@@ -16,7 +16,7 @@ import json
 import sys
 from datetime import date
 
-from .config import load_config
+from .config import load_config, DATA_DIR
 from .store import SnapshotStore
 from .datasources.cftc_cot import CftcCotSource
 from .datasources.cboe_options import CboeOptionsSource, snapshot_from_payload
@@ -25,8 +25,11 @@ from .analysis.positioning import analyze
 from .analysis.signals import generate_signals, net_bias
 from .analysis.gamma import analyze_gamma
 from .analysis.flow import analyze_flow
+from .analysis.outlook import build_outlook
 from .analysis.backtest import run_backtest
 from . import report as report_mod
+from . import viz
+from .report_html import render_report_html, render_index_html
 
 
 def _resolve_instruments(cfg, names: list[str]) -> list:
@@ -271,6 +274,115 @@ def cmd_flow(args) -> int:
     return 0
 
 
+def _load_curr_prev_snapshot(store, source, inst, today, *, no_cache, no_snapshot):
+    """取当前+上一份期权快照。今日未落盘则按需落盘（除非 --no-snapshot）。
+    返回 (curr_snap, prev_snap|None, prev_date|None, curr_date_str)。"""
+    sym = inst.options.symbol
+    if not no_snapshot and store.load("options", sym, today) is None:
+        payload = source.fetch_raw(inst, use_cache=not no_cache)
+        store.save("options", sym, payload, on_date=today)
+    stored = store.latest_two("options", sym)
+    if stored:
+        curr_d, curr_payload = stored[-1]
+        curr = snapshot_from_payload(curr_payload, inst.key, sym)
+        prev, prev_date = None, None
+        if len(stored) == 2:
+            prev_d, prev_payload = stored[0]
+            prev = snapshot_from_payload(prev_payload, inst.key, sym)
+            prev_date = prev_d.isoformat()
+        return curr, prev, prev_date, curr_d.isoformat()
+    payload = source.fetch_raw(inst, use_cache=not no_cache)
+    return snapshot_from_payload(payload, inst.key, sym), None, None, today.isoformat()
+
+
+def cmd_report(args) -> int:
+    """综合研判报告：四层情报聚合 + 可视化 + 情景推演 → 自包含 HTML。"""
+    cfg = load_config()
+    lookback = args.lookback or cfg.lookback_weeks
+    cot_src, opt_src, px_src = CftcCotSource(), CboeOptionsSource(), CboeHistorySource()
+    store = SnapshotStore()
+    today = date.today()
+    reports_dir = DATA_DIR / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        instruments = _resolve_instruments(cfg, args.instruments)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
+
+    written = []  # (inst, outlook, filename)
+    for inst in instruments:
+        if inst.options is None or inst.price is None:
+            print(f"[跳过] {inst.key} 未配置 options/price 数据源", file=sys.stderr)
+            continue
+        try:
+            history = cot_src.fetch_history(inst, lookback=lookback, use_cache=not args.no_cache)
+            an = analyze(history)
+            signals = generate_signals(an)
+
+            curr, prev, prev_date, curr_date_s = _load_curr_prev_snapshot(
+                store, opt_src, inst, today, no_cache=args.no_cache, no_snapshot=args.no_snapshot)
+            ga = analyze_gamma(curr, multiplier=inst.options.approx_commodity_multiplier,
+                               proxy_quality=inst.options.proxy_quality, today=today,
+                               horizon_days=args.horizon)
+            fa = analyze_flow(prev, curr, today=today, horizon_days=args.horizon,
+                              call_wall=ga.call_wall, put_wall=ga.put_wall,
+                              prev_date=prev_date, curr_date=curr_date_s)
+            outlook = build_outlook(an, signals, ga, fa, display_name=inst.display_name)
+
+            # —— 三张图 ——
+            price = px_src.fetch_series(inst, use_cache=not args.no_cache)
+            levels = []
+            if ga.call_wall_oi > 0:
+                levels.append(("call墙", ga.call_wall, viz.C_RES))
+            if ga.put_wall_oi > 0:
+                levels.append(("put墙", ga.put_wall, viz.C_SUP))
+            if ga.zero_gamma is not None:
+                levels.append(("零伽马", ga.zero_gamma, viz.C_FLIP))
+            price_svg = viz.price_levels_svg(
+                price.dates, price.closes, levels, ga.spot,
+                title=f"价格日线 + 关键位（{price.symbol}）")
+            oi_svg = viz.oi_walls_svg(
+                [(r.strike, r.call_oi, r.put_oi) for r in ga.strike_rows],
+                ga.spot, ga.call_wall, ga.put_wall, title="近价 OI 墙（按行权价）")
+            cot_svg = viz.cot_net_history_svg(
+                [r.report_date for r in history], [r.managed_money.net for r in history],
+                percentile=an.categories["managed_money"].net_percentile,
+                title="投机资金 Managed Money 净持仓历史")
+
+            html = render_report_html(outlook, price_svg, oi_svg, cot_svg)
+            fn = f"{inst.key}_{today.isoformat()}.html"
+            (reports_dir / fn).write_text(html, encoding="utf-8")
+            written.append((inst, outlook, fn))
+        except Exception as e:
+            print(f"[警告] {inst.key} 研判报告失败: {e}", file=sys.stderr)
+
+    if not written:
+        print("没有生成任何报告。", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _ in written],
+                         ensure_ascii=False, indent=2, default=str))
+        return 0
+
+    index_path = None
+    if len(written) > 1:
+        idx_items = [(o.display_name, fn, o.bias, o.confidence) for _, o, fn in written]
+        index_html = render_index_html(idx_items, today.isoformat())
+        index_path = reports_dir / f"index_{today.isoformat()}.html"
+        index_path.write_text(index_html, encoding="utf-8")
+
+    print(f"已生成综合研判报告（{today}）:")
+    for inst, o, fn in written:
+        print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence})  → {reports_dir / fn}")
+    if index_path:
+        print(f"  索引页 → {index_path}")
+    print(f"\n用浏览器打开即可（macOS: open '{reports_dir / written[0][2]}'）")
+    return 0
+
+
 def _gamma_jsonable(inst, ga) -> dict:
     return {
         "instrument": inst.key,
@@ -346,6 +458,14 @@ def build_parser() -> argparse.ArgumentParser:
                     help="前瞻交易日（默认 5 10 20 ≈1/2/4周）")
     pb.add_argument("--json", action="store_true", help="输出结构化 JSON")
     pb.set_defaults(func=cmd_backtest)
+
+    pr = sub.add_parser("report", help="综合研判：四层聚合+可视化+情景推演 → HTML 报告")
+    pr.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")
+    pr.add_argument("--lookback", type=int, default=None, help="COT 回看周数（默认读配置）")
+    pr.add_argument("--horizon", type=int, default=45, help="期权近月窗口天数（默认45）")
+    pr.add_argument("--no-snapshot", action="store_true", help="不自动落盘今日快照")
+    pr.add_argument("--json", action="store_true", help="输出 outlook 结构化 JSON")
+    pr.set_defaults(func=cmd_report)
 
     pl = sub.add_parser("list", help="列出已配置品种")
     pl.set_defaults(func=cmd_list)

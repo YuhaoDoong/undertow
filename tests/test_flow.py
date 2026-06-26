@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from trading_intel.models import OptionsSnapshot, OptionContract
-from trading_intel.analysis.flow import analyze_flow, scan_unusual
+from trading_intel.analysis.flow import analyze_flow, scan_unusual, _judge
 from trading_intel.store import SnapshotStore
 
 TODAY = date(2026, 6, 26)
@@ -84,6 +84,38 @@ def test_flow_single_snapshot_only_unusual():
     assert fa.changes == []
     assert any(u.strike == 95.0 for u in fa.unusual)
     assert "仅一份快照" in fa.flow_tilt
+
+
+def test_judge_matches_author():
+    # 用作者 WTI 6/22 表的代表行校验买卖方判定（IV 已是 Delta 修正后 pp）
+    cases = [
+        ("P", +318, -0.30, "卖方做支撑", "bullish"),
+        ("P", +1232, +0.33, "买方保护", "bearish"),
+        ("P", +140, +0.25, "买方轻微保护", "bearish"),   # 70P：<0.28 → 轻微
+        ("P", -264, +0.34, "卖方撤退", "bearish"),
+        ("C", +526, -1.32, "极强卖方压制", "bearish"),
+        ("C", +1132, -0.01, "噪音", "neutral"),
+        ("C", +496, +0.20, "轻微买方", "bullish"),
+    ]
+    for kind, doi, adj, exp_judg, exp_bias in cases:
+        bias, judg, _w = _judge(kind, doi, adj, True)
+        assert judg == exp_judg, f"{kind} {doi:+} {adj}: 得到 {judg}，期望 {exp_judg}"
+        assert bias == exp_bias
+
+
+def test_flow_buyer_seller_table():
+    # 65P 加仓+IV升=买方保护(看空)；80C 加仓+IV大降=极强卖方压制(看空) → 偏空
+    prev = _snap([_c(65, "P", oi=9000, iv=0.40), _c(80, "C", oi=6000, iv=0.35)], spot=70.0)
+    curr = _snap([_c(65, "P", oi=10000, vol=2000, iv=0.41),
+                  _c(80, "C", oi=7000, vol=2500, iv=0.32)], spot=70.0)
+    fa = analyze_flow(prev, curr, today=TODAY, prev_date="d0", curr_date="d1")
+    by = {(c.strike, c.kind): c for c in fa.changes}
+    p, cc = by[(65.0, "P")], by[(80.0, "C")]
+    assert p.judgment == "买方保护" and p.bias == "bearish"
+    assert abs(p.adj_iv_pp - 1.0) < 0.01           # IV +1pp（单点偏斜=0，修正=原始）
+    assert cc.judgment == "极强卖方压制" and cc.bias == "bearish"
+    assert abs(cc.adj_iv_pp + 3.0) < 0.01
+    assert fa.flow_tilt.startswith("偏空")
 
 
 def test_snapshot_store_roundtrip():

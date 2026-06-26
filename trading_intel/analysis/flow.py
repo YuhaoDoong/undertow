@@ -1,26 +1,27 @@
 """期权资金流 / 持仓异动分析（确定性计算，无 I/O）。
 
-动机（来自文章作者 6/24 的实战判断）:
-  作者抓的不是「静态的墙」(那是 gamma.py 的活)，而是【墙的增量】——
-  "6/22 七月 4000 put 单日 OI +1461、IV +1.13pp（新买盘涌入）→ 极强看跌；
-   6/23 又见卖方撤退 → 机构认为黄金大概率跌破 4000"。结果 6/24 黄金确实破 4000。
-  这种【临近到期 + 大单 ΔOI + ΔIV 同向】的异动，是静态快照看不见的高价值信号。
+动机（来自文章作者对 WTI 6/22 的整理）:
+  作者抓的不是「静态的墙」(那是 gamma.py 的活)，而是【墙的增量 + 买卖方性质】：
+  逐行权价看 ΔOI、当前OI、精确Delta、以及【Delta 修正后的相对 IV 变化】，
+  据此判断每个行权价是【买方建仓】还是【卖方建仓/撤退】：
+    · OI 增 + IV 升 = 买方在抬价买入（看跌买保护 / 看涨买突破）
+    · OI 增 + IV 降 = 卖方在写权收钱（写 put 做支撑 / 写 call 做压制）
+  作者据此判断 WTI「80 上方极强卖方压制、65 下方大量买方保护、put 越来越贵→下行风险更大」，
+  结果 6/24 原油如其所料走弱。
+
+  关键洞见：延迟数据没有逐笔成交，但【IV 变化的方向】可作买/卖方的代理——
+  买方抬价→IV 升，卖方供给→IV 降。这就是不用 tick 数据也能分买卖方的窍门。
 
 本模块两件事:
-  1) scan_unusual(snap)        —— 单张快照即可：按 volume / OI 比找"今日异常活跃"的
-     行权价。volume ≫ OI 说明今天有大量新交易涌入（明天往往兑现为新 OI）。
-     【今天就能用，不需要历史】。
+  1) scan_unusual(snap)        —— 单张快照即可：按 volume/OI 找"今日异常活跃"。
   2) analyze_flow(prev, curr)  —— 两日快照 diff：逐 (到期,行权价,C/P) 求 ΔOI / ΔIV，
-     按 |ΔOI| 排序，分类"看跌/看涨持仓增建 vs 减仓"，并叠加静态墙位
-     （新 OI 正堆在 put 墙上 + IV 升 = 作者那种自我实现的破位预警）。
-     【需要至少两天落盘的快照；CBOE 无期权历史，只能从落盘当天起往后攒】。
+     做【Delta 修正】(剔除现价移动沿偏斜的机械 IV 变化)，再按 OI 增减 × 修正IV 方向
+     判定买方/卖方，复刻作者那张表。需 ≥2 天落盘快照（CBOE 无期权历史，自攒）。
 
-诚实标注（已写进报告）:
-  * 延迟数据无逐笔成交，无法严格区分主动买/卖；本模块用
-    「持仓方向(C/P) × OI 增减 × IV 方向」做【启发式】推断，不是成交主动性。
-  * put 减仓本身歧义（获利了结偏多 / 卖方撤退偏空），仅作展示不计入净倾向。
-  * 净倾向只用【增建】侧（新建 put=偏空、新建 call=偏多，方向无歧义）聚合。
-  * 单标的 ETF 代理、样本短，只作预警、不作预言。
+诚实标注:
+  * 「Delta 修正后相对 IV 变化」是对作者方法的【原理化近似】(剔除 skew×Δspot 的机械项)，
+    不是其精确公式；买卖方判定在边界行可能与人工的酌情判断不同。
+  * 仍是 ETF 代理（USO≠WTI，行权价/IV 仅定性）、样本短，只作预警不作预言。
 """
 from __future__ import annotations
 
@@ -29,44 +30,52 @@ from datetime import date
 
 from ..models import OptionsSnapshot, OptionContract
 
-DEFAULT_HORIZON_DAYS = 60      # 只看近月（远月异动对短期方向意义小）
+DEFAULT_HORIZON_DAYS = 60      # 只看近月
 NEAR_MONEY_BAND = 0.15        # 只看现价 ±15% 内的行权价
-MIN_DOI = 50                  # |ΔOI| 低于此视为噪音
-TOP_N = 15                    # 异动榜最多展示条数
-UNUSUAL_MIN_VOLUME = 50       # 单快照异动：最低成交量门槛
-UNUSUAL_MIN_VOL_OI = 0.5      # volume ≥ 0.5×OI 视为"今日活跃"
+MIN_DOI = 50                  # |ΔOI| 低于此视为噪音（异动表）
+TOP_N = 15                    # 单快照异动榜上限
+TABLE_N = 14                  # 买卖方表 put/call 各自上限
+UNUSUAL_MIN_VOLUME = 50
+UNUSUAL_MIN_VOL_OI = 0.5
+# —— 买卖方判定阈值（pp，Delta 修正后）——
+IV_NOISE = 0.08              # |修正IV| 低于此 = 噪音
+IV_MILD = 0.28              # 区分"轻微" vs 正常强度
+IV_STRONG = 1.0            # call 卖方"极强压制"门槛
 
 
 @dataclass(frozen=True)
 class UnusualContract:
-    """单快照里"今日异常活跃"的一个合约。"""
     expiry: date
     strike: float
     kind: str
     open_interest: int
     volume: int
     iv: float
+    delta: float
     vol_oi_ratio: float
-    moneyness: float   # strike/spot - 1
+    moneyness: float
     note: str
 
 
 @dataclass(frozen=True)
 class FlowChange:
-    """两日 diff 里一个 (到期,行权价,C/P) 的持仓异动。"""
+    """两日 diff 里一个 (到期,行权价,C/P) 的持仓异动 + 买卖方判定。"""
     expiry: date
     strike: float
     kind: str
     prev_oi: int
     curr_oi: int
     d_oi: int
+    delta: float           # 精确 Delta（CBOE 给）
     prev_iv: float
     curr_iv: float
-    d_iv_pp: float       # (curr-prev) × 100，单位 pp
+    d_iv_pp: float         # 原始 ΔIV ×100 (pp)
+    adj_iv_pp: float       # Delta 修正后的相对 ΔIV (pp)
     curr_volume: int
     moneyness: float
-    bias: str            # bearish / bullish / unwind / neutral
-    on_wall: str         # "put墙" / "call墙" / ""
+    bias: str              # bearish / bullish / neutral（粗方向，供聚合）
+    judgment: str          # 买方保护 / 卖方做支撑 / 卖方压制 / 卖方撤退 …（细判，作者口径）
+    on_wall: str           # put墙 / call墙 / ""
     note: str
 
 
@@ -78,17 +87,18 @@ class FlowAnalysis:
     horizon_days: int
     curr_date: str
     curr_asof: str
-    prev_date: str | None          # None=只有一份快照，仅出单快照异动
-    # —— 单快照异动 ——
+    prev_date: str | None
+    # 单快照异动
     unusual: list[UnusualContract] = field(default_factory=list)
     total_call_volume: int = 0
     total_put_volume: int = 0
-    # —— 两日 diff ——
+    # 两日 diff
     changes: list[FlowChange] = field(default_factory=list)
-    net_call_doi: int = 0          # 近月增建的 call OI 净增（只计正向增建）
-    net_put_doi: int = 0           # 近月增建的 put OI 净增
+    net_call_doi: int = 0          # 近月增建 call OI 净增（kind 求和，向后兼容）
+    net_put_doi: int = 0           # 近月增建 put OI 净增
+    downside_pressure: float = 0.0  # 买卖方判定加权的下行压力
+    upside_pressure: float = 0.0
     flow_tilt: str = "—"
-    # 墙位上下文（来自 gamma，便于叠加判断）
     call_wall: float | None = None
     put_wall: float | None = None
 
@@ -98,7 +108,6 @@ def _yearfrac(expiry: date, today: date) -> float:
 
 
 def _live(snap: OptionsSnapshot, today: date, horizon_days: int) -> list[OptionContract]:
-    """近月、未到期、在现价 ±NEAR_MONEY_BAND 内的合约。"""
     if snap.spot <= 0:
         return []
     lo, hi = snap.spot * (1 - NEAR_MONEY_BAND), snap.spot * (1 + NEAR_MONEY_BAND)
@@ -110,9 +119,22 @@ def _live(snap: OptionsSnapshot, today: date, horizon_days: int) -> list[OptionC
     return out
 
 
+def _lin_slope(pts: list[tuple[float, float]]) -> float:
+    """最小二乘斜率 dY/dX（用于估期权偏斜 ∂IV/∂K）。"""
+    n = len(pts)
+    if n < 2:
+        return 0.0
+    mx = sum(x for x, _ in pts) / n
+    my = sum(y for _, y in pts) / n
+    den = sum((x - mx) ** 2 for x, _ in pts)
+    if den <= 0:
+        return 0.0
+    num = sum((x - mx) * (y - my) for x, y in pts)
+    return num / den
+
+
 def scan_unusual(snap: OptionsSnapshot, *, today: date,
                  horizon_days: int = DEFAULT_HORIZON_DAYS) -> list[UnusualContract]:
-    """单快照异动扫描：volume 大、且 volume/OI 高 = 今日新活跃（不需历史）。"""
     spot = snap.spot
     out: list[UnusualContract] = []
     for c in _live(snap, today, horizon_days):
@@ -125,26 +147,50 @@ def scan_unusual(snap: OptionsSnapshot, *, today: date,
         fresh = "量≫OI(疑全新建仓)" if ratio >= 1.0 else "量/OI偏高"
         out.append(UnusualContract(
             expiry=c.expiry, strike=c.strike, kind=c.kind,
-            open_interest=c.open_interest, volume=c.volume, iv=c.iv,
+            open_interest=c.open_interest, volume=c.volume, iv=c.iv, delta=c.delta,
             vol_oi_ratio=ratio, moneyness=(c.strike / spot - 1.0) if spot else 0.0,
             note=f"{kind_cn}·{fresh}",
         ))
-    # 先按到期升序（近月优先），再按成交量降序
     out.sort(key=lambda u: (u.expiry, -u.volume))
     return out[:TOP_N]
 
 
-def _classify(kind: str, d_oi: int, d_iv_pp: float) -> tuple[str, str]:
-    """按 持仓方向 × OI 增减 × IV 方向 做启发式方向推断。"""
-    iv_tag = "·IV升" if d_iv_pp > 0.1 else ("·IV降" if d_iv_pp < -0.1 else "")
-    if d_oi > 0:  # 增建（方向无歧义）
+def _judge(kind: str, d_oi: int, adj_pp: float, prev_known: bool) -> tuple[str, str, float]:
+    """按 持仓C/P × OI增减 × Delta修正IV方向 判定买卖方。
+    返回 (粗方向 bearish/bullish/neutral, 细判中文, 聚合权重系数 0~1)。
+
+    复刻作者口径：IV 升=买方抬价、IV 降=卖方供给；OI 增=建仓、OI 减=平仓/撤退。
+    """
+    if not prev_known:  # 无昨日 IV：只能按 OI 方向定性
         if kind == "P":
-            return "bearish", f"看跌持仓增建{iv_tag}" + ("(恐慌升温)" if d_iv_pp > 0.1 else "")
-        return "bullish", f"看涨持仓增建{iv_tag}"
-    else:         # 减仓（歧义，不计入净倾向）
-        if kind == "P":
-            return "unwind", f"看跌持仓减仓{iv_tag}(获利了结偏多/卖方撤退偏空,歧义)"
-        return "unwind", f"看涨持仓减仓{iv_tag}(平多/获利了结)"
+            return ("bearish", "买方保护(新建)", 1.0) if d_oi > 0 else ("neutral", "看跌减仓", 0.0)
+        return ("bullish", "买方(新建)", 1.0) if d_oi > 0 else ("neutral", "看涨减仓", 0.0)
+
+    a = adj_pp
+    if abs(a) < IV_NOISE:
+        return "neutral", "噪音", 0.0
+    up_oi = d_oi > 0
+    strong = abs(a) >= IV_STRONG
+    mild = abs(a) < IV_MILD
+    if kind == "P":
+        if a > 0:   # 买方抬 IV → 下方保护买盘（看跌）
+            if up_oi:
+                return "bearish", ("买方轻微保护" if mild else "买方保护"), (0.6 if mild else 1.0)
+            return "bearish", "卖方撤退", 0.5          # OI 降 + IV 升：支撑卖方退场，偏空
+        else:       # 卖方压 IV → 写 put 做支撑（看多）
+            if up_oi:
+                return "bullish", "卖方做支撑", 1.0
+            return "bullish", "买方了结", 0.5
+    else:  # CALL
+        if a < 0:   # 卖方压 IV → 上方压制（看空）
+            if up_oi:
+                lvl = "极强卖方压制" if strong else ("轻微卖方压制" if mild else "卖方压制")
+                return "bearish", lvl, (1.3 if strong else (0.6 if mild else 1.0))
+            return "bearish", "买方了结", 0.5
+        else:       # 买方抬 IV → 上方突破买盘（看多）
+            if up_oi:
+                return "bullish", ("轻微买方" if mild else "买方"), (0.6 if mild else 1.0)
+            return "bullish", "卖方撤退", 0.5
 
 
 def analyze_flow(
@@ -159,22 +205,25 @@ def analyze_flow(
     curr_date: str | None = None,
 ) -> FlowAnalysis:
     spot = curr.spot
+    live = _live(curr, today, horizon_days)
 
-    # —— 单快照异动（总能出）——
     unusual = scan_unusual(curr, today=today, horizon_days=horizon_days)
-    tcv = sum(c.volume for c in _live(curr, today, horizon_days) if c.kind == "C")
-    tpv = sum(c.volume for c in _live(curr, today, horizon_days) if c.kind == "P")
+    tcv = sum(c.volume for c in live if c.kind == "C")
+    tpv = sum(c.volume for c in live if c.kind == "P")
 
     changes: list[FlowChange] = []
     net_call = net_put = 0
-    tilt = "—（仅一份快照，明天起可出日对日 ΔOI/ΔIV 异动）"
+    downside = upside = 0.0
+    tilt = "—（仅一份快照，明天起可出 ΔOI/ΔIV 与买卖方判定）"
 
     if prev is not None:
-        # 以 (到期iso, 行权价, C/P) 为键对齐两日
-        prev_map: dict[tuple, OptionContract] = {
-            (c.expiry.isoformat(), c.strike, c.kind): c for c in prev.contracts
-        }
-        for c in _live(curr, today, horizon_days):
+        d_spot = spot - prev.spot
+        # 当前链的偏斜 ∂IV/∂K（put / call 各一条），用于 Delta 修正
+        put_slope = _lin_slope([(c.strike, c.iv) for c in live if c.kind == "P" and c.iv > 0])
+        call_slope = _lin_slope([(c.strike, c.iv) for c in live if c.kind == "C" and c.iv > 0])
+
+        prev_map = {(c.expiry.isoformat(), c.strike, c.kind): c for c in prev.contracts}
+        for c in live:
             key = (c.expiry.isoformat(), c.strike, c.kind)
             p = prev_map.get(key)
             prev_oi = p.open_interest if p else 0
@@ -182,41 +231,49 @@ def analyze_flow(
             d_oi = c.open_interest - prev_oi
             if abs(d_oi) < MIN_DOI:
                 continue
-            d_iv_pp = (c.iv - prev_iv) * 100.0 if (p and prev_iv > 0 and c.iv > 0) else 0.0
-            bias, note = _classify(c.kind, d_oi, d_iv_pp)
-            if p is None and c.open_interest >= MIN_DOI:
-                note = "【昨日无此行】" + note
+            prev_known = bool(p and prev_iv > 0 and c.iv > 0)
+            d_iv_pp = (c.iv - prev_iv) * 100.0 if prev_known else 0.0
+            slope = put_slope if c.kind == "P" else call_slope
+            adj_iv_pp = ((c.iv - prev_iv) - slope * d_spot) * 100.0 if prev_known else 0.0
+            bias, judgment, w = _judge(c.kind, d_oi, adj_iv_pp, prev_known)
+
             on_wall = ""
             if call_wall is not None and abs(c.strike - call_wall) < 1e-6:
                 on_wall = "call墙"
             elif put_wall is not None and abs(c.strike - put_wall) < 1e-6:
                 on_wall = "put墙"
+            note = judgment
+            if p is None and c.open_interest >= MIN_DOI:
+                note = "【昨日无此行】" + judgment
+
             changes.append(FlowChange(
                 expiry=c.expiry, strike=c.strike, kind=c.kind,
-                prev_oi=prev_oi, curr_oi=c.open_interest, d_oi=d_oi,
-                prev_iv=prev_iv, curr_iv=c.iv, d_iv_pp=d_iv_pp,
-                curr_volume=c.volume,
-                moneyness=(c.strike / spot - 1.0) if spot else 0.0,
-                bias=bias, on_wall=on_wall, note=note,
+                prev_oi=prev_oi, curr_oi=c.open_interest, d_oi=d_oi, delta=c.delta,
+                prev_iv=prev_iv, curr_iv=c.iv, d_iv_pp=d_iv_pp, adj_iv_pp=adj_iv_pp,
+                curr_volume=c.volume, moneyness=(c.strike / spot - 1.0) if spot else 0.0,
+                bias=bias, judgment=judgment, on_wall=on_wall, note=note,
             ))
-            # 净倾向只累计【增建】侧（方向无歧义）
-            if d_oi > 0:
+            if d_oi > 0:  # kind 求和（向后兼容字段）
                 if c.kind == "C":
                     net_call += d_oi
                 else:
                     net_put += d_oi
-        # 按 |ΔOI| 降序（最大异动排前），近月本就已过滤
-        changes.sort(key=lambda x: -abs(x.d_oi))
-        changes = changes[:TOP_N]
+            # 买卖方加权压力
+            mag = abs(d_oi) * w
+            if bias == "bearish":
+                downside += mag
+            elif bias == "bullish":
+                upside += mag
 
-        # 净倾向：增建的 put vs call 谁占优
-        if net_put or net_call:
-            if net_put > net_call * 1.3:
-                tilt = f"偏空（近月新增看跌押注 {net_put:,} > 看涨 {net_call:,}）"
-            elif net_call > net_put * 1.3:
-                tilt = f"偏多（近月新增看涨押注 {net_call:,} > 看跌 {net_put:,}）"
+        changes.sort(key=lambda x: -abs(x.d_oi))
+
+        if downside or upside:
+            if downside > upside * 1.3:
+                tilt = f"偏空（下行压力 {downside:,.0f} > 上行 {upside:,.0f}；put 买保护/call 卖压制占优）"
+            elif upside > downside * 1.3:
+                tilt = f"偏多（上行 {upside:,.0f} > 下行 {downside:,.0f}；call 买盘/put 卖方做支撑占优）"
             else:
-                tilt = f"分歧（新增看涨 {net_call:,} ≈ 看跌 {net_put:,}）"
+                tilt = f"分歧（下行 {downside:,.0f} ≈ 上行 {upside:,.0f}）"
 
     return FlowAnalysis(
         instrument=curr.instrument,
@@ -232,6 +289,8 @@ def analyze_flow(
         changes=changes,
         net_call_doi=net_call,
         net_put_doi=net_put,
+        downside_pressure=round(downside, 1),
+        upside_pressure=round(upside, 1),
         flow_tilt=tilt,
         call_wall=call_wall,
         put_wall=put_wall,

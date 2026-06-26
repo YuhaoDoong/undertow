@@ -29,7 +29,7 @@ from .analysis.outlook import build_outlook
 from .analysis.backtest import run_backtest
 from . import report as report_mod
 from . import viz
-from .report_html import render_report_html, render_index_html
+from .report_html import render_report_html, render_index_html, render_flow_section
 
 
 def _resolve_instruments(cfg, names: list[str]) -> list:
@@ -351,7 +351,8 @@ def cmd_report(args) -> int:
                 percentile=an.categories["managed_money"].net_percentile,
                 title="投机资金 Managed Money 净持仓历史")
 
-            html = render_report_html(outlook, price_svg, oi_svg, cot_svg)
+            flow_html = render_flow_section(fa)
+            html = render_report_html(outlook, price_svg, oi_svg, cot_svg, flow_html)
             fn = f"{inst.key}_{today.isoformat()}.html"
             (reports_dir / fn).write_text(html, encoding="utf-8")
             written.append((inst, outlook, fn))

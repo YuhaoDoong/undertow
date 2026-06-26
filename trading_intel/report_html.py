@@ -17,6 +17,7 @@ _KIND_COLOR = {
     "pin": "#8a6d3b", "flow": "#1f77b4",
 }
 _VOTE_COLOR = {"看多": "#1a7f37", "看空": "#b62324", "中性": "#6e7781"}
+_FLOW_COLOR = {"bearish": "#b62324", "bullish": "#1a7f37", "neutral": "#6e7781"}
 
 _CSS = """
 :root{color-scheme:light}
@@ -105,7 +106,68 @@ def _caveats_html(o: Outlook) -> str:
     return f'<div class="warn"><b>⚠️ 用法与局限</b><ul>{items}</ul></div>'
 
 
-def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str) -> str:
+def _flow_kind_table_html(changes, kind: str) -> str:
+    items = sorted([c for c in changes if c.kind == kind], key=lambda x: -abs(x.d_oi))[:14]
+    if not items:
+        return ""
+    side = "Put（下方保护/支撑）" if kind == "P" else "Call（上方压制/突破）"
+    rows = []
+    for c in sorted(items, key=lambda x: x.strike):
+        col = _FLOW_COLOR.get(c.bias, "#6e7781")
+        wall = f' <span style="color:#9467bd">🧱{_esc(c.on_wall)}</span>' if c.on_wall else ""
+        adj = f"{c.adj_iv_pp:+.2f}pp" if c.prev_iv > 0 else "—"
+        rows.append(
+            f'<tr><td class="r lvl">{c.strike:.1f}{wall}</td>'
+            f'<td class="r" style="color:{col}">{c.d_oi:+,}</td>'
+            f'<td class="r">{c.curr_oi:,}</td><td class="r">{c.delta:+.3f}</td>'
+            f'<td class="r">{_esc(adj)}</td>'
+            f'<td style="color:{col};font-weight:600">{_esc(c.judgment)}</td></tr>'
+        )
+    return (f'<div style="font-weight:600;margin:10px 0 2px">{side}</div>'
+            "<table><tr><th class='r'>行权价</th><th class='r'>ΔOI</th><th class='r'>当前OI</th>"
+            "<th class='r'>精确Delta</th><th class='r'>Delta修正ΔIV</th><th>判断</th></tr>"
+            + "".join(rows) + "</table>")
+
+
+def _unusual_table_html(fa) -> str:
+    if not fa.unusual:
+        return "<small>近月、现价附近无明显异常活跃。</small>"
+    rows = []
+    for u in fa.unusual[:12]:
+        cp = "P" if u.kind == "P" else "C"
+        ratio = "∞" if u.vol_oi_ratio == float("inf") else f"{u.vol_oi_ratio:.1f}x"
+        rows.append(
+            f'<tr><td class="r">{u.strike:.1f}</td><td>{cp}</td>'
+            f'<td class="r">{u.open_interest:,}</td><td class="r">{u.volume:,}</td>'
+            f'<td class="r">{_esc(ratio)}</td><td class="r">{u.delta:+.3f}</td>'
+            f'<td class="r">{u.iv*100:.0f}%</td></tr>'
+        )
+    return ("<table><tr><th class='r'>行权价</th><th>C/P</th><th class='r'>OI</th>"
+            "<th class='r'>今成交</th><th class='r'>量/OI</th><th class='r'>Delta</th>"
+            "<th class='r'>IV</th></tr>" + "".join(rows) + "</table>")
+
+
+def render_flow_section(fa) -> str:
+    """期权资金流买卖方卡片。两份快照→买卖方表；仅一份→单快照异常活跃。"""
+    if fa is None:
+        return ""
+    head = '<h2>期权资金流 / 持仓异动（买方 vs 卖方）</h2>'
+    tilt = f'<div class="sub">净倾向：<b>{_esc(fa.flow_tilt)}</b></div>'
+    if fa.prev_date and fa.changes:
+        body = (f'<div class="sub">对比 {_esc(fa.prev_date)} → {_esc(fa.curr_date)} · '
+                'OI增+IV升=买方抬价 / OI增+IV降=卖方写权</div>'
+                + _flow_kind_table_html(fa.changes, "P")
+                + _flow_kind_table_html(fa.changes, "C"))
+    else:
+        note = ("仅一份快照，ΔOI/ΔIV 的买卖方判定需要明天第二份快照才点亮。下方为今日单快照"
+                "异常活跃（量/OI 高 = 多为当日新建仓，是 ΔOI 异动的先兆）："
+                if not fa.prev_date else "近月无超阈值异动；下方为今日异常活跃：")
+        body = f'<div class="warn" style="margin-bottom:8px">{_esc(note)}</div>' + _unusual_table_html(fa)
+    return f'<div class="card">{head}{tilt}{body}</div>'
+
+
+def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
+                       flow_html: str = "") -> str:
     com = f"（≈商品 {o.commodity_spot:,.0f}）" if o.commodity_spot is not None else ""
     head = (
         f'<div class="card"><h1>{_esc(o.display_name)} · 综合研判</h1>'
@@ -117,6 +179,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str) ->
         f'<div class="card"><h2>关键位点（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
         f'<div class="chart">{price_svg}</div>'
         f'<div class="chart">{oi_svg}</div></div>'
+        f'{flow_html}'
         f'<div class="card"><h2>方向因子投票（按回测可信度加权）</h2>{_votes_table(o)}</div>'
         f'<div class="card"><h2>持仓结构</h2><div class="chart">{cot_svg}</div></div>'
         f'<div class="card"><h2>情景推演（规则化 if-then，非点位预言）</h2>{_scenarios_html(o)}</div>'

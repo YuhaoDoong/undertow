@@ -244,10 +244,10 @@ def render_backtest_all(blocks: list[str]) -> str:
 # ——————————————————————————————————————————————————————————
 
 FLOW_DISCLAIMER = (
-    "> ⚠️ **启发式 & 代理提示**：复刻文章作者的「临近到期大单异动」读法。"
-    "延迟数据**无逐笔成交**，无法严格区分主动买/卖；方向用「持仓C/P × OI增减 × IV方向」"
-    "**启发式**推断，非成交主动性。put 减仓本身歧义（获利了结偏多/卖方撤退偏空），仅展示不计净倾向；"
-    "净倾向只用**增建**侧（新建put=偏空、新建call=偏多）聚合。ETF 代理、样本短，**只作预警不作预言**。\n"
+    "> ⚠️ **启发式 & 代理提示**：复刻文章作者「逐行权价分买卖方」的读法——"
+    "**OI增+IV升=买方抬价、OI增+IV降=卖方写权**。延迟数据无逐笔成交，买卖方为**IV方向代理**推断；"
+    "「Delta修正ΔIV」是对作者方法的**原理化近似**（剔除现价移动沿偏斜的机械IV项），边界行可能与人工酌情判断不同。"
+    "ETF 代理（USO≠WTI，行权价/IV仅定性）、样本短，**只作预警不作预言**。\n"
     "> ΔOI/ΔIV 需要**两天落盘的快照**才有；CBOE 不存期权历史，先 `snapshot` 攒数据，明天起才出 diff。"
 )
 
@@ -258,6 +258,23 @@ def _mny(m: float) -> str:
 
 def _flow_icon(bias: str) -> str:
     return {"bearish": "🔴", "bullish": "🟢", "unwind": "⚪", "neutral": "·"}.get(bias, "·")
+
+
+def _flow_kind_table(changes, kind: str) -> list[str]:
+    items = sorted([c for c in changes if c.kind == kind], key=lambda x: -abs(x.d_oi))[:14]
+    if not items:
+        return []
+    side = "Put（下方保护/支撑）" if kind == "P" else "Call（上方压制/突破）"
+    L = [f"**{side}**",
+         "| 行权价 | ΔOI | 当前OI | 精确Delta | Delta修正ΔIV | 判断 |",
+         "|---:|---:|---:|---:|---:|---|"]
+    for c in sorted(items, key=lambda x: x.strike):
+        wall = f" 🧱{c.on_wall}" if c.on_wall else ""
+        adj = f"{c.adj_iv_pp:+.2f}pp" if c.prev_iv > 0 else "—（昨无IV）"
+        L.append(f"| {c.strike:.1f}{wall} | {_flow_icon(c.bias)}{c.d_oi:+,} | {c.curr_oi:,} | "
+                 f"{c.delta:+.3f} | {adj} | {c.judgment} |")
+    L.append("")
+    return L
 
 
 def render_flow(fa, display_name: str) -> str:
@@ -275,23 +292,15 @@ def render_flow(fa, display_name: str) -> str:
         L.append("静态墙位（来自 gamma 层，供叠加判断）：" + " · ".join(wall_bits))
     L.append("")
 
-    # —— 日对日 ΔOI / ΔIV 异动（核心，需两份快照）——
+    # —— 日对日买卖方判定（核心，需两份快照）——
     if fa.prev_date:
-        L.append(f"### 日对日持仓异动（ΔOI / ΔIV，按 |ΔOI| 排序）")
+        L.append("### 日对日买卖方判定（ΔOI × Delta修正IV → 买/卖方，复刻作者表）")
         L.append(f"**资金流净倾向：{fa.flow_tilt}**")
         if fa.changes:
-            L.append("| 到期 | 行权价 | C/P | 昨OI | 今OI | ΔOI | ΔIV | 今成交 | 解读 |")
-            L.append("|---|---:|:--:|---:|---:|---:|---:|---:|---|")
-            for c in fa.changes:
-                cp = "P" if c.kind == "P" else "C"
-                wall = f" 🧱{c.on_wall}" if c.on_wall else ""
-                div = f"{c.d_iv_pp:+.2f}pp" if c.d_iv_pp else "—"
-                L.append(
-                    f"| {c.expiry} | {c.strike:.1f}{wall} | {cp} | {c.prev_oi:,} | {c.curr_oi:,} | "
-                    f"{_flow_icon(c.bias)}{c.d_oi:+,} | {div} | {c.curr_volume:,} | {c.note} |"
-                )
+            L += _flow_kind_table(fa.changes, "P")
+            L += _flow_kind_table(fa.changes, "C")
         else:
-            L.append(f"- 近月、现价附近无超过阈值（|ΔOI|≥{50}）的持仓异动。")
+            L.append("- 近月、现价附近无超过阈值（|ΔOI|≥50）的持仓异动。")
         L.append("")
 
     # —— 单快照异动（今日活跃，总能出）——

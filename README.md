@@ -67,11 +67,12 @@ trading_intel/
     flow.py                 ★ 资金流异动：单快照 volume/OI 异常 + 两日 ΔOI/ΔIV diff
     backtest.py             ★ 信号事件研究：无前视、发布滞后、对齐收益、分位分桶
     outlook.py              ★ 综合研判：四层因子按回测可信度加权投票 + 关键位 + 情景
+  datasources/yahoo_futures.py ★ 真实期货价 GC=F/SI=F/CL=F（urllib 直连，零依赖）
   viz.py                    ★ 手绘 SVG 图（价格+关键位 / OI 墙 / 持仓历史，零依赖）
   report.py                 渲染 Markdown 报告（COT / Gamma / 资金流 / 回测）
   report_html.py            ★ 组装自包含 HTML 研判报告（内嵌 SVG，浏览器直接看）
   cli.py                    命令行入口（analyze/gamma/snapshot/flow/backtest/report/list）
-tests/                      单元测试（不依赖网络，21 个）
+tests/                      单元测试（不依赖网络，26 个）
 data/cache/                 缓存落盘（自动生成，.gitignore）
 data/snapshots/             ★ 期权链每日快照（gzip，入 git = 备份；不可再生）
 data/reports/               综合研判 HTML 报告（按品种/日期，入 git）
@@ -87,9 +88,15 @@ data/reports/               综合研判 HTML 报告（按品种/日期，入 gi
 | COT 持仓 | CFTC publicreporting.cftc.gov（Socrata `72hh-3qpy` Disaggregated 周报） | 免费/官方 | 周五发布，截止当周二 |
 | 期权 OI / Gamma | CBOE `cdn.cboe.com/api/global/delayed_quotes/options`（**ETF 代理** GLD/SLV/USO） | 免费/合法 | 延迟，日内更新 |
 | 历史日线（回测） | CBOE `cdn.cboe.com/api/global/delayed_quotes/charts/historical`（GLD/SLV/USO） | 免费/合法 | 日终 |
+| **真实期货价** | Yahoo `query1.finance.yahoo.com/v8/finance/chart`（**GC=F/SI=F/CL=F**，COMEX/NYMEX 期货） | 免费/合法 | 准实时 |
 
-> 本机实测：CME（403 禁抓）、Yahoo（限流）、Stooq（JS 门）、FRED（不可达）均不可用；
-> CFTC 与 CBOE 两个 host 稳定可达，全部数据收敛到这两家。
+> 本机实测：CME（403 禁抓，不绕）不可用；**Yahoo chart 接口可达**（urllib 直连，yfinance 底层同款，零依赖）；
+> CFTC + CBOE + Yahoo 三个 host 稳定可达。
+>
+> **最终位点落在真实商品价**：期权链是 ETF 的（位点本以 ETF 计），报告用【当日实时比值】=真实期货价/ETF价
+> 换算所有墙位/零伽马到真实金银油价——**免静态乘数漂移**（实测金的真实比值 ≈10.97，非旧的 10.8）；
+> 价格图也直接画 GC=F/SI=F/CL=F。**WTI 注意**：USO 与 WTI 价格量级不同（USO≈109 vs WTI≈70）且非线性，
+> 真实油价用 CL=F 显示，但 USO 期权位点换算 WTI 仅当日近似、漂移大。
 
 **为什么期权用 ETF 代理而不是 COMEX 原表**：
 - CME 对脚本访问**硬封锁**（403 + 明确援引 Data Terms of Use 禁止自动抓取）；不绕过。

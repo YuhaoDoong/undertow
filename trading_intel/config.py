@@ -56,6 +56,7 @@ class Instrument:
     cot: CotSpec
     options: OptionsSpec | None = None
     price: PriceSpec | None = None
+    commodity: PriceSpec | None = None  # 真实商品期货价（GC=F/SI=F/CL=F）
 
 
 @dataclass(frozen=True)
@@ -94,15 +95,12 @@ def load_config(path: Path | None = None) -> Config:
                 proxy_quality=opts_raw.get("proxy_quality", "unknown"),
                 note=opts_raw.get("note", ""),
             )
-        price_raw = spec.get("price")
-        price = None
-        if price_raw:
-            price = PriceSpec(
-                source=price_raw["source"],
-                symbol=price_raw["symbol"],
-                quality=price_raw.get("quality", "unknown"),
-                note=price_raw.get("note", ""),
-            )
+        def _price_spec(raw):
+            if not raw:
+                return None
+            return PriceSpec(source=raw["source"], symbol=raw["symbol"],
+                             quality=raw.get("quality", "unknown"), note=raw.get("note", ""))
+
         instruments[key] = Instrument(
             key=key,
             display_name=spec["display_name"],
@@ -113,6 +111,7 @@ def load_config(path: Path | None = None) -> Config:
                 market_name=cot["market_name"],
             ),
             options=options,
-            price=price,
+            price=_price_spec(spec.get("price")),
+            commodity=_price_spec(spec.get("commodity")),
         )
     return Config(instruments=instruments, defaults=raw.get("defaults", {}))

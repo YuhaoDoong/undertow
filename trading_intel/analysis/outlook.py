@@ -77,6 +77,8 @@ class Outlook:
     key_levels: list[KeyLevel] = field(default_factory=list)
     scenarios: list[Scenario] = field(default_factory=list)
     caveats: list[str] = field(default_factory=list)
+    commodity_symbol: str = ""    # 真实期货符号（GC=F 等），空=未接真实价
+    commodity_basis: str = ""     # 换算依据（实时比值 / 静态乘数近似）
 
 
 def _cot_votes(signals: list[Signal]) -> list[FactorVote]:
@@ -258,6 +260,8 @@ def build_outlook(
     fa: FlowAnalysis,
     *,
     display_name: str,
+    commodity_symbol: str = "",
+    commodity_basis: str = "",
 ) -> Outlook:
     votes = _cot_votes(signals) + _gamma_vote(ga) + _flow_vote(fa)
     pos_sum = sum(v.weight for v in votes if v.sign > 0)
@@ -282,4 +286,6 @@ def build_outlook(
         key_levels=_key_levels(ga, fa),
         scenarios=_scenarios(ga, bias_sign),
         caveats=_caveats(an, ga, fa, signals),
+        commodity_symbol=commodity_symbol,
+        commodity_basis=commodity_basis,
     )

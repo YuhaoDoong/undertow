@@ -21,6 +21,7 @@ from .store import SnapshotStore
 from .datasources.cftc_cot import CftcCotSource
 from .datasources.cboe_options import CboeOptionsSource, snapshot_from_payload
 from .datasources.cboe_history import CboeHistorySource
+from .datasources.yahoo_futures import YahooFuturesSource
 from .analysis.positioning import analyze
 from .analysis.signals import generate_signals, net_bias
 from .analysis.gamma import analyze_gamma
@@ -300,6 +301,7 @@ def cmd_report(args) -> int:
     cfg = load_config()
     lookback = args.lookback or cfg.lookback_weeks
     cot_src, opt_src, px_src = CftcCotSource(), CboeOptionsSource(), CboeHistorySource()
+    fut_src = YahooFuturesSource()
     store = SnapshotStore()
     today = date.today()
     reports_dir = DATA_DIR / "reports"
@@ -323,29 +325,60 @@ def cmd_report(args) -> int:
 
             curr, prev, prev_date, curr_date_s = _load_curr_prev_snapshot(
                 store, opt_src, inst, today, no_cache=args.no_cache, no_snapshot=args.no_snapshot)
-            ga = analyze_gamma(curr, multiplier=inst.options.approx_commodity_multiplier,
+
+            # —— 真实商品期货价：用【当日实时比值】= 期货价/ETF价 换算所有位点（免乘数漂移）——
+            real_series, real_price, real_asof, ratio = None, None, "", None
+            if inst.commodity is not None:
+                try:
+                    real_series, real_price, real_asof = fut_src.fetch_for(
+                        inst, use_cache=not args.no_cache)
+                    if curr.spot > 0:
+                        ratio = real_price / curr.spot
+                except Exception as e:
+                    print(f"[提示] {inst.key} 真实期货价获取失败，回退静态乘数: {e}", file=sys.stderr)
+            mult = ratio if ratio is not None else inst.options.approx_commodity_multiplier
+
+            ga = analyze_gamma(curr, multiplier=mult,
                                proxy_quality=inst.options.proxy_quality, today=today,
                                horizon_days=args.horizon)
             fa = analyze_flow(prev, curr, today=today, horizon_days=args.horizon,
                               call_wall=ga.call_wall, put_wall=ga.put_wall,
                               prev_date=prev_date, curr_date=curr_date_s)
-            outlook = build_outlook(an, signals, ga, fa, display_name=inst.display_name)
+            if ratio is not None:
+                etf_sym = inst.options.symbol
+                fut_sym = inst.commodity.symbol
+                basis = f"实时比值 {fut_sym}/{etf_sym}={ratio:.3f}（{real_asof[:10]}）"
+                comm_sym = fut_sym
+            else:
+                basis = "静态乘数近似（真实期货价不可用）"
+                comm_sym = ""
+            outlook = build_outlook(an, signals, ga, fa, display_name=inst.display_name,
+                                    commodity_symbol=comm_sym, commodity_basis=basis)
 
-            # —— 三张图 ——
-            price = px_src.fetch_series(inst, use_cache=not args.no_cache)
+            # —— 价格图：优先真实期货价 + 关键位换算到商品价；否则回退 ETF 日线 ——
+            def lvl(etf_v):
+                return ga.to_commodity(etf_v) if ratio is not None else etf_v
             levels = []
             if ga.call_wall_oi > 0:
-                levels.append(("call墙", ga.call_wall, viz.C_RES))
+                levels.append(("call墙", lvl(ga.call_wall), viz.C_RES))
             if ga.put_wall_oi > 0:
-                levels.append(("put墙", ga.put_wall, viz.C_SUP))
+                levels.append(("put墙", lvl(ga.put_wall), viz.C_SUP))
             if ga.zero_gamma is not None:
-                levels.append(("零伽马", ga.zero_gamma, viz.C_FLIP))
-            price_svg = viz.price_levels_svg(
-                price.dates, price.closes, levels, ga.spot,
-                title=f"价格日线 + 关键位（{price.symbol}）")
+                levels.append(("零伽马", lvl(ga.zero_gamma), viz.C_FLIP))
+            if real_series is not None:
+                px_dates, px_closes = real_series.dates, real_series.closes
+                px_spot = real_price
+                px_title = f"真实期货价日线 + 关键位（{real_series.symbol}）"
+            else:
+                price = px_src.fetch_series(inst, use_cache=not args.no_cache)
+                px_dates, px_closes, px_spot = price.dates, price.closes, ga.spot
+                px_title = f"价格日线 + 关键位（{price.symbol} ETF）"
+            price_svg = viz.price_levels_svg(px_dates, px_closes, levels, px_spot, title=px_title)
+            # OI 墙图：行权价换算到商品价（有真实比值时）
+            oi_rows = [(lvl(r.strike), r.call_oi, r.put_oi) for r in ga.strike_rows]
             oi_svg = viz.oi_walls_svg(
-                [(r.strike, r.call_oi, r.put_oi) for r in ga.strike_rows],
-                ga.spot, ga.call_wall, ga.put_wall, title="近价 OI 墙（按行权价）")
+                oi_rows, lvl(ga.spot), lvl(ga.call_wall), lvl(ga.put_wall),
+                title="近价 OI 墙（按" + ("商品价" if ratio is not None else "ETF行权价") + "）")
             cot_svg = viz.cot_net_history_svg(
                 [r.report_date for r in history], [r.managed_money.net for r in history],
                 percentile=an.categories["managed_money"].net_percentile,

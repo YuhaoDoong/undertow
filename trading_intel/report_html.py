@@ -168,10 +168,19 @@ def render_flow_section(fa) -> str:
 
 def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        flow_html: str = "") -> str:
-    com = f"（≈商品 {o.commodity_spot:,.0f}）" if o.commodity_spot is not None else ""
+    if o.commodity_symbol and o.commodity_spot is not None:
+        # 真实期货价为主，ETF 代理为辅
+        price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
+                      f' · 期权代理 {_esc(o.proxy_symbol)} {o.spot:.2f}')
+        basis_line = f'<div class="sub">位点换算：{_esc(o.commodity_basis)}</div>'
+    else:
+        com = f"（≈商品 {o.commodity_spot:,.0f}）" if o.commodity_spot is not None else ""
+        price_line = f'代理 {_esc(o.proxy_symbol)} · 现价 {o.spot:.2f}{com}'
+        basis_line = ""
     head = (
         f'<div class="card"><h1>{_esc(o.display_name)} · 综合研判</h1>'
-        f'<div class="sub">代理 {_esc(o.proxy_symbol)} · 现价 {o.spot:.2f}{com} · 数据 {_esc(o.asof)}</div>'
+        f'<div class="sub">{price_line} · 数据 {_esc(o.asof)}</div>'
+        f'{basis_line}'
         f'<div style="margin:10px 0">{_bias_badge(o)}</div>'
         f'<div class="sub">环境：{_esc(o.regime)}</div></div>'
     )

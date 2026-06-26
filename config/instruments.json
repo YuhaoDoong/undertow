@@ -1,0 +1,74 @@
+{
+  "_comment": "Instrument registry. Each instrument declares the data-source keys needed to pull its data. Add new instruments here without touching code. CFTC contract codes verified against publicreporting.cftc.gov Disaggregated report (dataset 72hh-3qpy).",
+  "instruments": {
+    "gold": {
+      "display_name": "黄金 Gold (COMEX)",
+      "asset_class": "metal",
+      "cot": {
+        "report": "disaggregated_fut",
+        "contract_market_code": "088691",
+        "market_name": "GOLD - COMMODITY EXCHANGE INC."
+      },
+      "options": {
+        "source": "cboe_etf",
+        "symbol": "GLD",
+        "approx_commodity_multiplier": 10.8,
+        "proxy_quality": "good",
+        "note": "GLD≈1/10oz黄金(扣费后)。行权价以GLD计，×≈10.8≈现货黄金。乘数随基金费率缓慢漂移，需定期校准。"
+      },
+      "price": {
+        "source": "cboe_history",
+        "symbol": "GLD",
+        "quality": "good",
+        "note": "GLD日线作黄金价格代理；日收益≈现货黄金，跟踪误差极小。"
+      }
+    },
+    "silver": {
+      "display_name": "白银 Silver (COMEX)",
+      "asset_class": "metal",
+      "cot": {
+        "report": "disaggregated_fut",
+        "contract_market_code": "084691",
+        "market_name": "SILVER - COMMODITY EXCHANGE INC."
+      },
+      "options": {
+        "source": "cboe_etf",
+        "symbol": "SLV",
+        "approx_commodity_multiplier": 1.1,
+        "proxy_quality": "good",
+        "note": "SLV≈1oz白银(扣费后)。行权价×≈1.1≈现货白银。需定期校准。"
+      },
+      "price": {
+        "source": "cboe_history",
+        "symbol": "SLV",
+        "quality": "good",
+        "note": "SLV日线作白银价格代理；日收益≈现货白银。"
+      }
+    },
+    "wti": {
+      "display_name": "原油 WTI Crude (NYMEX)",
+      "asset_class": "energy",
+      "cot": {
+        "report": "disaggregated_fut",
+        "contract_market_code": "067651",
+        "market_name": "CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE"
+      },
+      "options": {
+        "source": "cboe_etf",
+        "symbol": "USO",
+        "approx_commodity_multiplier": null,
+        "proxy_quality": "weak",
+        "note": "USO持有近月期货、长期受展期损耗影响，与WTI非线性，无稳定乘数。行权价仅作USO自身的位点/Gamma参考，映射WTI仅定性。"
+      },
+      "price": {
+        "source": "cboe_history",
+        "symbol": "USO",
+        "quality": "weak",
+        "note": "USO受展期损耗，多周收益≈WTI但有负向漂移偏差，方向研究可用、绝对幅度偏低。"
+      }
+    }
+  },
+  "defaults": {
+    "lookback_weeks": 156
+  }
+}

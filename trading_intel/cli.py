@@ -1,0 +1,361 @@
+"""命令行入口：拉数据 -> 分析 -> 渲染报告。
+
+用法示例（在项目根 /Users/yhdong/Trading 下运行）:
+    python -m trading_intel.cli analyze                 # 默认全部品种
+    python -m trading_intel.cli analyze gold silver     # 指定品种
+    python -m trading_intel.cli analyze --lookback 104  # 自定义回看周数
+    python -m trading_intel.cli analyze --json          # 输出结构化 JSON（喂给上层/LLM）
+    python -m trading_intel.cli list                    # 列出已配置品种
+    python -m trading_intel.cli --no-cache analyze gold # 强制绕过缓存
+"""
+from __future__ import annotations
+
+import argparse
+import dataclasses
+import json
+import sys
+from datetime import date
+
+from .config import load_config
+from .store import SnapshotStore
+from .datasources.cftc_cot import CftcCotSource
+from .datasources.cboe_options import CboeOptionsSource, snapshot_from_payload
+from .datasources.cboe_history import CboeHistorySource
+from .analysis.positioning import analyze
+from .analysis.signals import generate_signals, net_bias
+from .analysis.gamma import analyze_gamma
+from .analysis.flow import analyze_flow
+from .analysis.backtest import run_backtest
+from . import report as report_mod
+
+
+def _resolve_instruments(cfg, names: list[str]) -> list:
+    if not names:
+        return list(cfg.instruments.values())
+    return [cfg.get(n) for n in names]
+
+
+def cmd_list(args) -> int:
+    cfg = load_config()
+    print("已配置品种:")
+    for inst in cfg.instruments.values():
+        print(f"  {inst.key:8s} {inst.display_name}  (COT {inst.cot.contract_market_code})")
+    return 0
+
+
+def _analyze_one(source, inst, lookback, use_cache):
+    history = source.fetch_history(inst, lookback=lookback, use_cache=use_cache)
+    an = analyze(history)
+    signals = generate_signals(an)
+    return history, an, signals
+
+
+def cmd_analyze(args) -> int:
+    cfg = load_config()
+    lookback = args.lookback or cfg.lookback_weeks
+    source = CftcCotSource()
+
+    try:
+        instruments = _resolve_instruments(cfg, args.instruments)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
+
+    results = []
+    for inst in instruments:
+        try:
+            results.append((inst, *_analyze_one(source, inst, lookback, not args.no_cache)))
+        except Exception as e:  # 单品种失败不影响其它
+            print(f"[警告] {inst.key} 分析失败: {e}", file=sys.stderr)
+
+    if not results:
+        print("没有可用结果。", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps([_to_jsonable(inst, an, sigs) for inst, _, an, sigs in results],
+                         ensure_ascii=False, indent=2, default=str))
+        return 0
+
+    blocks = [report_mod.render(an, sigs, inst.display_name)
+              for inst, _, an, sigs in results]
+    print(report_mod.render_all(blocks))
+    return 0
+
+
+def cmd_gamma(args) -> int:
+    cfg = load_config()
+    source = CboeOptionsSource()
+    try:
+        instruments = _resolve_instruments(cfg, args.instruments)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
+
+    results = []
+    for inst in instruments:
+        if inst.options is None:
+            print(f"[跳过] {inst.key} 未配置期权数据源", file=sys.stderr)
+            continue
+        try:
+            snap = source.fetch_snapshot(inst, use_cache=not args.no_cache)
+            ga = analyze_gamma(
+                snap,
+                multiplier=inst.options.approx_commodity_multiplier,
+                proxy_quality=inst.options.proxy_quality,
+                horizon_days=args.horizon,
+            )
+            results.append((inst, ga))
+        except Exception as e:
+            print(f"[警告] {inst.key} 期权分析失败: {e}", file=sys.stderr)
+
+    if not results:
+        print("没有可用结果。", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps([_gamma_jsonable(inst, ga) for inst, ga in results],
+                         ensure_ascii=False, indent=2, default=str))
+        return 0
+
+    blocks = [report_mod.render_gamma(ga, inst.display_name) for inst, ga in results]
+    print(report_mod.render_gamma_all(blocks))
+    return 0
+
+
+def cmd_backtest(args) -> int:
+    cfg = load_config()
+    lookback = args.lookback or cfg.lookback_weeks
+    cot_src = CftcCotSource()
+    px_src = CboeHistorySource()
+    try:
+        instruments = _resolve_instruments(cfg, args.instruments)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
+
+    results = []
+    for inst in instruments:
+        if inst.price is None:
+            print(f"[跳过] {inst.key} 未配置 price 数据源", file=sys.stderr)
+            continue
+        try:
+            history = cot_src.fetch_history(inst, lookback=lookback, use_cache=not args.no_cache)
+            price = px_src.fetch_series(inst, use_cache=not args.no_cache)
+            bt = run_backtest(history, price, horizons=tuple(args.horizons))
+            results.append((inst, bt))
+        except Exception as e:
+            print(f"[警告] {inst.key} 回测失败: {e}", file=sys.stderr)
+
+    if not results:
+        print("没有可用结果。", file=sys.stderr)
+        return 1
+
+    if args.json:
+        import dataclasses
+        print(json.dumps([dataclasses.asdict(bt) | {"instrument": inst.key} for inst, bt in results],
+                         ensure_ascii=False, indent=2, default=str))
+        return 0
+
+    blocks = [report_mod.render_backtest(bt, inst.display_name, inst.price.quality)
+              for inst, bt in results]
+    print(report_mod.render_backtest_all(blocks))
+    return 0
+
+
+def cmd_snapshot(args) -> int:
+    """把当前期权链【原始 payload 全字段】按日落盘——攒 flow 层所需的历史。"""
+    cfg = load_config()
+    source = CboeOptionsSource()
+    store = SnapshotStore()
+    today = date.today()
+    try:
+        instruments = _resolve_instruments(cfg, args.instruments)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
+
+    saved = []
+    for inst in instruments:
+        if inst.options is None:
+            print(f"[跳过] {inst.key} 未配置期权数据源", file=sys.stderr)
+            continue
+        sym = inst.options.symbol
+        try:
+            payload = source.fetch_raw(inst, use_cache=not args.no_cache)
+            path = store.save("options", sym, payload, on_date=today)
+            snap = snapshot_from_payload(payload, inst.key, sym)
+            n_oi = len(snap.with_oi())
+            n_dates = len(store.dates("options", sym))
+            saved.append((inst, sym, path, len(snap.contracts), n_oi, n_dates))
+        except Exception as e:
+            print(f"[警告] {inst.key} 快照失败: {e}", file=sys.stderr)
+
+    if not saved:
+        print("没有保存任何快照。", file=sys.stderr)
+        return 1
+
+    print(f"已落盘 {today} 期权链快照（原始全字段，纳入 git 永久留存）:")
+    for inst, sym, path, n_all, n_oi, n_dates in saved:
+        print(f"  {inst.key:7s} {sym}: {n_all:,} 合约（{n_oi:,} 有OI）  "
+              f"→ 已累计 {n_dates} 天  ·  {path}")
+    if any(nd < 2 for *_, nd in saved):
+        print("\n提示：日对日 ΔOI/ΔIV 异动需要 ≥2 天快照。明天再跑一次 snapshot，"
+              "之后 `flow` 即可出作者那种「近月大单异动」。")
+    return 0
+
+
+def cmd_flow(args) -> int:
+    """期权资金流/持仓异动：单快照异常活跃 + 两日 ΔOI/ΔIV diff。"""
+    cfg = load_config()
+    source = CboeOptionsSource()
+    store = SnapshotStore()
+    today = date.today()
+    try:
+        instruments = _resolve_instruments(cfg, args.instruments)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
+
+    results = []
+    for inst in instruments:
+        if inst.options is None:
+            print(f"[跳过] {inst.key} 未配置期权数据源", file=sys.stderr)
+            continue
+        sym = inst.options.symbol
+        try:
+            # 当前快照：优先用刚落盘的今日数据；若今日未落盘则现拉一份（不落盘，仅分析）
+            if not args.no_snapshot and store.load("options", sym, today) is None:
+                payload = source.fetch_raw(inst, use_cache=not args.no_cache)
+                store.save("options", sym, payload, on_date=today)
+
+            stored = store.latest_two("options", sym)
+            if stored:
+                curr_date, curr_payload = stored[-1]
+                curr = snapshot_from_payload(curr_payload, inst.key, sym)
+                prev = None
+                prev_date = None
+                if len(stored) == 2:
+                    prev_date_d, prev_payload = stored[0]
+                    prev = snapshot_from_payload(prev_payload, inst.key, sym)
+                    prev_date = prev_date_d.isoformat()
+                curr_date_s = curr_date.isoformat()
+            else:
+                # 一份都没有：现拉一份分析（提示去 snapshot 攒历史）
+                payload = source.fetch_raw(inst, use_cache=not args.no_cache)
+                curr = snapshot_from_payload(payload, inst.key, sym)
+                prev, prev_date, curr_date_s = None, None, today.isoformat()
+
+            # 拿静态墙位叠加
+            ga = analyze_gamma(curr, multiplier=inst.options.approx_commodity_multiplier,
+                               proxy_quality=inst.options.proxy_quality, today=today,
+                               horizon_days=args.horizon)
+            fa = analyze_flow(prev, curr, today=today, horizon_days=args.horizon,
+                              call_wall=ga.call_wall, put_wall=ga.put_wall,
+                              prev_date=prev_date, curr_date=curr_date_s)
+            results.append((inst, fa))
+        except Exception as e:
+            print(f"[警告] {inst.key} 资金流分析失败: {e}", file=sys.stderr)
+
+    if not results:
+        print("没有可用结果。", file=sys.stderr)
+        return 1
+
+    if args.json:
+        print(json.dumps([dataclasses.asdict(fa) | {"instrument": inst.key} for inst, fa in results],
+                         ensure_ascii=False, indent=2, default=str))
+        return 0
+
+    blocks = [report_mod.render_flow(fa, inst.display_name) for inst, fa in results]
+    print(report_mod.render_flow_all(blocks))
+    return 0
+
+
+def _gamma_jsonable(inst, ga) -> dict:
+    return {
+        "instrument": inst.key,
+        "proxy_symbol": ga.proxy_symbol,
+        "spot": ga.spot,
+        "asof": ga.asof,
+        "multiplier": ga.multiplier,
+        "put_call_ratio": ga.put_call_ratio,
+        "net_gex": ga.net_gex,
+        "gex_regime": ga.gex_regime,
+        "zero_gamma": ga.zero_gamma,
+        "call_wall": ga.call_wall, "call_wall_oi": ga.call_wall_oi,
+        "put_wall": ga.put_wall, "put_wall_oi": ga.put_wall_oi,
+        "nearest_expiry": ga.nearest_expiry,
+        "nearest_call_wall": ga.nearest_call_wall,
+        "nearest_put_wall": ga.nearest_put_wall,
+        "commodity_levels": {
+            "call_wall": ga.to_commodity(ga.call_wall),
+            "put_wall": ga.to_commodity(ga.put_wall),
+            "zero_gamma": ga.to_commodity(ga.zero_gamma),
+        },
+    }
+
+
+def _to_jsonable(inst, an, signals) -> dict:
+    return {
+        "instrument": inst.key,
+        "display_name": inst.display_name,
+        "report_date": an.report_date,
+        "prev_date": an.prev_date,
+        "open_interest": an.open_interest,
+        "open_interest_change": an.open_interest_change,
+        "lookback_used": an.lookback_used,
+        "bias": net_bias(signals),
+        "categories": {n: dataclasses.asdict(c) for n, c in an.categories.items()},
+        "signals": [dataclasses.asdict(s) for s in signals],
+    }
+
+
+def build_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="trading_intel", description="期货持仓(COT)情报分析")
+    p.add_argument("--no-cache", action="store_true", help="绕过本地缓存强制拉取")
+    sub = p.add_subparsers(dest="command", required=True)
+
+    pa = sub.add_parser("analyze", help="分析品种持仓并出报告")
+    pa.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")
+    pa.add_argument("--lookback", type=int, default=None, help="回看周数（默认读配置）")
+    pa.add_argument("--json", action="store_true", help="输出结构化 JSON")
+    pa.set_defaults(func=cmd_analyze)
+
+    pg = sub.add_parser("gamma", help="分析期权 Gamma/OI 结构与关键位点")
+    pg.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")
+    pg.add_argument("--horizon", type=int, default=45, help="近月窗口天数（默认45）")
+    pg.add_argument("--json", action="store_true", help="输出结构化 JSON")
+    pg.set_defaults(func=cmd_gamma)
+
+    psn = sub.add_parser("snapshot", help="落盘期权链原始快照（攒 flow 所需历史，纳入 git）")
+    psn.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")
+    psn.set_defaults(func=cmd_snapshot)
+
+    pf = sub.add_parser("flow", help="期权资金流/持仓异动：单快照异常活跃 + 两日 ΔOI/ΔIV")
+    pf.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")
+    pf.add_argument("--horizon", type=int, default=60, help="近月窗口天数（默认60）")
+    pf.add_argument("--no-snapshot", action="store_true",
+                    help="不自动落盘今日快照（仅用已落盘数据分析）")
+    pf.add_argument("--json", action="store_true", help="输出结构化 JSON")
+    pf.set_defaults(func=cmd_flow)
+
+    pb = sub.add_parser("backtest", help="回测 COT 信号的历史前瞻收益（校准阈值）")
+    pb.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")
+    pb.add_argument("--lookback", type=int, default=None, help="COT 回看周数（默认读配置）")
+    pb.add_argument("--horizons", type=int, nargs="+", default=[5, 10, 20],
+                    help="前瞻交易日（默认 5 10 20 ≈1/2/4周）")
+    pb.add_argument("--json", action="store_true", help="输出结构化 JSON")
+    pb.set_defaults(func=cmd_backtest)
+
+    pl = sub.add_parser("list", help="列出已配置品种")
+    pl.set_defaults(func=cmd_list)
+    return p
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

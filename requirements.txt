@@ -1,0 +1,9 @@
+# 运行时：无第三方依赖，仅标准库（urllib/json/statistics/dataclasses）。
+# 这样便于后续封装成 Claude Code skill、跨环境移植。
+#
+# 可选（仅跑测试用）:
+# pytest>=8.0
+#
+# 后续若接入价格行情/期权链做更重的时序计算，可再引入:
+# pandas>=2.0
+# numpy>=1.26

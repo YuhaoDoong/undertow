@@ -1,0 +1,15 @@
+# 临时缓存（可由 API 重新拉取，不必入库）
+data/cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# macOS
+.DS_Store
+
+# 注意：data/snapshots/ 【不忽略】——期权链快照不可再生，入库即等于备份。

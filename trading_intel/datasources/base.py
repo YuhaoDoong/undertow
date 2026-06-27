@@ -35,6 +35,26 @@ def http_get_json(
         raise DataSourceError(f"返回非合法 JSON: {url}") from e
 
 
+def http_get_text(
+    url: str,
+    params: dict[str, Any] | None = None,
+    *,
+    timeout: float = 30.0,
+    headers: dict[str, str] | None = None,
+) -> str:
+    """GET 一个文本接口（如 FRED 的 CSV）。返回原始文本。"""
+    if params:
+        url = url + "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers=headers or {"User-Agent": "trading_intel/0.1"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        raise DataSourceError(f"HTTP {e.code} 调用失败: {url}") from e
+    except urllib.error.URLError as e:
+        raise DataSourceError(f"网络错误: {e.reason} ({url})") from e
+
+
 class DataSource(ABC):
     """所有数据源的统一接口。"""
 

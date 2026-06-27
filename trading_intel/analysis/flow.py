@@ -41,6 +41,8 @@ UNUSUAL_MIN_VOL_OI = 0.5
 IV_NOISE = 0.08              # |修正IV| 低于此 = 噪音
 IV_MILD = 0.28              # 区分"轻微" vs 正常强度
 IV_STRONG = 1.0            # call 卖方"极强压制"门槛
+MAX_ABS_DELTA = 0.90       # |delta| 超过此=深 ITM，IV 不可靠，剔除
+REL_MIN_STRIKES = 8        # 行权价数 ≥ 此才做"相对化"(减中位 ΔIV，剔全局 vol 平移)
 
 
 @dataclass(frozen=True)
@@ -218,48 +220,78 @@ def analyze_flow(
 
     if prev is not None:
         d_spot = spot - prev.spot
+        prev_live = _live(prev, today, horizon_days)
         # 当前链的偏斜 ∂IV/∂K（put / call 各一条），用于 Delta 修正
         put_slope = _lin_slope([(c.strike, c.iv) for c in live if c.kind == "P" and c.iv > 0])
         call_slope = _lin_slope([(c.strike, c.iv) for c in live if c.kind == "C" and c.iv > 0])
 
-        prev_map = {(c.expiry.isoformat(), c.strike, c.kind): c for c in prev.contracts}
-        for c in live:
-            key = (c.expiry.isoformat(), c.strike, c.kind)
-            p = prev_map.get(key)
-            prev_oi = p.open_interest if p else 0
-            prev_iv = p.iv if p else 0.0
-            d_oi = c.open_interest - prev_oi
+        def _agg(contracts):
+            """按 (行权价,C/P) 合并多个到期：OI 求和，IV/Delta 按 OI 加权。"""
+            m: dict[tuple, dict] = {}
+            for c in contracts:
+                k = (c.strike, c.kind)
+                a = m.setdefault(k, {"oi": 0, "ivw": 0.0, "dlw": 0.0, "vol": 0, "exp": c.expiry})
+                a["oi"] += c.open_interest
+                if c.iv > 0:
+                    a["ivw"] += c.iv * c.open_interest
+                a["dlw"] += c.delta * c.open_interest
+                a["vol"] += c.volume
+                if c.expiry < a["exp"]:
+                    a["exp"] = c.expiry
+            return m
+
+        cagg, pagg = _agg(live), _agg(prev_live)
+        # 第一遍：每个行权价的 Delta 修正 ΔIV（尚未相对化）
+        rows = []
+        for (strike, kind), a in cagg.items():
+            coi = a["oi"]
+            if coi <= 0:
+                continue
+            cdelta = a["dlw"] / coi
+            if abs(cdelta) > MAX_ABS_DELTA:   # 深 ITM，IV 不可靠
+                continue
+            civ = a["ivw"] / coi if a["ivw"] > 0 else 0.0
+            p = pagg.get((strike, kind))
+            poi = p["oi"] if p else 0
+            piv = (p["ivw"] / p["oi"]) if (p and p["oi"] > 0 and p["ivw"] > 0) else 0.0
+            d_oi = coi - poi
             if abs(d_oi) < MIN_DOI:
                 continue
-            prev_known = bool(p and prev_iv > 0 and c.iv > 0)
-            d_iv_pp = (c.iv - prev_iv) * 100.0 if prev_known else 0.0
-            slope = put_slope if c.kind == "P" else call_slope
-            adj_iv_pp = ((c.iv - prev_iv) - slope * d_spot) * 100.0 if prev_known else 0.0
-            bias, judgment, w = _judge(c.kind, d_oi, adj_iv_pp, prev_known)
+            prev_known = bool(p and piv > 0 and civ > 0)
+            d_iv = (civ - piv) if prev_known else 0.0
+            slope = put_slope if kind == "P" else call_slope
+            corrected = (d_iv - slope * d_spot) if prev_known else 0.0
+            rows.append({"strike": strike, "kind": kind, "coi": coi, "poi": poi, "d_oi": d_oi,
+                         "delta": cdelta, "civ": civ, "piv": piv, "d_iv": d_iv,
+                         "corrected": corrected, "known": prev_known, "vol": a["vol"], "exp": a["exp"]})
 
+        # "相对化"基准：行权价足够多时减去中位修正 ΔIV，剔除全市场 vol 平移；少则不减
+        cv = sorted(r["corrected"] for r in rows if r["known"])
+        ref = cv[len(cv) // 2] if len(cv) >= REL_MIN_STRIKES else 0.0
+
+        for r in rows:
+            adj_iv_pp = ((r["corrected"] - ref) * 100.0) if r["known"] else 0.0
+            d_iv_pp = r["d_iv"] * 100.0
+            bias, judgment, w = _judge(r["kind"], r["d_oi"], adj_iv_pp, r["known"])
             on_wall = ""
-            if call_wall is not None and abs(c.strike - call_wall) < 1e-6:
+            if call_wall is not None and abs(r["strike"] - call_wall) < 1e-6:
                 on_wall = "call墙"
-            elif put_wall is not None and abs(c.strike - put_wall) < 1e-6:
+            elif put_wall is not None and abs(r["strike"] - put_wall) < 1e-6:
                 on_wall = "put墙"
-            note = judgment
-            if p is None and c.open_interest >= MIN_DOI:
-                note = "【昨日无此行】" + judgment
-
+            note = judgment if r["poi"] > 0 else "【昨日无此行】" + judgment
             changes.append(FlowChange(
-                expiry=c.expiry, strike=c.strike, kind=c.kind,
-                prev_oi=prev_oi, curr_oi=c.open_interest, d_oi=d_oi, delta=c.delta,
-                prev_iv=prev_iv, curr_iv=c.iv, d_iv_pp=d_iv_pp, adj_iv_pp=adj_iv_pp,
-                curr_volume=c.volume, moneyness=(c.strike / spot - 1.0) if spot else 0.0,
+                expiry=r["exp"], strike=r["strike"], kind=r["kind"],
+                prev_oi=r["poi"], curr_oi=r["coi"], d_oi=r["d_oi"], delta=r["delta"],
+                prev_iv=r["piv"], curr_iv=r["civ"], d_iv_pp=d_iv_pp, adj_iv_pp=adj_iv_pp,
+                curr_volume=r["vol"], moneyness=(r["strike"] / spot - 1.0) if spot else 0.0,
                 bias=bias, judgment=judgment, on_wall=on_wall, note=note,
             ))
-            if d_oi > 0:  # kind 求和（向后兼容字段）
-                if c.kind == "C":
-                    net_call += d_oi
+            if r["d_oi"] > 0:  # kind 求和（向后兼容字段）
+                if r["kind"] == "C":
+                    net_call += r["d_oi"]
                 else:
-                    net_put += d_oi
-            # 买卖方加权压力
-            mag = abs(d_oi) * w
+                    net_put += r["d_oi"]
+            mag = abs(r["d_oi"]) * w
             if bias == "bearish":
                 downside += mag
             elif bias == "bullish":

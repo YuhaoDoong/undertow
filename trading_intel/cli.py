@@ -17,20 +17,24 @@ import sys
 from datetime import date
 
 from .config import load_config, DATA_DIR
+from .clock import market_today
 from .store import SnapshotStore
 from .datasources.cftc_cot import CftcCotSource
 from .datasources.cboe_options import CboeOptionsSource, snapshot_from_payload
 from .datasources.cboe_history import CboeHistorySource
 from .datasources.yahoo_futures import YahooFuturesSource
+from .datasources.fred_macro import FredMacroSource
 from .analysis.positioning import analyze
 from .analysis.signals import generate_signals, net_bias
 from .analysis.gamma import analyze_gamma
 from .analysis.flow import analyze_flow
-from .analysis.outlook import build_outlook
+from .analysis.outlook import build_outlook, macro_to_votes
+from .analysis.macro import analyze_macro, series_ids_for
 from .analysis.backtest import run_backtest
 from . import report as report_mod
 from . import viz
-from .report_html import render_report_html, render_index_html, render_flow_section
+from .report_html import (render_report_html, render_index_html,
+                          render_flow_section, render_macro_section)
 
 
 def _resolve_instruments(cfg, names: list[str]) -> list:
@@ -172,7 +176,7 @@ def cmd_snapshot(args) -> int:
     cfg = load_config()
     source = CboeOptionsSource()
     store = SnapshotStore()
-    today = date.today()
+    today = market_today()
     try:
         instruments = _resolve_instruments(cfg, args.instruments)
     except KeyError as e:
@@ -214,7 +218,7 @@ def cmd_flow(args) -> int:
     cfg = load_config()
     source = CboeOptionsSource()
     store = SnapshotStore()
-    today = date.today()
+    today = market_today()
     try:
         instruments = _resolve_instruments(cfg, args.instruments)
     except KeyError as e:
@@ -302,8 +306,9 @@ def cmd_report(args) -> int:
     lookback = args.lookback or cfg.lookback_weeks
     cot_src, opt_src, px_src = CftcCotSource(), CboeOptionsSource(), CboeHistorySource()
     fut_src = YahooFuturesSource()
+    fred_src = FredMacroSource()
     store = SnapshotStore()
-    today = date.today()
+    today = market_today()
     reports_dir = DATA_DIR / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
 
@@ -352,8 +357,20 @@ def cmd_report(args) -> int:
             else:
                 basis = "静态乘数近似（真实期货价不可用）"
                 comm_sym = ""
+
+            # —— 宏观背景层（FRED 真实利率/美元/通胀预期）——
+            ma, macro_votes = None, []
+            try:
+                sids = series_ids_for(inst.asset_class)
+                smap = {sid: fred_src.fetch_series(sid, use_cache=not args.no_cache) for sid in sids}
+                ma = analyze_macro(smap, asset_class=inst.asset_class)
+                macro_votes = macro_to_votes(ma)
+            except Exception as e:
+                print(f"[提示] {inst.key} 宏观层跳过: {e}", file=sys.stderr)
+
             outlook = build_outlook(an, signals, ga, fa, display_name=inst.display_name,
-                                    commodity_symbol=comm_sym, commodity_basis=basis)
+                                    commodity_symbol=comm_sym, commodity_basis=basis,
+                                    extra_votes=macro_votes)
 
             # —— 价格图：优先真实期货价 + 关键位换算到商品价；否则回退 ETF 日线 ——
             def lvl(etf_v):
@@ -385,7 +402,8 @@ def cmd_report(args) -> int:
                 title="投机资金 Managed Money 净持仓历史")
 
             flow_html = render_flow_section(fa)
-            html = render_report_html(outlook, price_svg, oi_svg, cot_svg, flow_html)
+            macro_html = render_macro_section(ma)
+            html = render_report_html(outlook, price_svg, oi_svg, cot_svg, flow_html, macro_html)
             fn = f"{inst.key}_{today.isoformat()}.html"
             (reports_dir / fn).write_text(html, encoding="utf-8")
             written.append((inst, outlook, fn))

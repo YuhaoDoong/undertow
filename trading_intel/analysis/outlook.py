@@ -81,6 +81,20 @@ class Outlook:
     commodity_basis: str = ""     # 换算依据（实时比值 / 静态乘数近似）
 
 
+def macro_to_votes(ma) -> list[FactorVote]:
+    """把宏观驱动（实际利率/美元/通胀预期）转成方向因子票。"""
+    out: list[FactorVote] = []
+    for d in ma.drivers:
+        if d.vote_sign == 0:
+            continue
+        out.append(FactorVote(
+            layer="Macro", factor=d.name, direction=_DIR_CN[d.vote_sign],
+            sign=d.vote_sign, weight=round(d.weight, 2),
+            reliability=d.reliability, detail=d.detail,
+        ))
+    return out
+
+
 def _cot_votes(signals: list[Signal]) -> list[FactorVote]:
     out: list[FactorVote] = []
     for s in signals:
@@ -122,17 +136,19 @@ def _gamma_vote(ga: GammaAnalysis) -> list[FactorVote]:
 
 
 def _flow_vote(fa: FlowAnalysis) -> list[FactorVote]:
-    if fa.prev_date:  # 有日对日 diff：用增建侧净倾向（方向无歧义）
+    if fa.prev_date:  # 有日对日 diff：用买卖方加权压力（与报告里的净倾向一致）
+        dn, up = fa.downside_pressure, fa.upside_pressure
         sign = 0
-        if fa.net_put_doi > fa.net_call_doi * 1.3:
+        if dn > up * 1.3:
             sign = -1
-        elif fa.net_call_doi > fa.net_put_doi * 1.3:
+        elif up > dn * 1.3:
             sign = 1
         if sign:
             return [FactorVote(
-                layer="Flow", factor="近月新增持仓倾向", direction=_DIR_CN[sign], sign=sign,
+                layer="Flow", factor="买卖方资金流", direction=_DIR_CN[sign], sign=sign,
                 weight=0.8, reliability="中",
-                detail=f"近月新增看涨 {fa.net_call_doi:,} vs 看跌 {fa.net_put_doi:,}（仅计增建侧）。",
+                detail=f"买卖方加权 下行压力 {dn:,.0f} vs 上行 {up:,.0f}"
+                       f"（OI增 × IV方向判买卖方）。",
             )]
         return []
     # 仅单快照：用今日成交 put/call 比（弱）
@@ -221,6 +237,9 @@ def _caveats(an: PositioningAnalysis, ga: GammaAnalysis, fa: FlowAnalysis,
         cv.append("含拥挤反指信号：回测显示其仅在均值回归品种可信，单边趋势里会失效——别在强趋势中盲做反指。")
     if fa.prev_date is None:
         cv.append("资金流仅一份快照，ΔOI/ΔIV 尚不可用；连续 `snapshot` 攒够两天后，方向研判会更实。")
+    elif fa.changes:
+        cv.append("资金流为【单腿】买卖方判定，可能把价差组合（如熊市看涨价差）的保护腿误读为"
+                  "方向性买盘——尤其原油机构常多腿布局，方向票仅供参考（详见 docs/author_notes.md）。")
     if ga.multiplier is None:
         cv.append(f"{ga.proxy_symbol} 与标的非线性（如 USO/WTI），关键位仅作 ETF 自身参考，换算商品仅定性。")
     if ga.net_gex < 0:
@@ -262,14 +281,20 @@ def build_outlook(
     display_name: str,
     commodity_symbol: str = "",
     commodity_basis: str = "",
+    extra_votes: list[FactorVote] = (),
 ) -> Outlook:
-    votes = _cot_votes(signals) + _gamma_vote(ga) + _flow_vote(fa)
+    votes = _cot_votes(signals) + _gamma_vote(ga) + _flow_vote(fa) + list(extra_votes)
     pos_sum = sum(v.weight for v in votes if v.sign > 0)
     neg_sum = sum(v.weight for v in votes if v.sign < 0)
     score = pos_sum - neg_sum
     bias, conf = _bias(score, pos_sum, neg_sum)
     # 情景排序按 bias【标签】而非原始分数：中性/分歧时以"基准·区间"打头，不强行给方向
     bias_sign = 1 if bias.startswith("偏多") else (-1 if bias.startswith("偏空") else 0)
+
+    caveats = _caveats(an, ga, fa, signals)
+    if any(v.layer == "Macro" for v in votes):
+        caveats.append("宏观（实际利率/美元）为背景与交叉验证；2024–2026 金价曾因央行购金"
+                       "与实际利率阶段性脱钩，勿单独依赖宏观择时。")
 
     return Outlook(
         instrument=an.instrument,
@@ -285,7 +310,7 @@ def build_outlook(
         votes=sorted(votes, key=lambda v: -v.weight),
         key_levels=_key_levels(ga, fa),
         scenarios=_scenarios(ga, bias_sign),
-        caveats=_caveats(an, ga, fa, signals),
+        caveats=caveats,
         commodity_symbol=commodity_symbol,
         commodity_basis=commodity_basis,
     )

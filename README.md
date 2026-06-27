@@ -66,13 +66,16 @@ trading_intel/
     gamma.py                ★ OI 墙 / Put-Call 比 / 做市商 GEX / 零伽马翻转
     flow.py                 ★ 资金流异动：单快照 volume/OI 异常 + 两日 ΔOI/ΔIV diff
     backtest.py             ★ 信号事件研究：无前视、发布滞后、对齐收益、分位分桶
-    outlook.py              ★ 综合研判：四层因子按回测可信度加权投票 + 关键位 + 情景
+    outlook.py              ★ 综合研判：五维因子(COT/Gamma/Flow/Macro/...)按可信度加权投票 + 关键位 + 情景
+    macro.py                ★ 宏观背景：实际利率/美元/通胀预期 → 金银利多利空
   datasources/yahoo_futures.py ★ 真实期货价 GC=F/SI=F/CL=F（urllib 直连，零依赖）
+  datasources/fred_macro.py    ★ FRED 宏观（DFII10 实际利率/DTWEXBGS 美元/T10YIE，免 key）
+  clock.py                  ★ 统一时钟：以【美东时间】为基准（用户在 SGT，交易日按美东算）
   viz.py                    ★ 手绘 SVG 图（价格+关键位 / OI 墙 / 持仓历史，零依赖）
   report.py                 渲染 Markdown 报告（COT / Gamma / 资金流 / 回测）
   report_html.py            ★ 组装自包含 HTML 研判报告（内嵌 SVG，浏览器直接看）
   cli.py                    命令行入口（analyze/gamma/snapshot/flow/backtest/report/list）
-tests/                      单元测试（不依赖网络，26 个）
+tests/                      单元测试（不依赖网络，30 个）
 data/cache/                 缓存落盘（自动生成，.gitignore）
 data/snapshots/             ★ 期权链每日快照（gzip，入 git = 备份；不可再生）
 data/reports/               综合研判 HTML 报告（按品种/日期，入 git）
@@ -89,6 +92,10 @@ data/reports/               综合研判 HTML 报告（按品种/日期，入 gi
 | 期权 OI / Gamma | CBOE `cdn.cboe.com/api/global/delayed_quotes/options`（**ETF 代理** GLD/SLV/USO） | 免费/合法 | 延迟，日内更新 |
 | 历史日线（回测） | CBOE `cdn.cboe.com/api/global/delayed_quotes/charts/historical`（GLD/SLV/USO） | 免费/合法 | 日终 |
 | **真实期货价** | Yahoo `query1.finance.yahoo.com/v8/finance/chart`（**GC=F/SI=F/CL=F**，COMEX/NYMEX 期货） | 免费/合法 | 准实时 |
+| **宏观背景** | FRED `fredgraph.csv`（**DFII10** 实际利率 / **DTWEXBGS** 美元 / **T10YIE** 通胀预期） | 免费/官方/免key | 日频 T+1 |
+
+> ⏱ **时钟以美东为准**（`clock.py`）：盯的是美国市场，交易日按 America/New_York 算。
+> 用户在新加坡(SGT)，本机日期比美东快约半天到一天，故快照/报告的"今天"统一锚定美东，避免与真实交易日错位。
 
 > 本机实测：CME（403 禁抓，不绕）不可用；**Yahoo chart 接口可达**（urllib 直连，yfinance 底层同款，零依赖）；
 > CFTC + CBOE + Yahoo 三个 host 稳定可达。

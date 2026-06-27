@@ -166,8 +166,35 @@ def render_flow_section(fa) -> str:
     return f'<div class="card">{head}{tilt}{body}</div>'
 
 
+def render_macro_section(ma) -> str:
+    """宏观背景卡片（实际利率/美元/通胀预期 → 金银利多/利空）。"""
+    if ma is None or not ma.drivers:
+        return ""
+    color = _BIAS_COLOR.get(ma.macro_bias, "#6e7781")
+    rows = []
+    for d in ma.drivers:
+        c = _VOTE_COLOR.get("看多" if d.vote_sign > 0 else ("看空" if d.vote_sign < 0 else "中性"), "#6e7781")
+        lean = "利多" if d.vote_sign > 0 else ("利空" if d.vote_sign < 0 else "中性")
+        chg = f"{d.chg_20d:+.2f}"
+        rows.append(
+            f'<tr><td>{_esc(d.name)}</td><td class="r">{d.latest:.2f}{_esc(d.unit)}</td>'
+            f'<td class="r">{_esc(chg)}</td>'
+            f'<td style="color:{c};font-weight:600">{_esc(lean)}</td>'
+            f'<td>{_esc(d.reliability)}</td></tr>'
+        )
+    return (
+        '<div class="card"><h2>宏观背景（基本面驱动 · FRED）</h2>'
+        f'<div class="sub">宏观倾向 <b style="color:{color}">{_esc(ma.macro_bias)}</b>'
+        f'（分 {ma.macro_score:+.1f}）· 数据 {_esc(ma.asof)}</div>'
+        "<table><tr><th>指标</th><th class='r'>最新</th><th class='r'>近20日Δ</th>"
+        "<th>对金银</th><th>可信度</th></tr>" + "".join(rows) + "</table>"
+        '<div class="sub" style="margin-top:6px">实际利率↓/美元↓ → 利多金银；为背景维度，'
+        '与持仓·期权微观结构共振时才加重。</div></div>'
+    )
+
+
 def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
-                       flow_html: str = "") -> str:
+                       flow_html: str = "", macro_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -190,6 +217,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="chart">{oi_svg}</div></div>'
         f'{flow_html}'
         f'<div class="card"><h2>方向因子投票（按回测可信度加权）</h2>{_votes_table(o)}</div>'
+        f'{macro_html}'
         f'<div class="card"><h2>持仓结构</h2><div class="chart">{cot_svg}</div></div>'
         f'<div class="card"><h2>情景推演（规则化 if-then，非点位预言）</h2>{_scenarios_html(o)}</div>'
         f'<div class="card">{_caveats_html(o)}</div>'

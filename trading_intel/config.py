@@ -57,6 +57,7 @@ class Instrument:
     options: OptionsSpec | None = None
     price: PriceSpec | None = None
     commodity: PriceSpec | None = None  # 真实商品期货价（GC=F/SI=F/CL=F）
+    vol_index: str | None = None        # CBOE 波动率指数符号（GVZ/OVX/VXSLV）
 
 
 @dataclass(frozen=True)
@@ -113,5 +114,6 @@ def load_config(path: Path | None = None) -> Config:
             options=options,
             price=_price_spec(spec.get("price")),
             commodity=_price_spec(spec.get("commodity")),
+            vol_index=spec.get("vol_index"),
         )
     return Config(instruments=instruments, defaults=raw.get("defaults", {}))

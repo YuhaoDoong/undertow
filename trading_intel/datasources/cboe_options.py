@@ -87,6 +87,23 @@ def snapshot_from_payload(payload: dict, instrument_key: str, sym: str) -> Optio
     )
 
 
+def chain_fingerprint(snap: OptionsSnapshot) -> str:
+    """期权链内容指纹（现价 + 每行权价 OI/volume），用于识别"无新数据"。
+
+    休市日（周末/节假日）CBOE 延迟报价仍是上一交易日的同一份数据——OI/volume/价
+    全部不变。把这种重复快照落成新的一天，会让 flow 层的日对日 diff 退化成全 0
+    （ΔOI≡0），悄悄抹掉买卖方信号。落盘前用指纹比对上一份：相同则跳过，不污染序列。
+    """
+    import hashlib
+    rows = sorted(
+        (c.expiry.isoformat(), c.kind, round(c.strike, 4), c.open_interest, c.volume)
+        for c in snap.contracts
+    )
+    h = hashlib.md5()
+    h.update(repr((round(snap.spot, 4), rows)).encode("utf-8"))
+    return h.hexdigest()
+
+
 class CboeOptionsSource:
     name = "cboe_etf"
     # 延迟报价日内会变，但对"人工监控"30 分钟缓存够用；调试可 use_cache=False

@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from trading_intel.analysis.macro import analyze_macro, series_ids_for
+from trading_intel.analysis.macro import analyze_macro, series_ids_for, vol_reading
 
 
 def _series(start_val, end_val, n=25):
@@ -62,6 +62,33 @@ def test_energy_only_dollar():
     ma = analyze_macro(smap, asset_class="energy")
     assert len(ma.drivers) == 1 and ma.drivers[0].key == "dollar"
     assert ma.drivers[0].vote_sign == 1
+
+
+def test_vol_reading_high_and_low_percentile():
+    base = date(2026, 1, 1)
+    # 一年 0~50 递增；最新=50 → 1年最高分位(100)，20日变化为正，note=高位
+    rising = [(base + timedelta(days=i), float(i)) for i in range(60)]
+    vr = vol_reading("OVX", rising)
+    assert vr is not None and vr.name == "OVX"
+    assert vr.latest == 59.0
+    assert vr.percentile_1y == 100.0
+    assert vr.chg_20d > 0
+    assert vr.note.startswith("高位")
+    # 最新落到序列最低 → 分位低、note=低位
+    falling = [(base + timedelta(days=i), float(60 - i)) for i in range(60)]
+    vr2 = vol_reading("GVZ", falling)
+    assert vr2.percentile_1y <= 20 and vr2.note.startswith("低位")
+    assert vr2.chg_20d < 0
+    # 空序列 → None（缺数据时不崩）
+    assert vol_reading("VXSLV", []) is None
+
+
+def test_analyze_macro_attaches_vol():
+    smap = {"DTWEXBGS": _series(105.0, 103.0)}
+    vseries = [(date(2026, 1, 1) + timedelta(days=i), 40.0 + i) for i in range(30)]
+    ma = analyze_macro(smap, asset_class="energy", vol_name="OVX", vol_series=vseries)
+    assert ma.vol is not None and ma.vol.name == "OVX"
+    assert ma.vol.latest == 69.0
 
 
 if __name__ == "__main__":

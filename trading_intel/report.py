@@ -271,8 +271,9 @@ def _flow_kind_table(changes, kind: str) -> list[str]:
     for c in sorted(items, key=lambda x: x.strike):
         wall = f" 🧱{c.on_wall}" if c.on_wall else ""
         adj = f"{c.adj_iv_pp:+.2f}pp" if c.prev_iv > 0 else "—（昨无IV）"
+        judg = c.judgment + (f" ⟂{c.spread_note}" if c.spread_note else "")
         L.append(f"| {c.strike:.1f}{wall} | {_flow_icon(c.bias)}{c.d_oi:+,} | {c.curr_oi:,} | "
-                 f"{c.delta:+.3f} | {adj} | {c.judgment} |")
+                 f"{c.delta:+.3f} | {adj} | {judg} |")
     L.append("")
     return L
 

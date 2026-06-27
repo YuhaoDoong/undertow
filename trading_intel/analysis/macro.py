@@ -53,12 +53,39 @@ class MacroDriver:
 
 
 @dataclass(frozen=True)
+class VolReading:
+    name: str            # GVZ / OVX / VXSLV
+    latest: float
+    chg_20d: float
+    percentile_1y: float   # 近1年分位 0~100
+    note: str
+
+
+@dataclass(frozen=True)
 class MacroAnalysis:
     asof: str
     asset_class: str
     drivers: list[MacroDriver] = field(default_factory=list)
     macro_bias: str = "中性"
     macro_score: float = 0.0
+    vol: VolReading | None = None
+
+
+def vol_reading(name: str, series: list[tuple]) -> VolReading | None:
+    """波动率指数读数：最新、20日变化、近1年分位 + 高低位提示。"""
+    if not series:
+        return None
+    latest = series[-1][1]
+    base = series[max(0, len(series) - 21)][1]
+    window = [v for _, v in series[-252:]]
+    pct = 100.0 * sum(1 for v in window if v <= latest) / len(window) if window else float("nan")
+    if pct >= 80:
+        note = "高位：避险/不确定性高，区间放大、追单谨慎"
+    elif pct <= 20:
+        note = "低位：自满，可能积蓄变盘"
+    else:
+        note = "中位"
+    return VolReading(name=name, latest=latest, chg_20d=latest - base, percentile_1y=pct, note=note)
 
 
 def _change(series: list[tuple], n: int, pct: bool) -> float:
@@ -71,7 +98,8 @@ def _change(series: list[tuple], n: int, pct: bool) -> float:
     return latest - base
 
 
-def analyze_macro(series_map: dict[str, list[tuple]], *, asset_class: str) -> MacroAnalysis:
+def analyze_macro(series_map: dict[str, list[tuple]], *, asset_class: str,
+                  vol_name: str | None = None, vol_series: list[tuple] | None = None) -> MacroAnalysis:
     drivers: list[MacroDriver] = []
     asof = ""
     score = 0.0
@@ -106,5 +134,6 @@ def analyze_macro(series_map: dict[str, list[tuple]], *, asset_class: str) -> Ma
         bias = "偏空"
     else:
         bias = "中性"
+    vol = vol_reading(vol_name, vol_series) if (vol_name and vol_series) else None
     return MacroAnalysis(asof=asof, asset_class=asset_class, drivers=drivers,
-                         macro_bias=bias, macro_score=round(score, 2))
+                         macro_bias=bias, macro_score=round(score, 2), vol=vol)

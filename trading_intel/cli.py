@@ -20,10 +20,11 @@ from .config import load_config, DATA_DIR
 from .clock import market_today
 from .store import SnapshotStore
 from .datasources.cftc_cot import CftcCotSource
-from .datasources.cboe_options import CboeOptionsSource, snapshot_from_payload
+from .datasources.cboe_options import CboeOptionsSource, snapshot_from_payload, chain_fingerprint
 from .datasources.cboe_history import CboeHistorySource
 from .datasources.yahoo_futures import YahooFuturesSource
 from .datasources.fred_macro import FredMacroSource
+from .datasources.cboe_vol import CboeVolSource
 from .analysis.positioning import analyze
 from .analysis.signals import generate_signals, net_bias
 from .analysis.gamma import analyze_gamma
@@ -191,7 +192,12 @@ def cmd_snapshot(args) -> int:
         sym = inst.options.symbol
         try:
             payload = source.fetch_raw(inst, use_cache=not args.no_cache)
-            path = store.save("options", sym, payload, on_date=today)
+            already = store.load("options", sym, today) is not None
+            path, skipped = _save_snapshot_dedup(store, inst, sym, payload, today)
+            if skipped and not already:
+                print(f"[提示] {inst.key} 期权数据与上一交易日逐行相同（休市重复），跳过落盘",
+                      file=sys.stderr)
+                continue
             snap = snapshot_from_payload(payload, inst.key, sym)
             n_oi = len(snap.with_oi())
             n_dates = len(store.dates("options", sym))
@@ -235,7 +241,10 @@ def cmd_flow(args) -> int:
             # 当前快照：优先用刚落盘的今日数据；若今日未落盘则现拉一份（不落盘，仅分析）
             if not args.no_snapshot and store.load("options", sym, today) is None:
                 payload = source.fetch_raw(inst, use_cache=not args.no_cache)
-                store.save("options", sym, payload, on_date=today)
+                _, skipped = _save_snapshot_dedup(store, inst, sym, payload, today)
+                if skipped:
+                    print(f"[提示] {inst.key} 期权数据与上一交易日逐行相同（休市重复），跳过落盘",
+                          file=sys.stderr)
 
             stored = store.latest_two("options", sym)
             if stored:
@@ -279,13 +288,33 @@ def cmd_flow(args) -> int:
     return 0
 
 
+def _save_snapshot_dedup(store, inst, sym, payload, today):
+    """落盘今日期权快照，但若内容与上一份完全相同则跳过（休市/数据未刷新的重复）。
+    返回 (path|None, skipped_bool)。跳过可避免 flow 层日对日 diff 退化成全 0。"""
+    try:
+        fp = chain_fingerprint(snapshot_from_payload(payload, inst.key, sym))
+        latest = store.latest("options", sym)
+        if latest is not None:
+            ld, lpayload = latest
+            if ld != today and lpayload is not None:
+                lfp = chain_fingerprint(snapshot_from_payload(lpayload, inst.key, sym))
+                if lfp == fp:
+                    return None, True   # 与上一交易日逐行相同 → 休市重复，不落盘
+    except Exception:
+        pass  # 指纹失败不应阻断落盘（宁可多存）
+    return store.save("options", sym, payload, on_date=today), False
+
+
 def _load_curr_prev_snapshot(store, source, inst, today, *, no_cache, no_snapshot):
     """取当前+上一份期权快照。今日未落盘则按需落盘（除非 --no-snapshot）。
     返回 (curr_snap, prev_snap|None, prev_date|None, curr_date_str)。"""
     sym = inst.options.symbol
     if not no_snapshot and store.load("options", sym, today) is None:
         payload = source.fetch_raw(inst, use_cache=not no_cache)
-        store.save("options", sym, payload, on_date=today)
+        _, skipped = _save_snapshot_dedup(store, inst, sym, payload, today)
+        if skipped:
+            print(f"[提示] {inst.key} 期权数据与上一交易日逐行相同（休市重复），跳过落盘",
+                  file=sys.stderr)
     stored = store.latest_two("options", sym)
     if stored:
         curr_d, curr_payload = stored[-1]
@@ -307,6 +336,7 @@ def cmd_report(args) -> int:
     cot_src, opt_src, px_src = CftcCotSource(), CboeOptionsSource(), CboeHistorySource()
     fut_src = YahooFuturesSource()
     fred_src = FredMacroSource()
+    vol_src = CboeVolSource()
     store = SnapshotStore()
     today = market_today()
     reports_dir = DATA_DIR / "reports"
@@ -363,7 +393,14 @@ def cmd_report(args) -> int:
             try:
                 sids = series_ids_for(inst.asset_class)
                 smap = {sid: fred_src.fetch_series(sid, use_cache=not args.no_cache) for sid in sids}
-                ma = analyze_macro(smap, asset_class=inst.asset_class)
+                vol_series = None
+                if inst.vol_index:
+                    try:
+                        vol_series = vol_src.fetch_series(inst.vol_index, use_cache=not args.no_cache)
+                    except Exception as ve:
+                        print(f"[提示] {inst.key} 波动率 {inst.vol_index} 跳过: {ve}", file=sys.stderr)
+                ma = analyze_macro(smap, asset_class=inst.asset_class,
+                                   vol_name=inst.vol_index, vol_series=vol_series)
                 macro_votes = macro_to_votes(ma)
             except Exception as e:
                 print(f"[提示] {inst.key} 宏观层跳过: {e}", file=sys.stderr)

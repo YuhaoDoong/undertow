@@ -116,12 +116,13 @@ def _flow_kind_table_html(changes, kind: str) -> str:
         col = _FLOW_COLOR.get(c.bias, "#6e7781")
         wall = f' <span style="color:#9467bd">🧱{_esc(c.on_wall)}</span>' if c.on_wall else ""
         adj = f"{c.adj_iv_pp:+.2f}pp" if c.prev_iv > 0 else "—"
+        sp = f' <span style="color:#9467bd;font-weight:400">⟂{_esc(c.spread_note)}</span>' if c.spread_note else ""
         rows.append(
             f'<tr><td class="r lvl">{c.strike:.1f}{wall}</td>'
             f'<td class="r" style="color:{col}">{c.d_oi:+,}</td>'
             f'<td class="r">{c.curr_oi:,}</td><td class="r">{c.delta:+.3f}</td>'
             f'<td class="r">{_esc(adj)}</td>'
-            f'<td style="color:{col};font-weight:600">{_esc(c.judgment)}</td></tr>'
+            f'<td style="color:{col};font-weight:600">{_esc(c.judgment)}{sp}</td></tr>'
         )
     return (f'<div style="font-weight:600;margin:10px 0 2px">{side}</div>'
             "<table><tr><th class='r'>行权价</th><th class='r'>ΔOI</th><th class='r'>当前OI</th>"
@@ -154,8 +155,15 @@ def render_flow_section(fa) -> str:
     head = '<h2>期权资金流 / 持仓异动（买方 vs 卖方）</h2>'
     tilt = f'<div class="sub">净倾向：<b>{_esc(fa.flow_tilt)}</b></div>'
     if fa.prev_date and fa.changes:
+        spread_html = ""
+        if fa.spreads:
+            items = "".join(f"<li><b>{_esc(s.name)}</b>：{_esc(s.detail)}</li>" for s in fa.spreads)
+            spread_html = ('<div class="warn" style="margin:8px 0"><b>⚠️ 检测到疑似价差结构'
+                           '（已从方向压力中扣除"封顶/保护腿"，避免误读为方向）</b>'
+                           f'<ul>{items}</ul></div>')
         body = (f'<div class="sub">对比 {_esc(fa.prev_date)} → {_esc(fa.curr_date)} · '
                 'OI增+IV升=买方抬价 / OI增+IV降=卖方写权</div>'
+                + spread_html
                 + _flow_kind_table_html(fa.changes, "P")
                 + _flow_kind_table_html(fa.changes, "C"))
     else:
@@ -182,14 +190,20 @@ def render_macro_section(ma) -> str:
             f'<td style="color:{c};font-weight:600">{_esc(lean)}</td>'
             f'<td>{_esc(d.reliability)}</td></tr>'
         )
+    vol_html = ""
+    if ma.vol is not None:
+        v = ma.vol
+        vol_html = (f'<div class="sub" style="margin-top:8px">波动率 <b>{_esc(v.name)} {v.latest:.1f}</b>'
+                    f'（近20日 {v.chg_20d:+.1f}，1年分位 {v.percentile_1y:.0f}%）— {_esc(v.note)}</div>')
     return (
-        '<div class="card"><h2>宏观背景（基本面驱动 · FRED）</h2>'
+        '<div class="card"><h2>宏观背景（基本面驱动 · FRED + CBOE 波动率）</h2>'
         f'<div class="sub">宏观倾向 <b style="color:{color}">{_esc(ma.macro_bias)}</b>'
         f'（分 {ma.macro_score:+.1f}）· 数据 {_esc(ma.asof)}</div>'
         "<table><tr><th>指标</th><th class='r'>最新</th><th class='r'>近20日Δ</th>"
         "<th>对金银</th><th>可信度</th></tr>" + "".join(rows) + "</table>"
-        '<div class="sub" style="margin-top:6px">实际利率↓/美元↓ → 利多金银；为背景维度，'
-        '与持仓·期权微观结构共振时才加重。</div></div>'
+        f'{vol_html}'
+        '<div class="sub" style="margin-top:6px">实际利率↓/美元↓ → 利多金银；波动率高位=区间放大、'
+        '追单谨慎。宏观为背景维度，与持仓·期权微观结构共振时才加重。</div></div>'
     )
 
 

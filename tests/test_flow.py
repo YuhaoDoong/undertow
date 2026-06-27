@@ -118,6 +118,40 @@ def test_flow_buyer_seller_table():
     assert fa.flow_tilt.startswith("偏空")
 
 
+def test_detect_bear_call_spread_strips_protective_leg():
+    # 表面"上方大量买 75C"看似看涨，实为 Bear Call Spread 的封顶腿：
+    # 卖 72C(IV降=压制) + 买 75C(IV升=保护)，净看空（复刻作者 6/25 WTI 识破）。
+    prev = _snap([_c(72, "C", oi=2000, iv=0.30), _c(75, "C", oi=1500, iv=0.34)], spot=70.0)
+    curr = _snap([_c(72, "C", oi=2300, vol=900, iv=0.28),
+                  _c(75, "C", oi=1800, vol=900, iv=0.36)], spot=70.0)
+    fa = analyze_flow(prev, curr, today=TODAY, prev_date="d0", curr_date="d1")
+    assert len(fa.spreads) == 1
+    sp = fa.spreads[0]
+    assert sp.net_bias == "bearish" and sp.short_strike == 72.0 and sp.long_strike == 75.0
+    assert "熊市看涨" in sp.name
+    by = {(c.strike, c.kind): c for c in fa.changes}
+    # 短腿=方向，长腿=保护（与净向相反，不计方向）
+    assert "短腿" in by[(72.0, "C")].spread_note
+    assert "保护" in by[(75.0, "C")].spread_note
+    # 75C 的看涨买盘被扣除 → 上行压力清零，净倾向偏空（而非被表象误导成看涨）
+    assert fa.upside_pressure == 0.0
+    assert fa.downside_pressure > 0
+    assert fa.flow_tilt.startswith("偏空")
+
+
+def test_spread_rejects_far_and_small_legs():
+    # 行权价相距过远（>8%）或某腿规模太小，都不应被配成价差。
+    prev = _snap([_c(72, "C", oi=2000, iv=0.30), _c(90, "C", oi=1500, iv=0.34),
+                  _c(73, "C", oi=2000, iv=0.30), _c(74, "C", oi=1000, iv=0.34)], spot=70.0)
+    curr = _snap([_c(72, "C", oi=2300, vol=900, iv=0.28),   # 卖方压制
+                  _c(90, "C", oi=1800, vol=900, iv=0.36),   # 买方，但距 72 太远(25%>8%)
+                  _c(73, "C", oi=2330, vol=900, iv=0.28),   # 卖方压制
+                  _c(74, "C", oi=1010, vol=900, iv=0.36)],  # 买方，但 ΔOI=10 < 噪音门槛
+                 spot=70.0)
+    fa = analyze_flow(prev, curr, today=TODAY, prev_date="d0", curr_date="d1")
+    assert fa.spreads == []   # 既无相近又量级达标的买卖对
+
+
 def test_snapshot_store_roundtrip():
     with tempfile.TemporaryDirectory() as tmp:
         store = SnapshotStore(root=Path(tmp))

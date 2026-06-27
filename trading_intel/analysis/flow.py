@@ -25,7 +25,7 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 
 from ..models import OptionsSnapshot, OptionContract
@@ -43,6 +43,10 @@ IV_MILD = 0.28              # 区分"轻微" vs 正常强度
 IV_STRONG = 1.0            # call 卖方"极强压制"门槛
 MAX_ABS_DELTA = 0.90       # |delta| 超过此=深 ITM，IV 不可靠，剔除
 REL_MIN_STRIKES = 8        # 行权价数 ≥ 此才做"相对化"(减中位 ΔIV，剔全局 vol 平移)
+# —— 价差结构识别（保守，宁缺勿滥，避免把相邻买卖方误配成价差）——
+SPREAD_MAX_WIDTH_FRAC = 0.08  # 两腿行权价间距 ≤ 短腿×此（垂直价差两腿应相近）
+SPREAD_MIN_SIZE = 2 * MIN_DOI  # 两腿较小者需 ≥ 此（双腿都明显高于噪音才算）
+SPREAD_TOP_N = 4             # 最多上报的价差数（按规模取前 N，其余视为噪音）
 
 
 @dataclass(frozen=True)
@@ -79,6 +83,20 @@ class FlowChange:
     judgment: str          # 买方保护 / 卖方做支撑 / 卖方压制 / 卖方撤退 …（细判，作者口径）
     on_wall: str           # put墙 / call墙 / ""
     note: str
+    weight: float = 0.0    # 该腿的方向权重（用于压力聚合 / 价差扣减）
+    spread_note: str = ""  # 若属某价差结构的腿，标注（如"熊市看涨价差·保护腿"）
+
+
+@dataclass(frozen=True)
+class Spread:
+    """检测到的疑似垂直价差结构（同 C/P、相邻行权价、卖一腿 + 买一腿）。"""
+    kind: str
+    name: str             # 熊市看涨价差(Bear Call) 等
+    short_strike: float   # 卖出腿（决定方向）
+    long_strike: float    # 买入腿（封顶/保护腿）
+    size: int
+    net_bias: str         # bearish / bullish（看短腿）
+    detail: str
 
 
 @dataclass(frozen=True)
@@ -98,9 +116,10 @@ class FlowAnalysis:
     changes: list[FlowChange] = field(default_factory=list)
     net_call_doi: int = 0          # 近月增建 call OI 净增（kind 求和，向后兼容）
     net_put_doi: int = 0           # 近月增建 put OI 净增
-    downside_pressure: float = 0.0  # 买卖方判定加权的下行压力
+    downside_pressure: float = 0.0  # 买卖方判定加权的下行压力（已扣价差保护腿）
     upside_pressure: float = 0.0
     flow_tilt: str = "—"
+    spreads: list[Spread] = field(default_factory=list)  # 检测到的疑似价差结构
     call_wall: float | None = None
     put_wall: float | None = None
 
@@ -195,6 +214,51 @@ def _judge(kind: str, d_oi: int, adj_pp: float, prev_known: bool) -> tuple[str, 
             return "bullish", "卖方撤退", 0.5
 
 
+def detect_spreads(changes: list[FlowChange]) -> list[Spread]:
+    """检测疑似垂直价差：同 C/P、卖一腿 + 买一腿、量级相当、行权价相邻。
+
+    复刻作者 6/25 WTI 的识破——表面"上方大量买 Call"实为 Bear Call Spread 的保护腿，
+    净头寸看短腿（卖 70C）的压制。垂直价差方向由"卖低买高/卖高买低"判定：
+      Call: 卖低买高=熊市看涨(净空)；卖高买低=牛市看涨(净多)
+      Put : 卖高买低=牛市看跌(净多)；卖低买高=熊市看跌(净空)
+    """
+    out: list[Spread] = []
+    used: set = set()
+    for kind in ("C", "P"):
+        building = [c for c in changes if c.kind == kind and c.d_oi > 0]
+        sellers = [c for c in building if "卖方" in c.judgment]
+        buyers = [c for c in building if "买方" in c.judgment]
+        for s in sorted(sellers, key=lambda x: -x.d_oi):
+            if (s.strike, kind) in used:
+                continue
+            max_width = SPREAD_MAX_WIDTH_FRAC * s.strike
+            cands = [b for b in buyers if (b.strike, kind) not in used
+                     and 1e-6 < abs(b.strike - s.strike) <= max_width  # 两腿相近才算垂直价差
+                     and 0.4 <= (b.d_oi / s.d_oi) <= 2.5]              # 量级相当
+            if not cands:
+                continue
+            b = min(cands, key=lambda x: abs(x.strike - s.strike))
+            size = min(s.d_oi, b.d_oi)
+            if size < SPREAD_MIN_SIZE:   # 双腿都得明显高于噪音
+                continue
+            if kind == "C":
+                name, net = ("熊市看涨价差(Bear Call)", "bearish") if s.strike < b.strike \
+                    else ("牛市看涨价差(Bull Call)", "bullish")
+            else:
+                name, net = ("牛市看跌价差(Bull Put)", "bullish") if s.strike > b.strike \
+                    else ("熊市看跌价差(Bear Put)", "bearish")
+            used.add((s.strike, kind)); used.add((b.strike, kind))
+            dir_cn = "看空" if net == "bearish" else "看多"
+            out.append(Spread(
+                kind=kind, name=name, short_strike=s.strike, long_strike=b.strike,
+                size=size, net_bias=net,
+                detail=f"卖 {s.strike:.0f}{kind} + 买 {b.strike:.0f}{kind}（各约 {size:,}）"
+                       f" → {name}，净{dir_cn}（与净向相反的腿为封顶/保护，不计方向）",
+            ))
+    out.sort(key=lambda sp: -sp.size)
+    return out[:SPREAD_TOP_N]   # 只报规模最大的几笔，宁缺勿滥
+
+
 def analyze_flow(
     prev: OptionsSnapshot | None,
     curr: OptionsSnapshot,
@@ -214,6 +278,7 @@ def analyze_flow(
     tpv = sum(c.volume for c in live if c.kind == "P")
 
     changes: list[FlowChange] = []
+    spreads: list[Spread] = []
     net_call = net_put = 0
     downside = upside = 0.0
     tilt = "—（仅一份快照，明天起可出 ΔOI/ΔIV 与买卖方判定）"
@@ -284,7 +349,7 @@ def analyze_flow(
                 prev_oi=r["poi"], curr_oi=r["coi"], d_oi=r["d_oi"], delta=r["delta"],
                 prev_iv=r["piv"], curr_iv=r["civ"], d_iv_pp=d_iv_pp, adj_iv_pp=adj_iv_pp,
                 curr_volume=r["vol"], moneyness=(r["strike"] / spot - 1.0) if spot else 0.0,
-                bias=bias, judgment=judgment, on_wall=on_wall, note=note,
+                bias=bias, judgment=judgment, on_wall=on_wall, note=note, weight=w,
             ))
             if r["d_oi"] > 0:  # kind 求和（向后兼容字段）
                 if r["kind"] == "C":
@@ -298,6 +363,29 @@ def analyze_flow(
                 upside += mag
 
         changes.sort(key=lambda x: -abs(x.d_oi))
+
+        # —— 价差结构识别：扣除"封顶/保护腿"的方向压力，避免把价差误读为方向 ——
+        spreads = detect_spreads(changes)
+        if spreads:
+            labels: dict[tuple, str] = {}
+            for sp in spreads:
+                for c in changes:
+                    if c.kind != sp.kind:
+                        continue
+                    is_short = abs(c.strike - sp.short_strike) < 1e-6
+                    is_long = abs(c.strike - sp.long_strike) < 1e-6
+                    if not (is_short or is_long):
+                        continue
+                    labels[(c.strike, c.kind)] = sp.name + ("·短腿(方向)" if is_short else "·长腿(保护)")
+                    # 与净方向相反的腿 = 封顶腿，扣其方向压力
+                    if c.bias != sp.net_bias and c.bias in ("bearish", "bullish"):
+                        p = abs(c.d_oi) * c.weight
+                        if c.bias == "bearish":
+                            downside -= p
+                        else:
+                            upside -= p
+            downside, upside = max(0.0, downside), max(0.0, upside)
+            changes = [replace(c, spread_note=labels.get((c.strike, c.kind), "")) for c in changes]
 
         if downside or upside:
             if downside > upside * 1.3:
@@ -324,6 +412,7 @@ def analyze_flow(
         downside_pressure=round(downside, 1),
         upside_pressure=round(upside, 1),
         flow_tilt=tilt,
+        spreads=spreads,
         call_wall=call_wall,
         put_wall=put_wall,
     )

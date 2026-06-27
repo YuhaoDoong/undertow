@@ -4,6 +4,7 @@
     "gold": {
       "display_name": "黄金 Gold (COMEX)",
       "asset_class": "metal",
+      "vol_index": "GVZ",
       "cot": {
         "report": "disaggregated_fut",
         "contract_market_code": "088691",
@@ -32,6 +33,7 @@
     "silver": {
       "display_name": "白银 Silver (COMEX)",
       "asset_class": "metal",
+      "vol_index": "VXSLV",
       "cot": {
         "report": "disaggregated_fut",
         "contract_market_code": "084691",
@@ -60,6 +62,7 @@
     "wti": {
       "display_name": "原油 WTI Crude (NYMEX)",
       "asset_class": "energy",
+      "vol_index": "OVX",
       "cot": {
         "report": "disaggregated_fut",
         "contract_market_code": "067651",

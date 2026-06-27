@@ -1,6 +1,8 @@
-# trading_intel — 期货/期权持仓情报地基
+# undertow — 读懂价格表面之下的机构持仓暗流
 
-三层情报 + 回测，复盘黄金 / 白银 / 原油的大资金结构：
+机构持仓情报工具，复盘**黄金 / 白银 / 原油 / 美元指数**的大资金结构。**纯标准库 Python，
+零依赖**；可作为 **Agent Skill** 装进 Claude Code（`.claude/skills/`）或 Codex（`.codex/skills/`），
+见 `SKILL.md`。三层情报 + 回测 + 综合研判：
 
 1. **COT 持仓层**（CFTC 周报）：投机资金/聪明钱/互换商的多空结构与变化，量化"拥挤度、空头回补 vs 主动建仓、聪明钱背离、互换商方向压力"。
 2. **期权 Gamma 层**（CBOE 延迟数据）：按行权价的 OI 墙（吸附/pin 位）、Put/Call 比、做市商 GEX 正负、零伽马翻转位——即文章里最有价值的"关键位点"。
@@ -19,70 +21,78 @@
 无需安装第三方库（纯标准库）。在本目录运行：
 
 ```bash
-python3 -m trading_intel.cli list                    # 列出已配置品种
+python3 -m undertow list                    # 列出已配置品种（金/银/油/美元，及各自数据层）
 # —— COT 持仓层 ——
-python3 -m trading_intel.cli analyze                 # 全部品种（金/银/油）
-python3 -m trading_intel.cli analyze gold silver     # 指定品种
-python3 -m trading_intel.cli analyze --lookback 104  # 自定义历史回看周数
-python3 -m trading_intel.cli analyze gold --json     # 结构化 JSON（喂给上层/LLM）
+python3 -m undertow analyze                 # 全部品种
+python3 -m undertow analyze gold silver     # 指定品种
+python3 -m undertow analyze dxy             # 美元指数（走 Legacy 报告：非商业/商业）
+python3 -m undertow analyze --lookback 104  # 自定义历史回看周数
+python3 -m undertow analyze gold --json     # 结构化 JSON（喂给上层/LLM）
 # —— 期权 Gamma 层 ——
-python3 -m trading_intel.cli gamma                   # 全部品种 Gamma/OI 结构
-python3 -m trading_intel.cli gamma gold --json       # 结构化 JSON
-python3 -m trading_intel.cli gamma --horizon 30      # 近月窗口天数（默认45）
+python3 -m undertow gamma                   # 全部品种 Gamma/OI 结构
+python3 -m undertow gamma gold --json       # 结构化 JSON
+python3 -m undertow gamma --horizon 30      # 近月窗口天数（默认45）
 # —— 期权资金流 / 异动层 ——
-python3 -m trading_intel.cli snapshot                # 落盘今日期权链（每天跑一次，攒历史）
-python3 -m trading_intel.cli flow                    # 单快照异常活跃 +（≥2天后）日对日 ΔOI/ΔIV
-python3 -m trading_intel.cli flow gold --json        # 结构化 JSON
-python3 -m trading_intel.cli flow --no-snapshot      # 只用已落盘数据，不自动拉今日
+python3 -m undertow snapshot                # 落盘今日期权链（每天跑一次，攒历史）
+python3 -m undertow flow                    # 单快照异常活跃 +（≥2天后）日对日 ΔOI/ΔIV
+python3 -m undertow flow gold --json        # 结构化 JSON
+python3 -m undertow flow --no-snapshot      # 只用已落盘数据，不自动拉今日
 # —— 信号回测层（校准阈值）——
-python3 -m trading_intel.cli backtest                # COT 信号历史前瞻收益
-python3 -m trading_intel.cli backtest gold --json    # 结构化 JSON
-python3 -m trading_intel.cli backtest --horizons 5 10 20  # 前瞻交易日
+python3 -m undertow backtest                # COT 信号历史前瞻收益
+python3 -m undertow backtest gold --json    # 结构化 JSON
+python3 -m undertow backtest --horizons 5 10 20  # 前瞻交易日
 # —— 综合研判报告（四层聚合 + 可视化 + 情景）——
-python3 -m trading_intel.cli report                  # 各品种 HTML 研判报告（含 3 张 SVG 图）
-python3 -m trading_intel.cli report gold             # 指定品种
-python3 -m trading_intel.cli report --json           # outlook 结构化 JSON（喂上层/LLM）
+python3 -m undertow report                  # 各品种 HTML 研判报告（含 3 张 SVG 图）
+python3 -m undertow report gold             # 指定品种
+python3 -m undertow report --json           # outlook 结构化 JSON（喂上层/LLM）
 # 产出在 data/reports/{品种}_{日期}.html，浏览器打开即看（macOS: open data/reports/...）
 ```
 
-## 架构（分层解耦，便于调整 / 加功能）
+## 架构（四层 + 公共核心，严格单向依赖，像 skill 一样模块分明）
 
 ```
-config/instruments.json     品种注册表：品种=改这个 JSON，不改代码
-trading_intel/
-  config.py                 读配置、路径
-  models.py                 数据模型（CotReport / OptionsSnapshot 等，纯数据）
-  cache.py                  文件缓存（COT 6h / 期权 30min TTL，临时、可覆盖）
-  store.py                  ★ 快照仓库：期权链原始 payload 按日 gzip 落盘（永久档案，入 git）
-  datasources/
+SKILL.md / AGENTS.md        Agent Skill 清单（Claude Code / Codex 通用）
+config/instruments.json     品种注册表：加品种 = 改这个 JSON，不改代码
+undertow/
+  __main__.py               python -m undertow 入口
+  cli.py                    命令编排（analyze/gamma/snapshot/flow/backtest/report/list）
+  core/                     【公共核心】不依赖其它层，可被自由引用
+    models.py               数据模型（CotReport / OptionsSnapshot 等，纯数据）
+    config.py               读 config/instruments.json、路径
+    clock.py                ★ 美东时钟（用户在 SGT，交易日按美东算）
+  collect/                  【数据收集层】各 API 收敛成语义模型 + 快照仓库 + 缓存
     base.py                 数据源抽象 + 标准库 HTTP 工具
-    cftc_cot.py             ★ CFTC COT 数据源（Socrata 72hh-3qpy）+ 字段映射
-    cboe_options.py         ★ CBOE 期权数据源（OCC 代码解析、OI/gamma/iv）+ 原始落盘
-    cboe_history.py         ★ CBOE 历史日线（GLD/SLV/USO，回测用，免 key）
-  analysis/
+    cftc_cot.py             ★ CFTC COT：Disaggregated(物理品) + Legacy(美元指数等金融品)
+    cboe_options.py         ★ CBOE 期权（OCC 解析、OI/gamma/iv）+ 原始落盘 + 内容指纹去重
+    cboe_history.py         ★ CBOE 历史日线（回测用，免 key）
+    cboe_vol.py             ★ CBOE 波动率指数（GVZ/OVX/VXSLV）
+    yahoo_futures.py        ★ 真实期货价 GC=F/SI=F/CL=F/DX=F（urllib 直连，零依赖）
+    fred_macro.py           ★ FRED 宏观（实际利率/美元/通胀预期，免 key）
+    store.py                ★ 快照仓库：期权链原始 payload 按日 gzip 落盘（永久档案，入 git）
+    cache.py                文件缓存（带 TTL，临时、可覆盖）
+  analyze/                  【数据分析层】只吃 core.models，与数据源解耦，纯确定性计算
     positioning.py          ★ 净头寸 / 周变化分解 / 历史分位 / z-score
     signals.py              ★ COT 规则解读：拥挤、背离、互换商压力（阈值集中可调）
-    blackscholes.py         BS gamma（用于零伽马翻转位重定价）
+    blackscholes.py         BS gamma（零伽马翻转位重定价）
     gamma.py                ★ OI 墙 / Put-Call 比 / 做市商 GEX / 零伽马翻转
-    flow.py                 ★ 资金流异动：单快照 volume/OI 异常 + 两日 ΔOI/ΔIV diff
+    flow.py                 ★ 资金流：单快照异动 + 两日 ΔOI/ΔIV 买卖方 + 多腿价差识别
+    macro.py                ★ 宏观背景：实际利率/美元/通胀预期 + 波动率指数
     backtest.py             ★ 信号事件研究：无前视、发布滞后、对齐收益、分位分桶
-    outlook.py              ★ 综合研判：五维因子(COT/Gamma/Flow/Macro/...)按可信度加权投票 + 关键位 + 情景
-    macro.py                ★ 宏观背景：实际利率/美元/通胀预期 → 金银利多利空
-  datasources/yahoo_futures.py ★ 真实期货价 GC=F/SI=F/CL=F（urllib 直连，零依赖）
-  datasources/fred_macro.py    ★ FRED 宏观（DFII10 实际利率/DTWEXBGS 美元/T10YIE，免 key）
-  clock.py                  ★ 统一时钟：以【美东时间】为基准（用户在 SGT，交易日按美东算）
-  viz.py                    ★ 手绘 SVG 图（价格+关键位 / OI 墙 / 持仓历史，零依赖）
-  report.py                 渲染 Markdown 报告（COT / Gamma / 资金流 / 回测）
-  report_html.py            ★ 组装自包含 HTML 研判报告（内嵌 SVG，浏览器直接看）
-  cli.py                    命令行入口（analyze/gamma/snapshot/flow/backtest/report/list）
-tests/                      单元测试（不依赖网络，30 个）
-data/cache/                 缓存落盘（自动生成，.gitignore）
+    outlook.py              ★ 综合研判：多维因子按可信度加权投票 + 关键位 + 情景
+  report/                   【报告层】只吃 analyze 结果，只管展示
+    markdown.py             终端 Markdown 报告（COT / Gamma / 资金流 / 回测）
+    html.py                 ★ 自包含 HTML 研判报告（内嵌 SVG，浏览器直接看）
+    viz.py                  ★ 手绘 SVG 图（价格+关键位 / OI 墙 / 持仓历史，零依赖）
+tests/                      单元测试（不依赖网络，36 个）
 data/snapshots/             ★ 期权链每日快照（gzip，入 git = 备份；不可再生）
 data/reports/               综合研判 HTML 报告（按品种/日期，入 git）
+data/cache/                 缓存落盘（自动生成，.gitignore）
 ```
 
-三层职责清晰：**数据源**只管把各家 API 收敛成语义模型；**分析层**只吃模型做确定性计算；
-**渲染层**只管展示。任何一层都能单独替换/测试。LLM 不参与算数，只做编排与解读。
+职责清晰、单向依赖：**collect** 把各家 API 收敛成语义模型；**analyze** 只吃模型做确定性
+计算；**report** 只管展示；**core** 是三者共享的地基。任何一层都能单独替换/测试。
+**加品种** = 改 JSON；**加数据源** = `collect/` 加一个文件（真·CME 期货期权数据源亦在此
+即插即用，分析层零改动）。LLM 不参与算数，只做编排与解读。
 
 ## 数据来源（含踩坑记录）
 
@@ -170,11 +180,25 @@ python3 tests/test_backtest.py
 # 或 python3 -m pytest tests/ -q
 ```
 
+## 作为 Agent Skill 安装
+
+本仓库即一个 **Agent Skill**（根目录 `SKILL.md` 提供清单，Claude Code 与 Codex 通用）：
+
+```bash
+# Claude Code
+git clone https://github.com/YuhaoDoong/undertow ~/.claude/skills/undertow
+# Codex CLI
+git clone https://github.com/YuhaoDoong/undertow ~/.codex/skills/undertow
+```
+
+装好后，问"黄金现在多空怎么看 / 美元持仓拥挤吗 / 原油期权墙在哪"即会触发，
+代理在仓库根目录跑 `python -m undertow <command>` 并把结论解读给你。零依赖、无需 pip。
+
 ## 路线图（下一步可加）
 
-1. ~~COT 持仓层~~ ✅ · ~~期权 Gamma 层~~ ✅ · ~~价格对齐 + 回测~~ ✅ · ~~资金流/异动层 + 快照落盘~~ ✅ · ~~综合研判 + 可视化 HTML 报告~~ ✅
-2. **每日攒快照**：把 `snapshot` 设成每日定时任务（cron），让 `flow` 的 ΔOI/ΔIV 持续有料；快照入 git 即备份。
-3. **按回测调阈值**：依回测结论改 `signals.py`（如给 `MM_CROWDED_*` 加趋势过滤、按品种分阈值）。
-4. **Gamma/Flow 历史回测**：快照攒够后，把 flow 异动信号也纳入事件研究（验证"近月大单异动"的前瞻收益）。
-5. **COMEX 原表（可选）**：接付费源拿真实 COMEX 期权 OI，与 ETF 代理交叉验证。
-6. **封装 skill**：把"拉数→分析→出报告"包成一个 Claude Code skill，按需触发。
+1. ~~COT 持仓层~~ ✅ · ~~期权 Gamma 层~~ ✅ · ~~价格对齐 + 回测~~ ✅ · ~~资金流/异动层 + 快照落盘~~ ✅ · ~~综合研判 + 可视化 HTML 报告~~ ✅ · ~~分层重构 + Skill 封装~~ ✅ · ~~美元指数(Legacy COT)~~ ✅
+2. **真·CME 期货期权**（最大短板）：现期权层是 ETF 代理（USO≈WTI 弱）。接 **IBKR API** 作为 `collect/` 新数据源，拿逐行权价真实 OI/IV/greeks，gamma/flow/价差识别全部复用——原油可信度直接提升。需券商账户 + CME 行情订阅。
+3. **每日攒快照**：把 `snapshot` 设成每日定时任务（cron），让 `flow` 的 ΔOI/ΔIV 持续有料。
+4. **美股个股**：架构已支持无 COT 品种（仅期权+宏观）；接入个股/ETF 期权源后加 config 即可。
+5. **按回测调阈值**：依回测结论改 `signals.py`（趋势过滤、按品种分阈值）。
+6. **DXY 期权层**：若接到合适的美元期权源（如 UUP 或 IBKR），给美元指数补全 gamma/flow + HTML 报告。

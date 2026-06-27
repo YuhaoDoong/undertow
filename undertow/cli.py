@@ -48,7 +48,16 @@ def cmd_list(args) -> int:
     cfg = load_config()
     print("已配置品种:")
     for inst in cfg.instruments.values():
-        print(f"  {inst.key:8s} {inst.display_name}  (COT {inst.cot.contract_market_code})")
+        layers = []
+        if inst.cot is not None:
+            layers.append(f"COT {inst.cot.contract_market_code}/{inst.cot.report.split('_')[0]}")
+        if inst.options is not None:
+            layers.append(f"期权 {inst.options.symbol}")
+        if inst.commodity is not None:
+            layers.append(f"价 {inst.commodity.symbol}")
+        if inst.vol_index:
+            layers.append(f"波动率 {inst.vol_index}")
+        print(f"  {inst.key:8s} {inst.display_name:28s} [{' · '.join(layers)}]")
     return 0
 
 
@@ -72,6 +81,9 @@ def cmd_analyze(args) -> int:
 
     results = []
     for inst in instruments:
+        if inst.cot is None:  # 无期货持仓的品种（如个股）—— 持仓命令不适用
+            print(f"[跳过] {inst.key} 无 COT 持仓数据（个股等无期货持仓）", file=sys.stderr)
+            continue
         try:
             results.append((inst, *_analyze_one(source, inst, lookback, not args.no_cache)))
         except Exception as e:  # 单品种失败不影响其它
@@ -86,7 +98,8 @@ def cmd_analyze(args) -> int:
                          ensure_ascii=False, indent=2, default=str))
         return 0
 
-    blocks = [report_mod.render(an, sigs, inst.display_name)
+    blocks = [report_mod.render(an, sigs, inst.display_name,
+                                report_kind=inst.cot.report if inst.cot else "disaggregated_fut")
               for inst, _, an, sigs in results]
     print(report_mod.render_all(blocks))
     return 0
@@ -145,8 +158,8 @@ def cmd_backtest(args) -> int:
 
     results = []
     for inst in instruments:
-        if inst.price is None:
-            print(f"[跳过] {inst.key} 未配置 price 数据源", file=sys.stderr)
+        if inst.cot is None or inst.price is None:
+            print(f"[跳过] {inst.key} 缺 COT 或 price 数据源（回测需两者）", file=sys.stderr)
             continue
         try:
             history = cot_src.fetch_history(inst, lookback=lookback, use_cache=not args.no_cache)
@@ -351,7 +364,10 @@ def cmd_report(args) -> int:
     written = []  # (inst, outlook, filename)
     for inst in instruments:
         if inst.options is None or inst.price is None:
-            print(f"[跳过] {inst.key} 未配置 options/price 数据源", file=sys.stderr)
+            # 综合 HTML 报告以期权 Gamma/Flow 为骨架；无期权代理的品种（如美元指数）
+            # 暂走持仓分析命令。接入真·期货期权数据源（如 IBKR）后即可出完整报告。
+            hint = "持仓分析请用 `analyze`" if inst.cot is not None else "暂无可分析层"
+            print(f"[跳过] {inst.key} 无期权数据源，不出综合 HTML 报告（{hint}）", file=sys.stderr)
             continue
         try:
             history = cot_src.fetch_history(inst, lookback=lookback, use_cache=not args.no_cache)

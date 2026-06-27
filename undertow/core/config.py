@@ -54,10 +54,10 @@ class Instrument:
     key: str  # 内部标识，如 "gold"
     display_name: str
     asset_class: str
-    cot: CotSpec
+    cot: CotSpec | None = None          # 持仓报告定位；无期货持仓的品种（如个股）可为 None
     options: OptionsSpec | None = None
     price: PriceSpec | None = None
-    commodity: PriceSpec | None = None  # 真实商品期货价（GC=F/SI=F/CL=F）
+    commodity: PriceSpec | None = None  # 真实标的价（期货 GC=F/SI=F/CL=F/DX=F，或个股价）
     vol_index: str | None = None        # CBOE 波动率指数符号（GVZ/OVX/VXSLV）
 
 
@@ -86,7 +86,12 @@ def load_config(path: Path | None = None) -> Config:
 
     instruments: dict[str, Instrument] = {}
     for key, spec in raw.get("instruments", {}).items():
-        cot = spec["cot"]
+        cot_raw = spec.get("cot")
+        cot = CotSpec(
+            report=cot_raw["report"],
+            contract_market_code=cot_raw["contract_market_code"],
+            market_name=cot_raw["market_name"],
+        ) if cot_raw else None
         opts_raw = spec.get("options")
         options = None
         if opts_raw:
@@ -107,11 +112,7 @@ def load_config(path: Path | None = None) -> Config:
             key=key,
             display_name=spec["display_name"],
             asset_class=spec.get("asset_class", "unknown"),
-            cot=CotSpec(
-                report=cot["report"],
-                contract_market_code=cot["contract_market_code"],
-                market_name=cot["market_name"],
-            ),
+            cot=cot,
             options=options,
             price=_price_spec(spec.get("price")),
             commodity=_price_spec(spec.get("commodity")),

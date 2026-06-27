@@ -87,6 +87,21 @@
         "quality": "weak",
         "note": "NYMEX WTI期货=真实油价(显示用)。但USO与WTI价格量级不同且非线性，USO期权位点换算WTI仅当日近似、漂移大。"
       }
+    },
+    "dxy": {
+      "display_name": "美元指数 US Dollar Index (ICE)",
+      "asset_class": "fx",
+      "cot": {
+        "report": "legacy_fut",
+        "contract_market_code": "098662",
+        "market_name": "USD INDEX - ICE FUTURES U.S."
+      },
+      "commodity": {
+        "source": "yahoo_futures",
+        "symbol": "DX=F",
+        "quality": "good",
+        "note": "ICE美元指数期货=真实DXY。金融期货不在Disaggregated报告，持仓走Legacy(非商业=大投机/商业=套保)。暂无合适的免费期权代理(UUP弱)，故只走持仓+价格+宏观三层。"
+      }
     }
   },
   "defaults": {

@@ -18,11 +18,15 @@ from undertow.collect.base import DataSource, http_get_json
 
 # Socrata 数据集端点
 DATASETS = {
+    # Disaggregated（物理大宗商品：金属/能源/农产品）
     "disaggregated_fut": "https://publicreporting.cftc.gov/resource/72hh-3qpy.json",
+    # Legacy（金融期货：美元指数/利率/股指等，物理品也有）。
+    # 美元指数等金融品不在 Disaggregated 里，只能走 Legacy（类别更粗）。
+    "legacy_fut": "https://publicreporting.cftc.gov/resource/6dca-aqww.json",
 }
 
-# 类别 -> (long字段, short字段, spread字段或None)  —— 当前持仓
-_POSITION_FIELDS = {
+# —— Disaggregated 字段映射 —— 类别 -> (long字段, short字段, spread字段或None)
+_DISAGG_POSITION_FIELDS = {
     "managed_money": ("m_money_positions_long_all", "m_money_positions_short_all", "m_money_positions_spread"),
     "other_reportables": ("other_rept_positions_long", "other_rept_positions_short", "other_rept_positions_spread"),
     # 注意：swap 的 short/spread 是双下划线，long 是单下划线
@@ -30,14 +34,33 @@ _POSITION_FIELDS = {
     "producer_merchant": ("prod_merc_positions_long", "prod_merc_positions_short", None),
     "nonreportable": ("nonrept_positions_long_all", "nonrept_positions_short_all", None),
 }
-
-# 类别 -> (long变化, short变化, spread变化或None)  —— 周环比变化（CFTC 自带）
-_CHANGE_FIELDS = {
+_DISAGG_CHANGE_FIELDS = {
     "managed_money": ("change_in_m_money_long_all", "change_in_m_money_short_all", "change_in_m_money_spread"),
     "other_reportables": ("change_in_other_rept_long", "change_in_other_rept_short", "change_in_other_rept_spread"),
     "swap_dealers": ("change_in_swap_long_all", "change_in_swap_short_all", "change_in_swap_spread_all"),
     "producer_merchant": ("change_in_prod_merc_long", "change_in_prod_merc_short", None),
     "nonreportable": ("change_in_nonrept_long_all", "change_in_nonrept_short_all", None),
+}
+
+# —— Legacy 字段映射 —— Legacy 只分 非商业/商业/非报告 三类，语义映射到模型槽位：
+#   非商业(大投机) -> managed_money   商业(套保) -> producer_merchant   非报告 -> nonreportable
+#   other_reportables / swap_dealers 在 Legacy 不细分 → 留空。
+#   （CFTC 字段名有历史拼写错误：spread 写作 "postions"/"spead"，照搬。）
+_LEGACY_POSITION_FIELDS = {
+    "managed_money": ("noncomm_positions_long_all", "noncomm_positions_short_all", "noncomm_postions_spread_all"),
+    "producer_merchant": ("comm_positions_long_all", "comm_positions_short_all", None),
+    "nonreportable": ("nonrept_positions_long_all", "nonrept_positions_short_all", None),
+}
+_LEGACY_CHANGE_FIELDS = {
+    "managed_money": ("change_in_noncomm_long_all", "change_in_noncomm_short_all", "change_in_noncomm_spead_all"),
+    "producer_merchant": ("change_in_comm_long_all", "change_in_comm_short_all", None),
+    "nonreportable": ("change_in_nonrept_long_all", "change_in_nonrept_short_all", None),
+}
+
+# 报告类型 -> (持仓字段表, 变化字段表)
+_FIELD_MAPS = {
+    "disaggregated_fut": (_DISAGG_POSITION_FIELDS, _DISAGG_CHANGE_FIELDS),
+    "legacy_fut": (_LEGACY_POSITION_FIELDS, _LEGACY_CHANGE_FIELDS),
 }
 
 
@@ -99,8 +122,13 @@ class CftcCotSource(DataSource):
         return data
 
     def _parse(self, instrument: Instrument, rec: dict) -> CotReport:
+        pos_fields, chg_fields = _FIELD_MAPS[instrument.cot.report]
+
         def category(name: str) -> TraderCategory:
-            lf, sf, spf = _POSITION_FIELDS[name]
+            f = pos_fields.get(name)
+            if not f:   # 该报告不细分此类别（如 Legacy 无 swap/other）→ 空
+                return TraderCategory(long=0, short=0, spread=0)
+            lf, sf, spf = f
             return TraderCategory(
                 long=_to_int(rec.get(lf)),
                 short=_to_int(rec.get(sf)),
@@ -108,7 +136,12 @@ class CftcCotSource(DataSource):
             )
 
         changes: dict[str, CategoryChange] = {}
-        for name, (lf, sf, spf) in _CHANGE_FIELDS.items():
+        for name in CotReport.CATEGORY_NAMES:
+            f = chg_fields.get(name)
+            if not f:
+                changes[name] = CategoryChange(long=0, short=0, spread=0)
+                continue
+            lf, sf, spf = f
             changes[name] = CategoryChange(
                 long=_to_int(rec.get(lf)),
                 short=_to_int(rec.get(sf)),

@@ -9,7 +9,7 @@ from undertow.analyze.positioning import PositioningAnalysis
 from undertow.analyze.signals import Signal, net_bias
 from undertow.analyze.gamma import GammaAnalysis
 
-# 类别中文名
+# 类别中文名（Disaggregated 口径）
 CAT_LABEL = {
     "managed_money": "投机资金 Managed Money",
     "other_reportables": "聪明钱 Other Reportables",
@@ -17,6 +17,16 @@ CAT_LABEL = {
     "producer_merchant": "实体套保 Producer/Merchant",
     "nonreportable": "小户 Non-reportable",
 }
+# Legacy 口径只有 非商业/商业/非报告；映射到相同槽位但标签不同（金融期货如美元指数走这套）
+CAT_LABEL_LEGACY = {
+    **CAT_LABEL,
+    "managed_money": "非商业(大投机) Non-Commercial",
+    "producer_merchant": "商业(套保) Commercial",
+}
+
+
+def _labels(report_kind: str) -> dict:
+    return CAT_LABEL_LEGACY if report_kind == "legacy_fut" else CAT_LABEL
 
 # 报告里重点展示的类别（小户信息量低，省略明细）
 PRIMARY_CATS = ("managed_money", "other_reportables", "swap_dealers", "producer_merchant")
@@ -30,7 +40,9 @@ def _z(v: float | None) -> str:
     return "—" if v is None else f"{v:+.1f}"
 
 
-def render(an: PositioningAnalysis, signals: list[Signal], display_name: str) -> str:
+def render(an: PositioningAnalysis, signals: list[Signal], display_name: str,
+           report_kind: str = "disaggregated_fut") -> str:
+    label = _labels(report_kind)
     lines: list[str] = []
     lines.append(f"## {display_name}")
     span = f"（对比上期 {an.prev_date}）" if an.prev_date else ""
@@ -46,9 +58,11 @@ def render(an: PositioningAnalysis, signals: list[Signal], display_name: str) ->
     lines.append("|---|---:|---:|---:|---:|---:|---|")
     for name in PRIMARY_CATS:
         c = an.categories[name]
+        if c.gross == 0 and c.net == 0:
+            continue  # 该报告未细分此类别（如 Legacy 无 swap/other）→ 不列空行
         d = c.decomposition
         lines.append(
-            f"| {CAT_LABEL[name]} | {c.net:+,} | {c.net_pct_of_oi:+.1f}% | "
+            f"| {label[name]} | {c.net:+,} | {c.net_pct_of_oi:+.1f}% | "
             f"{_pct(c.net_percentile)} | {_z(c.net_zscore)} | {d.net_change:+,} | "
             f"{d.driver}({d.conviction}) |"
         )
@@ -81,7 +95,7 @@ DISCLAIMER = (
 
 
 def render_all(blocks: list[str]) -> str:
-    header = "# 持仓情报速览（COT / CFTC Disaggregated）\n"
+    header = "# 持仓情报速览（COT / CFTC Disaggregated + Legacy）\n"
     return header + "\n" + DISCLAIMER + "\n\n" + "\n---\n\n".join(blocks)
 
 

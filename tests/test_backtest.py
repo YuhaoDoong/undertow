@@ -11,8 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from trading_intel.models import CategoryChange, CotReport, PriceSeries, TraderCategory
-from trading_intel.analysis.backtest import (
+from undertow.core.models import CategoryChange, CotReport, PriceSeries, TraderCategory
+from undertow.analyze.backtest import (
     DIR_SIGN, _signal_hstat, run_backtest, _quantile_buckets,
 )
 

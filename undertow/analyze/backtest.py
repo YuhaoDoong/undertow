@@ -21,9 +21,9 @@ import statistics
 from dataclasses import dataclass, field
 from datetime import timedelta
 
-from ..models import CotReport, PriceSeries
-from .positioning import analyze
-from .signals import generate_signals, net_bias
+from undertow.core.models import CotReport, PriceSeries
+from undertow.analyze.positioning import analyze
+from undertow.analyze.signals import generate_signals, net_bias
 
 # 信号方向 -> 期望价格方向符号
 DIR_SIGN = {"bullish": +1, "risk-up": +1, "bearish": -1, "risk-down": -1, "neutral": 0}

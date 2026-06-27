@@ -14,10 +14,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from ..config import Instrument
-from ..cache import FileCache
-from ..models import PriceSeries
-from .base import DataSourceError, http_get_json
+from undertow.core.config import Instrument
+from undertow.collect.cache import FileCache
+from undertow.core.models import PriceSeries
+from undertow.collect.base import DataSourceError, http_get_json
 
 YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 

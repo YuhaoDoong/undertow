@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .positioning import PositioningAnalysis
+from undertow.analyze.positioning import PositioningAnalysis
 
 # —— 可调阈值 ——
 CROWD_HIGH_PCT = 85.0       # 净头寸分位高于此 -> 拥挤

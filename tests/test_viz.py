@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from trading_intel import viz
+from undertow.report import viz
 
 
 def _well_formed(svg: str) -> bool:

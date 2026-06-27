@@ -23,7 +23,7 @@ def http_get_json(
     """GET 一个 JSON 接口。封装编码/超时/错误，返回已解析对象。"""
     if params:
         url = url + "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers=headers or {"User-Agent": "trading_intel/0.1"})
+    req = urllib.request.Request(url, headers=headers or {"User-Agent": "undertow/0.1"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode("utf-8"))
@@ -45,7 +45,7 @@ def http_get_text(
     """GET 一个文本接口（如 FRED 的 CSV）。返回原始文本。"""
     if params:
         url = url + "?" + urllib.parse.urlencode(params)
-    req = urllib.request.Request(url, headers=headers or {"User-Agent": "trading_intel/0.1"})
+    req = urllib.request.Request(url, headers=headers or {"User-Agent": "undertow/0.1"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return resp.read().decode("utf-8")

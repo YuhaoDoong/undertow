@@ -28,7 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from datetime import date
 
-from ..models import OptionsSnapshot, OptionContract
+from undertow.core.models import OptionsSnapshot, OptionContract
 
 DEFAULT_HORIZON_DAYS = 60      # 只看近月
 NEAR_MONEY_BAND = 0.15        # 只看现价 ±15% 内的行权价

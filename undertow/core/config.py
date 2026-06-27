@@ -11,8 +11,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-# 项目根 = 本文件所在包的上一级目录
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+# 项目根 = 仓库根目录：本文件在 undertow/core/config.py，上溯三级
+#   config.py -> core -> undertow(包) -> 仓库根
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 CONFIG_PATH = PROJECT_ROOT / "config" / "instruments.json"
 DATA_DIR = PROJECT_ROOT / "data"
 CACHE_DIR = DATA_DIR / "cache"

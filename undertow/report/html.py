@@ -5,7 +5,7 @@
 """
 from __future__ import annotations
 
-from .analysis.outlook import Outlook
+from undertow.analyze.outlook import Outlook
 
 _BIAS_COLOR = {
     "偏多": "#1a7f37", "偏多(弱)": "#3fb950",
@@ -236,7 +236,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="card"><h2>情景推演（规则化 if-then，非点位预言）</h2>{_scenarios_html(o)}</div>'
         f'<div class="card">{_caveats_html(o)}</div>'
     )
-    foot = ('<div class="foot">trading_intel · 规则化情景工具，非投资建议 · '
+    foot = ('<div class="foot">undertow · 规则化情景工具，非投资建议 · '
             '数据 CFTC + CBOE（ETF 代理）· 纯标准库生成</div>')
     return (
         '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">'
@@ -263,5 +263,5 @@ def render_index_html(items: list[tuple[str, str, str, str]], asof: str) -> str:
         f'<title>综合研判 {_esc(asof)}</title><style>{_CSS}</style></head>'
         f'<body><div class="wrap"><div class="card"><h1>大宗商品综合研判</h1>'
         f'<div class="sub">{_esc(asof)} · 点击进入各品种</div></div>{"".join(cards)}'
-        '<div class="foot">trading_intel · 纯标准库生成</div></div></body></html>'
+        '<div class="foot">undertow · 纯标准库生成</div></div></body></html>'
     )

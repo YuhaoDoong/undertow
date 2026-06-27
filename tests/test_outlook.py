@@ -11,11 +11,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from trading_intel.analysis.positioning import PositioningAnalysis
-from trading_intel.analysis.signals import Signal
-from trading_intel.analysis.gamma import GammaAnalysis
-from trading_intel.analysis.flow import FlowAnalysis
-from trading_intel.analysis.outlook import build_outlook, _cot_votes, _bias
+from undertow.analyze.positioning import PositioningAnalysis
+from undertow.analyze.signals import Signal
+from undertow.analyze.gamma import GammaAnalysis
+from undertow.analyze.flow import FlowAnalysis
+from undertow.analyze.outlook import build_outlook, _cot_votes, _bias
 
 
 def _ga(**kw) -> GammaAnalysis:

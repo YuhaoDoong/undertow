@@ -24,7 +24,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from .config import DATA_DIR
+from undertow.core.config import DATA_DIR
 
 SNAPSHOT_DIR = DATA_DIR / "snapshots"
 # gzip 落盘：原始 payload 体量大（一条期权链 ~3MB），gzip 后 ~1/6，

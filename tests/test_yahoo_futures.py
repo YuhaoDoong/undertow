@@ -11,8 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from trading_intel.cache import FileCache
-from trading_intel.datasources.yahoo_futures import YahooFuturesSource
+from undertow.collect.cache import FileCache
+from undertow.collect.yahoo_futures import YahooFuturesSource
 
 
 def _payload():

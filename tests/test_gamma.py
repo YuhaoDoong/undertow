@@ -10,10 +10,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from trading_intel.datasources.cboe_options import parse_occ
-from trading_intel.analysis import blackscholes as bs
-from trading_intel.analysis.gamma import analyze_gamma
-from trading_intel.models import OptionContract, OptionsSnapshot
+from undertow.collect.cboe_options import parse_occ
+from undertow.analyze import blackscholes as bs
+from undertow.analyze.gamma import analyze_gamma
+from undertow.core.models import OptionContract, OptionsSnapshot
 
 
 def test_parse_occ_put_call_and_root_lengths():

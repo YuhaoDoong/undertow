@@ -1,12 +1,12 @@
 """命令行入口：拉数据 -> 分析 -> 渲染报告。
 
 用法示例（在项目根 /Users/yhdong/Trading 下运行）:
-    python -m trading_intel.cli analyze                 # 默认全部品种
-    python -m trading_intel.cli analyze gold silver     # 指定品种
-    python -m trading_intel.cli analyze --lookback 104  # 自定义回看周数
-    python -m trading_intel.cli analyze --json          # 输出结构化 JSON（喂给上层/LLM）
-    python -m trading_intel.cli list                    # 列出已配置品种
-    python -m trading_intel.cli --no-cache analyze gold # 强制绕过缓存
+    python -m undertow.cli analyze                 # 默认全部品种
+    python -m undertow.cli analyze gold silver     # 指定品种
+    python -m undertow.cli analyze --lookback 104  # 自定义回看周数
+    python -m undertow.cli analyze --json          # 输出结构化 JSON（喂给上层/LLM）
+    python -m undertow.cli list                    # 列出已配置品种
+    python -m undertow.cli --no-cache analyze gold # 强制绕过缓存
 """
 from __future__ import annotations
 
@@ -16,25 +16,25 @@ import json
 import sys
 from datetime import date
 
-from .config import load_config, DATA_DIR
-from .clock import market_today
-from .store import SnapshotStore
-from .datasources.cftc_cot import CftcCotSource
-from .datasources.cboe_options import CboeOptionsSource, snapshot_from_payload, chain_fingerprint
-from .datasources.cboe_history import CboeHistorySource
-from .datasources.yahoo_futures import YahooFuturesSource
-from .datasources.fred_macro import FredMacroSource
-from .datasources.cboe_vol import CboeVolSource
-from .analysis.positioning import analyze
-from .analysis.signals import generate_signals, net_bias
-from .analysis.gamma import analyze_gamma
-from .analysis.flow import analyze_flow
-from .analysis.outlook import build_outlook, macro_to_votes
-from .analysis.macro import analyze_macro, series_ids_for
-from .analysis.backtest import run_backtest
-from . import report as report_mod
-from . import viz
-from .report_html import (render_report_html, render_index_html,
+from undertow.core.config import load_config, DATA_DIR
+from undertow.core.clock import market_today
+from undertow.collect.store import SnapshotStore
+from undertow.collect.cftc_cot import CftcCotSource
+from undertow.collect.cboe_options import CboeOptionsSource, snapshot_from_payload, chain_fingerprint
+from undertow.collect.cboe_history import CboeHistorySource
+from undertow.collect.yahoo_futures import YahooFuturesSource
+from undertow.collect.fred_macro import FredMacroSource
+from undertow.collect.cboe_vol import CboeVolSource
+from undertow.analyze.positioning import analyze
+from undertow.analyze.signals import generate_signals, net_bias
+from undertow.analyze.gamma import analyze_gamma
+from undertow.analyze.flow import analyze_flow
+from undertow.analyze.outlook import build_outlook, macro_to_votes
+from undertow.analyze.macro import analyze_macro, series_ids_for
+from undertow.analyze.backtest import run_backtest
+from undertow.report import markdown as report_mod
+from undertow.report import viz
+from undertow.report.html import (render_report_html, render_index_html,
                           render_flow_section, render_macro_section)
 
 
@@ -512,7 +512,7 @@ def _to_jsonable(inst, an, signals) -> dict:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="trading_intel", description="期货持仓(COT)情报分析")
+    p = argparse.ArgumentParser(prog="undertow", description="期货持仓(COT)情报分析")
     p.add_argument("--no-cache", action="store_true", help="绕过本地缓存强制拉取")
     sub = p.add_subparsers(dest="command", required=True)
 

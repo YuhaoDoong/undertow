@@ -13,9 +13,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from trading_intel.models import OptionsSnapshot, OptionContract
-from trading_intel.analysis.flow import analyze_flow, scan_unusual, _judge
-from trading_intel.store import SnapshotStore
+from undertow.core.models import OptionsSnapshot, OptionContract
+from undertow.analyze.flow import analyze_flow, scan_unusual, _judge
+from undertow.collect.store import SnapshotStore
 
 TODAY = date(2026, 6, 26)
 EXP = date(2026, 7, 17)  # 21 天后，在 60 天近月窗口内

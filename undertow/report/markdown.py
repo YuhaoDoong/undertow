@@ -5,9 +5,9 @@
 """
 from __future__ import annotations
 
-from .analysis.positioning import PositioningAnalysis
-from .analysis.signals import Signal, net_bias
-from .analysis.gamma import GammaAnalysis
+from undertow.analyze.positioning import PositioningAnalysis
+from undertow.analyze.signals import Signal, net_bias
+from undertow.analyze.gamma import GammaAnalysis
 
 # 类别中文名
 CAT_LABEL = {

@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from trading_intel.analysis.macro import analyze_macro, series_ids_for, vol_reading
+from undertow.analyze.macro import analyze_macro, series_ids_for, vol_reading
 
 
 def _series(start_val, end_val, n=25):

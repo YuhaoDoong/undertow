@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .config import CACHE_DIR
+from undertow.core.config import CACHE_DIR
 
 
 class FileCache:

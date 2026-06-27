@@ -12,7 +12,7 @@ import statistics
 from dataclasses import dataclass
 from datetime import date
 
-from ..models import CategoryChange, CotReport, TraderCategory
+from undertow.core.models import CategoryChange, CotReport, TraderCategory
 
 
 @dataclass(frozen=True)

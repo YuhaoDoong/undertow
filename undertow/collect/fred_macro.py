@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from ..cache import FileCache
-from .base import DataSourceError, http_get_text
+from undertow.collect.cache import FileCache
+from undertow.collect.base import DataSourceError, http_get_text
 
 FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv"
 

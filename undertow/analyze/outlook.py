@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .positioning import PositioningAnalysis
-from .signals import Signal
-from .gamma import GammaAnalysis
-from .flow import FlowAnalysis
+from undertow.analyze.positioning import PositioningAnalysis
+from undertow.analyze.signals import Signal
+from undertow.analyze.gamma import GammaAnalysis
+from undertow.analyze.flow import FlowAnalysis
 
 # —— 信号可信度表（来自回测发现，集中可调）——
 # code -> (可信度权重, 标签, 备注)

@@ -11,9 +11,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from trading_intel.models import CategoryChange, CotReport, TraderCategory
-from trading_intel.analysis.positioning import analyze
-from trading_intel.analysis.signals import generate_signals
+from undertow.core.models import CategoryChange, CotReport, TraderCategory
+from undertow.analyze.positioning import analyze
+from undertow.analyze.signals import generate_signals
 
 
 def _mk(d: date, mm_long: int, mm_short: int, ch: CategoryChange | None = None) -> CotReport:

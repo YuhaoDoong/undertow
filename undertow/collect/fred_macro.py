@@ -30,9 +30,10 @@ class FredMacroSource:
         cache_key = f"fred_{series_id}"
         text = self.cache.get(cache_key, self.CACHE_TTL if use_cache else 0) if use_cache else None
         if text is None:
-            # FRED 拒绝非浏览器 UA，需带 Mozilla UA
+            # FRED 对 Mozilla UA 会让 read 挂死（2026-06 实测，疑似 bot 缓解新策略）；
+            # 简单 curl UA 反而秒回完整 CSV。带 Accept 兜底。
             text = http_get_text(FRED_CSV, params={"id": series_id},
-                                 headers={"User-Agent": "Mozilla/5.0"})
+                                 headers={"User-Agent": "curl/8.0", "Accept": "*/*"})
             self.cache.set(cache_key, text)
         return self._parse(text)
 

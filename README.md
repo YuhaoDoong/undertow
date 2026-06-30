@@ -41,6 +41,9 @@ python3 -m undertow flow --no-snapshot      # 只用已落盘数据，不自动�
 python3 -m undertow backtest                # COT 信号历史前瞻收益
 python3 -m undertow backtest gold --json    # 结构化 JSON
 python3 -m undertow backtest --horizons 5 10 20  # 前瞻交易日
+# —— 事件雷达层 ——
+python3 -m undertow calendar                 # 未来关键节点（FOMC/CPI/非农/COT/期权到期）倒计时
+python3 -m undertow calendar silver --within 40  # 限定品种 + 放宽窗口天数（也自动嵌入 report 顶部）
 # —— 综合研判报告（四层聚合 + 可视化 + 情景）——
 python3 -m undertow report                  # 各品种 HTML 研判报告（含 3 张 SVG 图）
 python3 -m undertow report gold             # 指定品种
@@ -53,13 +56,15 @@ python3 -m undertow report --json           # outlook 结构化 JSON（喂上层
 ```
 SKILL.md / AGENTS.md        Agent Skill 清单（Claude Code / Codex 通用）
 config/instruments.json     品种注册表：加品种 = 改这个 JSON，不改代码
+config/calendar.json        关键事件表：FOMC/数据/COT/期权到期（美东日历，手维护，日期须核源）
 undertow/
   __main__.py               python -m undertow 入口
-  cli.py                    命令编排（analyze/gamma/snapshot/flow/backtest/report/list）
+  cli.py                    命令编排（analyze/gamma/snapshot/flow/backtest/report/calendar/list）
   core/                     【公共核心】不依赖其它层，可被自由引用
     models.py               数据模型（CotReport / OptionsSnapshot 等，纯数据）
     config.py               读 config/instruments.json、路径
     clock.py                ★ 美东时钟（用户在 SGT，交易日按美东算）
+    calendar.py             ★ 事件日历：读 calendar.json + 倒计时/窗口过滤（事件雷达）
   collect/                  【数据收集层】各 API 收敛成语义模型 + 快照仓库 + 缓存
     base.py                 数据源抽象 + 标准库 HTTP 工具
     cftc_cot.py             ★ CFTC COT：Disaggregated(物理品) + Legacy(美元指数等金融品)
@@ -83,7 +88,7 @@ undertow/
     markdown.py             终端 Markdown 报告（COT / Gamma / 资金流 / 回测）
     html.py                 ★ 自包含 HTML 研判报告（内嵌 SVG，浏览器直接看）
     viz.py                  ★ 手绘 SVG 图（价格+关键位 / OI 墙 / 持仓历史，零依赖）
-tests/                      单元测试（不依赖网络，36 个）
+tests/                      单元测试（不依赖网络，42 个）
 data/snapshots/             ★ 期权链每日快照（gzip，入 git = 备份；不可再生）
 data/reports/               综合研判 HTML 报告（按品种/日期，入 git）
 data/cache/                 缓存落盘（自动生成，.gitignore）

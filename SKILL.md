@@ -22,6 +22,7 @@ description: >-
 - 「期权 OI 墙 / Gamma / 零伽马翻转」→ `gamma`
 - 「期权资金流 / 谁在买谁在卖 / 价差结构」→ `flow`
 - 「这套信号历史上准不准」→ `backtest`
+- 「最近有什么大事件 / FOMC/CPI/非农 什么时候 / 临近哪些催化剂」→ `calendar`
 
 ## 前置
 - Python 3.9+；**无需 pip 安装任何依赖**（仅标准库 urllib/json/statistics…）。
@@ -37,6 +38,7 @@ description: >-
 | `python -m undertow flow [品种...]` | 买卖方资金流 + 多腿价差识别 | 终端 Markdown（需≥2 天快照） |
 | `python -m undertow backtest [品种...]` | COT 信号事件研究回测 | 终端 Markdown |
 | `python -m undertow snapshot [品种...]` | 落盘当日期权链原始全字段 | gzip 存 `data/snapshots/`（纳入 git） |
+| `python -m undertow calendar [品种...]` | 事件雷达：未来关键节点（FOMC/CPI/非农/COT/期权到期）倒计时 | 终端；也自动嵌入 `report` 的 HTML 顶部 |
 | `python -m undertow list` | 列出品种与各自数据层 | 终端 |
 
 留空品种 = 全部。全局开关：`--no-cache`（绕过缓存）置于子命令前，如 `python -m undertow --no-cache analyze gold`。

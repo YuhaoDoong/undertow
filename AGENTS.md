@@ -5,15 +5,15 @@
 
 ## 跑起来
 - Python 3.9+，**无第三方依赖**。在仓库根目录运行：`python -m undertow <command> [品种...]`。
-- 品种：`gold` `silver` `wti` `dxy`。命令：`report / analyze / gamma / flow / backtest / snapshot / list`。
+- 品种：`gold` `silver` `wti` `dxy`。命令：`report / analyze / gamma / flow / backtest / snapshot / calendar / list`。
 - 测试：`python -m pytest -q`（应全绿）。
 
 ## 代码地图（四层 + core，严格单向依赖）
-- `undertow/core/` — models / config / clock，不依赖其它层。
+- `undertow/core/` — models / config / clock / calendar（事件日历），不依赖其它层。
 - `undertow/collect/` — 数据源适配器 + 快照仓库 + 缓存（取数都在这）。
 - `undertow/analyze/` — 纯计算分析（只吃 `core.models`，不取数）。
 - `undertow/report/` — markdown / html / viz 渲染（只吃 analyze 结果）。
-- `undertow/cli.py` — 命令编排。`config/instruments.json` — 品种注册表。
+- `undertow/cli.py` — 命令编排。`config/instruments.json` — 品种注册表；`config/calendar.json` — 关键事件表（FOMC/数据/COT/到期，美东日历，手维护，日期须核源）。
 
 ## 约定
 - **不引入第三方依赖**（零依赖是这个项目的身份；可视化用手写 SVG，不用 matplotlib）。

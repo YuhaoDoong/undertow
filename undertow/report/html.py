@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from undertow.analyze.outlook import Outlook
+from undertow.core.calendar import CATEGORY_LABEL
 
 _BIAS_COLOR = {
     "偏多": "#1a7f37", "偏多(弱)": "#3fb950",
@@ -207,8 +208,40 @@ def render_macro_section(ma) -> str:
     )
 
 
+_CAT_COLOR = {"fed": "#8250df", "data": "#bf3989", "cot": "#0969da", "opex": "#bc4c00", "other": "#57606a"}
+
+
+def render_events_section(events, today) -> str:
+    """事件雷达卡片：未来关键节点（FOMC/数据/COT/到期），临近催化剂主动降置信。"""
+    if not events:
+        return ""
+    rows = []
+    for e in events:
+        tm = e.tminus(today)
+        urge = "#cf222e" if (e.days_until(today) <= 2 and e.importance == "high") else "#57606a"
+        cat = CATEGORY_LABEL.get(e.category, e.category)
+        cat_c = _CAT_COLOR.get(e.category, "#57606a")
+        when = f"{e.date.isoformat()}" + (f" {e.time_et} ET" if e.time_et and e.time_et != "—" else "")
+        scope = " ".join(e.instruments) if e.instruments else "全局"
+        note = f'<div class="t">{_esc(e.note)}</div>' if e.note else ""
+        rows.append(
+            f'<tr><td class="r" style="font-weight:700;color:{urge}">{e.mark} {tm}</td>'
+            f'<td>{_esc(when)}</td>'
+            f'<td><span class="pill" style="background:{cat_c}1a;color:{cat_c}">{_esc(cat)}</span> '
+            f'{_esc(e.name)}{note}</td>'
+            f'<td><small>{_esc(scope)}</small></td></tr>'
+        )
+    return (
+        '<div class="card"><h2>事件雷达（美东日历 · 临近催化剂请降置信）</h2>'
+        '<table><tr><th class="r">倒计时</th><th>时点</th><th>事件</th><th>影响</th></tr>'
+        + "".join(rows) + "</table>"
+        '<div class="sub" style="margin-top:6px">🔴高 / 🟡中影响。FOMC·CPI·非农前后跳空风险大，'
+        '期权到期(OPEX)前 Gamma/OI 墙会失真——事件窗口内的位点研判仅供风险预案，勿当点位预言。</div></div>'
+    )
+
+
 def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
-                       flow_html: str = "", macro_html: str = "") -> str:
+                       flow_html: str = "", macro_html: str = "", events_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -226,6 +259,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="sub">环境：{_esc(o.regime)}</div></div>'
     )
     body = (
+        f'{events_html}'
         f'<div class="card"><h2>关键位点（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
         f'<div class="chart">{price_svg}</div>'
         f'<div class="chart">{oi_svg}</div></div>'

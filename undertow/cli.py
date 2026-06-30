@@ -18,6 +18,7 @@ from datetime import date
 
 from undertow.core.config import load_config, DATA_DIR
 from undertow.core.clock import market_today
+from undertow.core.calendar import load_events, upcoming, CATEGORY_LABEL
 from undertow.collect.store import SnapshotStore
 from undertow.collect.cftc_cot import CftcCotSource
 from undertow.collect.cboe_options import CboeOptionsSource, snapshot_from_payload, chain_fingerprint
@@ -35,7 +36,7 @@ from undertow.analyze.backtest import run_backtest
 from undertow.report import markdown as report_mod
 from undertow.report import viz
 from undertow.report.html import (render_report_html, render_index_html,
-                          render_flow_section, render_macro_section)
+                          render_flow_section, render_macro_section, render_events_section)
 
 
 def _resolve_instruments(cfg, names: list[str]) -> list:
@@ -58,6 +59,32 @@ def cmd_list(args) -> int:
         if inst.vol_index:
             layers.append(f"波动率 {inst.vol_index}")
         print(f"  {inst.key:8s} {inst.display_name:28s} [{' · '.join(layers)}]")
+    return 0
+
+
+def cmd_calendar(args) -> int:
+    """事件雷达：未来关键节点（FOMC/数据/COT/到期），美东日历。"""
+    today = market_today()
+    events = load_events()
+    if not events:
+        print("事件表为空（config/calendar.json 缺失或无条目）。", file=sys.stderr)
+        return 1
+    inst = args.instruments[0] if args.instruments else None
+    evs = upcoming(events, today=today, within_days=args.within, instrument=inst)
+    scope = f"·{inst}" if inst else ""
+    print(f"事件雷达（美东 · 未来 {args.within} 天{scope}） · 今日 {today.isoformat()}")
+    if not evs:
+        print("  （窗口内无登记事件）")
+        return 0
+    for e in evs:
+        cat = CATEGORY_LABEL.get(e.category, e.category)
+        when = e.date.isoformat() + (f" {e.time_et}ET" if e.time_et and e.time_et != "—" else "")
+        scp = " ".join(e.instruments) if e.instruments else "全局"
+        line = f"  {e.mark} {e.tminus(today):>5s}  {when:20s} [{cat}] {e.name}  ·{scp}"
+        print(line)
+        if e.note:
+            print(f"            └ {e.note}")
+    print("\n临近 FOMC/CPI/非农请主动降置信、警惕跳空；OPEX 前 Gamma/OI 墙失真。")
     return 0
 
 
@@ -352,6 +379,7 @@ def cmd_report(args) -> int:
     vol_src = CboeVolSource()
     store = SnapshotStore()
     today = market_today()
+    all_events = load_events()
     reports_dir = DATA_DIR / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
 
@@ -456,7 +484,10 @@ def cmd_report(args) -> int:
 
             flow_html = render_flow_section(fa)
             macro_html = render_macro_section(ma)
-            html = render_report_html(outlook, price_svg, oi_svg, cot_svg, flow_html, macro_html)
+            evs = upcoming(all_events, today=today, within_days=21, instrument=inst.key)
+            events_html = render_events_section(evs, today)
+            html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
+                                      flow_html, macro_html, events_html)
             fn = f"{inst.key}_{today.isoformat()}.html"
             (reports_dir / fn).write_text(html, encoding="utf-8")
             written.append((inst, outlook, fn))
@@ -574,6 +605,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     pl = sub.add_parser("list", help="列出已配置品种")
     pl.set_defaults(func=cmd_list)
+
+    pc = sub.add_parser("calendar", help="事件雷达：未来关键节点（FOMC/数据/COT/到期）")
+    pc.add_argument("instruments", nargs="*", help="品种 key（留空=全部/全局事件）")
+    pc.add_argument("--within", type=int, default=21, help="未来天数窗口（默认21）")
+    pc.set_defaults(func=cmd_calendar)
     return p
 
 

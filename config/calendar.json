@@ -1,0 +1,16 @@
+{
+  "_comment": "关键事件日历（美东 ET 口径）。catalysts before/after 是持仓研判最该警惕的窗口。日期务必核准来源，勿臆造。category: fed/data/cot/opex/other。importance: high/medium/low。instruments 留空=影响全部。新增直接加条目即可。",
+  "_sources": "FOMC=federalreserve.gov; NFP/CPI=bls.gov; COT=cftc.gov(每周五15:30 ET,数据截至上周二,遇假顺延); OPEX=ETF期权每月第3个周五",
+  "events": [
+    {"date": "2026-07-02", "time_et": "08:30", "name": "美国 6 月非农就业报告 (NFP)", "category": "data", "importance": "high", "instruments": ["gold", "silver", "wti", "dxy"], "note": "因 7/4(周六)假期、7/3 休市，由周五提前至周四"},
+    {"date": "2026-07-06", "time_et": "15:30", "name": "CFTC COT 持仓报告", "category": "cot", "importance": "medium", "instruments": [], "note": "原 7/3 因独立日假期顺延至下周一（待 CFTC 官方确认）"},
+    {"date": "2026-07-10", "time_et": "15:30", "name": "CFTC COT 持仓报告", "category": "cot", "importance": "medium", "instruments": [], "note": "数据截至 7/7"},
+    {"date": "2026-07-14", "time_et": "08:30", "name": "美国 6 月 CPI 通胀", "category": "data", "importance": "high", "instruments": ["gold", "silver", "wti", "dxy"], "note": "金属/美元最敏感的通胀数据"},
+    {"date": "2026-07-17", "time_et": "16:00", "name": "ETF 期权月度到期 (OPEX)", "category": "opex", "importance": "medium", "instruments": ["gold", "silver", "wti"], "note": "GLD/SLV/USO 第3个周五到期；Gamma/OI 墙临近到期会失真，到期后结构重置"},
+    {"date": "2026-07-28", "time_et": "—", "name": "FOMC 议息会议（第 1 日）", "category": "fed", "importance": "high", "instruments": [], "note": "两日会议开始"},
+    {"date": "2026-07-29", "time_et": "14:00", "name": "FOMC 利率决议 + 鲍威尔发布会", "category": "fed", "importance": "high", "instruments": [], "note": "本次无经济预测/点阵图(SEP)；14:00 决议、14:30 发布会"},
+    {"date": "2026-09-16", "time_et": "14:00", "name": "FOMC 利率决议（含点阵图 SEP）", "category": "fed", "importance": "high", "instruments": [], "note": "9/15-16 会议，含季度经济预测与点阵图"},
+    {"date": "2026-10-28", "time_et": "14:00", "name": "FOMC 利率决议", "category": "fed", "importance": "high", "instruments": [], "note": "10/27-28 会议"},
+    {"date": "2026-12-09", "time_et": "14:00", "name": "FOMC 利率决议（含点阵图 SEP）", "category": "fed", "importance": "high", "instruments": [], "note": "12/8-9 会议，年内最后一次，含点阵图"}
+  ]
+}

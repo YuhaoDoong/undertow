@@ -38,7 +38,7 @@ description: >-
 | `python -m undertow flow [品种...]` | 买卖方资金流 + 多腿价差识别 | 终端 Markdown（需≥2 天快照） |
 | `python -m undertow backtest [品种...]` | COT 信号事件研究回测 | 终端 Markdown |
 | `python -m undertow snapshot [品种...]` | 落盘当日期权链原始全字段 | gzip 存 `data/snapshots/`（纳入 git） |
-| `python -m undertow calendar [品种...]` | 事件雷达：未来关键节点（FOMC/CPI/非农/COT/期权到期）倒计时 | 终端；也自动嵌入 `report` 的 HTML 顶部 |
+| `python -m undertow calendar [品种...]` | 事件雷达：关键节点倒计时 + **实时预测/前值/影响**（本周自动拉 FairEconomy 公开 feed，远期用手维护锚点） | 终端；也自动嵌入 `report` 顶部。`--no-live` 仅用本地锚点 |
 | `python -m undertow list` | 列出品种与各自数据层 | 终端 |
 
 留空品种 = 全部。全局开关：`--no-cache`（绕过缓存）置于子命令前，如 `python -m undertow --no-cache analyze gold`。
@@ -62,6 +62,7 @@ undertow/
 - **价格/位点**：最终位点用**真实期货价**（Yahoo GC=F/SI=F/CL=F/DX=F）+ 当日实时比值换算，免乘数漂移。
 - **宏观**：FRED（真实利率/美元/通胀预期）。**波动率**：CBOE GVZ/OVX/VXSLV。
 - 美元指数（dxy）暂无合适免费期权代理，只走持仓+价格+宏观，用 `analyze dxy`（不出 HTML 报告）。
+- **事件日历**：远期锚点（FOMC 全年/COT/OPEX）手维护于 `config/calendar.json`（日期须核官方源）；本周的数据预测/前值/影响自动拉 **FairEconomy 公开 JSON feed**（ForexFactory 数据方，合法消费公开 feed、非爬网页，标注 (FF)）。**不爬 ForexFactory/Investing 网页**（Cloudflare 反爬 + ToS）。
 - 全部只作**波段级风险情境**预警，不构成交易指令；不绕过任何数据源的反爬/ToS。
 
 ## 日常习惯（重要）

@@ -18,7 +18,7 @@
 ## 约定
 - **不引入第三方依赖**（零依赖是这个项目的身份；可视化用手写 SVG，不用 matplotlib）。
 - 数值一律走确定性代码，LLM 不负责算数；新增计算配单元测试。
-- **不绕过任何数据源的反爬/ToS**（尤其 CME 403）；只用可合法访问的 CFTC/CBOE/Yahoo/FRED。
+- **不绕过任何数据源的反爬/ToS**（尤其 CME 403、ForexFactory/Investing 网页 Cloudflare）；只用可合法访问的 CFTC/CBOE/Yahoo/FRED + FairEconomy 公开 JSON feed（事件日历，消费公开 feed 非爬网页）。
 - 新增品种改 JSON 即可；新增数据源在 `collect/` 加文件，分析层不动。
 - 提交信息讲清「为什么」；快照（`data/snapshots/`）纳入 git 作为不可再生历史的备份。
 

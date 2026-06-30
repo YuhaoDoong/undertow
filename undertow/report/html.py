@@ -216,6 +216,7 @@ def render_events_section(events, today) -> str:
     if not events:
         return ""
     rows = []
+    has_ff = False
     for e in events:
         tm = e.tminus(today)
         urge = "#cf222e" if (e.days_until(today) <= 2 and e.importance == "high") else "#57606a"
@@ -223,19 +224,26 @@ def render_events_section(events, today) -> str:
         cat_c = _CAT_COLOR.get(e.category, "#57606a")
         when = f"{e.date.isoformat()}" + (f" {e.time_et} ET" if e.time_et and e.time_et != "—" else "")
         scope = " ".join(e.instruments) if e.instruments else "全局"
+        tag = ' <small>(FF)</small>' if e.source == "ff" else ""
+        if e.source == "ff":
+            has_ff = True
+        cons = e.consensus()
+        cons_html = f'<div class="t" style="color:#0969da">{_esc(cons)}</div>' if cons else ""
         note = f'<div class="t">{_esc(e.note)}</div>' if e.note else ""
         rows.append(
             f'<tr><td class="r" style="font-weight:700;color:{urge}">{e.mark} {tm}</td>'
             f'<td>{_esc(when)}</td>'
             f'<td><span class="pill" style="background:{cat_c}1a;color:{cat_c}">{_esc(cat)}</span> '
-            f'{_esc(e.name)}{note}</td>'
+            f'{_esc(e.name)}{tag}{cons_html}{note}</td>'
             f'<td><small>{_esc(scope)}</small></td></tr>'
         )
+    ff_note = ('（标 <small>(FF)</small> 含预测/前值，来自 ForexFactory/FairEconomy 公开日历 feed）'
+               if has_ff else "")
     return (
         '<div class="card"><h2>事件雷达（美东日历 · 临近催化剂请降置信）</h2>'
         '<table><tr><th class="r">倒计时</th><th>时点</th><th>事件</th><th>影响</th></tr>'
         + "".join(rows) + "</table>"
-        '<div class="sub" style="margin-top:6px">🔴高 / 🟡中影响。FOMC·CPI·非农前后跳空风险大，'
+        f'<div class="sub" style="margin-top:6px">🔴高 / 🟡中影响。{ff_note}FOMC·CPI·非农前后跳空风险大，'
         '期权到期(OPEX)前 Gamma/OI 墙会失真——事件窗口内的位点研判仅供风险预案，勿当点位预言。</div></div>'
     )
 

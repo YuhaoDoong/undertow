@@ -42,8 +42,9 @@ python3 -m undertow backtest                # COT 信号历史前瞻收益
 python3 -m undertow backtest gold --json    # 结构化 JSON
 python3 -m undertow backtest --horizons 5 10 20  # 前瞻交易日
 # —— 事件雷达层 ——
-python3 -m undertow calendar                 # 未来关键节点（FOMC/CPI/非农/COT/期权到期）倒计时
+python3 -m undertow calendar                 # 关键节点倒计时 + 本周实时预测/前值/影响（FairEconomy feed）
 python3 -m undertow calendar silver --within 40  # 限定品种 + 放宽窗口天数（也自动嵌入 report 顶部）
+python3 -m undertow calendar --no-live        # 不拉实时 feed，仅用 config/calendar.json 手维护锚点
 # —— 综合研判报告（四层聚合 + 可视化 + 情景）——
 python3 -m undertow report                  # 各品种 HTML 研判报告（含 3 张 SVG 图）
 python3 -m undertow report gold             # 指定品种
@@ -73,6 +74,7 @@ undertow/
     cboe_vol.py             ★ CBOE 波动率指数（GVZ/OVX/VXSLV）
     yahoo_futures.py        ★ 真实期货价 GC=F/SI=F/CL=F/DX=F（urllib 直连，零依赖）
     fred_macro.py           ★ FRED 宏观（实际利率/美元/通胀预期，免 key）
+    faireconomy_cal.py      ★ 经济日历实时 feed（FairEconomy 公开 JSON，带预测/前值/影响）
     store.py                ★ 快照仓库：期权链原始 payload 按日 gzip 落盘（永久档案，入 git）
     cache.py                文件缓存（带 TTL，临时、可覆盖）
   analyze/                  【数据分析层】只吃 core.models，与数据源解耦，纯确定性计算
@@ -88,7 +90,7 @@ undertow/
     markdown.py             终端 Markdown 报告（COT / Gamma / 资金流 / 回测）
     html.py                 ★ 自包含 HTML 研判报告（内嵌 SVG，浏览器直接看）
     viz.py                  ★ 手绘 SVG 图（价格+关键位 / OI 墙 / 持仓历史，零依赖）
-tests/                      单元测试（不依赖网络，42 个）
+tests/                      单元测试（不依赖网络，46 个）
 data/snapshots/             ★ 期权链每日快照（gzip，入 git = 备份；不可再生）
 data/reports/               综合研判 HTML 报告（按品种/日期，入 git）
 data/cache/                 缓存落盘（自动生成，.gitignore）

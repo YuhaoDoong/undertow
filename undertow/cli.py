@@ -18,8 +18,9 @@ from datetime import date
 
 from undertow.core.config import load_config, DATA_DIR
 from undertow.core.clock import market_today
-from undertow.core.calendar import load_events, upcoming, CATEGORY_LABEL
+from undertow.core.calendar import load_events, upcoming, merge as merge_events, CATEGORY_LABEL
 from undertow.collect.store import SnapshotStore
+from undertow.collect.faireconomy_cal import FairEconomyCalSource
 from undertow.collect.cftc_cot import CftcCotSource
 from undertow.collect.cboe_options import CboeOptionsSource, snapshot_from_payload, chain_fingerprint
 from undertow.collect.cboe_history import CboeHistorySource
@@ -62,10 +63,25 @@ def cmd_list(args) -> int:
     return 0
 
 
+def _merged_events(no_live: bool, no_cache: bool):
+    """手维护锚点 + 实时 feed（FairEconomy 公开 JSON）合并去重。feed 失败优雅降级。"""
+    manual = load_events()
+    if no_live:
+        return manual, "（仅手维护锚点）"
+    try:
+        live = FairEconomyCalSource().fetch_events(use_cache=not no_cache)
+    except Exception as e:  # 网络/解析任意异常都退回手维护
+        print(f"[提示] 实时日历 feed 跳过，仅用手维护锚点: {e}", file=sys.stderr)
+        return manual, "（feed 不可用，仅手维护锚点）"
+    if not live:
+        return manual, "（feed 本周无匹配事件，仅手维护锚点）"
+    return merge_events(manual, live), f"（含 FairEconomy 实时 feed {len(live)} 条 + 手维护远期锚点）"
+
+
 def cmd_calendar(args) -> int:
-    """事件雷达：未来关键节点（FOMC/数据/COT/到期），美东日历。"""
+    """事件雷达：未来关键节点（FOMC/数据/COT/到期），美东日历，带预测/前值。"""
     today = market_today()
-    events = load_events()
+    events, src_note = _merged_events(args.no_live, args.no_cache)
     if not events:
         print("事件表为空（config/calendar.json 缺失或无条目）。", file=sys.stderr)
         return 1
@@ -73,18 +89,23 @@ def cmd_calendar(args) -> int:
     evs = upcoming(events, today=today, within_days=args.within, instrument=inst)
     scope = f"·{inst}" if inst else ""
     print(f"事件雷达（美东 · 未来 {args.within} 天{scope}） · 今日 {today.isoformat()}")
+    print(f"  来源 {src_note}")
     if not evs:
         print("  （窗口内无登记事件）")
         return 0
     for e in evs:
         cat = CATEGORY_LABEL.get(e.category, e.category)
         when = e.date.isoformat() + (f" {e.time_et}ET" if e.time_et and e.time_et != "—" else "")
-        scp = " ".join(e.instruments) if e.instruments else "全局"
-        line = f"  {e.mark} {e.tminus(today):>5s}  {when:20s} [{cat}] {e.name}  ·{scp}"
+        tag = " (FF)" if e.source == "ff" else ""
+        line = f"  {e.mark} {e.tminus(today):>5s}  {when:20s} [{cat}] {e.name}{tag}"
         print(line)
+        cons = e.consensus()
+        if cons:
+            print(f"            ├ {cons}")
         if e.note:
             print(f"            └ {e.note}")
     print("\n临近 FOMC/CPI/非农请主动降置信、警惕跳空；OPEX 前 Gamma/OI 墙失真。")
+    print("预测/前值/影响来自 ForexFactory/FairEconomy 公开日历 feed，仅供参考。")
     return 0
 
 
@@ -379,7 +400,7 @@ def cmd_report(args) -> int:
     vol_src = CboeVolSource()
     store = SnapshotStore()
     today = market_today()
-    all_events = load_events()
+    all_events, _ = _merged_events(getattr(args, "no_live", False), args.no_cache)
     reports_dir = DATA_DIR / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
 
@@ -600,15 +621,17 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--lookback", type=int, default=None, help="COT 回看周数（默认读配置）")
     pr.add_argument("--horizon", type=int, default=45, help="期权近月窗口天数（默认45）")
     pr.add_argument("--no-snapshot", action="store_true", help="不自动落盘今日快照")
+    pr.add_argument("--no-live", action="store_true", help="事件雷达不拉实时 feed，仅用手维护锚点")
     pr.add_argument("--json", action="store_true", help="输出 outlook 结构化 JSON")
     pr.set_defaults(func=cmd_report)
 
     pl = sub.add_parser("list", help="列出已配置品种")
     pl.set_defaults(func=cmd_list)
 
-    pc = sub.add_parser("calendar", help="事件雷达：未来关键节点（FOMC/数据/COT/到期）")
+    pc = sub.add_parser("calendar", help="事件雷达：未来关键节点（FOMC/数据/COT/到期）+ 实时预测")
     pc.add_argument("instruments", nargs="*", help="品种 key（留空=全部/全局事件）")
     pc.add_argument("--within", type=int, default=21, help="未来天数窗口（默认21）")
+    pc.add_argument("--no-live", action="store_true", help="不拉实时 feed，仅用手维护锚点")
     pc.set_defaults(func=cmd_calendar)
     return p
 

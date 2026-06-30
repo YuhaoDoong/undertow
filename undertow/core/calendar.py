@@ -26,6 +26,24 @@ SEVERITY_MARK = {"high": "🔴", "medium": "🟡", "low": "⚪"}
 _IMPORTANCE_RANK = {"high": 3, "medium": 2, "low": 1}
 
 
+# 用于「手维护锚点 ↔ 实时 feed」去重的归一化 token（feed 英文标题 → token）。
+# 只为有手维护锚点的事件设 token（其余 feed 事件 token="" 不参与去重）。
+_TOKEN_RULES = (
+    ("nfp", ("non-farm", "nonfarm", "non farm employment")),
+    ("cpi", ("cpi", "consumer price")),
+    ("fomc", ("fomc", "federal funds", "interest rate decision")),
+    ("ppi", ("ppi", "producer price")),
+)
+
+
+def derive_token(title: str) -> str:
+    t = title.lower()
+    for tok, kws in _TOKEN_RULES:
+        if any(k in t for k in kws):
+            return tok
+    return ""
+
+
 @dataclass
 class Event:
     date: date
@@ -35,6 +53,11 @@ class Event:
     time_et: str = ""
     instruments: tuple[str, ...] = field(default_factory=tuple)  # 空=影响全部
     note: str = ""
+    forecast: str = ""               # 市场预测/共识（feed 提供）
+    previous: str = ""               # 前值
+    actual: str = ""                 # 实际值（发布后 feed 回填）
+    source: str = "manual"           # manual=手维护锚点 / ff=ForexFactory/FairEconomy feed
+    match: str = ""                  # 去重 token（手维护可显式给；feed 自动派生）
 
     def days_until(self, today: date) -> int:
         return (self.date - today).days
@@ -50,6 +73,17 @@ class Event:
     def tminus(self, today: date) -> str:
         d = self.days_until(today)
         return "今天" if d == 0 else (f"T-{d}" if d > 0 else f"T+{-d}")
+
+    def consensus(self) -> str:
+        """预测/前值/实际的紧凑串，无数据返回空。"""
+        bits = []
+        if self.actual:
+            bits.append(f"实际{self.actual}")
+        if self.forecast:
+            bits.append(f"预测{self.forecast}")
+        if self.previous:
+            bits.append(f"前值{self.previous}")
+        return " ".join(bits)
 
 
 def load_events(path: Path | None = None) -> list[Event]:
@@ -68,7 +102,22 @@ def load_events(path: Path | None = None) -> list[Event]:
             time_et=e.get("time_et", ""),
             instruments=tuple(e.get("instruments", ())),
             note=e.get("note", ""),
+            source="manual",
+            match=e.get("match", ""),
         ))
+    out.sort(key=lambda x: (x.date, -_IMPORTANCE_RANK.get(x.importance, 0)))
+    return out
+
+
+def merge(manual: list[Event], live: list[Event]) -> list[Event]:
+    """合并手维护锚点与实时 feed：同(日期, token)以 feed 为准（它带预测值/精确时间）。
+
+    feed 全部保留；手维护事件若与某 feed 事件落在同一天且 token 相同则丢弃（被 feed 覆盖）。
+    手维护的 COT/OPEX 等 feed 没有的事件 token 为空，永不被去重，照常保留。
+    """
+    feed_keys = {(e.date, e.match) for e in live if e.match}
+    kept = [m for m in manual if not (m.match and (m.date, m.match) in feed_keys)]
+    out = live + kept
     out.sort(key=lambda x: (x.date, -_IMPORTANCE_RANK.get(x.importance, 0)))
     return out
 

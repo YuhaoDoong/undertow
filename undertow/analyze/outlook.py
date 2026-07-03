@@ -274,30 +274,36 @@ def _key_levels(ga: GammaAnalysis, fa: FlowAnalysis) -> list[KeyLevel]:
 def _scenarios(ga: GammaAnalysis, bias_sign: int) -> list[Scenario]:
     spot, cw, pw, zg = ga.spot, ga.call_wall, ga.put_wall, ga.zero_gamma
     neg = ga.net_gex < 0
+
+    def px(v: float) -> str:
+        """ETF 价位（≈商品价位）——商品价才是用户看盘的口径。"""
+        c = ga.to_commodity(v)
+        return f"{v:.1f}" if c is None else f"{v:.1f}（≈商品 {c:,.1f}）"
+
     out: list[Scenario] = []
     # 基准：区间
     out.append(Scenario(
         name="基准 · 区间震荡",
-        trigger=f"价格在 put 墙 {pw:.1f} 与 call 墙 {cw:.1f} 之间",
+        trigger=f"价格在 put 墙 {px(pw)} 与 call 墙 {px(cw)} 之间",
         path=("正伽马环境，做市商逆向对冲、价格易被钉回墙间，区间内高抛低吸为主。"
               if not neg else "负伽马环境，墙间波动也会被放大，区间边沿假突破多，别追。"),
-        invalidation=f"放量收破任一墙（{pw:.1f} 或 {cw:.1f}）",
+        invalidation=f"放量收破任一墙（{px(pw)} 或 {px(cw)}）",
     ))
     # 向下
     down_ref = min(pw, zg) if zg else pw
     out.append(Scenario(
         name="向下 · 破位走弱",
-        trigger=f"收破 put 墙 {pw:.1f}" + (f"／零伽马 {zg:.1f}" if zg and zg < spot else ""),
+        trigger=f"收破 put 墙 {px(pw)}" + (f"／零伽马 {px(zg)}" if zg and zg < spot else ""),
         path=("负伽马助跌：做市商越跌越卖，下行加速，别逆势接刀。"
               if neg else "支撑失守、动能转弱，留意下一档 OI 支撑。"),
-        invalidation=f"快速收回 {down_ref:.1f} 上方",
+        invalidation=f"快速收回 {px(down_ref)} 上方",
     ))
     # 向上
     out.append(Scenario(
         name="向上 · 突破走强",
-        trigger=f"放量站上 call 墙 {cw:.1f}",
+        trigger=f"放量站上 call 墙 {px(cw)}",
         path=("阻力翻支撑，若伴随做市商空头回补（gamma 挤压）上行可能加速。"),
-        invalidation=f"站不稳、快速跌回 {cw:.1f} 下方（假突破）",
+        invalidation=f"站不稳、快速跌回 {px(cw)} 下方（假突破）",
     ))
     # 把与 bias 一致的情景排前
     if bias_sign < 0:

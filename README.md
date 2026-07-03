@@ -82,7 +82,7 @@ undertow/
     signals.py              ★ COT 规则解读：拥挤、背离、互换商压力（阈值集中可调）
     blackscholes.py         BS gamma（零伽马翻转位重定价）
     gamma.py                ★ OI 墙 / Put-Call 比 / 做市商 GEX / 零伽马翻转
-    flow.py                 ★ 资金流：单快照异动 + 两日 ΔOI/ΔIV 买卖方 + 多腿价差识别
+    flow.py                 ★ 资金流：单快照异动 + 两日 ΔOI/ΔIV 买卖方 + 多腿价差识别 + 波动率面(ATM IV/skew)
     macro.py                ★ 宏观背景：实际利率/美元/通胀预期 + 波动率指数
     backtest.py             ★ 信号事件研究：无前视、发布滞后、对齐收益、分位分桶
     outlook.py              ★ 综合研判：多维因子按可信度加权投票 + 关键位 + 情景
@@ -90,7 +90,7 @@ undertow/
     markdown.py             终端 Markdown 报告（COT / Gamma / 资金流 / 回测）
     html.py                 ★ 自包含 HTML 研判报告（内嵌 SVG，浏览器直接看）
     viz.py                  ★ 手绘 SVG 图（价格+关键位 / OI 墙 / 持仓历史，零依赖）
-tests/                      单元测试（不依赖网络，46 个）
+tests/                      单元测试（不依赖网络，52 个）
 data/snapshots/             ★ 期权链每日快照（gzip，入 git = 备份；不可再生）
 data/reports/               综合研判 HTML 报告（按品种/日期，入 git）
 data/cache/                 缓存落盘（自动生成，.gitignore）

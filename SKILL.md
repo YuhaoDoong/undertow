@@ -35,7 +35,7 @@ description: >-
 | `python -m undertow report [品种...]` | 四层聚合综合研判 + SVG 图 | 自包含 HTML 落在 `data/reports/`（用真实期货价/位点） |
 | `python -m undertow analyze [品种...]` | COT 持仓分析（净头寸/拥挤度/聪明钱背离） | 终端 Markdown；`--json` 给结构化 |
 | `python -m undertow gamma [品种...]` | 期权 Gamma/OI 墙/零伽马 | 终端 Markdown |
-| `python -m undertow flow [品种...]` | 买卖方资金流 + 多腿价差识别 | 终端 Markdown（需≥2 天快照） |
+| `python -m undertow flow [品种...]` | 买卖方资金流 + 多腿价差识别 + 波动率面（ATM IV/25Δ·10Δ skew 日变化 → 期权端是否确认价格） | 终端 Markdown（需≥2 天快照） |
 | `python -m undertow backtest [品种...]` | COT 信号事件研究回测 | 终端 Markdown |
 | `python -m undertow snapshot [品种...]` | 落盘当日期权链原始全字段 | gzip 存 `data/snapshots/`（纳入 git） |
 | `python -m undertow calendar [品种...]` | 事件雷达：关键节点倒计时 + **实时预测/前值/影响**（本周自动拉 FairEconomy 公开 feed，远期用手维护锚点） | 终端；也自动嵌入 `report` 顶部。`--no-live` 仅用本地锚点 |

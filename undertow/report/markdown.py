@@ -307,6 +307,24 @@ def render_flow(fa, display_name: str) -> str:
         L.append("静态墙位（来自 gamma 层，供叠加判断）：" + " · ".join(wall_bits))
     L.append("")
 
+    # —— 波动率面：ATM IV / 偏斜（作者口径的"买方确认"检查）——
+    if fa.vol is not None:
+        v = fa.vol
+        L.append(f"### 波动率面（到期 {v.curr.expiry}，T-{v.curr.days_out}）——期权端是否确认价格")
+        if v.prev is not None:
+            L.append(f"- 现价 {v.d_spot_pct:+.2f}%  ·  ATM IV {v.prev.atm_iv_pp:.1f} → "
+                     f"{v.curr.atm_iv_pp:.1f}（**{v.d_atm_pp:+.2f}pp**）")
+            L.append(f"- 25Δ Put-Call skew {v.prev.skew25_pp:+.2f} → {v.curr.skew25_pp:+.2f}pp"
+                     f"（{v.d_skew25_pp:+.2f}）  ·  10Δ {v.prev.skew10_pp:+.2f} → "
+                     f"{v.curr.skew10_pp:+.2f}pp（{v.d_skew10_pp:+.2f}）")
+            L.append(f"- **判读：{v.verdict}**")
+            L.append("> 事件日（非农/CPI/FOMC 兑现后）IV 回落含事件溢价释放的机械成分，判读要打折；"
+                     "偏斜是否收敛比 ATM IV 单独一条更干净。")
+        else:
+            L.append(f"- 当日水平：ATM IV {v.curr.atm_iv_pp:.1f}  ·  25Δ skew "
+                     f"{v.curr.skew25_pp:+.2f}pp  ·  10Δ {v.curr.skew10_pp:+.2f}pp（{v.verdict}）")
+        L.append("")
+
     # —— 日对日买卖方判定（核心，需两份快照）——
     if fa.prev_date:
         L.append("### 日对日买卖方判定（ΔOI × Delta修正IV → 买/卖方，复刻作者表）")

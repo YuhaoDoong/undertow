@@ -149,6 +149,33 @@ def _unusual_table_html(fa) -> str:
             "<th class='r'>IV</th></tr>" + "".join(rows) + "</table>")
 
 
+def _vol_surface_html(v) -> str:
+    """波动率面小块：ATM IV / 25Δ·10Δ 偏斜的日变化 + 买方确认判读（作者口径）。"""
+    if v is None:
+        return ""
+    head = (f'<div style="font-weight:600;margin:10px 0 2px">波动率面'
+            f'（到期 {v.curr.expiry}，T-{v.curr.days_out}）——期权端是否确认价格</div>')
+    if v.prev is None:
+        return (head + f'<div class="sub">当日水平：ATM IV {v.curr.atm_iv_pp:.1f} · '
+                f'25Δ skew {v.curr.skew25_pp:+.2f}pp · 10Δ {v.curr.skew10_pp:+.2f}pp'
+                f'（{_esc(v.verdict)}）</div>')
+    atm_col = "#c62828" if v.d_atm_pp <= -0.3 else ("#2e7d32" if v.d_atm_pp >= 0.3 else "#6e7781")
+    rows = (
+        f"<tr><td>现价变动</td><td class='r'>{v.d_spot_pct:+.2f}%</td><td></td></tr>"
+        f"<tr><td>ATM IV</td><td class='r'>{v.prev.atm_iv_pp:.1f} → {v.curr.atm_iv_pp:.1f}</td>"
+        f"<td class='r' style='color:{atm_col};font-weight:600'>{v.d_atm_pp:+.2f}pp</td></tr>"
+        f"<tr><td>25Δ Put-Call skew</td><td class='r'>{v.prev.skew25_pp:+.2f} → {v.curr.skew25_pp:+.2f}pp</td>"
+        f"<td class='r'>{v.d_skew25_pp:+.2f}</td></tr>"
+        f"<tr><td>10Δ Put-Call skew</td><td class='r'>{v.prev.skew10_pp:+.2f} → {v.curr.skew10_pp:+.2f}pp</td>"
+        f"<td class='r'>{v.d_skew10_pp:+.2f}</td></tr>")
+    return (head
+            + "<table><tr><th>指标</th><th class='r'>昨日 → 今日</th><th class='r'>Δ</th></tr>"
+            + rows + "</table>"
+            + f'<div class="sub" style="margin-top:4px"><b>判读：{_esc(v.verdict)}</b></div>'
+            + '<small>事件日（非农/CPI/FOMC 兑现后）IV 回落含事件溢价释放的机械成分，判读要打折；'
+              '偏斜是否收敛比 ATM IV 单独一条更干净。</small>')
+
+
 def render_flow_section(fa) -> str:
     """期权资金流买卖方卡片。两份快照→买卖方表；仅一份→单快照异常活跃。"""
     if fa is None:
@@ -164,6 +191,7 @@ def render_flow_section(fa) -> str:
                            f'<ul>{items}</ul></div>')
         body = (f'<div class="sub">对比 {_esc(fa.prev_date)} → {_esc(fa.curr_date)} · '
                 'OI增+IV升=买方抬价 / OI增+IV降=卖方写权</div>'
+                + _vol_surface_html(fa.vol)
                 + spread_html
                 + _flow_kind_table_html(fa.changes, "P")
                 + _flow_kind_table_html(fa.changes, "C"))
@@ -171,7 +199,8 @@ def render_flow_section(fa) -> str:
         note = ("仅一份快照，ΔOI/ΔIV 的买卖方判定需要明天第二份快照才点亮。下方为今日单快照"
                 "异常活跃（量/OI 高 = 多为当日新建仓，是 ΔOI 异动的先兆）："
                 if not fa.prev_date else "近月无超阈值异动；下方为今日异常活跃：")
-        body = f'<div class="warn" style="margin-bottom:8px">{_esc(note)}</div>' + _unusual_table_html(fa)
+        body = (f'<div class="warn" style="margin-bottom:8px">{_esc(note)}</div>'
+                + _vol_surface_html(fa.vol) + _unusual_table_html(fa))
     return f'<div class="card">{head}{tilt}{body}</div>'
 
 

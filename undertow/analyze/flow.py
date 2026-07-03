@@ -47,6 +47,16 @@ REL_MIN_STRIKES = 8        # 行权价数 ≥ 此才做"相对化"(减中位 ΔI
 SPREAD_MAX_WIDTH_FRAC = 0.08  # 两腿行权价间距 ≤ 短腿×此（垂直价差两腿应相近）
 SPREAD_MIN_SIZE = 2 * MIN_DOI  # 两腿较小者需 ≥ 此（双腿都明显高于噪音才算）
 SPREAD_TOP_N = 4             # 最多上报的价差数（按规模取前 N，其余视为噪音）
+# —— 波动率面（ATM IV / 25Δ·10Δ 偏斜，作者口径的"买方确认"检查）——
+VOL_MIN_DAYS = 10            # 到期太近 IV 噪音大，不用
+VOL_MAX_DAYS = 90
+VOL_TARGET_DAYS = 30         # 优先取最接近 30 天的到期做"标尺"
+VOL_MIN_QUOTES = 4           # 单侧（C/P 各自）至少几个有效 IV 报价才可信
+VOL_MAX_ABS_DELTA = 0.85     # 深 ITM 的 IV 不可靠，剔除
+VOL_MIN_ABS_DELTA = 0.02     # 太深 OTM 报价稀疏，也剔除
+D_ATM_SIG = 0.3              # |ΔATM IV| 超过此(pp)才算有信息
+D_SKEW_SIG = 0.5             # |Δskew| 超过此(pp)才算明显收敛/走陡
+D_SPOT_SIG = 0.5             # |Δspot%| 超过此才算"明显涨/跌"
 
 
 @dataclass(frozen=True)
@@ -100,6 +110,42 @@ class Spread:
 
 
 @dataclass(frozen=True)
+class VolRead:
+    """某一天、某个到期的波动率面读数（单位 pp，即百分数点）。"""
+    expiry: date
+    days_out: int
+    atm_iv_pp: float       # ATM 隐含波动率
+    skew25_pp: float       # 25Δ put IV − 25Δ call IV（越大 = put 越贵 = 下行担忧越重）
+    skew10_pp: float       # 10Δ 同理（更极端的尾部保护）
+
+
+@dataclass(frozen=True)
+class VolSurface:
+    """两日波动率面对比 + 作者口径判读。
+
+    来自作者 7/2 黄金分析的方法：大涨若无买方在期权端追价（ATM IV 反被压、
+    put-call skew 不明显收敛），说明上涨是空头回补而非新多进场，动力存疑。
+    诚实边界：事件日（非农/CPI/FOMC 兑现后）IV 回落含事件溢价释放的机械成分，判读要打折。
+    """
+    curr: VolRead
+    prev: VolRead | None
+    d_spot_pct: float      # 现价两日变化 %
+    verdict: str           # 中文判读
+
+    @property
+    def d_atm_pp(self) -> float:
+        return (self.curr.atm_iv_pp - self.prev.atm_iv_pp) if self.prev else 0.0
+
+    @property
+    def d_skew25_pp(self) -> float:
+        return (self.curr.skew25_pp - self.prev.skew25_pp) if self.prev else 0.0
+
+    @property
+    def d_skew10_pp(self) -> float:
+        return (self.curr.skew10_pp - self.prev.skew10_pp) if self.prev else 0.0
+
+
+@dataclass(frozen=True)
 class FlowAnalysis:
     instrument: str
     proxy_symbol: str
@@ -122,6 +168,7 @@ class FlowAnalysis:
     spreads: list[Spread] = field(default_factory=list)  # 检测到的疑似价差结构
     call_wall: float | None = None
     put_wall: float | None = None
+    vol: VolSurface | None = None  # 波动率面：ATM IV / skew 日变化（买方确认检查）
 
 
 def _yearfrac(expiry: date, today: date) -> float:
@@ -257,6 +304,114 @@ def detect_spreads(changes: list[FlowChange]) -> list[Spread]:
             ))
     out.sort(key=lambda sp: -sp.size)
     return out[:SPREAD_TOP_N]   # 只报规模最大的几笔，宁缺勿滥
+
+
+def _interp(pts: list[tuple[float, float]], x: float) -> float | None:
+    """按 x 升序线性插值；x 超界取最近端点。pts 需 ≥2 个。"""
+    if len(pts) < 2:
+        return None
+    pts = sorted(pts)
+    if x <= pts[0][0]:
+        return pts[0][1]
+    if x >= pts[-1][0]:
+        return pts[-1][1]
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        if x0 <= x <= x1:
+            return y0 + (y1 - y0) * (x - x0) / (x1 - x0) if x1 > x0 else y0
+    return None
+
+
+def read_vol(snap: OptionsSnapshot, *, today: date,
+             expiry: date | None = None) -> VolRead | None:
+    """从单张快照读某个到期的 ATM IV 与 25Δ/10Δ 偏斜。
+
+    到期选择：[VOL_MIN_DAYS, VOL_MAX_DAYS] 内、C/P 两侧有效报价都够数的到期里，
+    取最接近 VOL_TARGET_DAYS 的那个（约一个月，作者表里的"主力月份"口径）。
+    传入 expiry 则强制用它（对比昨日时保证同一到期，才可比）。
+    """
+    if snap.spot <= 0:
+        return None
+    by_exp: dict[date, dict[str, list]] = {}
+    for c in snap.contracts:
+        d = (c.expiry - today).days
+        if not (VOL_MIN_DAYS <= d <= VOL_MAX_DAYS):
+            continue
+        if c.iv <= 0 or not (VOL_MIN_ABS_DELTA <= abs(c.delta) <= VOL_MAX_ABS_DELTA):
+            continue
+        by_exp.setdefault(c.expiry, {"C": [], "P": []})[c.kind].append(c)
+    if expiry is not None:
+        cands = [expiry] if expiry in by_exp else []
+    else:
+        cands = [e for e, s in by_exp.items()
+                 if len(s["C"]) >= VOL_MIN_QUOTES and len(s["P"]) >= VOL_MIN_QUOTES]
+        cands.sort(key=lambda e: abs((e - today).days - VOL_TARGET_DAYS))
+    if not cands:
+        return None
+    exp = cands[0]
+    calls, puts = by_exp[exp]["C"], by_exp[exp]["P"]
+    if len(calls) < 2 or len(puts) < 2:
+        return None
+    # ATM：C/P 各按行权价插值到现价，再取两侧均值（剔单侧报价噪音）
+    atm_c = _interp([(c.strike, c.iv) for c in calls], snap.spot)
+    atm_p = _interp([(c.strike, c.iv) for c in puts], snap.spot)
+    atm = [v for v in (atm_c, atm_p) if v is not None]
+    if not atm:
+        return None
+    # 偏斜：按 |Delta| 插值（比按行权价稳，自动适配现价移动）
+    civ = [(abs(c.delta), c.iv) for c in calls]
+    piv = [(abs(c.delta), c.iv) for c in puts]
+    c25, p25 = _interp(civ, 0.25), _interp(piv, 0.25)
+    c10, p10 = _interp(civ, 0.10), _interp(piv, 0.10)
+    if None in (c25, p25, c10, p10):
+        return None
+    return VolRead(
+        expiry=exp, days_out=(exp - today).days,
+        atm_iv_pp=round(100.0 * sum(atm) / len(atm), 2),
+        skew25_pp=round(100.0 * (p25 - c25), 2),
+        skew10_pp=round(100.0 * (p10 - c10), 2),
+    )
+
+
+def _vol_verdict(d_spot_pct: float, d_atm: float, d_skew25: float) -> str:
+    """作者口径：价格变动 × ATM IV 变动 × 偏斜收敛与否 → 期权端是否"确认"价格。"""
+    if d_spot_pct >= D_SPOT_SIG:                    # 明显上涨
+        if d_atm <= -D_ATM_SIG:
+            base = "价涨而 ATM IV 被压 → 没有买方追价抢筹（涨势更像空头回补）"
+            if d_skew25 <= -D_SKEW_SIG:
+                return base + "；但偏斜明显收敛，下行担忧同步减退 → 信号中性"
+            return base + "；且偏斜未明显收敛 → 期权端未确认涨势，后续动力存疑"
+        if d_atm >= D_ATM_SIG:
+            return "价涨且 ATM IV 抬升 → 买方追价，涨势获期权端确认"
+        return "价涨、ATM IV 大体持平 → 期权端未表态"
+    if d_spot_pct <= -D_SPOT_SIG:                   # 明显下跌
+        if d_atm >= D_ATM_SIG:
+            if d_skew25 >= D_SKEW_SIG:
+                return "价跌且 ATM IV / put 偏斜齐升 → 恐慌买保护，下行动能获确认"
+            return "价跌且 ATM IV 抬升 → 保护需求上升"
+        if d_atm <= -D_ATM_SIG:
+            return "价跌而 ATM IV 回落 → 恐慌有限，跌势未获期权端追认"
+        return "价跌、ATM IV 大体持平 → 期权端未表态"
+    # 价格大体持平：只看偏斜
+    if d_skew25 >= D_SKEW_SIG:
+        return "价平但 put 偏斜走陡 → 下行担忧升温"
+    if d_skew25 <= -D_SKEW_SIG:
+        return "价平且偏斜收敛 → 下行担忧减退"
+    return "价平、波动率面无方向信息"
+
+
+def vol_surface(prev: OptionsSnapshot | None, curr: OptionsSnapshot, *,
+                today: date) -> VolSurface | None:
+    """两日波动率面对比。prev 缺失时只给当日水平（明日起点亮判读）。"""
+    cr = read_vol(curr, today=today)
+    if cr is None:
+        return None
+    pr = read_vol(prev, today=today, expiry=cr.expiry) if prev is not None else None
+    if pr is None:
+        return VolSurface(curr=cr, prev=None, d_spot_pct=0.0,
+                          verdict="仅当日水平（无可比昨日同到期快照），明日起可出日变化判读")
+    d_spot = 100.0 * (curr.spot / prev.spot - 1.0) if prev.spot > 0 else 0.0
+    verdict = _vol_verdict(d_spot, cr.atm_iv_pp - pr.atm_iv_pp, cr.skew25_pp - pr.skew25_pp)
+    return VolSurface(curr=cr, prev=pr, d_spot_pct=round(d_spot, 2), verdict=verdict)
 
 
 def analyze_flow(
@@ -415,4 +570,5 @@ def analyze_flow(
         spreads=spreads,
         call_wall=call_wall,
         put_wall=put_wall,
+        vol=vol_surface(prev, curr, today=today),
     )

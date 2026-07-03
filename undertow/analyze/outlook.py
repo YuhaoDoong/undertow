@@ -81,6 +81,83 @@ class Outlook:
     commodity_basis: str = ""     # 换算依据（实时比值 / 静态乘数近似）
 
 
+def plain_summary(o: Outlook, *, day_chg_pct: float | None = None,
+                  vol_verdict: str = "") -> str:
+    """大白话速读：现价与日涨跌、上方阻力群、下方第一层支撑、多空分界、环境提示。
+
+    全部由已算好的关键位确定性拼句，不引入任何新判断；措辞刻意保留不确定性
+    （"把握不大/值得重视"），不说死"必涨必跌"。
+    """
+    use_comm = o.commodity_spot is not None
+    px = o.commodity_spot if use_comm else o.spot
+
+    def val(k: KeyLevel) -> float:
+        return k.commodity_level if (use_comm and k.commodity_level is not None) else k.etf_level
+
+    def short(label: str) -> str:
+        return label.split(" / ")[0].strip()
+
+    # 只用结构位（墙/零伽马）叙事；pin 与资金流活跃行留给位点表，避免啰嗦
+    core = [k for k in o.key_levels if k.kind in ("resistance", "support", "flip")]
+    above = sorted([k for k in core if val(k) > px], key=val)
+    below = sorted([k for k in core if val(k) < px], key=val, reverse=True)
+
+    fmt = (lambda v: f"{v:,.0f}") if px >= 500 else (lambda v: f"{v:,.1f}")
+    S: list[str] = []
+
+    # 1) 现价 + 日涨跌 + 综合方向
+    chg = ""
+    if day_chg_pct is not None:
+        word = "涨" if day_chg_pct >= 0 else "跌"
+        chg = f"，较上一交易日{word} {abs(day_chg_pct):.1f}%"
+    S.append(f"现价 {fmt(px)}{chg}；综合研判{o.bias}（可信度{o.confidence}）。")
+
+    # 2) 上方阻力
+    if len(above) >= 2:
+        chain = " → ".join(f"{fmt(val(k))}（{short(k.label)}）" for k in above[:3])
+        up = f"上方 {chain} 阻力密集"
+    elif above:
+        k = above[0]
+        up = f"上方最近阻力 {fmt(val(k))}（{short(k.label)}）"
+    else:
+        up = "上方近处已无成型 OI 阻力（现价在看涨墙上方，缺锚点）"
+    if "信号中性" in vol_verdict:
+        up += "，期权端信号中性——没人追价买涨，但看空保护也在撤，方向等表态"
+    elif "未确认" in vol_verdict or "空头回补" in vol_verdict:
+        up += "，且期权端暂无买方追价确认——短线一举突破的把握不大"
+    elif "买方追价" in vol_verdict or "获期权端确认" in vol_verdict:
+        up += "，期权端买方在追价——突破尝试值得重视"
+    elif above:
+        up += "，能否突破先看资金流表里 call 买方是否追价"
+    S.append(up + "。")
+
+    # 3) 下方支撑 + 多空分界
+    pivot = next((k for k in below if k.kind == "support"), None)  # 看跌墙
+    if below:
+        first = below[0]
+        if pivot is first:
+            S.append(f"下方第一层支撑就是更重要的多空分界：{fmt(val(first))}"
+                     f"（{short(first.label)}）——守住则区间对待，跌破则对冲盘转向助跌、"
+                     "下行容易加速。")
+        else:
+            down = f"下方第一层支撑 {fmt(val(first))}（{short(first.label)}）"
+            if pivot is not None:
+                down += (f"；更重要的多空分界在 {fmt(val(pivot))}（{short(pivot.label)}）"
+                         "——跌破则下行容易加速")
+            S.append(down + "。")
+    else:
+        sup = next((k for k in core if k.kind == "support"), None)
+        tail = f"（已跌破看跌墙 {fmt(val(sup))}，反抽该位先当压力看）" if sup else ""
+        S.append(f"下方近处已无成型 OI 支撑{tail}，处破位区运行。")
+
+    # 4) 对冲环境
+    if "负Gamma" in o.regime or "负伽马" in o.regime:
+        S.append("当前处负伽马环境：涨跌都会被做市商对冲放大，行情容易走过头，追单与接刀都需谨慎。")
+    elif "正Gamma" in o.regime or "正伽马" in o.regime:
+        S.append("当前处正伽马环境：波动易被对冲盘吸收，行情偏磨蹭，假突破多。")
+    return "".join(S)
+
+
 def macro_to_votes(ma) -> list[FactorVote]:
     """把宏观驱动（实际利率/美元/通胀预期）转成方向因子票。"""
     out: list[FactorVote] = []

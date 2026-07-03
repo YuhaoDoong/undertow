@@ -277,8 +277,18 @@ def render_events_section(events, today) -> str:
     )
 
 
+def render_tldr_section(text: str) -> str:
+    """大白话速读卡片：一段话讲清现价、阻力支撑、多空分界与环境。"""
+    if not text:
+        return ""
+    return ('<div class="card"><h2>大白话速读</h2>'
+            f'<div style="font-size:15px;line-height:1.9">{_esc(text)}</div>'
+            '<small>由关键位与当日数据自动拼句；措辞保留不确定性，非点位预言。</small></div>')
+
+
 def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
-                       flow_html: str = "", macro_html: str = "", events_html: str = "") -> str:
+                       flow_html: str = "", macro_html: str = "", events_html: str = "",
+                       tldr_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -296,6 +306,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="sub">环境：{_esc(o.regime)}</div></div>'
     )
     body = (
+        f'{tldr_html}'
         f'{events_html}'
         f'<div class="card"><h2>关键位点（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
         f'<div class="chart">{price_svg}</div>'

@@ -31,13 +31,14 @@ from undertow.analyze.positioning import analyze
 from undertow.analyze.signals import generate_signals, net_bias
 from undertow.analyze.gamma import analyze_gamma
 from undertow.analyze.flow import analyze_flow
-from undertow.analyze.outlook import build_outlook, macro_to_votes
+from undertow.analyze.outlook import build_outlook, macro_to_votes, plain_summary
 from undertow.analyze.macro import analyze_macro, series_ids_for
 from undertow.analyze.backtest import run_backtest
 from undertow.report import markdown as report_mod
 from undertow.report import viz
 from undertow.report.html import (render_report_html, render_index_html,
-                          render_flow_section, render_macro_section, render_events_section)
+                          render_flow_section, render_macro_section, render_events_section,
+                          render_tldr_section)
 
 
 def _resolve_instruments(cfg, names: list[str]) -> list:
@@ -507,8 +508,15 @@ def cmd_report(args) -> int:
             macro_html = render_macro_section(ma)
             evs = upcoming(all_events, today=today, within_days=21, instrument=inst.key)
             events_html = render_events_section(evs, today)
+            # —— 大白话速读：日涨跌用真实期货最近两根收盘；期权确认取波动率面判读 ——
+            day_chg = None
+            if real_series is not None and len(real_series.closes) >= 2 and real_series.closes[-2]:
+                day_chg = 100.0 * (real_series.closes[-1] / real_series.closes[-2] - 1.0)
+            vv = fa.vol.verdict if (fa.vol is not None and fa.vol.prev is not None) else ""
+            tldr_html = render_tldr_section(plain_summary(outlook, day_chg_pct=day_chg,
+                                                          vol_verdict=vv))
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
-                                      flow_html, macro_html, events_html)
+                                      flow_html, macro_html, events_html, tldr_html)
             fn = f"{inst.key}_{today.isoformat()}.html"
             (reports_dir / fn).write_text(html, encoding="utf-8")
             written.append((inst, outlook, fn))

@@ -32,7 +32,7 @@ description: >-
 ## 命令
 | 命令 | 作用 | 产物 |
 |---|---|---|
-| `python -m undertow report [品种...]` | 四层聚合综合研判 + SVG 图 | 自包含 HTML 落在 `data/reports/`（用真实期货价/位点） |
+| `python -m undertow report [品种...]` | 四层聚合综合研判 + SVG 图 + 策略情景参数化（期货：触发/失效/目标/否决票，非交易指令） | 自包含 HTML 落在 `data/reports/`（用真实期货价/位点） |
 | `python -m undertow analyze [品种...]` | COT 持仓分析（净头寸/拥挤度/聪明钱背离） | 终端 Markdown；`--json` 给结构化 |
 | `python -m undertow gamma [品种...]` | 期权 Gamma/OI 墙/零伽马 | 终端 Markdown |
 | `python -m undertow flow [品种...]` | 买卖方资金流 + 多腿价差识别 + 波动率面（ATM IV/25Δ·10Δ skew 日变化 → 期权端是否确认价格） | 终端 Markdown（需≥2 天快照） |
@@ -49,7 +49,7 @@ undertow/
   core/     models / config / clock          公共核心
   collect/  各数据源 + 快照仓库 + 缓存          数据收集层
   analyze/  positioning/gamma/flow/macro/      数据分析层（只吃 core.models）
-            outlook/backtest/signals/blackscholes
+            outlook/strategy/backtest/signals/blackscholes
   report/   markdown / html / viz             报告层
   cli.py + __main__.py
 ```

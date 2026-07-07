@@ -286,9 +286,51 @@ def render_tldr_section(text: str) -> str:
             '<small>由关键位与当日数据自动拼句；措辞保留不确定性，非点位预言。</small></div>')
 
 
+def render_strategy_section(sp) -> str:
+    """策略情景参数化卡片（期货）：方向→情景→触发/失效/目标/盈亏比 + 否决票。"""
+    if sp is None:
+        return ""
+    fmt = (lambda v: f"{v:,.0f}") if sp.spot >= 500 else (lambda v: f"{v:,.1f}")
+    dir_col = {"做空": "#c62828", "做多": "#2e7d32", "观望": "#6e7781"}.get(sp.direction, "#6e7781")
+    head = (f'<h2>策略情景参数化（期货 · 模块输出，非交易指令）</h2>'
+            f'<div style="margin:6px 0"><span class="pill" '
+            f'style="background:{dir_col}1a;color:{dir_col};font-weight:700">方向：{_esc(sp.direction)}</span>'
+            f' <small>{_esc(sp.direction_source)}</small></div>')
+    atr_line = ""
+    if sp.atr is not None:
+        atr_line = (f'<div class="sub">波幅口径：{_esc(sp.atr_note)} = {fmt(sp.atr)}'
+                    f'（{sp.atr_pct:.1f}%/日）——所有缓冲区按其缩放</div>')
+    vet = ""
+    if sp.vetoes:
+        items = "".join(f'<li>{_esc(v)}</li>' for v in sp.vetoes)
+        vet = (f'<div style="margin:8px 0 2px;font-weight:600;color:#c62828">'
+               f'实时层否决票 ×{len(sp.vetoes)}</div><ul style="margin:2px 0 6px">{items}</ul>')
+    scen_rows = []
+    for s in sp.scenarios:
+        zone = (f"{fmt(s.entry_lo)} – {fmt(s.entry_hi)}"
+                if s.entry_lo is not None else f"{fmt(s.entry_ref)}（触发价参考）")
+        tg = "；".join(f"{fmt(v)}（{_esc(lbl)}，R:R≈{r:.1f}）"
+                       for (v, lbl), r in zip(s.targets, s.rr)) or "—"
+        scen_rows.append(
+            f'<tr><td><b>{_esc(s.name)}</b><div class="t">{_esc(s.stance)}</div></td>'
+            f'<td>{_esc(s.trigger)}</td>'
+            f'<td class="r">{zone}</td>'
+            f'<td class="r">{fmt(s.invalidation)}<div class="t">{_esc(s.invalidation_note)}</div></td>'
+            f'<td>{tg}</td>'
+            f'<td><b>{_esc(s.status)}</b><div class="t">{_esc(s.status_note)}</div></td></tr>')
+    table = ("<table><tr><th>情景</th><th>触发条件（日收盘为准）</th><th class='r'>参考区</th>"
+             "<th class='r'>失效线</th><th>目标（盈亏比）</th><th>状态</th></tr>"
+             + "".join(scen_rows) + "</table>") if scen_rows else ""
+    verdict = f'<div class="sub" style="margin-top:6px"><b>模块裁决：{_esc(sp.verdict)}</b></div>'
+    sizing = f'<div class="sub">{_esc(sp.sizing_note)}</div>' if sp.sizing_note else ""
+    opts = f'<div class="sub" style="color:#6e7781">🧩 {_esc(sp.options_note)}</div>'
+    cavs = "<small>" + " ".join(_esc(c) for c in sp.caveats) + "</small>"
+    return f'<div class="card">{head}{atr_line}{vet}{table}{verdict}{sizing}{opts}{cavs}</div>'
+
+
 def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        flow_html: str = "", macro_html: str = "", events_html: str = "",
-                       tldr_html: str = "") -> str:
+                       tldr_html: str = "", strategy_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -316,6 +358,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'{macro_html}'
         f'<div class="card"><h2>持仓结构</h2><div class="chart">{cot_svg}</div></div>'
         f'<div class="card"><h2>情景推演（规则化 if-then，非点位预言）</h2>{_scenarios_html(o)}</div>'
+        f'{strategy_html}'
         f'<div class="card">{_caveats_html(o)}</div>'
     )
     foot = ('<div class="foot">undertow · 规则化情景工具，非投资建议 · '

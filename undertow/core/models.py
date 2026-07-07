@@ -133,11 +133,17 @@ class OptionsSnapshot:
 
 @dataclass(frozen=True)
 class PriceSeries:
-    """日线收盘价序列，按日期升序。用于回测/价格对齐。"""
+    """日线收盘价序列，按日期升序。用于回测/价格对齐。
+
+    highs/lows 可选（有则与 closes 等长），供 ATR 类真实波幅计算；
+    仅有收盘价的源（如 CBOE 历史）留空即可。
+    """
 
     symbol: str
     dates: list[date]  # 升序
     closes: list[float]
+    highs: list[float] = field(default_factory=list)
+    lows: list[float] = field(default_factory=list)
 
     def index_on_or_after(self, d: date) -> int | None:
         """第一个日期 >= d 的下标（用二分）。无则 None。"""

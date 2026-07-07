@@ -56,15 +56,23 @@ class YahooFuturesSource:
         ts = res.get("timestamp") or []
         quote = (res.get("indicators", {}).get("quote") or [{}])[0]
         closes_raw = quote.get("close") or []
-        dates, closes = [], []
-        for t, c in zip(ts, closes_raw):
+        highs_raw = quote.get("high") or []
+        lows_raw = quote.get("low") or []
+        dates, closes, highs, lows = [], [], [], []
+        for i, (t, c) in enumerate(zip(ts, closes_raw)):
             if c is None:
                 continue
             dates.append(datetime.fromtimestamp(t, tz=timezone.utc).date())
             closes.append(float(c))
+            h = highs_raw[i] if i < len(highs_raw) else None
+            l = lows_raw[i] if i < len(lows_raw) else None
+            # 个别 bar 缺高低价时用收盘顶替，保证与 closes 等长的不变式
+            highs.append(float(h) if h is not None else float(c))
+            lows.append(float(l) if l is not None else float(c))
         if not closes:
             raise DataSourceError(f"Yahoo {symbol} 无有效收盘价")
-        return PriceSeries(symbol=symbol, dates=dates, closes=closes)
+        return PriceSeries(symbol=symbol, dates=dates, closes=closes,
+                           highs=highs, lows=lows)
 
     def fetch_quote(self, symbol: str, *, use_cache: bool = True) -> tuple[float, str]:
         """最新真实期货价 + 时间戳。优先 regularMarketPrice，回退最后一根日线收盘。"""

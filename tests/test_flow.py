@@ -179,22 +179,25 @@ if __name__ == "__main__":
 # ==== 速读用结构性异动（structural_moves）====
 
 def test_structural_moves_detects_put_wall_roll():
-    # 复刻 2026-07-08 黄金实况：put 墙 360 削 2,275 / 355 增 2,119 = 防线后撤
+    # 复刻 2026-07-08 黄金实况：put 墙 360 卖方撤退 / 370 买方保护进场，
+    # 双腿 IV 齐升 → 双 bearish → 结论必须点明"资本更看跌"（作者口径）
     prev = _snap([
-        _c(360, "P", oi=106_000, iv=0.20), _c(355, "P", oi=6_600, iv=0.20),
+        _c(360, "P", oi=106_000, iv=0.200), _c(370, "P", oi=6_600, iv=0.200),
         _c(400, "C", oi=40_000, iv=0.20),
-    ], spot=375.0)
+    ], spot=374.0)
     curr = _snap([
-        _c(360, "P", oi=103_725, iv=0.20), _c(355, "P", oi=8_719, iv=0.20),
+        _c(360, "P", oi=103_725, iv=0.205),   # OI↓ + IV↑ = 卖方撤退（支撑减弱）
+        _c(370, "P", oi=9_467, iv=0.205),     # OI↑ + IV↑ = 买方保护进场
         _c(400, "C", oi=40_000, iv=0.20),
     ], spot=374.0)
     fa = analyze_flow(prev, curr, today=TODAY, put_wall=360.0, call_wall=400.0,
                       prev_date="a", curr_date="b")
     moves = structural_moves(fa, conv=lambda v: v * 10.9)
     assert moves, "应识别出 put 墙滚动"
-    assert "移至" in moves[0] and "支撑防线后撤" in moves[0]
-    assert "3,924" in moves[0] and "3,870" in moves[0]   # 360/355 × 10.9 商品口径
-    assert "-2,275" in moves[0] and "+2,119" in moves[0]
+    assert "卖方撤退" in moves[0] and "买方保护" in moves[0]
+    assert "资本更看跌" in moves[0]
+    assert "3,924" in moves[0] and "4,033" in moves[0]   # 360/370 × 10.9 商品口径
+    assert "-2,275" in moves[0] and "+2,867" in moves[0]
 
 
 def test_structural_moves_wall_thicken_and_top_build():

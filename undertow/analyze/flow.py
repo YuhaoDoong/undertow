@@ -201,22 +201,32 @@ def structural_moves(fa: "FlowAnalysis", *, conv=None, top_n: int = 2) -> list[s
             lo, hi = sorted((abs(dn.d_oi), up.d_oi))
             if lo < hi * ROLL_BALANCE:
                 continue
-            # 措辞随新腿的买卖方判定：卖方=墙/防线在平移，买方=方向性目标在平移
-            buyer = "买方" in up.judgment
-            if dn.kind == "P":
-                if up.strike < dn.strike:
-                    verb = "看跌目标下探" if buyer else "支撑防线后撤"
+            # 双腿各带买卖方判定入句（作者口径：谁在撤、谁在进），结尾给净方向
+            def _leg(c: FlowChange) -> str:
+                j = c.judgment
+                if j == "噪音" or "减仓" in j:      # 无 IV 方向信息时只描述 OI 动作
+                    j = "增仓" if c.d_oi > 0 else "减仓"
+                wall = f"（{c.on_wall}）" if c.on_wall else ""
+                return f"{fmt(c.strike)}{wall} {j}（{c.d_oi:+,} 手）"
+
+            # 净方向只看有 IV 信息的腿（中性/减仓腿不投票）；同向即明说资本方向
+            sides = {b for b in (dn.bias, up.bias) if b != "neutral"}
+            if sides == {"bearish"}:
+                concl = "资本更看跌"
+            elif sides == {"bullish"}:
+                concl = "资本更看多"
+            else:  # 两腿判定对立或全无信息：退回仓位平移的位置学描述
+                buyer = "买方" in up.judgment
+                if dn.kind == "P":
+                    concl = (("看跌目标下探" if buyer else "支撑防线后撤")
+                             if up.strike < dn.strike else
+                             ("看跌/保护重心上移" if buyer else "承接位上移"))
                 else:
-                    verb = "看跌/保护重心上移" if buyer else "支撑防线上顶"
-            else:
-                if up.strike < dn.strike:
-                    verb = "买方目标下移" if buyer else "压制位下压"
-                else:
-                    verb = "上方目标上移" if buyer else "压制位上移"
-            wall = f"（{dn.on_wall}）" if dn.on_wall else ""
-            moves.append(f"{'put' if dn.kind == 'P' else 'call'} 仓从 "
-                         f"{fmt(dn.strike)}{wall} 移至 {fmt(up.strike)}"
-                         f"（-{abs(dn.d_oi):,} / +{up.d_oi:,} 手，{verb}）")
+                    concl = (("买方目标下移" if buyer else "压制位下压")
+                             if up.strike < dn.strike else
+                             ("上方目标上移" if buyer else "压制位上移"))
+            side = "put 端" if dn.kind == "P" else "call 端"
+            moves.append(f"{side} {_leg(dn)}、{_leg(up)}——{concl}")
             used.update({(dn.strike, dn.kind), (up.strike, up.kind)})
             break
 

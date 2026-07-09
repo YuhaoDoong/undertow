@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from undertow.core.models import OptionsSnapshot, OptionContract
-from undertow.analyze.flow import analyze_flow, scan_unusual, _judge
+from undertow.analyze.flow import analyze_flow, scan_unusual, structural_moves, _judge
 from undertow.collect.store import SnapshotStore
 
 TODAY = date(2026, 6, 26)
@@ -174,3 +174,62 @@ if __name__ == "__main__":
         fn()
         print(f"PASS {fn.__name__}")
     print(f"\n{len(fns)} tests passed.")
+
+
+# ==== 速读用结构性异动（structural_moves）====
+
+def test_structural_moves_detects_put_wall_roll():
+    # 复刻 2026-07-08 黄金实况：put 墙 360 削 2,275 / 355 增 2,119 = 防线后撤
+    prev = _snap([
+        _c(360, "P", oi=106_000, iv=0.20), _c(355, "P", oi=6_600, iv=0.20),
+        _c(400, "C", oi=40_000, iv=0.20),
+    ], spot=375.0)
+    curr = _snap([
+        _c(360, "P", oi=103_725, iv=0.20), _c(355, "P", oi=8_719, iv=0.20),
+        _c(400, "C", oi=40_000, iv=0.20),
+    ], spot=374.0)
+    fa = analyze_flow(prev, curr, today=TODAY, put_wall=360.0, call_wall=400.0,
+                      prev_date="a", curr_date="b")
+    moves = structural_moves(fa, conv=lambda v: v * 10.9)
+    assert moves, "应识别出 put 墙滚动"
+    assert "移至" in moves[0] and "支撑防线后撤" in moves[0]
+    assert "3,924" in moves[0] and "3,870" in moves[0]   # 360/355 × 10.9 商品口径
+    assert "-2,275" in moves[0] and "+2,119" in moves[0]
+
+
+def test_structural_moves_wall_thicken_and_top_build():
+    prev = _snap([
+        _c(105, "C", oi=20_000, iv=0.20), _c(95, "P", oi=8_000, iv=0.20),
+    ])
+    curr = _snap([
+        _c(105, "C", oi=31_000, iv=0.208),   # call 墙 +11,000 增厚
+        _c(95, "P", oi=13_000, vol=9_000, iv=0.212),  # +5,000 买方保护
+    ])
+    fa = analyze_flow(prev, curr, today=TODAY, call_wall=105.0, put_wall=None,
+                      prev_date="a", curr_date="b")
+    moves = structural_moves(fa)
+    assert any("call墙" in m and "增厚" in m and "+11,000" in m for m in moves)
+    assert any("95.0 put 新增 5,000 手" in m for m in moves)
+
+
+def test_structural_moves_ignores_small_and_single_snapshot():
+    prev = _snap([_c(100, "C", oi=1_000, iv=0.20)])
+    curr = _snap([_c(100, "C", oi=1_500, iv=0.20)])   # +500 < 结构级门槛
+    fa = analyze_flow(prev, curr, today=TODAY, prev_date="a", curr_date="b")
+    assert structural_moves(fa) == []
+    fa_single = analyze_flow(None, curr, today=TODAY)
+    assert structural_moves(fa_single) == []
+
+
+def test_plain_summary_carries_flow_signals():
+    from undertow.analyze.outlook import KeyLevel, Outlook, plain_summary
+    o = Outlook(instrument="t", display_name="T", asof="x", spot=100.0,
+                commodity_spot=None, proxy_symbol="T", bias="偏空",
+                bias_score=-3.0, confidence="高", regime="负Gamma",
+                key_levels=[KeyLevel("看跌墙 / 支撑", 95.0, None, "support", "")])
+    txt = plain_summary(o, flow_tilt="偏空（下行 100 > 上行 10）",
+                        flow_moves=["put 仓从 95.0 移至 94.0（-2,000 / +1,900 手，支撑防线后撤）"])
+    assert "今日持仓异动：期权资金流净倾向偏空" in txt
+    assert "支撑防线后撤" in txt
+    # 不传就不出现该段
+    assert "今日持仓异动" not in plain_summary(o)

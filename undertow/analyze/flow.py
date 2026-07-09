@@ -47,6 +47,10 @@ REL_MIN_STRIKES = 8        # 行权价数 ≥ 此才做"相对化"(减中位 ΔI
 SPREAD_MAX_WIDTH_FRAC = 0.08  # 两腿行权价间距 ≤ 短腿×此（垂直价差两腿应相近）
 SPREAD_MIN_SIZE = 2 * MIN_DOI  # 两腿较小者需 ≥ 此（双腿都明显高于噪音才算）
 SPREAD_TOP_N = 4             # 最多上报的价差数（按规模取前 N，其余视为噪音）
+# —— 速读用结构性异动（墙体滚动/墙上增减/最大建仓，门槛取"结构级"远高于噪音）——
+ROLL_MAX_GAP_FRAC = 0.04     # 滚动两腿行权价间距 ≤ 旧腿×此（相邻才算"搬墙"）
+ROLL_BALANCE = 0.4           # 两腿规模较小者 ≥ 较大者×此，一减一增才认定为同一笔搬仓
+MOVE_MIN_DOI = 1_000         # 进速读的单点 |ΔOI| 门槛
 # —— 波动率面（ATM IV / 25Δ·10Δ 偏斜，作者口径的"买方确认"检查）——
 VOL_MIN_DAYS = 10            # 到期太近 IV 噪音大，不用
 VOL_MAX_DAYS = 90
@@ -169,6 +173,75 @@ class FlowAnalysis:
     call_wall: float | None = None
     put_wall: float | None = None
     vol: VolSurface | None = None  # 波动率面：ATM IV / skew 日变化（买方确认检查）
+
+
+def structural_moves(fa: "FlowAnalysis", *, conv=None, top_n: int = 2) -> list[str]:
+    """从两日 ΔOI 里挑最结构性的动作，拼成速读用短句（确定性拼句，无新判断）。
+
+    优先级：墙体滚动（同类相邻行权价一减一增 = 防线/压制位平移，如 360P→355P）
+    > 墙上大额增减 > 最大单点建仓。conv 把 ETF 行权价换算成展示口径（商品价）。
+    """
+    if not fa.changes:
+        return []
+    cv = conv or (lambda v: v)
+    fmt = (lambda v: f"{cv(v):,.0f}") if cv(fa.spot) >= 500 else (lambda v: f"{cv(v):,.1f}")
+    moves: list[str] = []
+    used: set[tuple[float, str]] = set()
+
+    # 1) 墙体滚动：一减一增、行权价相邻、规模相当（changes 已按 |ΔOI| 降序）
+    big = [c for c in fa.changes if abs(c.d_oi) >= MOVE_MIN_DOI]
+    for dn in (c for c in big if c.d_oi < 0):
+        if (dn.strike, dn.kind) in used:
+            continue
+        for up in (c for c in big if c.d_oi > 0 and c.kind == dn.kind
+                   and (c.strike, c.kind) not in used):
+            gap = abs(up.strike - dn.strike)
+            if not (0 < gap <= dn.strike * ROLL_MAX_GAP_FRAC):
+                continue
+            lo, hi = sorted((abs(dn.d_oi), up.d_oi))
+            if lo < hi * ROLL_BALANCE:
+                continue
+            # 措辞随新腿的买卖方判定：卖方=墙/防线在平移，买方=方向性目标在平移
+            buyer = "买方" in up.judgment
+            if dn.kind == "P":
+                if up.strike < dn.strike:
+                    verb = "看跌目标下探" if buyer else "支撑防线后撤"
+                else:
+                    verb = "看跌/保护重心上移" if buyer else "支撑防线上顶"
+            else:
+                if up.strike < dn.strike:
+                    verb = "买方目标下移" if buyer else "压制位下压"
+                else:
+                    verb = "上方目标上移" if buyer else "压制位上移"
+            wall = f"（{dn.on_wall}）" if dn.on_wall else ""
+            moves.append(f"{'put' if dn.kind == 'P' else 'call'} 仓从 "
+                         f"{fmt(dn.strike)}{wall} 移至 {fmt(up.strike)}"
+                         f"（-{abs(dn.d_oi):,} / +{up.d_oi:,} 手，{verb}）")
+            used.update({(dn.strike, dn.kind), (up.strike, up.kind)})
+            break
+
+    # 2) 墙上大额增减
+    for c in fa.changes:
+        if (c.strike, c.kind) in used or not c.on_wall or abs(c.d_oi) < MOVE_MIN_DOI:
+            continue
+        note = ("增厚，" + ("天花板更结实" if c.on_wall == "call墙" else "承接更结实")
+                ) if c.d_oi > 0 else ("被削，" + ("压制松动" if c.on_wall == "call墙"
+                                                  else "承接减弱"))
+        moves.append(f"{c.on_wall} {fmt(c.strike)} {note}（ΔOI {c.d_oi:+,} 手）")
+        used.add((c.strike, c.kind))
+
+    # 3) 最大单点建仓（带买卖方判定），补足条数
+    for c in fa.changes:
+        if len(moves) >= top_n:
+            break
+        if (c.strike, c.kind) in used or abs(c.d_oi) < MOVE_MIN_DOI:
+            continue
+        act = "新增" if c.d_oi > 0 else "减仓"
+        moves.append(f"{fmt(c.strike)} {'put' if c.kind == 'P' else 'call'} "
+                     f"{act} {abs(c.d_oi):,} 手（{c.judgment}）")
+        used.add((c.strike, c.kind))
+
+    return moves[:top_n]
 
 
 def _yearfrac(expiry: date, today: date) -> float:

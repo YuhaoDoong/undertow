@@ -82,11 +82,13 @@ class Outlook:
 
 
 def plain_summary(o: Outlook, *, day_chg_pct: float | None = None,
-                  vol_verdict: str = "") -> str:
-    """大白话速读：现价与日涨跌、上方阻力群、下方第一层支撑、多空分界、环境提示。
+                  vol_verdict: str = "", flow_tilt: str = "",
+                  flow_moves: list[str] | None = None) -> str:
+    """大白话速读：现价与日涨跌、上方阻力群、下方第一层支撑、多空分界、环境提示、
+    今日持仓异动（ΔOI 净倾向 + 结构性大动作）。
 
-    全部由已算好的关键位确定性拼句，不引入任何新判断；措辞刻意保留不确定性
-    （"把握不大/值得重视"），不说死"必涨必跌"。
+    全部由已算好的关键位/资金流结论确定性拼句，不引入任何新判断；措辞刻意保留
+    不确定性（"把握不大/值得重视"），不说死"必涨必跌"。
     """
     use_comm = o.commodity_spot is not None
     px = o.commodity_spot if use_comm else o.spot
@@ -155,6 +157,14 @@ def plain_summary(o: Outlook, *, day_chg_pct: float | None = None,
         S.append("当前处负伽马环境：涨跌都会被做市商对冲放大，行情容易走过头，追单与接刀都需谨慎。")
     elif "正Gamma" in o.regime or "正伽马" in o.regime:
         S.append("当前处正伽马环境：波动易被对冲盘吸收，行情偏磨蹭，假突破多。")
+
+    # 5) 今日持仓异动（ΔOI 信号，直接引用 flow 层现成结论，不做二次判断）
+    bits: list[str] = []
+    if flow_tilt:
+        bits.append(f"期权资金流净倾向{flow_tilt}")
+    bits.extend(flow_moves or [])
+    if bits:
+        S.append("今日持仓异动：" + "；".join(bits) + "。")
     return "".join(S)
 
 

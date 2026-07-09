@@ -30,7 +30,7 @@ from undertow.collect.cboe_vol import CboeVolSource
 from undertow.analyze.positioning import analyze
 from undertow.analyze.signals import generate_signals, net_bias
 from undertow.analyze.gamma import analyze_gamma
-from undertow.analyze.flow import analyze_flow
+from undertow.analyze.flow import analyze_flow, structural_moves
 from undertow.analyze.outlook import build_outlook, macro_to_votes, plain_summary
 from undertow.analyze.strategy import build_strategy
 from undertow.analyze.macro import analyze_macro, series_ids_for
@@ -514,8 +514,12 @@ def cmd_report(args) -> int:
             if real_series is not None and len(real_series.closes) >= 2 and real_series.closes[-2]:
                 day_chg = 100.0 * (real_series.closes[-1] / real_series.closes[-2] - 1.0)
             vv = fa.vol.verdict if (fa.vol is not None and fa.vol.prev is not None) else ""
+            # ΔOI 信号进速读：净倾向 + 结构性大动作（墙体滚动/墙上增减/最大建仓）
+            tilt = fa.flow_tilt if not fa.flow_tilt.startswith("—") else ""
+            moves = structural_moves(fa, conv=(ga.to_commodity if ratio is not None else None))
             tldr_html = render_tldr_section(plain_summary(outlook, day_chg_pct=day_chg,
-                                                          vol_verdict=vv))
+                                                          vol_verdict=vv, flow_tilt=tilt,
+                                                          flow_moves=moves))
             # —— 策略情景参数化（期货）：方向由综合研判定，位点由结构定，缓冲按 ATR ——
             plan = build_strategy(outlook, vol=fa.vol, series=real_series)
             strategy_html = render_strategy_section(plan)

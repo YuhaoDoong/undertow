@@ -113,11 +113,19 @@ def _rr(entry: float, invalid: float, target: float) -> float:
 
 
 def _targets_below(levels: list[KeyLevel], ceiling: float, use_comm: bool,
-                   n: int = 2) -> list[tuple[float, str]]:
-    """ceiling 下方的结构位，从近到远取 n 个（flow/pin/flip/support）。"""
+                   n: int = 2, *, ref: float | None = None,
+                   min_dist: float = 0.0) -> list[tuple[float, str]]:
+    """ceiling 下方的结构位，从近到远取 n 个（flow/pin/flip/support）。
+
+    ref/min_dist：止盈候选须距入场参考 ref 至少 min_dist（= max(1×ATR, 单位风险)），
+    保证首目标盈亏比 ≥1——离入场太近的 pin/资金流位不配当止盈（它们是仓位重心
+    而非承接墙，够远才有减仓价值）。
+    """
     cands = sorted(
         [(v, _short(k.label)) for k in levels
-         if k.kind in ("flow", "pin", "flip", "support") and (v := _val(k, use_comm)) < ceiling],
+         if k.kind in ("flow", "pin", "flip", "support")
+         and (v := _val(k, use_comm)) < ceiling
+         and (ref is None or v <= ref - min_dist)],
         key=lambda t: -t[0])
     out: list[tuple[float, str]] = []
     for v, lbl in cands:
@@ -129,10 +137,13 @@ def _targets_below(levels: list[KeyLevel], ceiling: float, use_comm: bool,
 
 
 def _targets_above(levels: list[KeyLevel], floor_: float, use_comm: bool,
-                   n: int = 2) -> list[tuple[float, str]]:
+                   n: int = 2, *, ref: float | None = None,
+                   min_dist: float = 0.0) -> list[tuple[float, str]]:
     cands = sorted(
         [(v, _short(k.label)) for k in levels
-         if k.kind in ("flow", "pin", "flip", "resistance") and (v := _val(k, use_comm)) > floor_],
+         if k.kind in ("flow", "pin", "flip", "resistance")
+         and (v := _val(k, use_comm)) > floor_
+         and (ref is None or v >= ref + min_dist)],
         key=lambda t: t[0])
     out: list[tuple[float, str]] = []
     for v, lbl in cands:
@@ -152,7 +163,8 @@ def _fade_scenario(direction: str, wall: KeyLevel, levels: list[KeyLevel],
         lo, hi = w - ZONE_W_ATR * buf, w
         invalid = w + INVALID_W_ATR * buf
         entry_ref = w - 0.5 * ZONE_W_ATR * buf
-        targets = _targets_below(levels, lo, use_comm)
+        targets = _targets_below(levels, lo, use_comm,
+                                 ref=entry_ref, min_dist=max(buf, invalid - entry_ref))
         trigger = f"价格进入墙前区且当日收盘被打回 {_short(wall.label)}下方（拒绝形态）"
         inv_note = "放量收上失效线；或 call 墙 OI 上移（墙被搬走）即结构性失效"
         if spot > invalid:
@@ -167,7 +179,8 @@ def _fade_scenario(direction: str, wall: KeyLevel, levels: list[KeyLevel],
         lo, hi = w, w + ZONE_W_ATR * buf
         invalid = w - INVALID_W_ATR * buf
         entry_ref = w + 0.5 * ZONE_W_ATR * buf
-        targets = _targets_above(levels, hi, use_comm)
+        targets = _targets_above(levels, hi, use_comm,
+                                 ref=entry_ref, min_dist=max(buf, entry_ref - invalid))
         trigger = f"价格回踩墙前区且当日收盘收回 {_short(wall.label)}上方（承接形态）"
         inv_note = "放量收破失效线；或 put 墙 OI 下移（墙被搬走）即结构性失效"
         if spot < invalid:
@@ -196,7 +209,8 @@ def _trigger_scenario(direction: str, flip: KeyLevel, levels: list[KeyLevel],
         # 失效线：flip 上方 1 ATR 内最近结构位，无则 flip + 0.5 ATR
         above = _targets_above(levels, f, use_comm, n=1)
         invalid = above[0][0] if above and above[0][0] <= f + buf else f + INVALID_W_ATR * buf
-        targets = _targets_below(levels, f, use_comm)
+        targets = _targets_below(levels, f, use_comm,
+                                 ref=f, min_dist=max(buf, invalid - f))
         trigger = "日收盘跌破零伽马（对冲环境翻负 → 下行重获放大器），次日回抽不收复确认"
         if spot > f:
             status, note = "未触发", f"现价高于触发线 {spot - f:.2f}——环境仍偏正Gamma侧"
@@ -205,7 +219,8 @@ def _trigger_scenario(direction: str, flip: KeyLevel, levels: list[KeyLevel],
     else:
         below = _targets_below(levels, f, use_comm, n=1)
         invalid = below[0][0] if below and below[0][0] >= f - buf else f - INVALID_W_ATR * buf
-        targets = _targets_above(levels, f, use_comm)
+        targets = _targets_above(levels, f, use_comm,
+                                 ref=f, min_dist=max(buf, f - invalid))
         trigger = "日收盘站上零伽马（对冲环境翻正 → 波动被抑制、回调易被承接），次日回踩不跌破确认"
         if spot < f:
             status, note = "未触发", f"现价低于触发线 {f - spot:.2f}——环境仍偏负Gamma侧"
@@ -300,7 +315,10 @@ def build_strategy(o: Outlook, *, vol: VolSurface | None = None,
     caveats = [
         "本区块是策略模块的规则化输出（供人/顾问参考的框架），不是交易指令，不构成投资建议。",
         f"位点为{unit}口径；在其他场所（如伦敦现货）执行需按当时基差自行平移。",
-        "触发/失效均以【日收盘】为准，盘中扎针不算；事件窗口（CPI/FOMC/OPEX）内位点会失真。",
+        "触发/失效均以【日收盘】为准，盘中扎针不算——日收盘 = 美东期货日线收盘"
+        "（结算价约 13:30 ET 敲定，电子盘日切 17:00 ET = 北京次日凌晨 5/6 点）；"
+        "每日 14:05 报告用【昨日已完成的收盘】做状态判定，盘中价只影响距离显示。"
+        "事件窗口（CPI/FOMC/OPEX）内位点会失真。",
     ]
 
     if direction == "观望":

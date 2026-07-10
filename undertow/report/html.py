@@ -299,54 +299,84 @@ _STATUS_COL = {"待命": "#6e7781", "未触发": "#6e7781", "触发观察中": "
                "结构条件已满足": "#0969da", "情景作废": "#c62828"}
 
 
+def _label_w_pct(text: str) -> float:
+    """标签宽度估算（占容器 %）：10px 字体，CJK≈10px/字、ASCII≈6px，容器按 ~660px 估。"""
+    px = sum(10 if ord(c) > 0x2E80 else 6 for c in text) + 6
+    return 100.0 * px / 660.0
+
+
 def _price_rail(s, spot: float, fmt) -> str:
-    """情景价格轨道：一条横轴上标出 止损(红)/入场区(蓝带)/现价(黑点)/止盈(绿)。"""
+    """情景价格轨道：止损(红)/入场区(蓝带)/现价(黑点)/止盈(绿)。
+
+    所有点标签统一放轨道下方，贪心分行避让：同行相邻标签若估算宽度重叠，
+    自动落到下一行——保证文字永不重叠（行高 13px，容器高度随行数伸缩）。
+    """
     pts = [s.invalidation, s.entry_ref, spot] + [v for v, _ in s.targets]
     if s.entry_lo is not None:
         pts += [s.entry_lo, s.entry_hi]
     lo, hi = min(pts), max(pts)
     span = (hi - lo) or 1.0
-    lo -= span * 0.07
-    hi += span * 0.07
+    lo -= span * 0.08
+    hi += span * 0.08
     pos = lambda v: 100.0 * (v - lo) / (hi - lo)
 
+    RAIL_Y = 22          # 轨道纵坐标
     el: list[str] = []
-    # 入场区蓝带 / 单点参考
+    marks: list[tuple[float, str, str, bool]] = []   # (pos%, 文本, 颜色, 加粗)
+
+    # 入场区蓝带（带内文字单独放最上行，不参与下方避让）
     if s.entry_lo is not None:
         l, r = pos(s.entry_lo), pos(s.entry_hi)
         el.append(f'<div style="position:absolute;left:{l:.1f}%;width:{max(r - l, 0.8):.1f}%;'
-                  'top:26px;height:14px;background:#0969da26;border:1px solid #0969da55;'
-                  'border-radius:3px"></div>')
-        el.append(f'<div style="position:absolute;left:{(l + r) / 2:.1f}%;top:2px;'
+                  f'top:{RAIL_Y - 6}px;height:14px;background:#0969da26;'
+                  'border:1px solid #0969da55;border-radius:3px"></div>')
+        c = (l + r) / 2
+        w = _label_w_pct(f"入场区 {fmt(s.entry_lo)}–{fmt(s.entry_hi)}")
+        c = min(max(c, w / 2), 100 - w / 2)
+        el.append(f'<div style="position:absolute;left:{c:.1f}%;top:0;'
                   'transform:translateX(-50%);font-size:10px;color:#0969da;white-space:nowrap">'
                   f'入场区 {fmt(s.entry_lo)}–{fmt(s.entry_hi)}</div>')
     else:
-        p = pos(s.entry_ref)
-        el.append(f'<div style="position:absolute;left:{p:.1f}%;top:24px;height:18px;width:2px;'
-                  'background:#0969da;transform:translateX(-50%)"></div>')
-        el.append(f'<div style="position:absolute;left:{p:.1f}%;top:2px;transform:translateX(-50%);'
-                  f'font-size:10px;color:#0969da;white-space:nowrap">触发 {fmt(s.entry_ref)}</div>')
-    # 止损（红）——标签放上排
-    p = pos(s.invalidation)
-    el.append(f'<div style="position:absolute;left:{p:.1f}%;top:24px;height:18px;width:2px;'
-              'background:#c62828;transform:translateX(-50%)"></div>')
-    el.append(f'<div style="position:absolute;left:{p:.1f}%;top:13px;transform:translateX(-50%);'
-              f'font-size:10px;color:#c62828;font-weight:600;white-space:nowrap">止损 {fmt(s.invalidation)}</div>')
-    # 止盈（绿）——标签放下排
+        marks.append((pos(s.entry_ref), f"触发 {fmt(s.entry_ref)}", "#0969da", True))
+        el.append(f'<div style="position:absolute;left:{pos(s.entry_ref):.1f}%;'
+                  f'top:{RAIL_Y - 8}px;height:18px;width:2px;background:#0969da;'
+                  'transform:translateX(-50%)"></div>')
+
+    marks.append((pos(s.invalidation), f"止损 {fmt(s.invalidation)}", "#c62828", True))
+    el.append(f'<div style="position:absolute;left:{pos(s.invalidation):.1f}%;'
+              f'top:{RAIL_Y - 8}px;height:18px;width:2px;background:#c62828;'
+              'transform:translateX(-50%)"></div>')
     for i, (v, _lbl) in enumerate(s.targets[:2], 1):
-        p = pos(v)
-        el.append(f'<div style="position:absolute;left:{p:.1f}%;top:24px;height:18px;width:2px;'
-                  'background:#2e7d32;transform:translateX(-50%)"></div>')
-        el.append(f'<div style="position:absolute;left:{p:.1f}%;top:44px;transform:translateX(-50%);'
-                  f'font-size:10px;color:#2e7d32;font-weight:600;white-space:nowrap">止盈{i} {fmt(v)}</div>')
-    # 现价（黑点）——标签再下一排，避免与止盈重叠
-    p = pos(spot)
-    el.append(f'<div style="position:absolute;left:{p:.1f}%;top:30px;width:7px;height:7px;'
-              'background:#24292f;border-radius:50%;transform:translateX(-50%)"></div>')
-    el.append(f'<div style="position:absolute;left:{p:.1f}%;top:56px;transform:translateX(-50%);'
-              f'font-size:10px;color:#24292f;white-space:nowrap">现价 {fmt(spot)}</div>')
-    return ('<div style="position:relative;height:72px;margin:6px 2px 2px">'
-            '<div style="position:absolute;left:0;right:0;top:32px;height:2px;'
+        marks.append((pos(v), f"止盈{i} {fmt(v)}", "#2e7d32", True))
+        el.append(f'<div style="position:absolute;left:{pos(v):.1f}%;'
+                  f'top:{RAIL_Y - 8}px;height:18px;width:2px;background:#2e7d32;'
+                  'transform:translateX(-50%)"></div>')
+    marks.append((pos(spot), f"现价 {fmt(spot)}", "#24292f", False))
+    el.append(f'<div style="position:absolute;left:{pos(spot):.1f}%;top:{RAIL_Y - 2}px;'
+              'width:7px;height:7px;background:#24292f;border-radius:50%;'
+              'transform:translateX(-50%)"></div>')
+
+    # 贪心分行：按 x 排序，放不进第一行（与该行上一标签重叠）就落下一行
+    rows_end: list[float] = []
+    label_y0 = RAIL_Y + 14
+    for p, text, color, bold in sorted(marks, key=lambda m: m[0]):
+        w = _label_w_pct(text)
+        c = min(max(p, w / 2), 100 - w / 2)   # 贴边标签夹回容器内
+        start = c - w / 2
+        row = 0
+        while row < len(rows_end) and rows_end[row] > start - 1.0:
+            row += 1
+        if row == len(rows_end):
+            rows_end.append(0.0)
+        rows_end[row] = c + w / 2
+        weight = ";font-weight:600" if bold else ""
+        el.append(f'<div style="position:absolute;left:{c:.1f}%;top:{label_y0 + row * 13}px;'
+                  f'transform:translateX(-50%);font-size:10px;color:{color}{weight};'
+                  f'white-space:nowrap">{_esc(text)}</div>')
+
+    height = label_y0 + len(rows_end) * 13 + 2
+    return (f'<div style="position:relative;height:{height}px;margin:6px 2px 2px">'
+            f'<div style="position:absolute;left:0;right:0;top:{RAIL_Y}px;height:2px;'
             'background:#d0d7de"></div>' + "".join(el) + "</div>")
 
 

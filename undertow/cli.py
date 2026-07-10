@@ -394,6 +394,23 @@ def _load_curr_prev_snapshot(store, source, inst, today, *, no_cache, no_snapsho
     return snapshot_from_payload(payload, inst.key, sym), None, None, today.isoformat()
 
 
+def _archive_existing(path) -> None:
+    """同日重复生成报告时不覆盖：把旧文件按其生成时刻改名留档（数据尽量多留原则）。
+
+    gold_2026-07-09.html → gold_2026-07-09_r1405.html（r+时分 = 旧版生成时间，本地时区）。
+    """
+    if not path.exists():
+        return
+    from datetime import datetime as _dt
+    stamp = _dt.fromtimestamp(path.stat().st_mtime).strftime("%H%M")
+    backup = path.with_name(f"{path.stem}_r{stamp}{path.suffix}")
+    n = 1
+    while backup.exists():   # 同一分钟内多次生成 → 追加序号
+        backup = path.with_name(f"{path.stem}_r{stamp}-{n}{path.suffix}")
+        n += 1
+    path.rename(backup)
+
+
 def cmd_report(args) -> int:
     """综合研判报告：四层情报聚合 + 可视化 + 情景推演 → 自包含 HTML。"""
     cfg = load_config()
@@ -535,6 +552,7 @@ def cmd_report(args) -> int:
                                       strategy_html,
                                       conc_html=render_concentration_html(an.concentration))
             fn = f"{inst.key}_{today.isoformat()}.html"
+            _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
             written.append((inst, outlook, fn))
         except Exception as e:
@@ -554,6 +572,7 @@ def cmd_report(args) -> int:
         idx_items = [(o.display_name, fn, o.bias, o.confidence) for _, o, fn in written]
         index_html = render_index_html(idx_items, today.isoformat())
         index_path = reports_dir / f"index_{today.isoformat()}.html"
+        _archive_existing(index_path)
         index_path.write_text(index_html, encoding="utf-8")
 
     print(f"已生成综合研判报告（{today}）:")

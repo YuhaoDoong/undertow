@@ -139,3 +139,22 @@ def test_exit_plan_template():
     o2 = _outlook(56.0, SILVER_LEVELS, bias="偏多", regime="正Gamma：做市商净多伽马")
     plan2 = build_strategy(o2, series=_series([56 + 0.05 * i for i in range(20)]))
     assert all("收盘跌破" in s.exit_plan for s in plan2.scenarios if s.exit_plan)
+
+
+def test_near_targets_filtered_for_min_rr():
+    # 复刻白银病例：近到期 pin 距零伽马仅 0.4——不配当止盈，首目标 R:R 必须 ≥1
+    levels = [
+        _lvl("看涨墙 / 阻力", 65.5, "resistance"),
+        _lvl("资金流活跃 看涨56.0", 61.1, "flow"),
+        _lvl("零伽马翻转", 60.6, "flip"),
+        _lvl("近到期 put pin", 60.2, "pin"),        # 距 flip 0.4 < 缓冲 → 应被过滤
+        _lvl("资金流活跃 看跌52.0", 56.9, "flow"),
+        _lvl("看跌墙 / 支撑", 54.6, "support"),
+    ]
+    o = _outlook(59.8, levels)
+    plan = build_strategy(o)                        # 无序列 → 缓冲=现价1.5%
+    trig = next(s for s in plan.scenarios if s.key == "trigger")
+    assert all(abs(t - 60.2) > 1e-9 for t, _ in trig.targets), "近 pin 不该当止盈"
+    assert trig.targets and trig.rr[0] >= 1.0
+    fade = next(s for s in plan.scenarios if s.key == "fade")
+    assert fade.targets and fade.rr[0] >= 1.0

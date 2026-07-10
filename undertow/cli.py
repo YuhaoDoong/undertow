@@ -30,7 +30,8 @@ from undertow.collect.cboe_vol import CboeVolSource
 from undertow.analyze.positioning import analyze
 from undertow.analyze.signals import generate_signals, net_bias
 from undertow.analyze.gamma import analyze_gamma, structure_delta
-from undertow.analyze.flow import analyze_flow, counter_signals, structural_moves
+from undertow.analyze.flow import (analyze_flow, counter_signals,
+                                   flip_driver_summary, structural_moves)
 from undertow.analyze.outlook import (build_outlook, macro_to_votes,
                                       plain_summary_blocks)
 from undertow.analyze.strategy import build_strategy
@@ -619,6 +620,9 @@ def cmd_report(args) -> int:
                                             proxy_quality=inst.options.proxy_quality,
                                             today=prev_d, horizon_days=args.horizon)
                     struct_notes = structure_delta(ga_prev, ga)
+                    driver = flip_driver_summary(fa)
+                    if driver:
+                        struct_notes.append(driver)
                 except Exception:
                     pass
             trend = _score_trend(inst.key, today.isoformat(), outlook.bias_score)

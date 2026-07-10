@@ -164,9 +164,11 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
         sup = next((k for k in core if k.kind == "support"), None)
         tail = f"（已跌破看跌墙 {fmt(val(sup))}，反抽该位先当压力看）" if sup else ""
         S.append(f"下方近处已无成型 OI 支撑{tail}，处破位区运行。")
-    if struct_notes:
-        S.append("结构对昨变化：" + "；".join(struct_notes) + "。")
     blocks.append(("关键位", "".join(S)))
+
+    # ── 结构解读：对昨变化 + 零伽马驱动分解，拼成因果叙事一段 ──
+    if struct_notes:
+        blocks.append(("结构解读", "；".join(struct_notes) + "。"))
 
     # ── 持仓异动（ΔOI 信号，直接引用 flow 层现成结论，不做二次判断）──
     bits: list[str] = []

@@ -91,7 +91,7 @@ undertow/
     markdown.py             终端 Markdown 报告（COT / Gamma / 资金流 / 回测）
     html.py                 ★ 自包含 HTML 研判报告（内嵌 SVG，浏览器直接看）
     viz.py                  ★ 手绘 SVG 图（价格+关键位 / OI 墙 / 持仓历史，零依赖）
-tests/                      单元测试（不依赖网络，74 个）
+tests/                      单元测试（不依赖网络，75 个）
 data/snapshots/             ★ 期权链每日快照（gzip，入 git = 备份；不可再生）
 data/reports/               综合研判 HTML 报告（按品种/日期，入 git；同日重生成自动留档 _rHHMM）
 data/cache/                 缓存落盘（自动生成，.gitignore）

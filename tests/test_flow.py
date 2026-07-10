@@ -14,7 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from undertow.core.models import OptionsSnapshot, OptionContract
-from undertow.analyze.flow import (analyze_flow, counter_signals, scan_unusual,
+from undertow.analyze.flow import (analyze_flow, counter_signals, flip_driver_summary, scan_unusual,
                                    structural_moves, _judge)
 from undertow.collect.store import SnapshotStore
 
@@ -281,3 +281,20 @@ def test_plain_summary_blocks_structure_and_counter():
                  bias_score=0.0, confidence="低", regime="正Gamma",
                  key_levels=[])
     assert "对手盘警示" not in dict(plain_summary_blocks(o3, flow_tilt="分歧（…）"))
+
+
+def test_flip_driver_summary_panic_receding():
+    # 现价上方 put 减仓+IV降、近价 call 增仓+IV升 → 恐慌退潮、多头谨慎入场
+    prev = _snap([_c(102, "P", oi=9_000, iv=0.50), _c(101, "C", oi=5_000, iv=0.44)],
+                 spot=100.0)
+    curr = _snap([_c(102, "P", oi=6_500, iv=0.44), _c(101, "C", oi=8_200, iv=0.47)],
+                 spot=100.0)
+    fa = analyze_flow(prev, curr, today=TODAY, prev_date="a", curr_date="b")
+    txt = flip_driver_summary(fa)
+    assert "现价上方 put 减仓 2,500 手且相对 IV 回落" in txt
+    assert "近价 call 增仓 3,200 手且相对 IV 走强" in txt
+    assert "恐慌保护退潮" in txt and "谨慎入场" in txt
+    # 反向模式：put 增仓+IV升 → 风险重新加价；call 撤退
+    fa2 = analyze_flow(curr, prev, today=TODAY, prev_date="a", curr_date="b")
+    t2 = flip_driver_summary(fa2)
+    assert "下方风险重新加价" in t2 and "看涨需求退潮" in t2

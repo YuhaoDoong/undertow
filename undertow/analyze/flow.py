@@ -689,3 +689,66 @@ def analyze_flow(
         put_wall=put_wall,
         vol=vol_surface(prev, curr, today=today),
     )
+
+
+FLIP_DRIVER_BAND = 0.12       # 驱动分解的近价带（moneyness）
+FLIP_DRIVER_MIN_DOI = 1_000   # 一条腿够格进叙事的 |ΣΔOI| 门槛
+
+
+def flip_driver_summary(fa: "FlowAnalysis") -> str:
+    """零伽马位移的驱动分解一句话（用户口径的叙事体）：
+
+    近价带按【现价上方 put / 现价下方 put / 近价 call】三段聚合 ΔOI 与
+    （|ΔOI| 加权的）**Delta 修正后相对 ΔIV**——与买卖方判定同一套去噪（R2），
+    免被全市场 IV 齐涨齐落带偏。结论按分段模式组合，确定性拼句，无新判断。
+    """
+    if not fa.changes:
+        return ""
+
+    def agg(rows) -> tuple[int, float]:
+        doi = sum(r.d_oi for r in rows)
+        known = [r for r in rows if r.prev_iv > 0 and r.d_oi]
+        w = sum(abs(r.d_oi) for r in known)
+        div = sum(r.adj_iv_pp * abs(r.d_oi) for r in known) / w if w else 0.0
+        return doi, div
+
+    near = [c for c in fa.changes if abs(c.moneyness) <= FLIP_DRIVER_BAND]
+    p_up = agg([c for c in near if c.kind == "P" and c.strike > fa.spot])
+    p_dn = agg([c for c in near if c.kind == "P" and c.strike <= fa.spot])
+    c_nr = agg([c for c in near if c.kind == "C"])
+
+    def leg(name: str, doi: int, div: float) -> str | None:
+        if abs(doi) < FLIP_DRIVER_MIN_DOI:
+            return None
+        act = "增仓" if doi > 0 else "减仓"
+        ivw = ("相对 IV 走强" if div > 0.1 else
+               ("相对 IV 回落" if div < -0.1 else "相对 IV 持平"))
+        return f"{name}{act} {abs(doi):,} 手且{ivw}"
+
+    bits = [b for b in (leg("现价上方 put ", *p_up), leg("现价下方 put ", *p_dn),
+                        leg("近价 call ", *c_nr)) if b]
+    if not bits:
+        return ""
+
+    # 分段结论组合（各段独立判定，拼在一起就是叙事）
+    concls: list[str] = []
+    if p_up[0] < -FLIP_DRIVER_MIN_DOI and p_up[1] <= 0.1:
+        concls.append("现价上方的保护单在了结，恐慌保护退潮")
+    elif p_up[0] > FLIP_DRIVER_MIN_DOI and p_up[1] > 0.1:
+        concls.append("现价上方保护加码，下方风险重新加价")
+    if c_nr[0] > FLIP_DRIVER_MIN_DOI:
+        if c_nr[1] > 0.1:
+            concls.append("近价 call 由买方推动，有多头资金谨慎入场")
+        elif c_nr[1] < -0.1:
+            concls.append("近价 call 由卖方写入——压制位前移，天花板下压")
+        else:
+            concls.append("近价 call 增仓但买卖方不明")
+    elif c_nr[0] < -FLIP_DRIVER_MIN_DOI:
+        concls.append("近价 call 撤退，看涨需求退潮")
+    if p_dn[0] > FLIP_DRIVER_MIN_DOI:
+        if p_dn[1] < -0.1:
+            concls.append("下方 put 由卖方写入做支撑（承接位跟进）")
+        elif p_dn[1] > 0.1:
+            concls.append("下方买保护加深（押更深跌幅）")
+    concl = "；".join(concls) if concls else "多空双向换仓，期权端方向分歧"
+    return "驱动分解：" + "、".join(bits) + " → " + concl

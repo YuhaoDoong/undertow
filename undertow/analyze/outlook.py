@@ -126,6 +126,24 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
         dir_txt += "当前处正伽马环境：波动易被对冲盘吸收，行情偏磨蹭，假突破多。"
     blocks.append(("方向", dir_txt))
 
+    # ── 焦点与路径：距现价最近的结构位 + 上/下推演（路径树，确定性拼句）──
+    all_lv = sorted(o.key_levels, key=val)
+    if all_lv and px:
+        pivot_k = min(all_lv, key=lambda k: abs(val(k) - px))
+        pv = val(pivot_k)
+        dpct = 100.0 * (pv - px) / px
+        ups = [k for k in all_lv if val(k) > max(px, pv) + 1e-9][:2]
+        dns = [k for k in all_lv if val(k) < min(px, pv) - 1e-9][-2:][::-1]
+        up_txt = " → ".join(f"{fmt(val(k))}（{short(k.label)}）" for k in ups) or "上方近处无结构位"
+        dn_txt = " → ".join(f"{fmt(val(k))}（{short(k.label)}）" for k in dns) or "下方近处无结构位"
+        t = (f"当前焦点位 {fmt(pv)}（{short(pivot_k.label)}，距现价 {dpct:+.1f}%）。"
+             f"路径推演（日收盘口径）：有效站上 → 依次看 {up_txt}；"
+             f"失守 → 依次看 {dn_txt}。")
+        if abs(dpct) < 1.0:
+            t += ("现价贴线：" + ("翻转位附近多空对冲换手最频繁，短线易反复洗，"
+                  "不宜追单，等收盘表态。" if pivot_k.kind == "flip" else "该位争夺中，易反复。"))
+        blocks.append(("焦点与路径", t))
+
     # ── 关键位：上方阻力 ──
     S: list[str] = []
     if len(above) >= 2:

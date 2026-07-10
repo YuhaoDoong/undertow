@@ -81,14 +81,17 @@ class Outlook:
     commodity_basis: str = ""     # 换算依据（实时比值 / 静态乘数近似）
 
 
-def plain_summary(o: Outlook, *, day_chg_pct: float | None = None,
-                  vol_verdict: str = "", flow_tilt: str = "",
-                  flow_moves: list[str] | None = None) -> str:
-    """大白话速读：现价与日涨跌、上方阻力群、下方第一层支撑、多空分界、环境提示、
-    今日持仓异动（ΔOI 净倾向 + 结构性大动作）。
+def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
+                         vol_verdict: str = "", flow_tilt: str = "",
+                         flow_moves: list[str] | None = None,
+                         counter_notes: list[str] | None = None,
+                         ) -> list[tuple[str, str]]:
+    """大白话速读（分块）：像文章摘要一样分【方向】【关键位】【持仓异动】
+    【对手盘警示】四块，每块一段。返回 (标题, 文本) 列表，空块自动省略。
 
     全部由已算好的关键位/资金流结论确定性拼句，不引入任何新判断；措辞刻意保留
-    不确定性（"把握不大/值得重视"），不说死"必涨必跌"。
+    不确定性（"把握不大/值得重视"），不说死"必涨必跌"。对手盘警示 = 与研判
+    方向相反的最强 ΔOI 信号 + 策略模块否决票——反向证据越多，方向置信越该下调。
     """
     use_comm = o.commodity_spot is not None
     px = o.commodity_spot if use_comm else o.spot
@@ -105,16 +108,22 @@ def plain_summary(o: Outlook, *, day_chg_pct: float | None = None,
     below = sorted([k for k in core if val(k) < px], key=val, reverse=True)
 
     fmt = (lambda v: f"{v:,.0f}") if px >= 500 else (lambda v: f"{v:,.1f}")
-    S: list[str] = []
+    blocks: list[tuple[str, str]] = []
 
-    # 1) 现价 + 日涨跌 + 综合方向
+    # ── 方向：现价 + 日涨跌 + 综合研判 + 对冲环境 ──
     chg = ""
     if day_chg_pct is not None:
         word = "涨" if day_chg_pct >= 0 else "跌"
         chg = f"，较上一交易日{word} {abs(day_chg_pct):.1f}%"
-    S.append(f"现价 {fmt(px)}{chg}；综合研判{o.bias}（可信度{o.confidence}）。")
+    dir_txt = f"现价 {fmt(px)}{chg}；综合研判{o.bias}（可信度{o.confidence}）。"
+    if "负Gamma" in o.regime or "负伽马" in o.regime:
+        dir_txt += "当前处负伽马环境：涨跌都会被做市商对冲放大，行情容易走过头，追单与接刀都需谨慎。"
+    elif "正Gamma" in o.regime or "正伽马" in o.regime:
+        dir_txt += "当前处正伽马环境：波动易被对冲盘吸收，行情偏磨蹭，假突破多。"
+    blocks.append(("方向", dir_txt))
 
-    # 2) 上方阻力
+    # ── 关键位：上方阻力 ──
+    S: list[str] = []
     if len(above) >= 2:
         chain = " → ".join(f"{fmt(val(k))}（{short(k.label)}）" for k in above[:3])
         up = f"上方 {chain} 阻力密集"
@@ -133,7 +142,7 @@ def plain_summary(o: Outlook, *, day_chg_pct: float | None = None,
         up += "，能否突破先看资金流表里 call 买方是否追价"
     S.append(up + "。")
 
-    # 3) 下方支撑 + 多空分界
+    # ── 关键位：下方支撑 + 多空分界 ──
     pivot = next((k for k in below if k.kind == "support"), None)  # 看跌墙
     if below:
         first = below[0]
@@ -151,21 +160,30 @@ def plain_summary(o: Outlook, *, day_chg_pct: float | None = None,
         sup = next((k for k in core if k.kind == "support"), None)
         tail = f"（已跌破看跌墙 {fmt(val(sup))}，反抽该位先当压力看）" if sup else ""
         S.append(f"下方近处已无成型 OI 支撑{tail}，处破位区运行。")
+    blocks.append(("关键位", "".join(S)))
 
-    # 4) 对冲环境
-    if "负Gamma" in o.regime or "负伽马" in o.regime:
-        S.append("当前处负伽马环境：涨跌都会被做市商对冲放大，行情容易走过头，追单与接刀都需谨慎。")
-    elif "正Gamma" in o.regime or "正伽马" in o.regime:
-        S.append("当前处正伽马环境：波动易被对冲盘吸收，行情偏磨蹭，假突破多。")
-
-    # 5) 今日持仓异动（ΔOI 信号，直接引用 flow 层现成结论，不做二次判断）
+    # ── 持仓异动（ΔOI 信号，直接引用 flow 层现成结论，不做二次判断）──
     bits: list[str] = []
     if flow_tilt:
-        bits.append(f"期权资金流净倾向{flow_tilt}")
+        bits.append(f"资金流净倾向{flow_tilt}")
     bits.extend(flow_moves or [])
     if bits:
-        S.append("今日持仓异动：" + "；".join(bits) + "。")
-    return "".join(S)
+        blocks.append(("持仓异动", "；".join(bits) + "。"))
+
+    # ── 对手盘警示：与研判方向相反的最强证据（有方向且有 diff 数据才出）──
+    directional = ("多" in o.bias or "空" in o.bias) and "分歧" not in o.bias
+    if counter_notes:
+        blocks.append(("对手盘警示",
+                       "与研判方向相反的最强信号：" + "；".join(counter_notes) +
+                       "。反向证据增多时，方向结论的置信应相应下调。"))
+    elif directional and bits:
+        blocks.append(("对手盘警示", "今日 ΔOI 中暂无结构级的反向信号。"))
+    return blocks
+
+
+def plain_summary(o: Outlook, **kw) -> str:
+    """大白话速读（单段文本版）：分块内容顺序连写，供终端/测试等纯文本场景。"""
+    return "".join(txt for _, txt in plain_summary_blocks(o, **kw))
 
 
 def macro_to_votes(ma) -> list[FactorVote]:

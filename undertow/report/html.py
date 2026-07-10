@@ -277,12 +277,21 @@ def render_events_section(events, today) -> str:
     )
 
 
-def render_tldr_section(text: str) -> str:
-    """大白话速读卡片：一段话讲清现价、阻力支撑、多空分界与环境。"""
-    if not text:
+def render_tldr_section(blocks: list[tuple[str, str]]) -> str:
+    """大白话速读卡片：分块摘要（方向/关键位/持仓异动/对手盘警示），
+    对手盘警示块标红——它是与研判方向相反的最强证据，读报先看反方。"""
+    if not blocks:
         return ""
-    return ('<div class="card"><h2>大白话速读</h2>'
-            f'<div style="font-size:15px;line-height:1.9">{_esc(text)}</div>'
+    parts = []
+    for title, text in blocks:
+        warn = "对手盘" in title
+        tag = (f'<b style="color:#c62828">【{_esc(title)}】</b>' if warn
+               else f'<b>【{_esc(title)}】</b>')
+        style = "margin:7px 0;font-size:15px;line-height:1.85"
+        if warn:
+            style += ";background:#fdecea;border-left:3px solid #c62828;padding:6px 10px;border-radius:4px"
+        parts.append(f'<p style="{style}">{tag}{_esc(text)}</p>')
+    return ('<div class="card"><h2>大白话速读</h2>' + "".join(parts) +
             '<small>由关键位与当日数据自动拼句；措辞保留不确定性，非点位预言。</small></div>')
 
 

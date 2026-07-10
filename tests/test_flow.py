@@ -14,7 +14,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from undertow.core.models import OptionsSnapshot, OptionContract
-from undertow.analyze.flow import analyze_flow, scan_unusual, structural_moves, _judge
+from undertow.analyze.flow import (analyze_flow, counter_signals, scan_unusual,
+                                   structural_moves, _judge)
 from undertow.collect.store import SnapshotStore
 
 TODAY = date(2026, 6, 26)
@@ -232,7 +233,51 @@ def test_plain_summary_carries_flow_signals():
                 key_levels=[KeyLevel("看跌墙 / 支撑", 95.0, None, "support", "")])
     txt = plain_summary(o, flow_tilt="偏空（下行 100 > 上行 10）",
                         flow_moves=["put 仓从 95.0 移至 94.0（-2,000 / +1,900 手，支撑防线后撤）"])
-    assert "今日持仓异动：期权资金流净倾向偏空" in txt
+    assert "资金流净倾向偏空" in txt
     assert "支撑防线后撤" in txt
     # 不传就不出现该段
     assert "今日持仓异动" not in plain_summary(o)
+
+
+def test_counter_signals_picks_opposing_moves():
+    # 偏空研判下，call 端买方大单是最强对手盘；观望不出
+    prev = _snap([_c(62, "C", oi=4_000, iv=0.200), _c(55, "P", oi=9_000, iv=0.200)],
+                 spot=58.0)
+    curr = _snap([
+        _c(62, "C", oi=9_181, iv=0.206),   # OI↑+IV↑ = 买方（bullish）
+        _c(55, "P", oi=13_500, iv=0.206),  # OI↑+IV↑ = 买方保护（bearish）
+    ], spot=58.0)
+    fa = analyze_flow(prev, curr, today=TODAY, prev_date="a", curr_date="b")
+    against_short = counter_signals(fa, "做空")
+    assert against_short and "62.0" in against_short[0] and "买方" in against_short[0]
+    assert all("买方保护" not in s for s in against_short)   # 同向的不算对手盘
+    against_long = counter_signals(fa, "做多")
+    assert against_long and "55.0" in against_long[0]
+    assert counter_signals(fa, "观望") == []
+
+
+def test_plain_summary_blocks_structure_and_counter():
+    from undertow.analyze.outlook import KeyLevel, Outlook, plain_summary_blocks
+    o = Outlook(instrument="t", display_name="T", asof="x", spot=100.0,
+                commodity_spot=None, proxy_symbol="T", bias="偏空",
+                bias_score=-3.0, confidence="高", regime="负Gamma",
+                key_levels=[KeyLevel("看跌墙 / 支撑", 95.0, None, "support", "")])
+    blocks = plain_summary_blocks(
+        o, flow_tilt="偏空（下行 100 > 上行 10）",
+        flow_moves=["put 墙 95.0 增厚（+2,000 手）"],
+        counter_notes=["call 端 105.0 买方（+5,181 手）"])
+    titles = [t for t, _ in blocks]
+    assert titles == ["方向", "关键位", "持仓异动", "对手盘警示"]
+    d = dict(blocks)
+    assert "负伽马" in d["方向"] and "综合研判偏空" in d["方向"]
+    assert "与研判方向相反的最强信号" in d["对手盘警示"]
+    assert "置信应相应下调" in d["对手盘警示"]
+    # 有方向、有 diff、但无反向信号 → 显式说"暂无"
+    blocks2 = plain_summary_blocks(o, flow_tilt="偏空（下行 100 > 上行 10）")
+    assert dict(blocks2)["对手盘警示"] == "今日 ΔOI 中暂无结构级的反向信号。"
+    # 中性 → 无对手盘块
+    o3 = Outlook(instrument="t", display_name="T", asof="x", spot=100.0,
+                 commodity_spot=None, proxy_symbol="T", bias="中性",
+                 bias_score=0.0, confidence="低", regime="正Gamma",
+                 key_levels=[])
+    assert "对手盘警示" not in dict(plain_summary_blocks(o3, flow_tilt="分歧（…）"))

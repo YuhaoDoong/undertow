@@ -175,6 +175,41 @@ class FlowAnalysis:
     vol: VolSurface | None = None  # 波动率面：ATM IV / skew 日变化（买方确认检查）
 
 
+def _px_fmt(fa: "FlowAnalysis", conv):
+    """速读拼句用的行权价格式器：conv 换算展示口径（商品价），按量级定小数位。"""
+    cv = conv or (lambda v: v)
+    return (lambda v: f"{cv(v):,.0f}") if cv(fa.spot) >= 500 else (lambda v: f"{cv(v):,.1f}")
+
+
+def counter_signals(fa: "FlowAnalysis", direction: str, *,
+                    conv=None, top_n: int = 2) -> list[str]:
+    """与研判方向相反的最强 ΔOI 信号（对手盘警示素材，确定性挑选）。
+
+    direction 含"空"→ 找 bullish 异动；含"多"→ 找 bearish；其余（观望/中性）不出。
+    只取结构级（|ΔOI| ≥ MOVE_MIN_DOI）；changes 已按 |ΔOI| 降序，天然取最强。
+    """
+    if not fa.changes:
+        return []
+    if "空" in direction:
+        want = "bullish"
+    elif "多" in direction:
+        want = "bearish"
+    else:
+        return []
+    fmt = _px_fmt(fa, conv)
+    out: list[str] = []
+    for c in fa.changes:
+        if c.bias != want or abs(c.d_oi) < MOVE_MIN_DOI:
+            continue
+        wall = f"（{c.on_wall}）" if c.on_wall else ""
+        sp = f"，{c.spread_note}" if c.spread_note else ""
+        out.append(f"{'put' if c.kind == 'P' else 'call'} 端 {fmt(c.strike)}{wall} "
+                   f"{c.judgment}（{c.d_oi:+,} 手{sp}）")
+        if len(out) >= top_n:
+            break
+    return out
+
+
 def structural_moves(fa: "FlowAnalysis", *, conv=None, top_n: int = 2) -> list[str]:
     """从两日 ΔOI 里挑最结构性的动作，拼成速读用短句（确定性拼句，无新判断）。
 
@@ -183,8 +218,7 @@ def structural_moves(fa: "FlowAnalysis", *, conv=None, top_n: int = 2) -> list[s
     """
     if not fa.changes:
         return []
-    cv = conv or (lambda v: v)
-    fmt = (lambda v: f"{cv(v):,.0f}") if cv(fa.spot) >= 500 else (lambda v: f"{cv(v):,.1f}")
+    fmt = _px_fmt(fa, conv)
     moves: list[str] = []
     used: set[tuple[float, str]] = set()
 

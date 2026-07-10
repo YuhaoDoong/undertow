@@ -227,3 +227,67 @@ def cot_net_history_svg(dates: list[date], nets: list[int], *, percentile: float
         s.append(_txt(xp, height - 8, dates[idx].strftime("%y-%m"), size=10, fill=C_AXIS, anchor=anch))
     s.append("</svg>")
     return "".join(s)
+
+
+def strategy_timeline_svg(rows: list[tuple], spot: float | None = None, *,
+                          title: str = "结构时间轴：日K(高低收) vs 零伽马/墙（日收盘口径）",
+                          width: int = 680, height: int = 240) -> str:
+    """策略卡时间轴：近 N 日 HLC 竖线 + 逐日零伽马/call墙/put墙折线。
+
+    rows = [(date, close, high, low, flip, call_wall, put_wall)]，高低/结构可为 None。
+    价格用 HLC 竖线（无开盘价数据），收盘为右侧短横；结构线为逐日折线（虚线）。
+    """
+    rows = [r for r in rows if r[1] is not None]
+    if len(rows) < 2:
+        return ""
+    ml, mr, mt, mb = 48, 96, 30, 24
+    px0, px1 = ml, width - mr
+    py0, py1 = mt, height - mb
+
+    yvals: list[float] = []
+    for _, c, h, l, f, cw, pw in rows:
+        yvals += [v for v in (c, h, l, f, cw, pw) if v]
+    if spot:
+        yvals.append(spot)
+    ymin, ymax = min(yvals), max(yvals)
+    pad = (ymax - ymin) * 0.07 or (ymax * 0.02 or 1)
+    ymin, ymax = ymin - pad, ymax + pad
+    n = len(rows)
+    xs = [_lin(i, 0, max(n - 1, 1), px0 + 8, px1 - 8) for i in range(n)]
+    Y = lambda v: _lin(v, ymin, ymax, py1, py0)
+
+    s = [_svg_open(width, height), _txt(ml, 16, title, size=12.5, weight="bold")]
+    for i in range(5):
+        yv = ymin + (ymax - ymin) * i / 4
+        s.append(_line(px0, Y(yv), px1, Y(yv), stroke=C_GRID))
+        s.append(_txt(px0 - 5, Y(yv) + 3, f"{yv:.1f}", size=10, fill=C_AXIS, anchor="end"))
+
+    # 结构折线（逐日）：零伽马紫、call墙绿、put墙红——右端标最新值
+    for idx, color, label in ((4, C_FLIP, "零伽马"), (5, C_RES, "call墙"), (6, C_SUP, "put墙")):
+        pts = [(xs[i], Y(rows[i][idx])) for i in range(n) if rows[i][idx]]
+        if len(pts) >= 2:
+            s.append('<polyline points="' + " ".join(f"{x:.1f},{y:.1f}" for x, y in pts) +
+                     f'" fill="none" stroke="{color}" stroke-width="1.4" stroke-dasharray="5,3"/>')
+        if pts:
+            last_v = next(rows[i][idx] for i in range(n - 1, -1, -1) if rows[i][idx])
+            s.append(_txt(px1 + 4, pts[-1][1] + 3, f"{label} {last_v:.1f}", size=10, fill=color))
+
+    # HLC 竖线 + 收盘短横（价格）
+    for i, (_, c, h, l, *_r) in enumerate(rows):
+        x = xs[i]
+        if h and l:
+            s.append(_line(x, Y(h), x, Y(l), stroke=C_PRICE, width=1.4))
+        s.append(_line(x, Y(c), x + 4, Y(c), stroke=C_PRICE, width=2.0))
+
+    # 现价点（盘中参考，非收盘）
+    if spot:
+        s.append(f'<circle cx="{px1 - 4:.1f}" cy="{Y(spot):.1f}" r="3.2" fill="{C_SPOT}"/>')
+        s.append(_txt(px1 - 10, Y(spot) - 6, f"现价 {spot:.1f}", size=10, fill=C_SPOT,
+                      anchor="end", weight="bold"))
+
+    for frac, anch in ((0.0, "start"), (0.5, "middle"), (1.0, "end")):
+        i = int(frac * (n - 1))
+        s.append(_txt(xs[i], height - 8, rows[i][0].strftime("%m-%d"), size=10,
+                      fill=C_AXIS, anchor=anch))
+    s.append("</svg>")
+    return "".join(s)

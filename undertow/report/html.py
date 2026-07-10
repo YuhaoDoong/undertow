@@ -297,6 +297,18 @@ def render_tldr_section(blocks: list[tuple[str, str]]) -> str:
 
 _STATUS_COL = {"待命": "#6e7781", "未触发": "#6e7781", "触发观察中": "#9a6700",
                "结构条件已满足": "#0969da", "情景作废": "#c62828"}
+_STATUS_PREFIX_COL = (("追认成立", "#0969da"), ("破位日", "#9a6700"),
+                      ("已破位", "#9a6700"), ("突破测试中", "#9a6700"),
+                      ("破位测试中", "#9a6700"))
+
+
+def _status_col(status: str) -> str:
+    if status in _STATUS_COL:
+        return _STATUS_COL[status]
+    for pre, col in _STATUS_PREFIX_COL:
+        if status.startswith(pre):
+            return col
+    return "#6e7781"
 
 
 def _label_w_pct(text: str) -> float:
@@ -380,7 +392,7 @@ def _price_rail(s, spot: float, fmt) -> str:
             'background:#d0d7de"></div>' + "".join(el) + "</div>")
 
 
-def render_strategy_section(sp) -> str:
+def render_strategy_section(sp, timeline_svg: str = "") -> str:
     """策略情景参数化卡片（期货）：裁决横幅 → 否决票 → 每个情景一张"交易票"
     子卡（状态/触发/价格轨道/止盈止损方案）。模块输出，非交易指令。"""
     if sp is None:
@@ -416,7 +428,7 @@ def render_strategy_section(sp) -> str:
 
     tickets = []
     for s in sp.scenarios:
-        st_col = _STATUS_COL.get(s.status, "#6e7781")
+        st_col = _status_col(s.status)
         dead = s.status == "情景作废"
         header = (f'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
                   f'<b{" style=text-decoration:line-through" if dead else ""}>{_esc(s.name)}</b>'
@@ -438,7 +450,8 @@ def render_strategy_section(sp) -> str:
 
     opts = f'<div class="sub" style="color:#6e7781">🧩 {_esc(sp.options_note)}</div>'
     cavs = "<small>" + " ".join(_esc(c) for c in sp.caveats) + "</small>"
-    return (f'<div class="card">{head}{verdict}{meta_html}{vet}'
+    tl = f'<div class="chart">{timeline_svg}</div>' if timeline_svg else ""
+    return (f'<div class="card">{head}{verdict}{meta_html}{vet}{tl}'
             f'{"".join(tickets)}{opts}{cavs}</div>')
 
 

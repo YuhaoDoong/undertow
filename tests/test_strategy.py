@@ -158,3 +158,28 @@ def test_near_targets_filtered_for_min_rr():
     assert trig.targets and trig.rr[0] >= 1.0
     fade = next(s for s in plan.scenarios if s.key == "fade")
     assert fade.targets and fade.rr[0] >= 1.0
+
+
+def test_trigger_window_state_machine():
+    o = _outlook(59.9, SILVER_LEVELS)
+    # A) 破位后第4日、期间回抽摸到翻转带 → 追认成立·持仓管理（不是新开仓点）
+    ser = _series([61.5] * 15 + [60.0, 59.5, 59.8, 59.6, 59.9])
+    sh = [(d, 60.6, 65.5, 54.6) for d in ser.dates]
+    plan = build_strategy(o, series=ser, struct_history=sh)
+    trig = next(s for s in plan.scenarios if s.key == "trigger")
+    assert trig.status.startswith("追认成立")
+    assert "应已在场内" in trig.status_note and "不是新开仓点" in trig.status_note
+    # B) 今日收盘首次跌破 → 破位日（T+0），明说今天不是追认点
+    ser2 = _series([61.5] * 19 + [60.0])
+    plan2 = build_strategy(o, series=ser2,
+                           struct_history=[(d, 60.6, None, None) for d in ser2.dates])
+    trig2 = next(s for s in plan2.scenarios if s.key == "trigger")
+    assert trig2.status.startswith("破位日")
+    assert "不是追认点" in trig2.status_note
+    # C) 破位后被收复 → 情景重置回未触发
+    ser3 = _series([61.5] * 17 + [60.0, 59.8, 61.2])
+    o3 = _outlook(61.2, SILVER_LEVELS)
+    plan3 = build_strategy(o3, series=ser3,
+                           struct_history=[(d, 60.6, None, None) for d in ser3.dates])
+    trig3 = next(s for s in plan3.scenarios if s.key == "trigger")
+    assert trig3.status == "未触发" and "收复" in trig3.status_note

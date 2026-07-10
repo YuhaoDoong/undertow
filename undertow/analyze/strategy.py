@@ -241,6 +241,91 @@ def _trigger_scenario(direction: str, flip: KeyLevel, levels: list[KeyLevel],
 # ——————————————————————————————————————————————————————————
 
 
+WINDOW_DAYS = 10          # 窗口状态机回看的收盘日数
+RETEST_TOUCH_ATR = 0.5    # 回抽"摸到翻转点附近"的判定带宽（ATR 倍数）
+
+
+def _trigger_window_status(short_side: bool, struct_history: list[tuple],
+                           series: PriceSeries | None, buf: float,
+                           ) -> tuple[str, str] | None:
+    """翻转追认的跨日状态机：用最近 N 个【已完成日收盘】对逐日零伽马的序列判定。
+
+    状态：未触发(含曾破位被收复) / 破位日(T+0) / 已破位·等回抽 / 追认成立·持仓管理。
+    关键语义（用户指正）："追认成立"= 按规则仓位应已在场内，是持仓管理不是新开仓点。
+    返回 None = 数据不足，退回单日逻辑。
+    """
+    if not struct_history or series is None or not series.closes:
+        return None
+    closes = dict(zip(series.dates, series.closes))
+    highs = dict(zip(series.dates, series.highs)) if series.highs else {}
+    lows = dict(zip(series.dates, series.lows)) if series.lows else {}
+    rows = sorted((d, closes[d], f) for d, f, *_ in struct_history
+                  if f and d in closes)[-WINDOW_DAYS:]
+    if len(rows) < 2:
+        return None
+
+    broken = [(c < f) if short_side else (c > f) for _, c, f in rows]
+    if not broken[-1]:
+        if any(broken):
+            d_re = next(rows[i][0] for i in range(len(rows) - 1, -1, -1) if broken[i])
+            side = "收复" if short_side else "跌回"
+            return ("未触发", f"近{len(rows)}日曾收盘破位但已被{side}（最近破位侧收盘在 "
+                              f"{d_re}）——情景重置，等新的破位日")
+        return None   # 一直未破位 → 用单日逻辑的距离提示
+
+    # 最新收盘在破位侧：找本轮破位起点
+    k = len(broken) - 1
+    while k > 0 and broken[k - 1]:
+        k -= 1
+    d0 = rows[k][0]
+    d0_s = f"{d0} 或更早" if (k == 0 and broken[0]) else str(d0)  # 首日即破位=左截尾
+    n = len(rows) - 1 - k
+    if n == 0:
+        act = "跌破" if short_side else "站上"
+        return (f"破位日（T+0）", f"{d0} 收盘首次{act}零伽马——按规则等次日起的"
+                                  f"回抽确认，今日不是追认点")
+
+    # 破位后是否出现过"回抽摸到翻转点附近"（有高低价用高/低，否则用收盘近似）
+    band = RETEST_TOUCH_ATR * buf
+    retest = False
+    for d, c, f in rows[k + 1:]:
+        probe = highs.get(d, c) if short_side else lows.get(d, c)
+        if (short_side and probe >= f - band) or (not short_side and probe <= f + band):
+            retest = True
+            break
+    if retest:
+        return (f"追认成立（{d0_s} 破位，T+{n}）",
+                "破位后回抽未收复，追认条件已完成——按规则仓位【应已在场内】，当前是"
+                "持仓管理阶段（按 🎯 止盈止损执行），不是新开仓点；空仓者等下一次"
+                "回抽不收复的二次机会，不追")
+    return (f"已破位·等回抽（T+{n}）",
+            f"{d0_s} 破位后尚无有效回抽——追认点未出现，等价格回抽零伽马附近且收不回"
+            f"时才是上车点，直接追单不取")
+
+
+def _fade_window_note(short_side: bool, w: float, zone_lo: float, zone_hi: float,
+                      struct_history: list[tuple], series: PriceSeries | None,
+                      buf: float) -> str:
+    """墙前拒绝的窗口注记：近几日是否出现过'摸墙被打回'的拒绝形态。"""
+    if series is None or not series.closes:
+        return ""
+    closes = dict(zip(series.dates, series.closes))
+    highs = dict(zip(series.dates, series.highs)) if series.highs else {}
+    lows = dict(zip(series.dates, series.lows)) if series.lows else {}
+    days = sorted(closes)[-5:]
+    for d in reversed(days):
+        c = closes[d]
+        if short_side:
+            touched = highs.get(d, c) >= w - 0.3 * buf
+            rejected = c < zone_lo
+        else:
+            touched = lows.get(d, c) <= w + 0.3 * buf
+            rejected = c > zone_hi
+        if touched and rejected:
+            return f"（{d} 曾摸墙被打回——拒绝形态近日已出现过一次，重复出现更可信）"
+    return ""
+
+
 def _exit_plan(s: TradeScenario, spot: float) -> str:
     """规则化止盈止损模板（确定性拼句）：止损=失效线、止盈=结构目标分批、
     首目标达成后移损保本。全部日收盘口径，属参考框架而非交易指令。"""
@@ -295,7 +380,10 @@ def _vetoes(direction: str, o: Outlook, flip_v: float | None, spot: float,
 
 
 def build_strategy(o: Outlook, *, vol: VolSurface | None = None,
-                   series: PriceSeries | None = None) -> StrategyPlan:
+                   series: PriceSeries | None = None,
+                   struct_history: list[tuple] | None = None) -> StrategyPlan:
+    """struct_history：逐日结构位 [(交易日, 零伽马, call墙, put墙), ...]（与位点同口径），
+    由调用方从历史快照逐日重算 gamma 得到——有它才启用跨日窗口状态机。"""
     use_comm = o.commodity_spot is not None
     spot = o.commodity_spot if use_comm else o.spot
     unit = "商品" if use_comm else "ETF"
@@ -338,12 +426,31 @@ def build_strategy(o: Outlook, *, vol: VolSurface | None = None,
         scenarios.append(_fade_scenario(direction, wall, levels, spot, buf, use_comm))
     if flip is not None:
         scenarios.append(_trigger_scenario(direction, flip, levels, spot, buf, use_comm))
+
+    # 窗口状态机：有逐日结构历史时，用最近 N 个已完成收盘的序列覆盖单日判定
+    if struct_history:
+        short_side = direction == "做空"
+        upgraded = []
+        for s in scenarios:
+            if s.key == "trigger":
+                ws = _trigger_window_status(short_side, struct_history, series, buf)
+                if ws:
+                    s = replace(s, status=ws[0], status_note=ws[1])
+            elif s.key == "fade" and wall is not None and s.status == "待命":
+                note = _fade_window_note(short_side, _val(wall, use_comm),
+                                         s.entry_lo, s.entry_hi,
+                                         struct_history, series, buf)
+                if note:
+                    s = replace(s, status_note=s.status_note + note)
+            upgraded.append(s)
+        scenarios = upgraded
     scenarios = [replace(s, exit_plan=_exit_plan(s, spot)) for s in scenarios]
 
     vetoes = _vetoes(direction, o, flip_v, spot, vol)
 
     n = len(vetoes)
-    armed = any(s.status in ("结构条件已满足", "触发观察中") for s in scenarios)
+    _ARMED = ("结构条件已满足", "触发观察中", "破位日", "已破位", "追认成立")
+    armed = any(s.status.startswith(_ARMED) for s in scenarios)
     if not scenarios:
         verdict = f"方向为{direction}但期权结构缺失（无墙/无零伽马）——模块无法参数化，仅按综合研判观察。"
     elif n >= 2:

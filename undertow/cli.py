@@ -533,9 +533,42 @@ def cmd_report(args) -> int:
             if real_series is not None and len(real_series.closes) >= 2 and real_series.closes[-2]:
                 day_chg = 100.0 * (real_series.closes[-1] / real_series.closes[-2] - 1.0)
             vv = fa.vol.verdict if (fa.vol is not None and fa.vol.prev is not None) else ""
+            # —— 逐日结构历史：用已落盘快照逐日重算 gamma（快照日=链日+1，比值按当日期货收盘）——
+            struct_hist, timeline_rows = [], []
+            if ratio is not None and real_series is not None:
+                closes_m = dict(zip(real_series.dates, real_series.closes))
+                highs_m = dict(zip(real_series.dates, real_series.highs)) if real_series.highs else {}
+                lows_m = dict(zip(real_series.dates, real_series.lows)) if real_series.lows else {}
+                by_day = {}
+                opt_sym = inst.options.symbol
+                for snap_d in store.dates("options", opt_sym)[-14:]:
+                    try:
+                        h_snap = snapshot_from_payload(store.load("options", opt_sym, snap_d),
+                                                       inst.key, opt_sym)
+                        t = max((dd for dd in closes_m if dd < snap_d), default=None)
+                        if t is None or h_snap.spot <= 0:
+                            continue
+                        g_h = analyze_gamma(h_snap, multiplier=closes_m[t] / h_snap.spot,
+                                            proxy_quality=inst.options.proxy_quality,
+                                            today=snap_d, horizon_days=args.horizon)
+                        r_h = closes_m[t] / h_snap.spot
+                        by_day[t] = (
+                            g_h.zero_gamma * r_h if g_h.zero_gamma is not None else None,
+                            g_h.call_wall * r_h if g_h.call_wall_oi > 0 else None,
+                            g_h.put_wall * r_h if g_h.put_wall_oi > 0 else None)
+                    except Exception:
+                        continue
+                for t in sorted(by_day):
+                    f_v, cw, pw = by_day[t]
+                    struct_hist.append((t, f_v, cw, pw))
+                    timeline_rows.append((t, closes_m.get(t), highs_m.get(t),
+                                          lows_m.get(t), f_v, cw, pw))
+            timeline_svg = viz.strategy_timeline_svg(timeline_rows, real_price) \
+                if len(timeline_rows) >= 2 else ""
             # —— 策略情景参数化（期货）先算：其否决票 = 现成的对手盘证据 ——
-            plan = build_strategy(outlook, vol=fa.vol, series=real_series)
-            strategy_html = render_strategy_section(plan)
+            plan = build_strategy(outlook, vol=fa.vol, series=real_series,
+                                  struct_history=struct_hist or None)
+            strategy_html = render_strategy_section(plan, timeline_svg=timeline_svg)
             # —— 分块速读：方向 / 关键位 / 持仓异动(ΔOI) / 对手盘警示 ——
             tilt = fa.flow_tilt if not fa.flow_tilt.startswith("—") else ""
             conv = ga.to_commodity if ratio is not None else None

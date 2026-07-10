@@ -40,7 +40,8 @@ from undertow.report import markdown as report_mod
 from undertow.report import viz
 from undertow.report.html import (render_report_html, render_index_html,
                           render_flow_section, render_macro_section, render_events_section,
-                          render_tldr_section, render_strategy_section)
+                          render_tldr_section, render_strategy_section,
+                          render_concentration_html)
 
 
 def _resolve_instruments(cfg, names: list[str]) -> list:
@@ -531,7 +532,8 @@ def cmd_report(args) -> int:
                 flow_tilt=tilt, flow_moves=moves, counter_notes=counters))
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,
-                                      strategy_html)
+                                      strategy_html,
+                                      conc_html=render_concentration_html(an.concentration))
             fn = f"{inst.key}_{today.isoformat()}.html"
             (reports_dir / fn).write_text(html, encoding="utf-8")
             written.append((inst, outlook, fn))

@@ -90,3 +90,25 @@ if __name__ == "__main__":
         fn()
         print(f"PASS {fn.__name__}")
     print(f"\n{len(fns)} tests passed.")
+
+
+def test_concentration_stats_author_gold_case():
+    # 复刻作者 6/30 黄金实例：前8大净空 51.1% → 52.8%（+1.7pp），前8大净多微动
+    from dataclasses import replace as _rep
+    hist = []
+    for i, (l8, s8) in enumerate([(29.0, 50.2), (28.9, 51.1), (28.4, 52.8)]):
+        r = _mk(date(2026, 6, 16 + i * 7), 130_000, 15_000)
+        hist.append(_rep(r, conc_net_4_long=21.0, conc_net_4_short=35.5,
+                         conc_net_8_long=l8, conc_net_8_short=s8))
+    an = analyze(hist)
+    cs = an.concentration
+    assert cs is not None
+    assert abs(cs.net8_short - 52.8) < 1e-9
+    assert abs(cs.d8_short - 1.7) < 1e-9          # 51.1 → 52.8
+    assert cs.pct8_short == 100.0                  # 三期中最高
+    assert "52.8%" in cs.note() and "+1.7pp" in cs.note()
+
+
+def test_concentration_absent_gracefully():
+    an = analyze([_mk(date(2026, 6, 16), 1000, 500), _mk(date(2026, 6, 23), 1100, 500)])
+    assert an.concentration is None

@@ -91,7 +91,7 @@ undertow/
     markdown.py             终端 Markdown 报告（COT / Gamma / 资金流 / 回测）
     html.py                 ★ 自包含 HTML 研判报告（内嵌 SVG，浏览器直接看）
     viz.py                  ★ 手绘 SVG 图（价格+关键位 / OI 墙 / 持仓历史，零依赖）
-tests/                      单元测试（不依赖网络，69 个）
+tests/                      单元测试（不依赖网络，71 个）
 data/snapshots/             ★ 期权链每日快照（gzip，入 git = 备份；不可再生）
 data/reports/               综合研判 HTML 报告（按品种/日期，入 git）
 data/cache/                 缓存落盘（自动生成，.gitignore）
@@ -141,6 +141,9 @@ data/cache/                 缓存落盘（自动生成，.gitignore）
 - **MM_FLOW_QUALITY**：本周净变化来源分解——主动建仓(强) vs 空头回补/多头了结(弱)。
 - **SMART_DIVERGE_***：聪明钱(Other Reportables)与投机资金背离（防守/吸筹）。
 - **SWAP_DIR_***：互换商方向性压力（复刻文章逻辑，强标 OTC 对冲歧义，仅作辅助）。
+- **大户集中度**（`ConcentrationStats`，作者口径 R10）：CFTC Concentration Ratios 的前 4/8 大
+  净多/净空集中度（占 OI%）+ 周变化 + 历史分位——净空集中度上行 = 空头火力向大户集中
+  （金 6/30 实测 52.8%、+1.7pp、156 周分位 89）。展示于 analyze 终端与 report「持仓结构」卡。
 
 **Gamma 层指标**（`analysis/gamma.py`）：
 - **OI 墙**：现价 ±15% 内最大 call OI=阻力墙、最大 put OI=支撑墙 → 吸附/pin 候选。**不依赖任何假设，最可靠**。

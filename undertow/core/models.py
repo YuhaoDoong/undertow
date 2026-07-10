@@ -69,6 +69,12 @@ class CotReport:
     changes: dict[str, CategoryChange] = field(default_factory=dict)
     raw: dict = field(default_factory=dict, repr=False)
 
+    # 前 4/8 大交易商净持仓集中度（占 OI %，CFTC Concentration Ratios；缺失=None）
+    conc_net_4_long: float | None = None
+    conc_net_4_short: float | None = None
+    conc_net_8_long: float | None = None
+    conc_net_8_short: float | None = None
+
     # 便于按名字遍历类别
     CATEGORY_NAMES = (
         "managed_money",

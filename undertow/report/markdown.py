@@ -51,6 +51,8 @@ def render(an: PositioningAnalysis, signals: list[Signal], display_name: str,
     lines.append(
         f"总持仓 OI: {an.open_interest:,} 手  ({oi_arrow} {an.open_interest_change:+,})"
     )
+    if an.concentration is not None:
+        lines.append(f"大户集中度: {an.concentration.note()}（占OI%，净口径）")
     lines.append("")
 
     # 持仓总览表

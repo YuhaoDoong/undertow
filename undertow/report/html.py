@@ -412,9 +412,18 @@ def render_strategy_section(sp) -> str:
             f'{"".join(tickets)}{opts}{cavs}</div>')
 
 
+def render_concentration_html(cs) -> str:
+    """大户集中度一行（作者口径 R10：前8大净空集中度上行=空头火力向大户集中）。"""
+    if cs is None:
+        return ""
+    return (f'<div class="sub">大户集中度（CFTC 净口径，占 OI%）：{_esc(cs.note())}'
+            f'——净空集中度上行 = 空头火力向大户集中</div>')
+
+
 def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        flow_html: str = "", macro_html: str = "", events_html: str = "",
-                       tldr_html: str = "", strategy_html: str = "") -> str:
+                       tldr_html: str = "", strategy_html: str = "",
+                       conc_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -440,7 +449,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'{flow_html}'
         f'<div class="card"><h2>方向因子投票（按回测可信度加权）</h2>{_votes_table(o)}</div>'
         f'{macro_html}'
-        f'<div class="card"><h2>持仓结构</h2><div class="chart">{cot_svg}</div></div>'
+        f'<div class="card"><h2>持仓结构</h2>{conc_html}<div class="chart">{cot_svg}</div></div>'
         f'<div class="card"><h2>情景推演（规则化 if-then，非点位预言）</h2>{_scenarios_html(o)}</div>'
         f'{strategy_html}'
         f'<div class="card">{_caveats_html(o)}</div>'

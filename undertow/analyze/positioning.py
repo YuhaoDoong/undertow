@@ -63,6 +63,29 @@ class CategoryStats:
 
 
 @dataclass(frozen=True)
+class ConcentrationStats:
+    """前 4/8 大交易商净持仓集中度（占 OI %，CFTC Concentration Ratios）。
+
+    作者读法（R10）：前 8 大净空集中度上行 = 空头火力向大户集中（如金 51.1→52.8%）。
+    """
+    net4_long: float
+    net4_short: float
+    net8_long: float
+    net8_short: float
+    d8_long: float | None       # 前8大净多集中度 周变化 pp
+    d8_short: float | None      # 前8大净空集中度 周变化 pp
+    pct8_long: float | None     # 在回看窗口的历史分位 0~100
+    pct8_short: float | None
+
+    def note(self) -> str:
+        d = (f"周变化 {self.d8_short:+.1f}pp" if self.d8_short is not None else "首期无对比")
+        p = (f"，历史分位 {self.pct8_short:.0f}" if self.pct8_short is not None else "")
+        return (f"前8大净空 {self.net8_short:.1f}%（{d}{p}）· "
+                f"前8大净多 {self.net8_long:.1f}%"
+                + (f"（{self.d8_long:+.1f}pp）" if self.d8_long is not None else ""))
+
+
+@dataclass(frozen=True)
 class PositioningAnalysis:
     instrument: str
     market_name: str
@@ -72,6 +95,7 @@ class PositioningAnalysis:
     open_interest_change: int
     lookback_used: int
     categories: dict[str, CategoryStats]
+    concentration: ConcentrationStats | None = None
 
 
 def _decompose(change: CategoryChange) -> ChangeDecomposition:
@@ -136,6 +160,24 @@ def analyze(history: list[CotReport]) -> PositioningAnalysis:
             net_history_max=hmax,
         )
 
+    # 前 4/8 大集中度（字段缺失的旧数据/品种优雅跳过）
+    conc = None
+    if latest.conc_net_8_short is not None and latest.conc_net_8_long is not None:
+        s8 = [r.conc_net_8_short for r in history if r.conc_net_8_short is not None]
+        l8 = [r.conc_net_8_long for r in history if r.conc_net_8_long is not None]
+        conc = ConcentrationStats(
+            net4_long=latest.conc_net_4_long or 0.0,
+            net4_short=latest.conc_net_4_short or 0.0,
+            net8_long=latest.conc_net_8_long,
+            net8_short=latest.conc_net_8_short,
+            d8_long=(latest.conc_net_8_long - prev.conc_net_8_long
+                     if prev and prev.conc_net_8_long is not None else None),
+            d8_short=(latest.conc_net_8_short - prev.conc_net_8_short
+                      if prev and prev.conc_net_8_short is not None else None),
+            pct8_long=_percentile_rank(latest.conc_net_8_long, l8) if len(l8) >= 2 else None,
+            pct8_short=_percentile_rank(latest.conc_net_8_short, s8) if len(s8) >= 2 else None,
+        )
+
     return PositioningAnalysis(
         instrument=latest.instrument,
         market_name=latest.market_name,
@@ -145,4 +187,5 @@ def analyze(history: list[CotReport]) -> PositioningAnalysis:
         open_interest_change=latest.open_interest_change,
         lookback_used=len(history),
         categories=categories,
+        concentration=conc,
     )

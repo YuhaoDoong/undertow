@@ -13,3 +13,4 @@ venv/
 .DS_Store
 
 # 注意：data/snapshots/ 【不忽略】——期权链快照不可再生，入库即等于备份。
+.humanize/

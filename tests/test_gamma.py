@@ -108,3 +108,9 @@ def test_structure_delta_phrases():
                [StrikeRow(61.0, 90_000, 0, 0.0), StrikeRow(50.0, 0, 176_000, 0.0)])
     notes2 = structure_delta(prev, curr2)
     assert any("call 墙" in n and "上移" in n for n in notes2)
+    # R8b 到期滚落：昨日墙含当日到期仓时，必须用"存活合约"基准，否则假报削弱
+    notes3 = structure_delta(prev, curr,
+                             prev_surviving={(60.0, "C"): 200_000, (50.0, "P"): 176_000})
+    joined3 = "；".join(notes3)
+    assert "call 墙" in joined3 and "增厚" in joined3      # 205,000 vs 存活基准 200,000
+    assert "put 墙" in joined3 and "增厚" in joined3

@@ -14,7 +14,7 @@ import argparse
 import dataclasses
 import json
 import sys
-from datetime import date
+from datetime import date, timedelta
 
 from undertow.core.config import load_config, DATA_DIR
 from undertow.core.clock import market_today
@@ -619,7 +619,14 @@ def cmd_report(args) -> int:
                     ga_prev = analyze_gamma(prev, multiplier=mult,
                                             proxy_quality=inst.options.proxy_quality,
                                             today=prev_d, horizon_days=args.horizon)
-                    struct_notes = structure_delta(ga_prev, ga)
+                    # 墙厚基准 = 昨日快照中按【今日窗口】仍存活的 OI（防 R8b 到期滚落假削弱）
+                    end = today + timedelta(days=args.horizon)
+                    surv: dict = {}
+                    for c_ in prev.contracts:
+                        if today < c_.expiry <= end:   # 与 gamma 的 0<T 同语义：当日到期不算存活
+                            key_ = (c_.strike, c_.kind)
+                            surv[key_] = surv.get(key_, 0) + c_.open_interest
+                    struct_notes = structure_delta(ga_prev, ga, prev_surviving=surv)
                     driver = flip_driver_summary(fa)
                     if driver:
                         struct_notes.append(driver)

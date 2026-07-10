@@ -227,11 +227,16 @@ def analyze_gamma(
     )
 
 
-def structure_delta(prev: "GammaAnalysis", curr: "GammaAnalysis") -> list[str]:
+def structure_delta(prev: "GammaAnalysis", curr: "GammaAnalysis",
+                    prev_surviving: dict | None = None) -> list[str]:
     """昨日→今日的结构变化短句（速读用，确定性拼句）。
 
     位移按 ETF 行权价内在口径判断（免换算比值的时点噪音），展示用今日商品口径；
     墙的强弱 = 同一行权价的 OI 对昨变化（墙没动看厚薄，动了报迁移）。
+
+    prev_surviving：昨日快照中【以今日窗口衡量仍存活】的 (行权价, C/P)→OI——
+    墙厚对比必须用它作基准，否则"今日到期合约滚出窗口"会伪装成墙被削弱
+    （R8b 到期滚落污染；零伽马对比不受此扰，仍用各自日期锚定的完整结构）。
     """
     conv = curr.to_commodity
     c_spot = conv(curr.spot) or curr.spot
@@ -256,8 +261,11 @@ def structure_delta(prev: "GammaAnalysis", curr: "GammaAnalysis") -> list[str]:
         name = "call 墙" if kind == "C" else "put 墙"
         role = "压制" if kind == "C" else "承接"
         if abs(p_w - c_w) < 1e-9:
-            r = prev_by_strike.get(c_w)
-            base = (r.call_oi if kind == "C" else r.put_oi) if r else p_oi
+            if prev_surviving is not None:
+                base = prev_surviving.get((c_w, kind), 0)
+            else:
+                r = prev_by_strike.get(c_w)
+                base = (r.call_oi if kind == "C" else r.put_oi) if r else p_oi
             d = c_oi - base
             if abs(d) < max(200, base * 0.01):
                 out.append(f"{name} {fmt(c_w)} 未移，厚度基本不变（OI {c_oi:,}）")

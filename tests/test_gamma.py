@@ -114,3 +114,15 @@ def test_structure_delta_phrases():
     joined3 = "；".join(notes3)
     assert "call 墙" in joined3 and "增厚" in joined3      # 205,000 vs 存活基准 200,000
     assert "put 墙" in joined3 and "增厚" in joined3
+
+
+def test_zero_gamma_no_fake_root_on_empty_chain():
+    # Codex P0-5：空链/无有效 IV 不得返回 zero_gamma=spot 的假翻转位
+    from undertow.core.models import OptionsSnapshot, OptionContract
+    from undertow.analyze.gamma import analyze_gamma
+    from datetime import date
+    empty = OptionsSnapshot(instrument="t", proxy_symbol="T", spot=100.0,
+                            asof="x", contracts=[])
+    ga = analyze_gamma(empty, multiplier=1.0, proxy_quality="good",
+                       today=date(2026, 7, 10), horizon_days=45)
+    assert ga.zero_gamma is None

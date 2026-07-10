@@ -201,6 +201,8 @@ def counter_signals(fa: "FlowAnalysis", direction: str, *,
     for c in fa.changes:
         if c.bias != want or abs(c.d_oi) < MOVE_MIN_DOI:
             continue
+        if "保护" in c.spread_note or "长腿" in c.spread_note:
+            continue    # 价差保护腿的方向已被扣除，不再当独立对手盘
         wall = f"（{c.on_wall}）" if c.on_wall else ""
         sp = f"，{c.spread_note}" if c.spread_note else ""
         out.append(f"{'put' if c.kind == 'P' else 'call'} 端 {fmt(c.strike)}{wall} "
@@ -346,10 +348,10 @@ def _judge(kind: str, d_oi: int, adj_pp: float, prev_known: bool) -> tuple[str, 
 
     复刻作者口径：IV 升=买方抬价、IV 降=卖方供给；OI 增=建仓、OI 减=平仓/撤退。
     """
-    if not prev_known:  # 无昨日 IV：只能按 OI 方向定性
+    if not prev_known:  # 无昨日 IV：无法判主动方，只按 OI 方向定性且降权
         if kind == "P":
-            return ("bearish", "买方保护(新建)", 1.0) if d_oi > 0 else ("neutral", "看跌减仓", 0.0)
-        return ("bullish", "买方(新建)", 1.0) if d_oi > 0 else ("neutral", "看涨减仓", 0.0)
+            return ("bearish", "买方保护(新建·主动方未知)", 0.5) if d_oi > 0 else ("neutral", "看跌减仓", 0.0)
+        return ("bullish", "买方(新建·主动方未知)", 0.5) if d_oi > 0 else ("neutral", "看涨减仓", 0.0)
 
     a = adj_pp
     if abs(a) < IV_NOISE:
@@ -397,7 +399,8 @@ def detect_spreads(changes: list[FlowChange]) -> list[Spread]:
                 continue
             max_width = SPREAD_MAX_WIDTH_FRAC * s.strike
             cands = [b for b in buyers if (b.strike, kind) not in used
-                     and 1e-6 < abs(b.strike - s.strike) <= max_width  # 两腿相近才算垂直价差
+                     and b.expiry == s.expiry                          # 垂直价差必须同到期
+                     and 1e-6 < abs(b.strike - s.strike) <= max_width  # 两腿相近
                      and 0.4 <= (b.d_oi / s.d_oi) <= 2.5]              # 量级相当
             if not cands:
                 continue
@@ -563,18 +566,19 @@ def analyze_flow(
         call_slope = _lin_slope([(c.strike, c.iv) for c in live if c.kind == "C" and c.iv > 0])
 
         def _agg(contracts):
-            """按 (行权价,C/P) 合并多个到期：OI 求和，IV/Delta 按 OI 加权。"""
+            """按 (行权价,C/P) 合并多个到期：OI 求和，IV/Delta 按 OI 加权；
+            同时留 per-expiry OI 明细，供计算"主导到期"（|ΔOI| 最大的到期）。"""
             m: dict[tuple, dict] = {}
             for c in contracts:
                 k = (c.strike, c.kind)
-                a = m.setdefault(k, {"oi": 0, "ivw": 0.0, "dlw": 0.0, "vol": 0, "exp": c.expiry})
+                a = m.setdefault(k, {"oi": 0, "ivw": 0.0, "dlw": 0.0, "vol": 0,
+                                     "exp_oi": {}})
                 a["oi"] += c.open_interest
                 if c.iv > 0:
                     a["ivw"] += c.iv * c.open_interest
                 a["dlw"] += c.delta * c.open_interest
                 a["vol"] += c.volume
-                if c.expiry < a["exp"]:
-                    a["exp"] = c.expiry
+                a["exp_oi"][c.expiry] = a["exp_oi"].get(c.expiry, 0) + c.open_interest
             return m
 
         cagg, pagg = _agg(live), _agg(prev_live)
@@ -594,13 +598,21 @@ def analyze_flow(
             d_oi = coi - poi
             if abs(d_oi) < MIN_DOI:
                 continue
+            # 主导到期 = |ΔOI| 最大的到期（价差配对按它比对，杜绝跨到期伪垂直价差）
+            p_exp = p["exp_oi"] if p else {}
+            exp_d = {e: a["exp_oi"].get(e, 0) - p_exp.get(e, 0)
+                     for e in set(a["exp_oi"]) | set(p_exp)}
+            dom_exp = max(exp_d, key=lambda e: abs(exp_d[e])) if exp_d else min(a["exp_oi"])
             prev_known = bool(p and piv > 0 and civ > 0)
             d_iv = (civ - piv) if prev_known else 0.0
             slope = put_slope if kind == "P" else call_slope
-            corrected = (d_iv - slope * d_spot) if prev_known else 0.0
+            # 机械项：现价动 ΔS 后固定行权价沿偏斜'继承'的 IV ≈ -slope×ΔS
+            # （sticky-moneyness 近似），去除机械项 = d_iv - (-slope×ΔS)
+            corrected = (d_iv + slope * d_spot) if prev_known else 0.0
             rows.append({"strike": strike, "kind": kind, "coi": coi, "poi": poi, "d_oi": d_oi,
                          "delta": cdelta, "civ": civ, "piv": piv, "d_iv": d_iv,
-                         "corrected": corrected, "known": prev_known, "vol": a["vol"], "exp": a["exp"]})
+                         "corrected": corrected, "known": prev_known, "vol": a["vol"],
+                         "exp": dom_exp})
 
         # "相对化"基准：行权价足够多时减去中位修正 ΔIV，剔除全市场 vol 平移；少则不减
         cv = sorted(r["corrected"] for r in rows if r["known"])
@@ -649,9 +661,10 @@ def analyze_flow(
                     if not (is_short or is_long):
                         continue
                     labels[(c.strike, c.kind)] = sp.name + ("·短腿(方向)" if is_short else "·长腿(保护)")
-                    # 与净方向相反的腿 = 封顶腿，扣其方向压力
+                    # 与净方向相反的腿 = 封顶腿，只扣【匹配数量】的压力
+                    # （腿不等量时，未配对的剩余仓仍是方向仓）
                     if c.bias != sp.net_bias and c.bias in ("bearish", "bullish"):
-                        p = abs(c.d_oi) * c.weight
+                        p = min(abs(c.d_oi), sp.size) * c.weight
                         if c.bias == "bearish":
                             downside -= p
                         else:

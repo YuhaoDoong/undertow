@@ -297,7 +297,8 @@ def _trigger_window_status(short_side: bool, struct_history: list[tuple],
         return (f"追认成立（{d0_s} 破位，T+{n}）",
                 "破位后回抽未收复，追认条件已完成——按规则仓位【应已在场内】，当前是"
                 "持仓管理阶段（按 🎯 止盈止损执行），不是新开仓点；空仓者等下一次"
-                "回抽不收复的二次机会，不追")
+                "回抽不收复的二次机会，不追。"
+                "（回溯口径：假设破位起即按当前方向执行；彼时的研判方向与否决票未回溯核验）")
     return (f"已破位·等回抽（T+{n}）",
             f"{d0_s} 破位后尚无有效回抽——追认点未出现，等价格回抽零伽马附近且收不回"
             f"时才是上车点，直接追单不取")
@@ -451,8 +452,15 @@ def build_strategy(o: Outlook, *, vol: VolSurface | None = None,
     n = len(vetoes)
     _ARMED = ("结构条件已满足", "触发观察中", "破位日", "已破位", "追认成立")
     armed = any(s.status.startswith(_ARMED) for s in scenarios)
+    holding = any(s.status.startswith("追认成立") for s in scenarios)
     if not scenarios:
         verdict = f"方向为{direction}但期权结构缺失（无墙/无零伽马）——模块无法参数化，仅按综合研判观察。"
+    elif holding:
+        # 持仓生命周期优先：追认已完成 = 持仓管理语境，否决票在此语境下是减仓/警惕信号，
+        # 不再用"等触发"话术（那是新开仓语境）——两种语境混用曾致卡内自相矛盾
+        veto_part = (f"实时层现有 {n} 张否决票提示环境转变——存量仓按 🎯 止盈止损从严管理，"
+                     f"逢反弹主动减仓；" if n else "无否决票——存量仓按 🎯 止盈止损正常管理；")
+        verdict = f"持仓管理模式：顺结构{direction}的追认已在历史上完成。{veto_part}新开仓一律等新触发，不追。"
     elif n >= 2:
         verdict = (f"今日无有效{direction}信号：实时层给出 {n} 张否决票。"
                    f"模块判定——不开枪，等待情景触发（否决票消失或顺结构情景确认）。")

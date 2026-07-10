@@ -395,6 +395,14 @@ def _load_curr_prev_snapshot(store, source, inst, today, *, no_cache, no_snapsho
     return snapshot_from_payload(payload, inst.key, sym), None, None, today.isoformat()
 
 
+def _prev_weekday(d: date) -> date:
+    """前一个工作日（链日/观察日推导；只跳周末，节假日误差由快照去重兜底）。"""
+    d = d - timedelta(days=1)
+    while d.weekday() >= 5:
+        d = d - timedelta(days=1)
+    return d
+
+
 def _score_trend(inst_key: str, date_s: str, score: float) -> str:
     """记录每日综合分并给出对昨趋势短句（同向比强弱、异向报翻转）。入 git 留痕。"""
     hist_path = DATA_DIR / "history" / "outlook_scores.json"
@@ -463,7 +471,9 @@ def cmd_report(args) -> int:
         print(e, file=sys.stderr)
         return 2
 
-    written = []  # (inst, outlook, filename)
+    written = []
+
+    failed: list = []
     for inst in instruments:
         if inst.options is None or inst.price is None:
             # 综合 HTML 报告以期权 Gamma/Flow 为骨架；无期权代理的品种（如美元指数）
@@ -491,10 +501,15 @@ def cmd_report(args) -> int:
                     print(f"[提示] {inst.key} 真实期货价获取失败，回退静态乘数: {e}", file=sys.stderr)
             mult = ratio if ratio is not None else inst.options.approx_commodity_multiplier
 
+            # 观察日 = 链交易日（快照日前一工作日）：报告的期权结构是"昨收快照"，
+            # 计时按观察日锚定——否则当日到期(0DTE)合约会被当成已过期剔除，
+            # 而自动报告恰在 ET 凌晨生成、这些合约当天仍在交易（Codex P0-4）
+            obs_day = _prev_weekday(date.fromisoformat(curr_date_s)) if curr_date_s else _prev_weekday(today)
+
             ga = analyze_gamma(curr, multiplier=mult,
-                               proxy_quality=inst.options.proxy_quality, today=today,
+                               proxy_quality=inst.options.proxy_quality, today=obs_day,
                                horizon_days=args.horizon)
-            fa = analyze_flow(prev, curr, today=today, horizon_days=args.horizon,
+            fa = analyze_flow(prev, curr, today=obs_day, horizon_days=args.horizon,
                               call_wall=ga.call_wall, put_wall=ga.put_wall,
                               prev_date=prev_date, curr_date=curr_date_s)
             if ratio is not None:
@@ -572,14 +587,6 @@ def cmd_report(args) -> int:
                 highs_m = dict(zip(real_series.dates, real_series.highs)) if real_series.highs else {}
                 lows_m = dict(zip(real_series.dates, real_series.lows)) if real_series.lows else {}
 
-                def _chain_day(d):
-                    """快照日 → 链交易日 = 前一个工作日（独立推导，不依赖价格序列
-                    的完整性——Yahoo 日线偶有缺根/日期漂移，按序列配日会错位覆盖）。"""
-                    d = d - timedelta(days=1)
-                    while d.weekday() >= 5:
-                        d = d - timedelta(days=1)
-                    return d
-
                 by_day = {}
                 opt_sym = inst.options.symbol
                 for snap_d in store.dates("options", opt_sym)[-14:]:
@@ -588,12 +595,12 @@ def cmd_report(args) -> int:
                                                        inst.key, opt_sym)
                         if h_snap.spot <= 0:
                             continue
-                        t = _chain_day(snap_d)
+                        t = _prev_weekday(snap_d)
                         # 当日比值：有该日期货收盘用之；缺根时退用实时比值（仅影响展示口径）
                         r_h = (closes_m[t] / h_snap.spot) if t in closes_m else ratio
                         g_h = analyze_gamma(h_snap, multiplier=r_h,
                                             proxy_quality=inst.options.proxy_quality,
-                                            today=snap_d, horizon_days=args.horizon)
+                                            today=t, horizon_days=args.horizon)
                         by_day[t] = (
                             g_h.zero_gamma * r_h if g_h.zero_gamma is not None else None,
                             g_h.call_wall * r_h if g_h.call_wall_oi > 0 else None,
@@ -614,7 +621,16 @@ def cmd_report(args) -> int:
             timeline_svg = viz.strategy_timeline_svg(timeline_rows, real_price) \
                 if len(timeline_rows) >= 3 else ""
             # —— 策略情景参数化（期货）先算：其否决票 = 现成的对手盘证据 ——
-            plan = build_strategy(outlook, vol=fa.vol, series=real_series,
+            # Yahoo 序列尾根若是今日盘中 bar（未完成），剔除后再喂给 ATR/窗口状态机
+            series_done = real_series
+            if real_series is not None and real_series.dates and real_series.dates[-1] >= today:
+                from undertow.core.models import PriceSeries as _PS
+                series_done = _PS(symbol=real_series.symbol,
+                                  dates=real_series.dates[:-1],
+                                  closes=real_series.closes[:-1],
+                                  highs=real_series.highs[:-1] if real_series.highs else [],
+                                  lows=real_series.lows[:-1] if real_series.lows else [])
+            plan = build_strategy(outlook, vol=fa.vol, series=series_done,
                                   struct_history=struct_hist or None)
             strategy_html = render_strategy_section(plan, timeline_svg=timeline_svg)
             # —— 分块速读：方向 / 关键位 / 持仓异动(ΔOI) / 对手盘警示 ——
@@ -631,15 +647,16 @@ def cmd_report(args) -> int:
                 try:
                     # 昨日结构必须用昨日的日期锚定（到期时间权重随 today 变，
                     # 用今天的日期算昨日链会把零伽马算歪）
-                    prev_d = date.fromisoformat(prev_date) if prev_date else today
+                    prev_obs = _prev_weekday(date.fromisoformat(prev_date)) if prev_date \
+                        else _prev_weekday(obs_day)
                     ga_prev = analyze_gamma(prev, multiplier=mult,
                                             proxy_quality=inst.options.proxy_quality,
-                                            today=prev_d, horizon_days=args.horizon)
-                    # 墙厚基准 = 昨日快照中按【今日窗口】仍存活的 OI（防 R8b 到期滚落假削弱）
-                    end = today + timedelta(days=args.horizon)
+                                            today=prev_obs, horizon_days=args.horizon)
+                    # 墙厚基准 = 昨日快照中按【今日观察窗口】仍存活的 OI（防 R8b 到期滚落假削弱）
+                    end = obs_day + timedelta(days=args.horizon)
                     surv: dict = {}
                     for c_ in prev.contracts:
-                        if today < c_.expiry <= end:   # 与 gamma 的 0<T 同语义：当日到期不算存活
+                        if obs_day < c_.expiry <= end:   # 与 gamma 的 0<T 同语义
                             key_ = (c_.strike, c_.kind)
                             surv[key_] = surv.get(key_, 0) + c_.open_interest
                     struct_notes = structure_delta(ga_prev, ga, prev_surviving=surv)
@@ -662,6 +679,7 @@ def cmd_report(args) -> int:
             (reports_dir / fn).write_text(html, encoding="utf-8")
             written.append((inst, outlook, fn))
         except Exception as e:
+            failed.append(inst.key)
             print(f"[警告] {inst.key} 研判报告失败: {e}", file=sys.stderr)
 
     if not written:
@@ -686,6 +704,10 @@ def cmd_report(args) -> int:
         print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence})  → {reports_dir / fn}")
     if index_path:
         print(f"  索引页 → {index_path}")
+    if failed:
+        print(f"[部分失败] {', '.join(failed)} 未生成——退出码置 1，避免自动化误提交残缺报告集",
+              file=sys.stderr)
+        return 1
     print(f"\n用浏览器打开即可（macOS: open '{reports_dir / written[0][2]}'）")
     return 0
 

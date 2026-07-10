@@ -88,29 +88,32 @@ def _dealer_gamma_at(contracts, S: float, today: date) -> float:
 
 
 def _find_zero_gamma(contracts, spot: float, today: date) -> float | None:
-    """扫描现价网格，找最接近现价的伽马翻转(零伽马)位。"""
+    """扫描现价网格，找最接近现价的伽马翻转(零伽马)位。
+
+    只接受【非零两侧符号翻转】的真实穿越：空链/无有效 IV/数值下溢形成的
+    零平台不算根（否则空数据会返回 zero_gamma=spot 的假翻转位）；
+    且整个扫描的 |GEX| 峰值必须显著大于零，否则判"无结构"返回 None。
+    """
     if spot <= 0:
         return None
     lo, hi, steps = 0.70 * spot, 1.30 * spot, 240
-    prev_S = lo
-    prev_G = _dealer_gamma_at(contracts, lo, today)
+    grid = [lo + (hi - lo) * i / steps for i in range(steps + 1)]
+    gs = [_dealer_gamma_at(contracts, S, today) for S in grid]
+    peak = max(abs(g) for g in gs)
+    if peak <= 0:
+        return None
+    eps = peak * 1e-6           # 相对零阈：低于此视为"无信号平台"，不当根
     best = None
     best_dist = float("inf")
-    for i in range(1, steps + 1):
-        S = lo + (hi - lo) * i / steps
-        G = _dealer_gamma_at(contracts, S, today)
-        if prev_G == 0.0:
-            cross = prev_S
-        elif (prev_G < 0) != (G < 0):
-            # 线性插值找零点
-            cross = prev_S + (S - prev_S) * (0 - prev_G) / (G - prev_G)
-        else:
-            cross = None
-        if cross is not None:
+    for i in range(1, len(grid)):
+        g0, g1 = gs[i - 1], gs[i]
+        if abs(g0) <= eps or abs(g1) <= eps:
+            continue            # 零平台/下溢段不算穿越
+        if (g0 < 0) != (g1 < 0):
+            cross = grid[i - 1] + (grid[i] - grid[i - 1]) * (0 - g0) / (g1 - g0)
             dist = abs(cross - spot)
             if dist < best_dist:
                 best_dist, best = dist, cross
-        prev_S, prev_G = S, G
     return best
 
 

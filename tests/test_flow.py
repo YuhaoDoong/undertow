@@ -298,3 +298,54 @@ def test_flip_driver_summary_panic_receding():
     fa2 = analyze_flow(curr, prev, today=TODAY, prev_date="a", curr_date="b")
     t2 = flip_driver_summary(fa2)
     assert "下方风险重新加价" in t2 and "看涨需求退潮" in t2
+
+
+# ==== Codex review P0 回归（2026-07-10）====
+
+def test_delta_correction_sign_sticky_moneyness():
+    # P0-1：现价 +1、IV 沿偏斜机械上移（sticky-moneyness），残差应≈0 判噪音；
+    # 旧实现（d_iv - slope*d_spot）会把机械项翻倍成 +0.4pp 误判买方保护
+    prev = _snap([_c(95, "P", oi=2_000, iv=0.300), _c(100, "P", oi=2_000, iv=0.290)],
+                 spot=100.0)
+    curr = _snap([_c(95, "P", oi=2_500, iv=0.302), _c(100, "P", oi=2_000, iv=0.292)],
+                 spot=101.0)
+    fa = analyze_flow(prev, curr, today=TODAY, prev_date="a", curr_date="b")
+    p95 = next(c for c in fa.changes if c.strike == 95.0)
+    assert abs(p95.adj_iv_pp) < 0.05, f"机械 IV 变化未被去除: {p95.adj_iv_pp}pp"
+    assert p95.judgment == "噪音"
+
+
+def test_spread_requires_same_expiry():
+    # P0-2：跨到期的"卖低买高"不得配成垂直价差（7月卖方 + 8月买方 ≠ Bear Call）
+    e2 = EXP + timedelta(days=35)
+    prev = _snap([_c(100, "C", oi=2_000, iv=0.30), _c(105, "C", oi=1_500, iv=0.34, expiry=e2)],
+                 spot=100.0)
+    curr = _snap([_c(100, "C", oi=2_300, vol=900, iv=0.28),
+                  _c(105, "C", oi=1_800, vol=900, iv=0.36, expiry=e2)], spot=100.0)
+    fa = analyze_flow(prev, curr, today=TODAY, prev_date="a", curr_date="b")
+    assert fa.spreads == [], "跨到期两腿被误配为垂直价差"
+    # 同到期版本必须仍能识别
+    prev2 = _snap([_c(100, "C", oi=2_000, iv=0.30), _c(105, "C", oi=1_500, iv=0.34)], spot=100.0)
+    curr2 = _snap([_c(100, "C", oi=2_300, vol=900, iv=0.28),
+                   _c(105, "C", oi=1_800, vol=900, iv=0.36)], spot=100.0)
+    fa2 = analyze_flow(prev2, curr2, today=TODAY, prev_date="a", curr_date="b")
+    assert len(fa2.spreads) == 1
+
+
+def test_unequal_spread_deducts_matched_size_only():
+    # P0-3：腿不等量时只扣匹配数量——剩余 150 张买方 call 仍是方向仓
+    prev = _snap([_c(72, "C", oi=2_000, iv=0.30), _c(75, "C", oi=1_500, iv=0.34)], spot=70.0)
+    curr = _snap([_c(72, "C", oi=2_100, vol=900, iv=0.28),     # 卖方 +100
+                  _c(75, "C", oi=1_750, vol=900, iv=0.36)], spot=70.0)  # 买方 +250
+    fa = analyze_flow(prev, curr, today=TODAY, prev_date="a", curr_date="b")
+    assert len(fa.spreads) == 1 and fa.spreads[0].size == 100
+    assert fa.upside_pressure == 150.0, f"应剩 150 未配对买方压力，实得 {fa.upside_pressure}"
+
+
+def test_new_row_without_prev_iv_is_downweighted():
+    # P1-8：昨日无 IV 的全新行 → 主动方未知，方向权重减半而非满权
+    prev = _snap([_c(100, "C", oi=1_000, iv=0.20)])
+    curr = _snap([_c(100, "C", oi=1_000, iv=0.20), _c(95, "P", oi=800, iv=0.20)])
+    fa = analyze_flow(prev, curr, today=TODAY, prev_date="a", curr_date="b")
+    p95 = next(c for c in fa.changes if c.strike == 95.0)
+    assert "主动方未知" in p95.judgment and p95.weight == 0.5

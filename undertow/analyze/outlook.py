@@ -132,8 +132,15 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
         pivot_k = min(all_lv, key=lambda k: abs(val(k) - px))
         pv = val(pivot_k)
         dpct = 100.0 * (pv - px) / px
-        ups = [k for k in all_lv if val(k) > max(px, pv) + 1e-9][:2]
-        dns = [k for k in all_lv if val(k) < min(px, pv) - 1e-9][-2:][::-1]
+        def _uniq(seq):   # 展示价相同的位点去重（如两个 pin 换算后同价）
+            out, seen = [], set()
+            for k in seq:
+                if fmt(val(k)) not in seen:
+                    seen.add(fmt(val(k)))
+                    out.append(k)
+            return out
+        ups = _uniq([k for k in all_lv if val(k) > max(px, pv) + 1e-9])[:2]
+        dns = _uniq([k for k in all_lv if val(k) < min(px, pv) - 1e-9][::-1])[:2]
         up_txt = " → ".join(f"{fmt(val(k))}（{short(k.label)}）" for k in ups) or "上方近处无结构位"
         dn_txt = " → ".join(f"{fmt(val(k))}（{short(k.label)}）" for k in dns) or "下方近处无结构位"
         t = (f"当前焦点位 {fmt(pv)}（{short(pivot_k.label)}，距现价 {dpct:+.1f}%）。"
@@ -170,8 +177,8 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
         first = below[0]
         if pivot is first:
             S.append(f"下方第一层支撑就是更重要的多空分界：{fmt(val(first))}"
-                     f"（{short(first.label)}）——守住则区间对待，跌破则对冲盘转向助跌、"
-                     "下行容易加速。")
+                     f"（{short(first.label)}）——守住则区间对待，跌破则支撑/吸附失效、"
+                     "下行空间打开（对冲环境是否翻转以零伽马为准）。")
         else:
             down = f"下方第一层支撑 {fmt(val(first))}（{short(first.label)}）"
             if pivot is not None:

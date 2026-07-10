@@ -230,14 +230,14 @@ def cot_net_history_svg(dates: list[date], nets: list[int], *, percentile: float
 
 
 def strategy_timeline_svg(rows: list[tuple], spot: float | None = None, *,
-                          title: str = "结构时间轴：日K(高低收) vs 零伽马/墙（日收盘口径）",
+                          title: str = "结构时间轴：日K(高低收) vs 零伽马/墙（历史=各日收盘口径；末点(今)=盘中换算，与下方交易票一致）",
                           width: int = 680, height: int = 240) -> str:
     """策略卡时间轴：近 N 日 HLC 竖线 + 逐日零伽马/call墙/put墙折线。
 
     rows = [(date, close, high, low, flip, call_wall, put_wall)]，高低/结构可为 None。
     价格用 HLC 竖线（无开盘价数据），收盘为右侧短横；结构线为逐日折线（虚线）。
     """
-    rows = [r for r in rows if r[1] is not None]
+    rows = [r for r in rows if r[1] is not None or r[4] is not None]
     if len(rows) < 2:
         return ""
     ml, mr, mt, mb = 48, 96, 30, 24
@@ -247,6 +247,7 @@ def strategy_timeline_svg(rows: list[tuple], spot: float | None = None, *,
     yvals: list[float] = []
     for _, c, h, l, f, cw, pw in rows:
         yvals += [v for v in (c, h, l, f, cw, pw) if v]
+    has_close = [r[1] is not None for r in rows]
     if spot:
         yvals.append(spot)
     ymin, ymax = min(yvals), max(yvals)
@@ -272,22 +273,29 @@ def strategy_timeline_svg(rows: list[tuple], spot: float | None = None, *,
             last_v = next(rows[i][idx] for i in range(n - 1, -1, -1) if rows[i][idx])
             s.append(_txt(px1 + 4, pts[-1][1] + 3, f"{label} {last_v:.1f}", size=10, fill=color))
 
-    # HLC 竖线 + 收盘短横（价格）
+    # HLC 竖线 + 收盘短横（价格）；close 为 None 的行 = 今日盘中占位，只画结构线
     for i, (_, c, h, l, *_r) in enumerate(rows):
+        if c is None:
+            continue
         x = xs[i]
         if h and l:
             s.append(_line(x, Y(h), x, Y(l), stroke=C_PRICE, width=1.4))
         s.append(_line(x, Y(c), x + 4, Y(c), stroke=C_PRICE, width=2.0))
 
-    # 现价点（盘中参考，非收盘）
+    # 现价点（盘中参考，非收盘）——画在最后一根 x 位（今日）
     if spot:
-        s.append(f'<circle cx="{px1 - 4:.1f}" cy="{Y(spot):.1f}" r="3.2" fill="{C_SPOT}"/>')
-        s.append(_txt(px1 - 10, Y(spot) - 6, f"现价 {spot:.1f}", size=10, fill=C_SPOT,
+        s.append(f'<circle cx="{xs[-1]:.1f}" cy="{Y(spot):.1f}" r="3.2" fill="{C_SPOT}"/>')
+        s.append(_txt(xs[-1] - 6, Y(spot) - 6, f"现价 {spot:.1f}", size=10, fill=C_SPOT,
                       anchor="end", weight="bold"))
 
-    for frac, anch in ((0.0, "start"), (0.5, "middle"), (1.0, "end")):
-        i = int(frac * (n - 1))
-        s.append(_txt(xs[i], height - 8, rows[i][0].strftime("%m-%d"), size=10,
-                      fill=C_AXIS, anchor=anch))
+    # 日期标签：≤12 根全标，否则隔根标；今日盘中行标"今"
+    step = 1 if n <= 12 else max(1, n // 8)
+    for i in range(0, n, step):
+        anch = "start" if i == 0 else ("end" if i >= n - 1 else "middle")
+        lbl = rows[i][0].strftime("%m-%d") + ("(今)" if not has_close[i] else "")
+        s.append(_txt(xs[i], height - 8, lbl, size=9.5, fill=C_AXIS, anchor=anch))
+    if (n - 1) % step:
+        lbl = rows[-1][0].strftime("%m-%d") + ("(今)" if not has_close[-1] else "")
+        s.append(_txt(xs[-1], height - 8, lbl, size=9.5, fill=C_AXIS, anchor="end"))
     s.append("</svg>")
     return "".join(s)

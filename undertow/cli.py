@@ -571,19 +571,29 @@ def cmd_report(args) -> int:
                 closes_m = dict(zip(real_series.dates, real_series.closes))
                 highs_m = dict(zip(real_series.dates, real_series.highs)) if real_series.highs else {}
                 lows_m = dict(zip(real_series.dates, real_series.lows)) if real_series.lows else {}
+
+                def _chain_day(d):
+                    """快照日 → 链交易日 = 前一个工作日（独立推导，不依赖价格序列
+                    的完整性——Yahoo 日线偶有缺根/日期漂移，按序列配日会错位覆盖）。"""
+                    d = d - timedelta(days=1)
+                    while d.weekday() >= 5:
+                        d = d - timedelta(days=1)
+                    return d
+
                 by_day = {}
                 opt_sym = inst.options.symbol
                 for snap_d in store.dates("options", opt_sym)[-14:]:
                     try:
                         h_snap = snapshot_from_payload(store.load("options", opt_sym, snap_d),
                                                        inst.key, opt_sym)
-                        t = max((dd for dd in closes_m if dd < snap_d), default=None)
-                        if t is None or h_snap.spot <= 0:
+                        if h_snap.spot <= 0:
                             continue
-                        g_h = analyze_gamma(h_snap, multiplier=closes_m[t] / h_snap.spot,
+                        t = _chain_day(snap_d)
+                        # 当日比值：有该日期货收盘用之；缺根时退用实时比值（仅影响展示口径）
+                        r_h = (closes_m[t] / h_snap.spot) if t in closes_m else ratio
+                        g_h = analyze_gamma(h_snap, multiplier=r_h,
                                             proxy_quality=inst.options.proxy_quality,
                                             today=snap_d, horizon_days=args.horizon)
-                        r_h = closes_m[t] / h_snap.spot
                         by_day[t] = (
                             g_h.zero_gamma * r_h if g_h.zero_gamma is not None else None,
                             g_h.call_wall * r_h if g_h.call_wall_oi > 0 else None,
@@ -595,8 +605,14 @@ def cmd_report(args) -> int:
                     struct_hist.append((t, f_v, cw, pw))
                     timeline_rows.append((t, closes_m.get(t), highs_m.get(t),
                                           lows_m.get(t), f_v, cw, pw))
+            if timeline_rows and ratio is not None:
+                # 末点 = 今日（盘中口径）：结构线与策略票同一换算，消除 58.2 vs 60.6 的双口径困惑
+                timeline_rows.append((today, None, None, None,
+                                      ga.to_commodity(ga.zero_gamma),
+                                      ga.to_commodity(ga.call_wall) if ga.call_wall_oi > 0 else None,
+                                      ga.to_commodity(ga.put_wall) if ga.put_wall_oi > 0 else None))
             timeline_svg = viz.strategy_timeline_svg(timeline_rows, real_price) \
-                if len(timeline_rows) >= 2 else ""
+                if len(timeline_rows) >= 3 else ""
             # —— 策略情景参数化（期货）先算：其否决票 = 现成的对手盘证据 ——
             plan = build_strategy(outlook, vol=fa.vol, series=real_series,
                                   struct_history=struct_hist or None)

@@ -749,6 +749,6 @@ def flip_driver_summary(fa: "FlowAnalysis") -> str:
         if p_dn[1] < -0.1:
             concls.append("下方 put 由卖方写入做支撑（承接位跟进）")
         elif p_dn[1] > 0.1:
-            concls.append("下方买保护加深（押更深跌幅）")
+            concls.append("下方买保护加深（下行风险仍被付费定价——空头押注或多头买保险，防御性动作）")
     concl = "；".join(concls) if concls else "多空双向换仓，期权端方向分歧"
     return "驱动分解：" + "、".join(bits) + " → " + concl

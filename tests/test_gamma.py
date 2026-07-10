@@ -80,3 +80,31 @@ if __name__ == "__main__":
         fn()
         print(f"PASS {fn.__name__}")
     print(f"\n{len(fns)} tests passed.")
+
+
+def test_structure_delta_phrases():
+    from undertow.analyze.gamma import GammaAnalysis, StrikeRow, structure_delta
+
+    def mk(zg, cw, coi, pw, poi, rows):
+        return GammaAnalysis(
+            instrument="t", proxy_symbol="T", spot=54.0, asof="x", horizon_days=45,
+            multiplier=1.12, proxy_quality="good", total_call_oi=0, total_put_oi=0,
+            put_call_ratio=1.0, net_gex=-1.0, gex_regime="负Gamma", zero_gamma=zg,
+            call_wall=cw, call_wall_oi=coi, put_wall=pw, put_wall_oi=poi,
+            nearest_expiry=None, nearest_call_wall=None, nearest_put_wall=None,
+            strike_rows=rows)
+
+    prev = mk(55.5, 60.0, 208_000, 50.0, 176_000,
+              [StrikeRow(60.0, 208_000, 0, 0.0), StrikeRow(50.0, 0, 176_000, 0.0)])
+    curr = mk(54.1, 60.0, 205_000, 50.0, 181_500,
+              [StrikeRow(60.0, 205_000, 0, 0.0), StrikeRow(50.0, 0, 181_500, 0.0)])
+    notes = structure_delta(prev, curr)
+    joined = "；".join(notes)
+    assert "零伽马" in joined and "下移" in joined and "向现价贴近" in joined
+    assert "call 墙" in joined and "削弱" in joined      # -3,000 手
+    assert "put 墙" in joined and "增厚" in joined       # +5,500 手
+    # 墙迁移分支
+    curr2 = mk(54.1, 61.0, 90_000, 50.0, 176_000,
+               [StrikeRow(61.0, 90_000, 0, 0.0), StrikeRow(50.0, 0, 176_000, 0.0)])
+    notes2 = structure_delta(prev, curr2)
+    assert any("call 墙" in n and "上移" in n for n in notes2)

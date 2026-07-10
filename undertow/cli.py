@@ -29,7 +29,7 @@ from undertow.collect.fred_macro import FredMacroSource
 from undertow.collect.cboe_vol import CboeVolSource
 from undertow.analyze.positioning import analyze
 from undertow.analyze.signals import generate_signals, net_bias
-from undertow.analyze.gamma import analyze_gamma
+from undertow.analyze.gamma import analyze_gamma, structure_delta
 from undertow.analyze.flow import analyze_flow, counter_signals, structural_moves
 from undertow.analyze.outlook import (build_outlook, macro_to_votes,
                                       plain_summary_blocks)
@@ -394,6 +394,37 @@ def _load_curr_prev_snapshot(store, source, inst, today, *, no_cache, no_snapsho
     return snapshot_from_payload(payload, inst.key, sym), None, None, today.isoformat()
 
 
+def _score_trend(inst_key: str, date_s: str, score: float) -> str:
+    """记录每日综合分并给出对昨趋势短句（同向比强弱、异向报翻转）。入 git 留痕。"""
+    hist_path = DATA_DIR / "history" / "outlook_scores.json"
+    hist_path.parent.mkdir(parents=True, exist_ok=True)
+    data: dict = {}
+    if hist_path.exists():
+        try:
+            data = json.loads(hist_path.read_text())
+        except Exception:
+            data = {}
+    hist = data.setdefault(inst_key, {})
+    prev_dates = sorted(d for d in hist if d < date_s)
+    trend = ""
+    if prev_dates:
+        pv = hist[prev_dates[-1]]
+        arrow = f"综合分较上日 {pv:+.1f} → {score:+.1f}"
+        if pv * score > 0:
+            side = "空" if score < 0 else "多"
+            if abs(score) > abs(pv) + 0.05:
+                trend = f"{arrow}，看{side}增强"
+            elif abs(score) < abs(pv) - 0.05:
+                trend = f"{arrow}，看{side}减弱"
+            else:
+                trend = f"{arrow}，强度持平"
+        elif score == 0 or pv == 0 or pv * score < 0:
+            trend = f"{arrow}，方向较昨发生翻转/中性化"
+    hist[date_s] = round(score, 2)
+    hist_path.write_text(json.dumps(data, ensure_ascii=False, indent=1))
+    return trend
+
+
 def _archive_existing(path) -> None:
     """同日重复生成报告时不覆盖：把旧文件按其生成时刻改名留档（数据尽量多留原则）。
 
@@ -577,9 +608,24 @@ def cmd_report(args) -> int:
             if plan.vetoes:  # 全文在策略卡，速读只留短标签
                 labels = "、".join(v.split("：")[0] for v in plan.vetoes)
                 counters.append(f"实时层否决票 ×{len(plan.vetoes)}（{labels}，详见策略卡）")
+            # —— 结构对昨变化（墙增/削、零伽马位移）+ 综合分趋势 ——
+            struct_notes = []
+            if prev is not None:
+                try:
+                    # 昨日结构必须用昨日的日期锚定（到期时间权重随 today 变，
+                    # 用今天的日期算昨日链会把零伽马算歪）
+                    prev_d = date.fromisoformat(prev_date) if prev_date else today
+                    ga_prev = analyze_gamma(prev, multiplier=mult,
+                                            proxy_quality=inst.options.proxy_quality,
+                                            today=prev_d, horizon_days=args.horizon)
+                    struct_notes = structure_delta(ga_prev, ga)
+                except Exception:
+                    pass
+            trend = _score_trend(inst.key, today.isoformat(), outlook.bias_score)
             tldr_html = render_tldr_section(plain_summary_blocks(
                 outlook, day_chg_pct=day_chg, vol_verdict=vv,
-                flow_tilt=tilt, flow_moves=moves, counter_notes=counters))
+                flow_tilt=tilt, flow_moves=moves, counter_notes=counters,
+                bias_trend=trend, struct_notes=struct_notes))
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,
                                       strategy_html,

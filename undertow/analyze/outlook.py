@@ -85,6 +85,8 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
                          vol_verdict: str = "", flow_tilt: str = "",
                          flow_moves: list[str] | None = None,
                          counter_notes: list[str] | None = None,
+                         bias_trend: str = "",
+                         struct_notes: list[str] | None = None,
                          ) -> list[tuple[str, str]]:
     """大白话速读（分块）：像文章摘要一样分【方向】【关键位】【持仓异动】
     【对手盘警示】四块，每块一段。返回 (标题, 文本) 列表，空块自动省略。
@@ -116,6 +118,8 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
         word = "涨" if day_chg_pct >= 0 else "跌"
         chg = f"，较上一交易日{word} {abs(day_chg_pct):.1f}%"
     dir_txt = f"现价 {fmt(px)}{chg}；综合研判{o.bias}（可信度{o.confidence}）。"
+    if bias_trend:
+        dir_txt += bias_trend + "。"
     if "负Gamma" in o.regime or "负伽马" in o.regime:
         dir_txt += "当前处负伽马环境：涨跌都会被做市商对冲放大，行情容易走过头，追单与接刀都需谨慎。"
     elif "正Gamma" in o.regime or "正伽马" in o.regime:
@@ -160,6 +164,8 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
         sup = next((k for k in core if k.kind == "support"), None)
         tail = f"（已跌破看跌墙 {fmt(val(sup))}，反抽该位先当压力看）" if sup else ""
         S.append(f"下方近处已无成型 OI 支撑{tail}，处破位区运行。")
+    if struct_notes:
+        S.append("结构对昨变化：" + "；".join(struct_notes) + "。")
     blocks.append(("关键位", "".join(S)))
 
     # ── 持仓异动（ΔOI 信号，直接引用 flow 层现成结论，不做二次判断）──

@@ -225,3 +225,52 @@ def analyze_gamma(
         nearest_put_wall=npe,
         strike_rows=rows,
     )
+
+
+def structure_delta(prev: "GammaAnalysis", curr: "GammaAnalysis") -> list[str]:
+    """昨日→今日的结构变化短句（速读用，确定性拼句）。
+
+    位移按 ETF 行权价内在口径判断（免换算比值的时点噪音），展示用今日商品口径；
+    墙的强弱 = 同一行权价的 OI 对昨变化（墙没动看厚薄，动了报迁移）。
+    """
+    conv = curr.to_commodity
+    c_spot = conv(curr.spot) or curr.spot
+    fmt = (lambda v: f"{conv(v):,.0f}") if c_spot >= 500 else (lambda v: f"{conv(v):,.1f}")
+    out: list[str] = []
+
+    # 零伽马位移（相对现价的贴近/远离一并说明）
+    if prev.zero_gamma is not None and curr.zero_gamma is not None:
+        d_pct = 100.0 * (curr.zero_gamma - prev.zero_gamma) / prev.zero_gamma
+        if abs(d_pct) < 0.15:
+            out.append(f"零伽马 {fmt(curr.zero_gamma)} 基本未动")
+        else:
+            word = "下移" if d_pct < 0 else "上移"
+            closer = (abs(curr.zero_gamma - curr.spot) < abs(prev.zero_gamma - curr.spot))
+            rel = "向现价贴近，收复/跌破它的门槛变近" if closer else "远离现价"
+            out.append(f"零伽马 {fmt(prev.zero_gamma)}→{fmt(curr.zero_gamma)}"
+                       f"（{word} {abs(d_pct):.1f}%，{rel}）")
+
+    prev_by_strike = {r.strike: r for r in prev.strike_rows}
+
+    def wall(kind: str, p_w: float, p_oi: int, c_w: float, c_oi: int) -> None:
+        name = "call 墙" if kind == "C" else "put 墙"
+        role = "压制" if kind == "C" else "承接"
+        if abs(p_w - c_w) < 1e-9:
+            r = prev_by_strike.get(c_w)
+            base = (r.call_oi if kind == "C" else r.put_oi) if r else p_oi
+            d = c_oi - base
+            if abs(d) < max(200, base * 0.01):
+                out.append(f"{name} {fmt(c_w)} 未移，厚度基本不变（OI {c_oi:,}）")
+            else:
+                word = "增厚" if d > 0 else "削弱"
+                out.append(f"{name} {fmt(c_w)} 未移但{word}（OI {d:+,} 手，{role}"
+                           f"{'更结实' if d > 0 else '在松动'}）")
+        else:
+            word = "上移" if c_w > p_w else "下移"
+            out.append(f"{name} {fmt(p_w)}→{fmt(c_w)}（{word}，新墙 OI {c_oi:,}）")
+
+    if prev.call_wall_oi > 0 and curr.call_wall_oi > 0:
+        wall("C", prev.call_wall, prev.call_wall_oi, curr.call_wall, curr.call_wall_oi)
+    if prev.put_wall_oi > 0 and curr.put_wall_oi > 0:
+        wall("P", prev.put_wall, prev.put_wall_oi, curr.put_wall, curr.put_wall_oi)
+    return out

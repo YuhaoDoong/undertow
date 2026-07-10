@@ -295,8 +295,64 @@ def render_tldr_section(blocks: list[tuple[str, str]]) -> str:
             '<small>由关键位与当日数据自动拼句；措辞保留不确定性，非点位预言。</small></div>')
 
 
+_STATUS_COL = {"待命": "#6e7781", "未触发": "#6e7781", "触发观察中": "#9a6700",
+               "结构条件已满足": "#0969da", "情景作废": "#c62828"}
+
+
+def _price_rail(s, spot: float, fmt) -> str:
+    """情景价格轨道：一条横轴上标出 止损(红)/入场区(蓝带)/现价(黑点)/止盈(绿)。"""
+    pts = [s.invalidation, s.entry_ref, spot] + [v for v, _ in s.targets]
+    if s.entry_lo is not None:
+        pts += [s.entry_lo, s.entry_hi]
+    lo, hi = min(pts), max(pts)
+    span = (hi - lo) or 1.0
+    lo -= span * 0.07
+    hi += span * 0.07
+    pos = lambda v: 100.0 * (v - lo) / (hi - lo)
+
+    el: list[str] = []
+    # 入场区蓝带 / 单点参考
+    if s.entry_lo is not None:
+        l, r = pos(s.entry_lo), pos(s.entry_hi)
+        el.append(f'<div style="position:absolute;left:{l:.1f}%;width:{max(r - l, 0.8):.1f}%;'
+                  'top:26px;height:14px;background:#0969da26;border:1px solid #0969da55;'
+                  'border-radius:3px"></div>')
+        el.append(f'<div style="position:absolute;left:{(l + r) / 2:.1f}%;top:2px;'
+                  'transform:translateX(-50%);font-size:10px;color:#0969da;white-space:nowrap">'
+                  f'入场区 {fmt(s.entry_lo)}–{fmt(s.entry_hi)}</div>')
+    else:
+        p = pos(s.entry_ref)
+        el.append(f'<div style="position:absolute;left:{p:.1f}%;top:24px;height:18px;width:2px;'
+                  'background:#0969da;transform:translateX(-50%)"></div>')
+        el.append(f'<div style="position:absolute;left:{p:.1f}%;top:2px;transform:translateX(-50%);'
+                  f'font-size:10px;color:#0969da;white-space:nowrap">触发 {fmt(s.entry_ref)}</div>')
+    # 止损（红）——标签放上排
+    p = pos(s.invalidation)
+    el.append(f'<div style="position:absolute;left:{p:.1f}%;top:24px;height:18px;width:2px;'
+              'background:#c62828;transform:translateX(-50%)"></div>')
+    el.append(f'<div style="position:absolute;left:{p:.1f}%;top:13px;transform:translateX(-50%);'
+              f'font-size:10px;color:#c62828;font-weight:600;white-space:nowrap">止损 {fmt(s.invalidation)}</div>')
+    # 止盈（绿）——标签放下排
+    for i, (v, _lbl) in enumerate(s.targets[:2], 1):
+        p = pos(v)
+        el.append(f'<div style="position:absolute;left:{p:.1f}%;top:24px;height:18px;width:2px;'
+                  'background:#2e7d32;transform:translateX(-50%)"></div>')
+        el.append(f'<div style="position:absolute;left:{p:.1f}%;top:44px;transform:translateX(-50%);'
+                  f'font-size:10px;color:#2e7d32;font-weight:600;white-space:nowrap">止盈{i} {fmt(v)}</div>')
+    # 现价（黑点）——标签再下一排，避免与止盈重叠
+    p = pos(spot)
+    el.append(f'<div style="position:absolute;left:{p:.1f}%;top:30px;width:7px;height:7px;'
+              'background:#24292f;border-radius:50%;transform:translateX(-50%)"></div>')
+    el.append(f'<div style="position:absolute;left:{p:.1f}%;top:56px;transform:translateX(-50%);'
+              f'font-size:10px;color:#24292f;white-space:nowrap">现价 {fmt(spot)}</div>')
+    return ('<div style="position:relative;height:72px;margin:6px 2px 2px">'
+            '<div style="position:absolute;left:0;right:0;top:32px;height:2px;'
+            'background:#d0d7de"></div>' + "".join(el) + "</div>")
+
+
 def render_strategy_section(sp) -> str:
-    """策略情景参数化卡片（期货）：方向→情景→触发/失效/目标/盈亏比 + 否决票。"""
+    """策略情景参数化卡片（期货）：裁决横幅 → 否决票 → 每个情景一张"交易票"
+    子卡（状态/触发/价格轨道/止盈止损方案）。模块输出，非交易指令。"""
     if sp is None:
         return ""
     fmt = (lambda v: f"{v:,.0f}") if sp.spot >= 500 else (lambda v: f"{v:,.1f}")
@@ -305,36 +361,55 @@ def render_strategy_section(sp) -> str:
             f'<div style="margin:6px 0"><span class="pill" '
             f'style="background:{dir_col}1a;color:{dir_col};font-weight:700">方向：{_esc(sp.direction)}</span>'
             f' <small>{_esc(sp.direction_source)}</small></div>')
-    atr_line = ""
+
+    # 裁决横幅置顶：先给结论，再看细节
+    v_col = "#c62828" if ("不开枪" in sp.verdict or "无有效" in sp.verdict) else (
+        "#0969da" if "信号在位" in sp.verdict else "#6e7781")
+    verdict = (f'<div style="margin:8px 0;padding:8px 12px;border-left:4px solid {v_col};'
+               f'background:{v_col}12;border-radius:4px;font-weight:600">'
+               f'模块裁决：{_esc(sp.verdict)}</div>')
+
+    meta = []
     if sp.atr is not None:
-        atr_line = (f'<div class="sub">波幅口径：{_esc(sp.atr_note)} = {fmt(sp.atr)}'
-                    f'（{sp.atr_pct:.1f}%/日）——所有缓冲区按其缩放</div>')
+        meta.append(f"波幅口径：{_esc(sp.atr_note)} = {fmt(sp.atr)}（{sp.atr_pct:.1f}%/日），缓冲区按其缩放")
+    if sp.sizing_note:
+        meta.append(_esc(sp.sizing_note))
+    meta_html = f'<div class="sub">{"　·　".join(meta)}</div>' if meta else ""
+
     vet = ""
     if sp.vetoes:
-        items = "".join(f'<li>{_esc(v)}</li>' for v in sp.vetoes)
-        vet = (f'<div style="margin:8px 0 2px;font-weight:600;color:#c62828">'
-               f'实时层否决票 ×{len(sp.vetoes)}</div><ul style="margin:2px 0 6px">{items}</ul>')
-    scen_rows = []
+        chips = "".join(f'<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 8px;'
+                        f'border:1px solid #c6282855;background:#c628280d;color:#c62828;'
+                        f'border-radius:10px;font-size:12px">✕ {_esc(v)}</span>' for v in sp.vetoes)
+        vet = (f'<div style="margin:6px 0"><b style="color:#c62828;font-size:13px">'
+               f'实时层否决票 ×{len(sp.vetoes)}</b><div>{chips}</div></div>')
+
+    tickets = []
     for s in sp.scenarios:
-        zone = (f"{fmt(s.entry_lo)} – {fmt(s.entry_hi)}"
-                if s.entry_lo is not None else f"{fmt(s.entry_ref)}（触发价参考）")
-        tg = "；".join(f"{fmt(v)}（{_esc(lbl)}，R:R≈{r:.1f}）"
-                       for (v, lbl), r in zip(s.targets, s.rr)) or "—"
-        scen_rows.append(
-            f'<tr><td><b>{_esc(s.name)}</b><div class="t">{_esc(s.stance)}</div></td>'
-            f'<td>{_esc(s.trigger)}</td>'
-            f'<td class="r">{zone}</td>'
-            f'<td class="r">{fmt(s.invalidation)}<div class="t">{_esc(s.invalidation_note)}</div></td>'
-            f'<td>{tg}</td>'
-            f'<td><b>{_esc(s.status)}</b><div class="t">{_esc(s.status_note)}</div></td></tr>')
-    table = ("<table><tr><th>情景</th><th>触发条件（日收盘为准）</th><th class='r'>参考区</th>"
-             "<th class='r'>失效线</th><th>目标（盈亏比）</th><th>状态</th></tr>"
-             + "".join(scen_rows) + "</table>") if scen_rows else ""
-    verdict = f'<div class="sub" style="margin-top:6px"><b>模块裁决：{_esc(sp.verdict)}</b></div>'
-    sizing = f'<div class="sub">{_esc(sp.sizing_note)}</div>' if sp.sizing_note else ""
+        st_col = _STATUS_COL.get(s.status, "#6e7781")
+        dead = s.status == "情景作废"
+        header = (f'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'
+                  f'<b{" style=text-decoration:line-through" if dead else ""}>{_esc(s.name)}</b>'
+                  f'<span style="font-size:11px;color:#6e7781">{_esc(s.stance)}</span>'
+                  f'<span style="margin-left:auto;padding:2px 10px;border-radius:10px;font-size:12px;'
+                  f'font-weight:600;color:{st_col};background:{st_col}1a">{_esc(s.status)}</span></div>')
+        trig = (f'<div style="font-size:12.5px;color:#57606a;margin:3px 0">'
+                f'触发（日收盘为准）：{_esc(s.trigger)}'
+                f'{"　·　" + _esc(s.status_note) if s.status_note else ""}</div>')
+        rail = _price_rail(s, sp.spot, fmt)
+        exit_html = (f'<div style="font-size:12.5px;margin:4px 0;padding:6px 8px;'
+                     f'background:#f6f8fa;border-radius:4px">🎯 {_esc(s.exit_plan)}</div>'
+                     if s.exit_plan else "")
+        inval = (f'<div style="font-size:11.5px;color:#6e7781">失效判定：{_esc(s.invalidation_note)}</div>'
+                 if s.invalidation_note else "")
+        tickets.append(f'<div style="border:1px solid #d0d7de;border-radius:6px;'
+                       f'padding:8px 12px;margin:8px 0{";opacity:.55" if dead else ""}">'
+                       f'{header}{trig}{rail}{exit_html}{inval}</div>')
+
     opts = f'<div class="sub" style="color:#6e7781">🧩 {_esc(sp.options_note)}</div>'
     cavs = "<small>" + " ".join(_esc(c) for c in sp.caveats) + "</small>"
-    return f'<div class="card">{head}{atr_line}{vet}{table}{verdict}{sizing}{opts}{cavs}</div>'
+    return (f'<div class="card">{head}{verdict}{meta_html}{vet}'
+            f'{"".join(tickets)}{opts}{cavs}</div>')
 
 
 def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,

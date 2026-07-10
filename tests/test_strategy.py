@@ -124,3 +124,18 @@ def test_missing_structure_degrades():
     plan = build_strategy(o)
     assert plan.direction == "做空" and not plan.scenarios
     assert "结构缺失" in plan.verdict
+
+
+def test_exit_plan_template():
+    o = _outlook(59.8, SILVER_LEVELS)          # 已破零伽马的做空情景
+    plan = build_strategy(o, series=_series([66 - 0.5 * i for i in range(20)]))
+    trig = next(s for s in plan.scenarios if s.key == "trigger")
+    ep = trig.exit_plan
+    assert "止损 = 失效线" in ep and "收盘站上" in ep and "日收盘口径" in ep
+    assert "单位风险" in ep and "%" in ep
+    assert "止盈" in ep and "R:R≈" in ep
+    assert "保本" in ep
+    # 做多镜像用"收盘跌破"
+    o2 = _outlook(56.0, SILVER_LEVELS, bias="偏多", regime="正Gamma：做市商净多伽马")
+    plan2 = build_strategy(o2, series=_series([56 + 0.05 * i for i in range(20)]))
+    assert all("收盘跌破" in s.exit_plan for s in plan2.scenarios if s.exit_plan)

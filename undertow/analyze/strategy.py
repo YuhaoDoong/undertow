@@ -10,7 +10,7 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from undertow.analyze.outlook import Outlook, KeyLevel
 from undertow.analyze.flow import VolSurface, D_SKEW_SIG
@@ -39,6 +39,7 @@ class TradeScenario:
     rr: list[float] = field(default_factory=list)                   # 对应目标的盈亏比
     status: str = ""          # 待命 / 未触发 / 触发观察中 / 结构条件已满足 / 情景作废
     status_note: str = ""
+    exit_plan: str = ""       # 规则化止盈止损方案（模板拼句，非交易指令）
 
 
 @dataclass(frozen=True)
@@ -225,6 +226,30 @@ def _trigger_scenario(direction: str, flip: KeyLevel, levels: list[KeyLevel],
 # ——————————————————————————————————————————————————————————
 
 
+def _exit_plan(s: TradeScenario, spot: float) -> str:
+    """规则化止盈止损模板（确定性拼句）：止损=失效线、止盈=结构目标分批、
+    首目标达成后移损保本。全部日收盘口径，属参考框架而非交易指令。"""
+    if s.invalidation is None or not s.targets:
+        return ""
+    fmt = (lambda v: f"{v:,.0f}") if spot >= 500 else (lambda v: f"{v:,.1f}")
+    breach = "收盘站上" if s.direction == "做空" else "收盘跌破"
+    risk = abs(s.entry_ref - s.invalidation)
+    parts = [f"止损 = 失效线 {fmt(s.invalidation)}（{breach}即离场，日收盘口径；"
+             f"单位风险 {fmt(risk)} ≈ {100 * risk / s.entry_ref:.1f}%）"]
+    if len(s.targets) >= 2:
+        (t1, l1), (t2, l2) = s.targets[0], s.targets[1]
+        r1 = s.rr[0] if s.rr else 0.0
+        r2 = s.rr[1] if len(s.rr) > 1 else 0.0
+        parts.append(f"止盈分批 = 首目标 {fmt(t1)}（{l1}，R:R≈{r1:.1f}）减半仓，"
+                     f"次目标 {fmt(t2)}（{l2}，R:R≈{r2:.1f}）离场")
+    else:
+        t1, l1 = s.targets[0]
+        r1 = s.rr[0] if s.rr else 0.0
+        parts.append(f"止盈 = {fmt(t1)}（{l1}，R:R≈{r1:.1f}）")
+    parts.append(f"首目标达成后止损移至入场参考 {fmt(s.entry_ref)}（保本）")
+    return "；".join(parts) + "。"
+
+
 def _vetoes(direction: str, o: Outlook, flip_v: float | None, spot: float,
             vol: VolSurface | None) -> list[str]:
     out: list[str] = []
@@ -295,6 +320,7 @@ def build_strategy(o: Outlook, *, vol: VolSurface | None = None,
         scenarios.append(_fade_scenario(direction, wall, levels, spot, buf, use_comm))
     if flip is not None:
         scenarios.append(_trigger_scenario(direction, flip, levels, spot, buf, use_comm))
+    scenarios = [replace(s, exit_plan=_exit_plan(s, spot)) for s in scenarios]
 
     vetoes = _vetoes(direction, o, flip_v, spot, vol)
 

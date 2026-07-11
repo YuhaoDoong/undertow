@@ -26,7 +26,7 @@ fi
 
 python3 -m undertow report gold silver wti --no-snapshot
 
-git add data/snapshots data/reports
+git add data/snapshots data/reports data/history
 if git diff --cached --quiet; then
     echo "[跳过] 无变更可提交"
     exit 0

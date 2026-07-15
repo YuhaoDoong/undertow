@@ -294,10 +294,16 @@ def _yearfrac(expiry: date, today: date) -> float:
     return (expiry - today).days / 365.0
 
 
-def _live(snap: OptionsSnapshot, today: date, horizon_days: int) -> list[OptionContract]:
+def _live(snap: OptionsSnapshot, today: date, horizon_days: int,
+          band_spot: float | None = None) -> list[OptionContract]:
+    """近月窗口 + 近价带过滤。band_spot：近价带的锚定现价（默认用 snap 自身 spot）。
+    做两日 diff 时，昨日链必须用【今日】spot 锚定近价带——否则现价移动后刚进带的
+    行权价在昨日基线里缺失，全量存量 OI 会被误判成"单日新建"（行权价维度的窗口
+    伪影，同 R8b 到期滚落一族；实例：SLV 60C 存量 134,701 手被整体误报为新建买方）。"""
     if snap.spot <= 0:
         return []
-    lo, hi = snap.spot * (1 - NEAR_MONEY_BAND), snap.spot * (1 + NEAR_MONEY_BAND)
+    anchor = band_spot if band_spot and band_spot > 0 else snap.spot
+    lo, hi = anchor * (1 - NEAR_MONEY_BAND), anchor * (1 + NEAR_MONEY_BAND)
     out = []
     for c in snap.contracts:
         T = _yearfrac(c.expiry, today)
@@ -560,7 +566,7 @@ def analyze_flow(
 
     if prev is not None:
         d_spot = spot - prev.spot
-        prev_live = _live(prev, today, horizon_days)
+        prev_live = _live(prev, today, horizon_days, band_spot=spot)
         # 当前链的偏斜 ∂IV/∂K（put / call 各一条），用于 Delta 修正
         put_slope = _lin_slope([(c.strike, c.iv) for c in live if c.kind == "P" and c.iv > 0])
         call_slope = _lin_slope([(c.strike, c.iv) for c in live if c.kind == "C" and c.iv > 0])

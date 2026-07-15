@@ -349,3 +349,21 @@ def test_new_row_without_prev_iv_is_downweighted():
     fa = analyze_flow(prev, curr, today=TODAY, prev_date="a", curr_date="b")
     p95 = next(c for c in fa.changes if c.strike == 95.0)
     assert "主动方未知" in p95.judgment and p95.weight == 0.5
+
+
+def test_band_crossing_strike_uses_prev_oi_baseline():
+    # P0（2026-07-15 实况）：现价上涨后，行权价 113 刚进入今日近价带，
+    # 但按昨日 spot 锚定的带宽在带外——旧实现昨日基线缺失，把 134,701 手
+    # 存量 OI 整体误判成"单日新建买方"（SLV 60C 实例）。
+    # 修复：昨日链按【今日】spot 锚定近价带（band_spot）。
+    prev = _snap([_c(100, "C", oi=5_000, iv=0.20), _c(113, "C", oi=134_701, iv=0.30)],
+                 spot=98.0)   # 昨日 spot=98 → 旧带上界在 113 之下，该行落带外
+    curr = _snap([_c(100, "C", oi=5_000, iv=0.20), _c(113, "C", oi=134_951, iv=0.30)],
+                 spot=101.0)  # 今日 spot=101 → 113 进带
+    fa = analyze_flow(prev, curr, today=TODAY, prev_date="a", curr_date="b")
+    # 关键断言：不得出现 13 万手级别的伪"新建"行
+    assert all(abs(c.d_oi) < 10_000 for c in fa.changes), \
+        [f"{c.strike}{c.kind} {c.d_oi:+,}" for c in fa.changes]
+    row = next((c for c in fa.changes if c.strike == 113.0), None)
+    if row is not None:   # ΔOI=+250 若低于门槛整行被滤掉，同样正确
+        assert row.d_oi == 250 and "新建" not in row.judgment

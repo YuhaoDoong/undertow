@@ -88,19 +88,25 @@ def snapshot_from_payload(payload: dict, instrument_key: str, sym: str) -> Optio
 
 
 def chain_fingerprint(snap: OptionsSnapshot) -> str:
-    """期权链内容指纹（现价 + 每行权价 OI/volume），用于识别"无新数据"。
+    """期权**持仓结构**指纹（每行权价 expiry/kind/strike/OI），用于识别"无新持仓数据"。
 
-    休市日（周末/节假日）CBOE 延迟报价仍是上一交易日的同一份数据——OI/volume/价
-    全部不变。把这种重复快照落成新的一天，会让 flow 层的日对日 diff 退化成全 0
-    （ΔOI≡0），悄悄抹掉买卖方信号。落盘前用指纹比对上一份：相同则跳过，不污染序列。
+    只认 OI，**不含现价与 volume**——这是刻意的：
+    - 休市日（周末/节假日）：OI 不变 → 指纹相同 → 跳过，不把重复快照落成新的一天。
+    - 交易日 ET 凌晨 OCC 尚未发布隔夜结算 OI 时：CBOE 延迟报价里 OI 仍是上一交易日
+      的结算值，但现价/volume 已刷新成当日值。若指纹含现价/volume 就会误判为"新数据"
+      而落盘一份 OI 未结算的残缺快照（现价新、OI 旧），使 flow 层日对日 diff 退化成
+      全 0（ΔOI≡0）。只认 OI 后，这种"OI 未结算"状态会被正确识别为无新数据→跳过，
+      交给定时任务的后续重试点在 OCC 发布后再抓（见 scripts/daily_update.sh）。
+    我们的情报核心是持仓量（OI），现价另由期货源实时提供、volume 日内累积本就多变，
+    二者都不该参与"是否有新持仓"的判定。
     """
     import hashlib
     rows = sorted(
-        (c.expiry.isoformat(), c.kind, round(c.strike, 4), c.open_interest, c.volume)
+        (c.expiry.isoformat(), c.kind, round(c.strike, 4), c.open_interest)
         for c in snap.contracts
     )
     h = hashlib.md5()
-    h.update(repr((round(snap.spot, 4), rows)).encode("utf-8"))
+    h.update(repr(rows).encode("utf-8"))
     return h.hexdigest()
 
 

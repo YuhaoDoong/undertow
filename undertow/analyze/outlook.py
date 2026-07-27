@@ -306,44 +306,48 @@ def _flow_vote(fa: FlowAnalysis) -> list[FactorVote]:
 
 def _key_levels(ga: GammaAnalysis, fa: FlowAnalysis) -> list[KeyLevel]:
     out: list[KeyLevel] = []
-    # 看涨墙：并列展示带内前三大 call OI（top1 保留原 kind/叙事，top2/3 仅进位点表）。
-    # 单一最大 + ±15% 硬边界会让贴边界的大墙随 spot 微动而"闪进闪出"，故三档并列更诚实。
+    # 墙的 ΔOI + 买卖方判定（口径与墙一致：按行权价跨到期聚合）。存量墙 Δ~0，新砌墙 Δ 大。
+    has_prev = fa is not None and getattr(fa, "prev_date", None) and fa.changes
+    doi_map = {(round(c.strike, 4), c.kind): c for c in (fa.changes if has_prev else [])}
+
+    def _dsfx(strike: float, kind: str) -> str:
+        if not has_prev:
+            return ""
+        c = doi_map.get((round(strike, 4), kind))
+        return f" · Δ{c.d_oi:+,} {c.judgment}" if c else " · Δ~0"
+
+    # 看涨/看跌墙：带内前三大 OI 并列（top1 保留原 kind/叙事，top2/3 仅进位点表）。
+    # 单一最大 + ±15% 硬边界会让贴边界的大墙随 spot 微动"闪进闪出"，故三档并列更诚实。
     call_top = ga.call_walls_top or ([(ga.call_wall, ga.call_wall_oi)] if ga.call_wall_oi > 0 else [])
-    for i, (strike, oi) in enumerate(call_top):
-        if oi <= 0:
-            continue
-        if i == 0:
-            out.append(KeyLevel("看涨墙 / 阻力", strike, ga.to_commodity(strike),
-                                "resistance", f"call OI {oi:,}，上沿磁吸/阻力（带内最大）"))
-        else:
-            out.append(KeyLevel(f"看涨墙 #{i+1} / 次阻力", strike, ga.to_commodity(strike),
-                                "resistance2", f"call OI {oi:,}，带内第 {i+1} 大"))
+    for i, (strike, oi) in enumerate(w for w in call_top if w[1] > 0):
+        lbl = "看涨墙 / 阻力" if i == 0 else f"看涨墙 #{i+1}"
+        knd = "resistance" if i == 0 else "resistance2"
+        rank = "带内最大" if i == 0 else f"第{i+1}大"
+        out.append(KeyLevel(lbl, strike, ga.to_commodity(strike), knd,
+                            f"OI {oi:,}（{rank}）{_dsfx(strike, 'C')}"))
     put_top = ga.put_walls_top or ([(ga.put_wall, ga.put_wall_oi)] if ga.put_wall_oi > 0 else [])
-    for i, (strike, oi) in enumerate(put_top):
-        if oi <= 0:
-            continue
-        if i == 0:
-            out.append(KeyLevel("看跌墙 / 支撑", strike, ga.to_commodity(strike),
-                                "support", f"put OI {oi:,}，下沿磁吸/支撑（带内最大）"))
-        else:
-            out.append(KeyLevel(f"看跌墙 #{i+1} / 次支撑", strike, ga.to_commodity(strike),
-                                "support2", f"put OI {oi:,}，带内第 {i+1} 大"))
+    for i, (strike, oi) in enumerate(w for w in put_top if w[1] > 0):
+        lbl = "看跌墙 / 支撑" if i == 0 else f"看跌墙 #{i+1}"
+        knd = "support" if i == 0 else "support2"
+        rank = "带内最大" if i == 0 else f"第{i+1}大"
+        out.append(KeyLevel(lbl, strike, ga.to_commodity(strike), knd,
+                            f"OI {oi:,}（{rank}）{_dsfx(strike, 'P')}"))
     if ga.zero_gamma is not None:
         rel = "现价上方" if ga.zero_gamma > ga.spot else "现价下方"
         out.append(KeyLevel("零伽马翻转", ga.zero_gamma, ga.to_commodity(ga.zero_gamma),
-                            "flip", f"{rel}；越过则做市商对冲方向反转、波动特性切换"))
+                            "flip", f"{rel} · 越过则对冲方向反转"))
     if ga.nearest_expiry is not None and ga.nearest_put_wall:
         out.append(KeyLevel(f"近到期 {ga.nearest_expiry} put pin", ga.nearest_put_wall,
-                            ga.to_commodity(ga.nearest_put_wall), "pin", "临近到期，对冲最敏感"))
+                            ga.to_commodity(ga.nearest_put_wall), "pin", "近到期 · 对冲最敏感"))
     if ga.nearest_expiry is not None and ga.nearest_call_wall:
         out.append(KeyLevel(f"近到期 {ga.nearest_expiry} call pin", ga.nearest_call_wall,
-                            ga.to_commodity(ga.nearest_call_wall), "pin", "临近到期，对冲最敏感"))
+                            ga.to_commodity(ga.nearest_call_wall), "pin", "近到期 · 对冲最敏感"))
     # 资金流活跃行权价（最多 2 个）
     for u in fa.unusual[:2]:
         kind_cn = "看跌" if u.kind == "P" else "看涨"
         out.append(KeyLevel(f"资金流活跃 {kind_cn}{u.strike:.1f}", u.strike,
                             ga.to_commodity(u.strike), "flow",
-                            f"今日成交 {u.volume:,}（量/OI {('∞' if u.vol_oi_ratio==float('inf') else f'{u.vol_oi_ratio:.1f}x')}）"))
+                            f"今成交 {u.volume:,} · 量/OI {('∞' if u.vol_oi_ratio==float('inf') else f'{u.vol_oi_ratio:.1f}x')}"))
     # 按 ETF 价从高到低排
     out.sort(key=lambda k: -k.etf_level)
     return out

@@ -26,19 +26,19 @@ def test_summary_core_sentences():
     o = _outlook(4196, GOLD_LEVELS)
     s = plain_summary(o, day_chg_pct=3.0,
                       vol_verdict="价涨而 ATM IV 被压 → …期权端未确认涨势")
-    assert "现价 4,196" in s and "涨 3.0%" in s
-    assert "偏空（可信度高）" in s
-    assert "4,304（零伽马翻转） → 4,439（看涨墙）" in s and "阻力密集" in s
-    assert "把握不大" in s                       # 无买方确认 → 突破存疑
-    assert "3,995" in s and "多空分界" in s      # put 墙 = 第一层支撑 = 分界（合并句）
+    assert "4,196" in s and "3.0%" in s          # 现价 + 日涨跌（精简格式）
+    assert "偏空·可信度高" in s
+    # 焦点=最接近现价的零伽马；上行终端=看涨墙 4,439；下行=分界看跌墙 3,995（合并去重）
+    assert "焦点 4,304（零伽马翻转" in s
+    assert "阻力 4,439（看涨墙）" in s
+    assert "分界 3,995（看跌墙）" in s
     assert "负伽马" in s
 
 
 def test_summary_buyer_confirmed_and_positive_gamma():
     o = _outlook(4196, GOLD_LEVELS, bias="偏多", regime="正Gamma：做市商净多伽马")
     s = plain_summary(o, day_chg_pct=-1.2, vol_verdict="价涨且 ATM IV 抬升 → 买方追价，涨势获期权端确认")
-    assert "跌 1.2%" in s
-    assert "突破尝试值得重视" in s
+    assert "1.2%" in s
     assert "正伽马" in s and "假突破" in s
 
 

@@ -112,27 +112,24 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
     fmt = (lambda v: f"{v:,.0f}") if px >= 500 else (lambda v: f"{v:,.1f}")
     blocks: list[tuple[str, str]] = []
 
-    # ── 方向：现价 + 日涨跌 + 综合研判 + 对冲环境 ──
-    chg = ""
-    if day_chg_pct is not None:
-        word = "涨" if day_chg_pct >= 0 else "跌"
-        chg = f"，较上一交易日{word} {abs(day_chg_pct):.1f}%"
-    dir_txt = f"现价 {fmt(px)}{chg}；综合研判{o.bias}（可信度{o.confidence}）。"
-    if bias_trend:
-        dir_txt += bias_trend + "。"
+    # ── 方向：现价 + 日涨跌 + 研判 + 对冲环境（精简）──
+    chg = f"（{'+' if day_chg_pct >= 0 else '−'}{abs(day_chg_pct):.1f}%）" if day_chg_pct is not None else ""
+    dir_txt = f"{fmt(px)}{chg}，{o.bias}·可信度{o.confidence}。"
+    if bias_trend and "持平" not in bias_trend:   # 分数无变化的"强度持平"是噪音，略去
+        dir_txt += bias_trend.lstrip("；，。 ") + "。"
     if "负Gamma" in o.regime or "负伽马" in o.regime:
-        dir_txt += "当前处负伽马环境：涨跌都会被做市商对冲放大，行情容易走过头，追单与接刀都需谨慎。"
+        dir_txt += "负伽马：对冲放大波动，易走过头，追单/接刀都需谨慎。"
     elif "正Gamma" in o.regime or "正伽马" in o.regime:
-        dir_txt += "当前处正伽马环境：波动易被对冲盘吸收，行情偏磨蹭，假突破多。"
+        dir_txt += "正伽马：波动易被吸收，假突破多。"
     blocks.append(("方向", dir_txt))
 
-    # ── 焦点与路径：距现价最近的结构位 + 上/下推演（路径树，确定性拼句）──
-    # 次墙(resistance2/support2)只进位点表，不参与焦点/路径叙事，避免改变既有措辞
+    # ── 关键位/路径：焦点 + 上下路径 + 终端关键墙（合并去重；次墙只进位点表）──
     all_lv = sorted([k for k in o.key_levels if k.kind not in ("resistance2", "support2")], key=val)
     if all_lv and px:
         pivot_k = min(all_lv, key=lambda k: abs(val(k) - px))
         pv = val(pivot_k)
         dpct = 100.0 * (pv - px) / px
+
         def _uniq(seq):   # 展示价相同的位点去重（如两个 pin 换算后同价）
             out, seen = [], set()
             for k in seq:
@@ -140,57 +137,32 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
                     seen.add(fmt(val(k)))
                     out.append(k)
             return out
+
         ups = _uniq([k for k in all_lv if val(k) > max(px, pv) + 1e-9])[:2]
         dns = _uniq([k for k in all_lv if val(k) < min(px, pv) - 1e-9][::-1])[:2]
-        up_txt = " → ".join(f"{fmt(val(k))}（{short(k.label)}）" for k in ups) or "上方近处无结构位"
-        dn_txt = " → ".join(f"{fmt(val(k))}（{short(k.label)}）" for k in dns) or "下方近处无结构位"
-        t = (f"当前焦点位 {fmt(pv)}（{short(pivot_k.label)}，距现价 {dpct:+.1f}%）。"
-             f"路径推演（日收盘口径）：有效站上 → 依次看 {up_txt}；"
-             f"失守 → 依次看 {dn_txt}。")
-        if abs(dpct) < 1.0:
-            t += ("现价贴线：" + ("翻转位附近多空对冲换手最频繁，短线易反复洗，"
-                  "不宜追单，等收盘表态。" if pivot_k.kind == "flip" else "该位争夺中，易反复。"))
-        blocks.append(("焦点与路径", t))
+        res = next((k for k in above if k.kind == "resistance"), None)   # 看涨墙
+        sup = next((k for k in below if k.kind == "support"), None)      # 看跌墙=多空分界
+        near = "贴线" if abs(dpct) < 1.0 else f"距现价 {dpct:+.1f}%"
 
-    # ── 关键位：上方阻力 ──
-    S: list[str] = []
-    if len(above) >= 2:
-        chain = " → ".join(f"{fmt(val(k))}（{short(k.label)}）" for k in above[:3])
-        up = f"上方 {chain} 阻力密集"
-    elif above:
-        k = above[0]
-        up = f"上方最近阻力 {fmt(val(k))}（{short(k.label)}）"
-    else:
-        up = "上方近处已无成型 OI 阻力（现价在看涨墙上方，缺锚点）"
-    if "信号中性" in vol_verdict:
-        up += "，期权端信号中性——没人追价买涨，但看空保护也在撤，方向等表态"
-    elif "未确认" in vol_verdict or "空头回补" in vol_verdict:
-        up += "，且期权端暂无买方追价确认——短线一举突破的把握不大"
-    elif "买方追价" in vol_verdict or "获期权端确认" in vol_verdict:
-        up += "，期权端买方在追价——突破尝试值得重视"
-    elif above:
-        up += "，能否突破先看资金流表里 call 买方是否追价"
-    S.append(up + "。")
+        # 路径位点 ∪ 关键墙 一起按价排序、就地标注墙（墙可能就是焦点，不能硬塞末尾）
+        def _seg(levels, wall, wall_cn, reverse):
+            # 墙放最前：与同价路径位并列时，稳定排序 + _uniq 让墙胜出、拿到标签
+            merged = ([wall] if wall is not None else []) + list(levels)
+            merged = _uniq(sorted(merged, key=val, reverse=reverse))[:3]
+            return "→".join(
+                f"{wall_cn} {fmt(val(k))}（{short(k.label)}）" if k is wall else fmt(val(k))
+                for k in merged
+            )
 
-    # ── 关键位：下方支撑 + 多空分界 ──
-    pivot = next((k for k in below if k.kind == "support"), None)  # 看跌墙
-    if below:
-        first = below[0]
-        if pivot is first:
-            S.append(f"下方第一层支撑就是更重要的多空分界：{fmt(val(first))}"
-                     f"（{short(first.label)}）——守住则区间对待，跌破则支撑/吸附失效、"
-                     "下行空间打开（对冲环境是否翻转以零伽马为准）。")
+        up_seg = _seg(ups, res, "阻力", False) or "已在看涨墙上方、缺锚"
+        if not dns and sup is None:   # 已破全部支撑
+            broken = next((k for k in core if k.kind == "support"), None)
+            dn_seg = f"破位区（已破看跌墙 {fmt(val(broken))}）" if broken else "破位区、下方无支撑"
         else:
-            down = f"下方第一层支撑 {fmt(val(first))}（{short(first.label)}）"
-            if pivot is not None:
-                down += (f"；更重要的多空分界在 {fmt(val(pivot))}（{short(pivot.label)}）"
-                         "——跌破则下行容易加速")
-            S.append(down + "。")
-    else:
-        sup = next((k for k in core if k.kind == "support"), None)
-        tail = f"（已跌破看跌墙 {fmt(val(sup))}，反抽该位先当压力看）" if sup else ""
-        S.append(f"下方近处已无成型 OI 支撑{tail}，处破位区运行。")
-    blocks.append(("关键位", "".join(S)))
+            dn_seg = _seg(dns, sup, "分界", True)
+        t = f"焦点 {fmt(pv)}（{short(pivot_k.label)}，{near}）。上：{up_seg}；下：{dn_seg}。"
+        blocks.append(("关键位/路径", t))
+
 
     # ── 结构解读：对昨变化 + 零伽马驱动分解，拼成因果叙事一段 ──
     if struct_notes:

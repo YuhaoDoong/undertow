@@ -267,9 +267,9 @@ def test_plain_summary_blocks_structure_and_counter():
         flow_moves=["put 墙 95.0 增厚（+2,000 手）"],
         counter_notes=["call 端 105.0 买方（+5,181 手）"])
     titles = [t for t, _ in blocks]
-    assert titles == ["方向", "焦点与路径", "关键位", "持仓异动", "对手盘警示"]
+    assert titles == ["方向", "关键位/路径", "持仓异动", "对手盘警示"]
     d = dict(blocks)
-    assert "负伽马" in d["方向"] and "综合研判偏空" in d["方向"]
+    assert "负伽马" in d["方向"] and "偏空·可信度高" in d["方向"]
     assert "与研判方向相反的最强信号" in d["对手盘警示"]
     assert "置信应相应下调" in d["对手盘警示"]
     # 有方向、有 diff、但无反向信号 → 显式说"暂无"

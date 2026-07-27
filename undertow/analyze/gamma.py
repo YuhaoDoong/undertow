@@ -60,6 +60,11 @@ class GammaAnalysis:
     nearest_call_wall: float | None
     nearest_put_wall: float | None
 
+    # 带内 call/put 墙的前若干名 (行权价, OI)，按 OI 降序；[0] 即 call_wall/put_wall。
+    # 单一最大值 + ±15% 硬边界会让贴边界的大墙"闪进闪出"标题（见 SLV 60），故并列展示前三。
+    call_walls_top: list[tuple[float, int]] = field(default_factory=list)
+    put_walls_top: list[tuple[float, int]] = field(default_factory=list)
+
     strike_rows: list[StrikeRow] = field(default_factory=list)
 
     def to_commodity(self, etf_price: float | None) -> float | None:
@@ -167,6 +172,9 @@ def analyze_gamma(
     put_strikes = [(s, v[1]) for s, v in by_strike.items() if wall_lo <= s <= spot and v[1] > 0]
     call_wall, call_wall_oi = max(call_strikes, key=lambda x: x[1]) if call_strikes else (spot, 0)
     put_wall, put_wall_oi = max(put_strikes, key=lambda x: x[1]) if put_strikes else (spot, 0)
+    # 带内前三大墙（OI 降序）——并列展示，避免单一最大值随 spot 微动而跳变
+    call_walls_top = sorted(call_strikes, key=lambda x: -x[1])[:3]
+    put_walls_top = sorted(put_strikes, key=lambda x: -x[1])[:3]
 
     net_gex = sum(gex_by_strike.values())
     if net_gex > 0:
@@ -226,6 +234,8 @@ def analyze_gamma(
         nearest_expiry=nearest_expiry,
         nearest_call_wall=nce,
         nearest_put_wall=npe,
+        call_walls_top=call_walls_top,
+        put_walls_top=put_walls_top,
         strike_rows=rows,
     )
 

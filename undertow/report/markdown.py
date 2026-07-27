@@ -130,10 +130,14 @@ def render_gamma(ga: GammaAnalysis, display_name: str) -> str:
 
     # 关键位点
     L.append("### 关键位点（吸附/pin 候选）")
-    L.append(f"- 🧱 **看涨墙(阻力) {ga.call_wall:.1f}**{_commodity_hint(ga, ga.call_wall)}"
-             f"  ·  call OI {ga.call_wall_oi:,}")
-    L.append(f"- 🧱 **看跌墙(支撑) {ga.put_wall:.1f}**{_commodity_hint(ga, ga.put_wall)}"
-             f"  ·  put OI {ga.put_wall_oi:,}")
+    call_top = ga.call_walls_top or ([(ga.call_wall, ga.call_wall_oi)] if ga.call_wall_oi > 0 else [])
+    for i, (s, oi) in enumerate([w for w in call_top if w[1] > 0]):
+        tag = "看涨墙(阻力)" if i == 0 else f"看涨墙#{i+1}(次阻力)"
+        L.append(f"- 🧱 **{tag} {s:.1f}**{_commodity_hint(ga, s)}  ·  call OI {oi:,}")
+    put_top = ga.put_walls_top or ([(ga.put_wall, ga.put_wall_oi)] if ga.put_wall_oi > 0 else [])
+    for i, (s, oi) in enumerate([w for w in put_top if w[1] > 0]):
+        tag = "看跌墙(支撑)" if i == 0 else f"看跌墙#{i+1}(次支撑)"
+        L.append(f"- 🧱 **{tag} {s:.1f}**{_commodity_hint(ga, s)}  ·  put OI {oi:,}")
     if ga.zero_gamma is not None:
         rel = "上方" if ga.zero_gamma > ga.spot else "下方"
         L.append(f"- 🔄 **零伽马翻转位 {ga.zero_gamma:.1f}**{_commodity_hint(ga, ga.zero_gamma)}"
@@ -160,7 +164,7 @@ def render_gamma(ga: GammaAnalysis, display_name: str) -> str:
     if ga.strike_rows:
         max_comb = max((r.call_oi + r.put_oi) for r in ga.strike_rows) or 1
         floor = 0.05 * max_comb
-        keep = {ga.call_wall, ga.put_wall}
+        keep = {s for s, _ in (ga.call_walls_top + ga.put_walls_top)} or {ga.call_wall, ga.put_wall}
         nearest = min(ga.strike_rows, key=lambda r: abs(r.strike - ga.spot)).strike
         keep.add(nearest)
         rows = [r for r in ga.strike_rows if (r.call_oi + r.put_oi) >= floor or r.strike in keep]

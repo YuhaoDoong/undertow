@@ -15,6 +15,7 @@ _BIAS_COLOR = {
 }
 _KIND_COLOR = {
     "resistance": "#2ca02c", "support": "#d62728", "flip": "#9467bd",
+    "resistance2": "#74b874", "support2": "#e08a8b",  # 次墙：主墙色的柔和版
     "pin": "#8a6d3b", "flow": "#1f77b4",
 }
 _VOTE_COLOR = {"看多": "#1a7f37", "看空": "#b62324", "中性": "#6e7781"}

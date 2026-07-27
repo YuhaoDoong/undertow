@@ -127,7 +127,8 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
     blocks.append(("方向", dir_txt))
 
     # ── 焦点与路径：距现价最近的结构位 + 上/下推演（路径树，确定性拼句）──
-    all_lv = sorted(o.key_levels, key=val)
+    # 次墙(resistance2/support2)只进位点表，不参与焦点/路径叙事，避免改变既有措辞
+    all_lv = sorted([k for k in o.key_levels if k.kind not in ("resistance2", "support2")], key=val)
     if all_lv and px:
         pivot_k = min(all_lv, key=lambda k: abs(val(k) - px))
         pv = val(pivot_k)
@@ -305,12 +306,28 @@ def _flow_vote(fa: FlowAnalysis) -> list[FactorVote]:
 
 def _key_levels(ga: GammaAnalysis, fa: FlowAnalysis) -> list[KeyLevel]:
     out: list[KeyLevel] = []
-    if ga.call_wall_oi > 0:
-        out.append(KeyLevel("看涨墙 / 阻力", ga.call_wall, ga.to_commodity(ga.call_wall),
-                            "resistance", f"call OI {ga.call_wall_oi:,}，上沿磁吸/阻力"))
-    if ga.put_wall_oi > 0:
-        out.append(KeyLevel("看跌墙 / 支撑", ga.put_wall, ga.to_commodity(ga.put_wall),
-                            "support", f"put OI {ga.put_wall_oi:,}，下沿磁吸/支撑"))
+    # 看涨墙：并列展示带内前三大 call OI（top1 保留原 kind/叙事，top2/3 仅进位点表）。
+    # 单一最大 + ±15% 硬边界会让贴边界的大墙随 spot 微动而"闪进闪出"，故三档并列更诚实。
+    call_top = ga.call_walls_top or ([(ga.call_wall, ga.call_wall_oi)] if ga.call_wall_oi > 0 else [])
+    for i, (strike, oi) in enumerate(call_top):
+        if oi <= 0:
+            continue
+        if i == 0:
+            out.append(KeyLevel("看涨墙 / 阻力", strike, ga.to_commodity(strike),
+                                "resistance", f"call OI {oi:,}，上沿磁吸/阻力（带内最大）"))
+        else:
+            out.append(KeyLevel(f"看涨墙 #{i+1} / 次阻力", strike, ga.to_commodity(strike),
+                                "resistance2", f"call OI {oi:,}，带内第 {i+1} 大"))
+    put_top = ga.put_walls_top or ([(ga.put_wall, ga.put_wall_oi)] if ga.put_wall_oi > 0 else [])
+    for i, (strike, oi) in enumerate(put_top):
+        if oi <= 0:
+            continue
+        if i == 0:
+            out.append(KeyLevel("看跌墙 / 支撑", strike, ga.to_commodity(strike),
+                                "support", f"put OI {oi:,}，下沿磁吸/支撑（带内最大）"))
+        else:
+            out.append(KeyLevel(f"看跌墙 #{i+1} / 次支撑", strike, ga.to_commodity(strike),
+                                "support2", f"put OI {oi:,}，带内第 {i+1} 大"))
     if ga.zero_gamma is not None:
         rel = "现价上方" if ga.zero_gamma > ga.spot else "现价下方"
         out.append(KeyLevel("零伽马翻转", ga.zero_gamma, ga.to_commodity(ga.zero_gamma),

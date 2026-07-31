@@ -42,7 +42,11 @@ from undertow.report import viz
 from undertow.report.html import (render_report_html, render_index_html,
                           render_flow_section, render_macro_section, render_events_section,
                           render_tldr_section, render_strategy_section,
-                          render_concentration_html)
+                          render_concentration_html, render_vol_regime_section,
+                          render_strategy_hub, render_condor_section)
+from undertow.analyze.volregime import assess_vol_regime
+from undertow.analyze.condor import assess_condor
+from undertow.analyze.strategy_hub import assemble_strategies
 
 
 def _resolve_instruments(cfg, names: list[str]) -> list:
@@ -670,10 +674,24 @@ def cmd_report(args) -> int:
                 outlook, day_chg_pct=day_chg, vol_verdict=vv,
                 flow_tilt=tilt, flow_moves=moves, counter_notes=counters,
                 bias_trend=trend, struct_notes=struct_notes))
+            # —— 波动率环境：期权偏贵/偏便宜 → 波段级买方/卖方倾向 ——
+            vr_closes = series_done.closes if series_done is not None else (
+                real_series.closes if real_series is not None else None)
+            vr = assess_vol_regime(
+                iv_reading=(ma.vol if ma is not None else None),
+                atm_iv_pp=(fa.vol.curr.atm_iv_pp if fa.vol is not None else None),
+                closes=vr_closes)
+            volregime_html = render_vol_regime_section(vr)
+            # —— 铁鹰策略子模块 + 策略统筹（多子模块调度）——
+            condor_plan = assess_condor(snap=curr, vr=vr, today=today, fa=fa)
+            strategy_props = assemble_strategies(directional=plan, condor=condor_plan)
+            strategy_html = (render_strategy_hub(strategy_props) + strategy_html
+                             + render_condor_section(condor_plan))
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,
                                       strategy_html,
-                                      conc_html=render_concentration_html(an.concentration))
+                                      conc_html=render_concentration_html(an.concentration),
+                                      volregime_html=volregime_html)
             fn = f"{inst.key}_{today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")

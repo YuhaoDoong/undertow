@@ -177,6 +177,40 @@ def _vol_surface_html(v) -> str:
               '偏斜是否收敛比 ATM IV 单独一条更干净。</small>')
 
 
+def render_vol_regime_section(vr) -> str:
+    """波动率环境卡片：期权偏贵/偏便宜 → 波段级"买方 vs 卖方"倾向。"""
+    if vr is None or not getattr(vr, "has_content", False):
+        return ""
+    palette = {"偏卖方": "#8250df", "偏买方": "#0969da", "中性": "#6e7781"}
+    col = palette.get(vr.stance, "#6e7781")
+    badge = (f'<span style="display:inline-block;padding:3px 12px;border-radius:12px;'
+             f'background:{col};color:#fff;font-weight:600">倾向：{_esc(vr.stance)}</span>')
+    # 数字行
+    cells = []
+    if vr.iv_index_name and vr.iv_index_latest is not None:
+        pct = f"，近1年分位 {vr.iv_pct:.0f}%" if vr.iv_pct is not None else ""
+        chg = f"，20日 {vr.iv_chg_20d:+.1f}pp" if vr.iv_chg_20d is not None else ""
+        cells.append(f"{_esc(vr.iv_index_name)} <b>{vr.iv_index_latest:.1f}</b>{pct}{chg}")
+    if vr.atm_iv_pp is not None:
+        cells.append(f"近月 ATM IV <b>{vr.atm_iv_pp:.1f}</b>")
+    if vr.rv_pp is not None:
+        cells.append(f"近20日实际波动 RV <b>{vr.rv_pp:.1f}</b>")
+    if vr.iv_minus_rv is not None:
+        dcol = "#8250df" if vr.iv_minus_rv >= 2 else ("#0969da" if vr.iv_minus_rv <= -2 else "#6e7781")
+        cells.append(f'IV−RV <b style="color:{dcol}">{vr.iv_minus_rv:+.1f}pp</b>')
+    nums = f'<div class="sub" style="margin-top:8px">' + " · ".join(cells) + "</div>"
+    reasons = "".join(f"<li>{_esc(r)}</li>" for r in vr.reasons)
+    reasons_html = f"<ul style='margin:8px 0'>{reasons}</ul>" if reasons else ""
+    caveats = "".join(f"<li>{_esc(c)}</li>" for c in vr.caveats)
+    caveats_html = (f'<div class="sub" style="margin-top:4px"><small><ul>{caveats}</ul></small></div>'
+                    if caveats else "")
+    edu = ('<small>买方=买入期权：看对方向或波动放大才赚，怕横盘 / IV 回落；'
+           '卖方=卖出期权：收权利金、赌横盘 / IV 回落，怕突发大行情。'
+           '判据：IV 分位（相对自身历史贵不贵）+ ATM IV−RV（相对标的实际波动贵不贵）。</small>')
+    return (f'<div class="card"><h2>波动率环境 · 期权买方还是卖方</h2>'
+            f'<div style="margin:4px 0 2px">{badge}</div>{nums}{reasons_html}{caveats_html}{edu}</div>')
+
+
 def render_flow_section(fa) -> str:
     """期权资金流买卖方卡片。两份快照→买卖方表；仅一份→单快照异常活跃。"""
     if fa is None:
@@ -456,6 +490,95 @@ def render_strategy_section(sp, timeline_svg: str = "") -> str:
             f'{"".join(tickets)}{opts}{cavs}</div>')
 
 
+def render_strategy_hub(proposals) -> str:
+    """策略总纲（统筹层）：把各独立策略子模块的适配结论汇成一张调度表。"""
+    if not proposals:
+        return ""
+    n_ap = sum(1 for p in proposals if p.applicable)
+    rows = []
+    for p in proposals:
+        ico = "✅" if p.applicable else "—"
+        col = "#2e7d32" if p.applicable else "#6e7781"
+        tag = (f'<span style="padding:1px 8px;border-radius:10px;font-size:11px;'
+               f'color:{col};background:{col}1a;white-space:nowrap">{_esc(p.tag)}</span>')
+        rows.append(
+            f'<tr style="border-top:1px solid #eaeef2">'
+            f'<td style="padding:5px 8px;white-space:nowrap">{ico} <b>{_esc(p.name)}</b></td>'
+            f'<td style="padding:5px 8px">{tag}</td>'
+            f'<td style="padding:5px 8px;color:#57606a">{_esc(p.headline)}</td></tr>')
+    return (f'<div class="card"><h2>策略总纲（统筹 · 多子模块调度）</h2>'
+            f'<div class="sub">系统评估 {len(proposals)} 个独立策略子模块，其中 '
+            f'<b>{n_ap}</b> 个适配当前信号。各子模块独立判断、下方分卡展开——模块输出，非交易指令。</div>'
+            f'<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin:6px 0">'
+            f'{"".join(rows)}</table></div>')
+
+
+def render_condor_section(cp) -> str:
+    """铁鹰策略子卡：结构映射 + 盈亏结构 + 适配度体检。模块输出，非交易指令。"""
+    if cp is None:
+        return ""
+    fmt = (lambda v: f"{v:,.0f}") if (cp.spot or 0) >= 500 else (lambda v: f"{v:,.1f}")
+    head = '<h2>铁鹰（区间卖方 · 策略子模块，非交易指令）</h2>'
+
+    if not cp.applicable:
+        why = "".join(f'<li>{_esc(r)}</li>' for r in cp.reasons)
+        cav = "<small>" + " ".join(_esc(c) for c in cp.caveats) + "</small>"
+        return (f'<div class="card">{head}'
+                f'<div style="margin:8px 0;padding:8px 12px;border-left:4px solid #6e7781;'
+                f'background:#6e77810f;border-radius:4px;color:#57606a">{_esc(cp.headline)}</div>'
+                f'{"<ul>" + why + "</ul>" if why else ""}{cav}</div>')
+
+    fit = cp.fit_score
+    fcol = "#2e7d32" if fit >= 75 else ("#d97706" if fit >= 55 else "#6e7781")
+    banner = (f'<div style="margin:8px 0;padding:8px 12px;border-left:4px solid {fcol};'
+              f'background:{fcol}12;border-radius:4px;font-weight:600">{_esc(cp.headline)}</div>')
+    badge = (f'<div style="margin:6px 0"><span class="pill" '
+             f'style="background:{fcol}1a;color:{fcol};font-weight:700">适配度 {fit}/100 · {_esc(cp.condor_type)}</span></div>')
+
+    leg_rows = []
+    for lg in cp.legs:
+        acol = "#c62828" if lg.action == "卖出" else "#2e7d32"
+        leg_rows.append(
+            f'<tr style="border-top:1px solid #eaeef2">'
+            f'<td style="padding:4px 8px;color:{acol};font-weight:600">{lg.action} {lg.kind}</td>'
+            f'<td style="padding:4px 8px">{fmt(lg.strike)}</td>'
+            f'<td style="padding:4px 8px;color:#57606a">{lg.delta:+.3f}</td>'
+            f'<td style="padding:4px 8px;color:#57606a">{lg.iv_pp:.1f}%</td>'
+            f'<td style="padding:4px 8px;color:#57606a">{lg.bs_price:.3f}</td></tr>')
+    legs_tbl = (f'<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin:6px 0">'
+                f'<tr style="color:#8a919a;font-size:11px"><th style="text-align:left;padding:2px 8px">腿</th>'
+                f'<th style="text-align:left;padding:2px 8px">行权</th>'
+                f'<th style="text-align:left;padding:2px 8px">Δ</th>'
+                f'<th style="text-align:left;padding:2px 8px">IV</th>'
+                f'<th style="text-align:left;padding:2px 8px">BS理论价</th></tr>'
+                f'{"".join(leg_rows)}</table>')
+
+    pnl = []
+    if cp.max_profit is not None:
+        pnl.append(f"理论净收 <b>${cp.max_profit:,.0f}</b>")
+    if cp.max_loss is not None:
+        pnl.append(f"最大亏损 ${cp.max_loss:,.0f}")
+    if cp.rr is not None:
+        pnl.append(f"盈亏比 {cp.rr:.2f}:1")
+    if cp.be_lo is not None and cp.be_hi is not None:
+        pnl.append(f"盈亏平衡 {fmt(cp.be_lo)}/{fmt(cp.be_hi)}")
+    if cp.centering is not None:
+        pnl.append(f"居中度 {cp.centering:.2f}")
+    pnl_html = (f'<div style="font-size:12.5px;margin:4px 0;padding:6px 8px;'
+                f'background:#f6f8fa;border-radius:4px">📐 {"　·　".join(pnl)}</div>')
+
+    reasons = "".join(f'<li>{_esc(r)}</li>' for r in cp.reasons)
+    reasons_html = f'<ul style="margin:4px 0;font-size:12.5px">{reasons}</ul>' if reasons else ""
+    cavs = "<small>" + " ".join("· " + _esc(c) for c in cp.caveats) + "</small>"
+    edu = ('<div class="sub" style="color:#6e7781;margin-top:4px"><small>'
+           '铁鹰 = 卖出区间上下两道墙（收权利金）+ 买入更外侧两翼（限制亏损）；'
+           '赌价格横盘在盈亏平衡区内、IV 回落，怕突发单边大行情。适配度综合卖腿 delta、'
+           '净收/翼宽、skew 摩擦、居中度打分。</small></div>')
+
+    return (f'<div class="card">{head}{banner}{badge}{legs_tbl}{pnl_html}'
+            f'{reasons_html}{cavs}{edu}</div>')
+
+
 def render_concentration_html(cs) -> str:
     """大户集中度一行（作者口径 R10：前8大净空集中度上行=空头火力向大户集中）。"""
     if cs is None:
@@ -467,7 +590,7 @@ def render_concentration_html(cs) -> str:
 def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        flow_html: str = "", macro_html: str = "", events_html: str = "",
                        tldr_html: str = "", strategy_html: str = "",
-                       conc_html: str = "") -> str:
+                       conc_html: str = "", volregime_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -491,6 +614,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="chart">{price_svg}</div>'
         f'<div class="chart">{oi_svg}</div></div>'
         f'{flow_html}'
+        f'{volregime_html}'
         f'<div class="card"><h2>方向因子投票（按回测可信度加权）</h2>{_votes_table(o)}</div>'
         f'{macro_html}'
         f'<div class="card"><h2>持仓结构</h2>{conc_html}<div class="chart">{cot_svg}</div></div>'

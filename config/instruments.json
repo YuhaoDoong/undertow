@@ -102,6 +102,35 @@
         "quality": "good",
         "note": "ICE美元指数期货=真实DXY。金融期货不在Disaggregated报告，持仓走Legacy(非商业=大投机/商业=套保)。暂无合适的免费期权代理(UUP弱)，故只走持仓+价格+宏观三层。"
       }
+    },
+    "nasdaq": {
+      "display_name": "纳斯达克100 Nasdaq-100",
+      "asset_class": "equity_index",
+      "vol_index": "VXN",
+      "cot": {
+        "report": "legacy_fut",
+        "contract_market_code": "209742",
+        "market_name": "NASDAQ-100 STOCK INDEX (MINI) - CHICAGO MERCANTILE EXCHANGE"
+      },
+      "options": {
+        "source": "cboe_etf",
+        "symbol": "QQQ",
+        "approx_commodity_multiplier": null,
+        "proxy_quality": "good",
+        "note": "QQQ=纳斯达克100 ETF，纳指最直接、最流动的代理(非隔层代理，本身即主战场)。行权价以QQQ计；QQQ×≈41≈NDX点位但随分红/费用漂移，故不设静态乘数，位点直接用QQQ口径。"
+      },
+      "price": {
+        "source": "cboe_history",
+        "symbol": "QQQ",
+        "quality": "good",
+        "note": "QQQ日线=纳指100价格代理，跟踪误差极小。"
+      },
+      "commodity": {
+        "source": "yahoo_futures",
+        "symbol": "NQ=F",
+        "quality": "good",
+        "note": "CME E-mini纳斯达克100期货=真实纳指。QQQ×≈41≈NQ，量级不同故位点不换算，仅显示真实纳指走势。COT持仓待补(E-mini Nasdaq-100 Legacy)。"
+      }
     }
   },
   "defaults": {

@@ -36,14 +36,14 @@ if [[ -z $(git status --porcelain data/snapshots) ]]; then
     exit 0
 fi
 
-python3 -m undertow report gold silver wti --no-snapshot
+python3 -m undertow report gold silver wti qqq --no-snapshot
 
 git add data/snapshots data/reports data/history
 if git diff --cached --quiet; then
     echo "[跳过] 无变更可提交"
     exit 0
 fi
-git commit -m "每日自动更新 $(TZ=America/New_York date +%F)：期权链快照+三品种报告（launchd 定时任务）
+git commit -m "每日自动更新 $(TZ=America/New_York date +%F)：期权链快照+四品种报告（launchd 定时任务）
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 git push

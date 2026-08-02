@@ -103,8 +103,8 @@
         "note": "ICE美元指数期货=真实DXY。金融期货不在Disaggregated报告，持仓走Legacy(非商业=大投机/商业=套保)。暂无合适的免费期权代理(UUP弱)，故只走持仓+价格+宏观三层。"
       }
     },
-    "nasdaq": {
-      "display_name": "纳斯达克100 Nasdaq-100",
+    "qqq": {
+      "display_name": "纳斯达克100 (QQQ)",
       "asset_class": "equity_index",
       "vol_index": "VXN",
       "cot": {

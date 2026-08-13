@@ -457,6 +457,15 @@ def _archive_existing(path) -> None:
     path.rename(backup)
 
 
+def _persist_vrp(key: str, h) -> None:
+    """VRP 跨周期结果落盘存档 —— 长周期数据「记录」，纳入 git 备份，不进每日报告分析。"""
+    d = DATA_DIR / "history" / "vrp"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"{key}.json").write_text(
+        json.dumps(dataclasses.asdict(h), ensure_ascii=False, indent=2, default=str),
+        encoding="utf-8")
+
+
 def cmd_vol(args) -> int:
     """波动率溢价（VRP）跨周期检验：这个卖方 edge 能不能穿越牛熊。"""
     cfg = load_config()
@@ -712,19 +721,25 @@ def cmd_report(args) -> int:
                 atm_iv_pp=(fa.vol.curr.atm_iv_pp if fa.vol is not None else None),
                 closes=vr_closes)
             volregime_html = render_vol_regime_section(vr)
-            # —— 波动率速览：最近水平（复用 vr）+ VRP 卖方溢价跨周期检验 ——
-            vrp_hist = None
+            # —— 波动率速览：聚焦最近（复用 vr）+ 近1年波动率曲线 ——
+            #    VRP「穿越牛熊」属长周期，不进每日报告，仅落盘存档（data/history/vrp/）。
+            vol_svg = ""
             if inst.vol_index and inst.price:
                 try:
                     iv_ser = vol_src.fetch_series(inst.vol_index, use_cache=not args.no_cache)
+                    recent = [v for _, v in sorted(iv_ser)[-252:]]
+                    mean_ref = sum(recent) / len(recent) if recent else None
+                    vol_svg = viz.vol_history_svg(
+                        iv_ser, title=f"波动率指数 {inst.vol_index} 近1年（年化 IV，pp）",
+                        mean_ref=mean_ref)
                     px_ser = px_src.fetch_series(inst, use_cache=not args.no_cache)
-                    vrp_hist = assess_vrp_history(
+                    _persist_vrp(inst.key, assess_vrp_history(
                         iv_series=iv_ser, px_dates=px_ser.dates, px_closes=px_ser.closes,
-                        index_name=inst.vol_index)
+                        index_name=inst.vol_index))
                 except Exception as ve:
-                    print(f"[提示] {inst.key} VRP 跨周期跳过: {type(ve).__name__}: {ve}",
+                    print(f"[提示] {inst.key} 波动率历史跳过: {type(ve).__name__}: {ve}",
                           file=sys.stderr)
-            vol_analysis_html = render_vol_analysis_section(vr, vrp_hist)
+            vol_analysis_html = render_vol_analysis_section(vr, vol_svg)
             # —— 铁鹰策略子模块 + 策略统筹（多子模块调度）——
             condor_plan = assess_condor(snap=curr, vr=vr, today=today, fa=fa)
             strategy_props = assemble_strategies(directional=plan, condor=condor_plan)

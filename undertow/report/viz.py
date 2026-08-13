@@ -4,10 +4,11 @@
 HTML 报告。刻意只用基本图元(line/polyline/rect/text)，不引第三方绘图库，
 以保持项目"纯标准库"身份、便于将来封装 skill / 跨机部署。
 
-三张图对应三层情报:
+四张图对应各层情报:
   price_levels_svg     —— 价格日线 + 关键位点(墙/零伽马/现价)横线
   oi_walls_svg         —— 按行权价的 call/put OI 墙(发散水平条) + 现价
   cot_net_history_svg  —— 投机资金净持仓历史曲线 + 当前分位
+  vol_history_svg      —— 波动率指数(GVZ/OVX/VXSLV/VXN)近段曲线 + 均值参照 + 现值
 """
 from __future__ import annotations
 
@@ -111,6 +112,59 @@ def price_levels_svg(dates: list[date], closes: list[float],
         yp = _lin(spot, ymin, ymax, py1, py0)
         s.append(_line(px0, yp, px1, yp, stroke=C_SPOT, width=1.6))
         s.append(_txt(px0 + 3, yp - 4, f"现价 {spot:.1f}", size=10, fill=C_SPOT, weight="bold"))
+    s.append("</svg>")
+    return "".join(s)
+
+
+def vol_history_svg(pairs: list[tuple[date, float]], *, title: str = "",
+                    mean_ref: float | None = None, width: int = 680, height: int = 240,
+                    max_points: int = 252) -> str:
+    """波动率指数近段曲线 + 近段均值参照虚线 + 现值末点。
+
+    pairs=[(日期, IV值 pp)]（全历史即可，内部截取最近 max_points）。
+    mean_ref=展示窗口内的参照均值（画水平虚线，直观看现值相对近段高低）。
+    """
+    pairs = sorted(pairs)[-max_points:]
+    dates = [d for d, _ in pairs]
+    vals = [v for _, v in pairs]
+    ml, mr, mt, mb = 52, 60, 28, 24
+    px0, px1 = ml, width - mr
+    py0, py1 = mt, height - mb
+    s = [_svg_open(width, height)]
+    if title:
+        s.append(_txt(12, 16, title, size=13, weight="bold"))
+    if len(vals) < 2:
+        s.append(_txt(width / 2, height / 2, "波动率历史不足", anchor="middle") + "</svg>")
+        return "".join(s)
+    yv_all = list(vals) + ([mean_ref] if mean_ref is not None else [])
+    ymin, ymax = min(yv_all), max(yv_all)
+    pad = (ymax - ymin) * 0.08 or (ymax * 0.02 or 1)
+    ymin, ymax = ymin - pad, ymax + pad
+    # y 网格 + 标签
+    for i in range(4):
+        yv = ymin + (ymax - ymin) * i / 3
+        yp = _lin(yv, ymin, ymax, py1, py0)
+        s.append(_line(px0, yp, px1, yp, stroke=C_GRID))
+        s.append(_txt(px0 - 5, yp + 3, f"{yv:.0f}", size=10, fill=C_AXIS, anchor="end"))
+    # 近段均值参照（虚线）
+    if mean_ref is not None and ymin <= mean_ref <= ymax:
+        yp = _lin(mean_ref, ymin, ymax, py1, py0)
+        s.append(_line(px0, yp, px1, yp, stroke=C_AXIS, width=1.0, dash="5,3"))
+        s.append(_txt(px1 + 4, yp + 3, f"均值 {mean_ref:.1f}", size=10, fill=C_AXIS))
+    # 波动率折线
+    n = len(vals)
+    pts = " ".join(f"{_lin(i,0,n-1,px0,px1):.1f},{_lin(v,ymin,ymax,py1,py0):.1f}"
+                   for i, v in enumerate(vals))
+    s.append(f'<polyline points="{pts}" fill="none" stroke="{C_PRICE}" stroke-width="1.6"/>')
+    # 现值末点
+    lx, ly = _lin(n-1, 0, n-1, px0, px1), _lin(vals[-1], ymin, ymax, py1, py0)
+    s.append(f'<circle cx="{lx:.1f}" cy="{ly:.1f}" r="3.2" fill="{C_SPOT}"/>')
+    s.append(_txt(lx, ly - 7, f"{vals[-1]:.1f}", size=10, fill=C_SPOT, anchor="end", weight="bold"))
+    # x 日期首尾
+    for frac, anch in ((0.0, "start"), (1.0, "end")):
+        idx = int(frac * (n - 1))
+        xp = _lin(idx, 0, n-1, px0, px1)
+        s.append(_txt(xp, height - 8, dates[idx].strftime("%y-%m"), size=10, fill=C_AXIS, anchor=anch))
     s.append("</svg>")
     return "".join(s)
 

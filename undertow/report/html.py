@@ -211,16 +211,18 @@ def render_vol_regime_section(vr) -> str:
             f'<div style="margin:4px 0 2px">{badge}</div>{nums}{reasons_html}{caveats_html}{edu}</div>')
 
 
-def render_vol_analysis_section(vr, vh) -> str:
-    """波动率速览卡：一栏答两个问题。
-      上半「最近波动率如何」：现值 / 近1年分位 / 近20日趋势 / 当前 IV−RV（数据到最新交易日）。
-      下半「卖方溢价能否穿越牛熊」：VRP 逐年检验（因前视对齐，样本天然滞后约1个月）。
+def render_vol_analysis_section(vr, vol_svg: str = "") -> str:
+    """波动率速览卡：聚焦最近这段时间的波动率水平 + 近1年走势曲线。
+
+    上半：现值 / 近1年分位 / 近20日趋势 / 当前 IV−RV（数据到最新交易日）。
+    下半：波动率指数近1年曲线 + 近段均值参照。
+    （VRP 卖方溢价的「穿越牛熊」属长周期分析，不在每日报告展开；数据落盘 data/history/vrp/，
+     随时可用 `undertow vol` 查看。）
     """
     has_now = vr is not None and getattr(vr, "has_content", False)
-    has_vrp = vh is not None and bool(getattr(vh, "year_stats", None))
-    if not has_now and not has_vrp:
+    if not has_now and not vol_svg:
         return ""
-    parts = ['<div class="card"><h2>波动率速览 · 最近水平 &amp; 卖方溢价能否穿越牛熊</h2>']
+    parts = ['<div class="card"><h2>波动率速览 · 最近水平</h2>']
 
     # —— 上半：最近波动率水平（数据到最新）——
     if has_now:
@@ -255,36 +257,15 @@ def render_vol_analysis_section(vr, vh) -> str:
         nums = f'<div class="sub" style="margin-top:8px">' + " · ".join(cells) + "</div>" if cells else ""
         parts.append(f'<div style="margin:4px 0 2px">{badge}</div>{nums}')
 
-    # —— 下半：VRP 跨周期检验（滞后约1月）——
-    if has_vrp:
-        corr = (f'{vh.corr_with_direction:+.2f}' if vh.corr_with_direction is not None else "样本不足")
-        robust = "✅ 稳健" if vh.regime_robust else "❌ 不稳健"
-        rows = []
-        for y in vh.year_stats:
-            mcol = "#2e7d32" if y.mean_vrp > 2 else ("#c62828" if y.mean_vrp < 0 else "#6e7781")
-            rows.append(
-                f"<tr><td>{y.year}</td><td class='r'>{y.n}</td>"
-                f"<td class='r' style='color:{mcol};font-weight:600'>{y.mean_vrp:+.2f}</td>"
-                f"<td class='r'>{y.positive_share * 100:.0f}%</td>"
-                f"<td class='r'>{y.underlying_return:+.0f}%</td>"
-                f"<td class='r'>{y.verdict}</td></tr>")
-        neg = f"　为负年份：{vh.negative_years}" if vh.negative_years else ""
-        table = ("<table><tr><th>年份</th><th class='r'>样本</th><th class='r'>均值VRP</th>"
-                 "<th class='r'>&gt;0占比</th><th class='r'>标的年涨跌</th><th class='r'></th></tr>"
-                 + "".join(rows) + "</table>")
-        head = (f'<div style="font-weight:600;margin:14px 0 2px">VRP 卖方溢价 · 跨周期检验'
-                f'（{_esc(vh.index_name)}）</div>')
-        summ = (f'<div class="sub">全样本均值 <b>{vh.mean_vrp:+.2f}pp</b> · 为正占比 '
-                f'{vh.positive_share * 100:.0f}% · 与标的年涨跌相关性 <b>{corr}</b>'
-                f'（越接近 0 越像真溢价、越接近 +1 越像做多的伪装）· '
-                f'穿越牛熊：<b>{robust}</b>{neg}</div>')
-        note = (f'<small>口径：当日 {_esc(vh.index_name)} 减其后 {vh.window} 个交易日的已实现波动'
-                f'（前视对齐）。因需未来数据，样本止于 <b>{vh.end}</b>，故本半反映的是'
-                f'<b>卖方溢价的历史稳定性</b>，不是最近波动率——最近水平看上半。'
-                f'配对 {vh.n_pairs} 个里独立约 {vh.independent_samples} 个，显著性远低于表面；'
-                f'VRP 为毛溢价，实际到手须对冲 delta 且分布左偏（多数日子赚小钱、少数日子巨亏）。</small>')
-        parts.append(head + summ + table + note)
+    # —— 波动率指数近1年曲线 ——
+    if vol_svg:
+        parts.append(f'<div class="chart">{vol_svg}</div>')
 
+    parts.append(
+        '<small>IV 现值/近1年分位/近20日趋势 = 最近波动率相对自身历史贵不贵、在扩张还是收敛；'
+        'IV−RV = 期权相对标的近期实际波动的溢价（正=偏贵）。曲线为波动率指数近1年走势，'
+        '虚线为近段均值——现值在均值之上即近期偏贵。事件日（CPI/非农/FOMC 兑现）IV 回落含事件溢价'
+        '机械释放，判读打折。</small>')
     parts.append('</div>')
     return "".join(parts)
 

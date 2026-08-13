@@ -1,0 +1,130 @@
+{
+  "index_name": "VXSLV",
+  "window": 21,
+  "n_pairs": 3034,
+  "start": "2011-03-16",
+  "end": "2026-07-13",
+  "mean_vrp": 4.836127209484872,
+  "median_vrp": 5.607737780454024,
+  "positive_share": 0.8266315095583389,
+  "year_stats": [
+    {
+      "year": 2011,
+      "n": 202,
+      "mean_vrp": 2.1661962891141826,
+      "median_vrp": 6.342390227811169,
+      "positive_share": 0.6287128712871287,
+      "underlying_return": -10.140093395597061
+    },
+    {
+      "year": 2012,
+      "n": 250,
+      "mean_vrp": 9.30136943426815,
+      "median_vrp": 8.914400731074288,
+      "positive_share": 0.952,
+      "underlying_return": 1.8730489073881529
+    },
+    {
+      "year": 2013,
+      "n": 252,
+      "mean_vrp": 2.5505181963297487,
+      "median_vrp": 5.583648890951212,
+      "positive_share": 0.7222222222222222,
+      "underlying_return": -37.46657754010695
+    },
+    {
+      "year": 2014,
+      "n": 252,
+      "mean_vrp": 6.77822236100841,
+      "median_vrp": 7.016109376480357,
+      "positive_share": 0.8690476190476191,
+      "underlying_return": -21.684867394695782
+    },
+    {
+      "year": 2015,
+      "n": 252,
+      "mean_vrp": 7.789864539223569,
+      "median_vrp": 6.695903569942777,
+      "positive_share": 0.9722222222222222,
+      "underlying_return": -12.706816677696885
+    },
+    {
+      "year": 2016,
+      "n": 252,
+      "mean_vrp": 4.544029909751602,
+      "median_vrp": 3.9732136374243385,
+      "positive_share": 0.8888888888888888,
+      "underlying_return": 14.556482183472319
+    },
+    {
+      "year": 2017,
+      "n": 251,
+      "mean_vrp": 4.835895618297802,
+      "median_vrp": 5.05257102414474,
+      "positive_share": 0.9203187250996016,
+      "underlying_return": 3.5621761658031215
+    },
+    {
+      "year": 2018,
+      "n": 250,
+      "mean_vrp": 4.012767552509591,
+      "median_vrp": 4.3958166266831675,
+      "positive_share": 0.856,
+      "underlying_return": -10.425663170882181
+    },
+    {
+      "year": 2019,
+      "n": 250,
+      "mean_vrp": 2.7696712410494255,
+      "median_vrp": 3.5551662751906994,
+      "positive_share": 0.792,
+      "underlying_return": 14.560439560439553
+    },
+    {
+      "year": 2020,
+      "n": 252,
+      "mean_vrp": 4.1074954732495454,
+      "median_vrp": 8.402811811117424,
+      "positive_share": 0.6904761904761905,
+      "underlying_return": 46.16299821534802
+    },
+    {
+      "year": 2021,
+      "n": 252,
+      "mean_vrp": 9.665510503948367,
+      "median_vrp": 9.962750798664697,
+      "positive_share": 0.9126984126984127,
+      "underlying_return": -15.147928994082838
+    },
+    {
+      "year": 2022,
+      "n": 29,
+      "mean_vrp": 6.221354673071779,
+      "median_vrp": 4.698833696292855,
+      "positive_share": 1.0,
+      "underlying_return": 3.966005665722383
+    },
+    {
+      "year": 2025,
+      "n": 159,
+      "mean_vrp": 0.007896736266538576,
+      "median_vrp": 3.9240827957772666,
+      "positive_share": 0.7044025157232704,
+      "underlying_return": 139.2127738581508
+    },
+    {
+      "year": 2026,
+      "n": 131,
+      "mean_vrp": -0.84717517865494,
+      "median_vrp": 7.981663369264936,
+      "positive_share": 0.648854961832061,
+      "underlying_return": -10.950570342205324
+    }
+  ],
+  "corr_with_direction": -0.37914261653535114,
+  "caveats": [
+    "重叠窗口：3034 个配对样本里独立的约 144 个，显著性远低于表面",
+    "VRP 为毛溢价 —— 实际拿到手须对冲 delta，对冲成本会吃掉相当一部分",
+    "收益分布左偏：多数日子赚小钱，少数日子巨亏；均值为正≠扛得住那几天"
+  ]
+}

@@ -95,6 +95,11 @@ def _short(label: str) -> str:
     return label.split(" / ")[0].strip()
 
 
+def _etf_anchor(k: KeyLevel, use_comm: bool, dp: int = 0) -> str:
+    """墙/翻转位补 ETF 行权价锚（换算展示时）——分辨墙真动 vs 比值漂移。"""
+    return f"（ETF {k.etf_level:.{dp}f}）" if (use_comm and k.etf_level is not None) else ""
+
+
 def _pick(levels: list[KeyLevel], kind: str) -> KeyLevel | None:
     for k in levels:
         if k.kind == kind:
@@ -165,7 +170,8 @@ def _fade_scenario(direction: str, wall: KeyLevel, levels: list[KeyLevel],
         entry_ref = w - 0.5 * ZONE_W_ATR * buf
         targets = _targets_below(levels, lo, use_comm,
                                  ref=entry_ref, min_dist=max(buf, invalid - entry_ref))
-        trigger = f"价格进入墙前区且当日收盘被打回 {_short(wall.label)}下方（拒绝形态）"
+        trigger = (f"价格进入墙前区且当日收盘被打回 {_short(wall.label)}"
+                   f"{_etf_anchor(wall, use_comm)}下方（拒绝形态）")
         inv_note = "放量收上失效线；或 call 墙 OI 上移（墙被搬走）即结构性失效"
         if spot > invalid:
             status, note = "情景作废", "现价已在失效线上方，墙被突破，待重评"
@@ -181,7 +187,8 @@ def _fade_scenario(direction: str, wall: KeyLevel, levels: list[KeyLevel],
         entry_ref = w + 0.5 * ZONE_W_ATR * buf
         targets = _targets_above(levels, hi, use_comm,
                                  ref=entry_ref, min_dist=max(buf, entry_ref - invalid))
-        trigger = f"价格回踩墙前区且当日收盘收回 {_short(wall.label)}上方（承接形态）"
+        trigger = (f"价格回踩墙前区且当日收盘收回 {_short(wall.label)}"
+                   f"{_etf_anchor(wall, use_comm)}上方（承接形态）")
         inv_note = "放量收破失效线；或 put 墙 OI 下移（墙被搬走）即结构性失效"
         if spot < invalid:
             status, note = "情景作废", "现价已在失效线下方，墙被跌破，待重评"
@@ -327,27 +334,29 @@ def _fade_window_note(short_side: bool, w: float, zone_lo: float, zone_hi: float
     return ""
 
 
-def _exit_plan(s: TradeScenario, spot: float) -> str:
+def _exit_plan(s: TradeScenario, spot: float, cpe: float | None = None) -> str:
     """规则化止盈止损模板（确定性拼句）：止损=失效线、止盈=结构目标分批、
-    首目标达成后移损保本。全部日收盘口径，属参考框架而非交易指令。"""
+    首目标达成后移损保本。全部日收盘口径，属参考框架而非交易指令。
+    cpe=商品价/ETF价：非空时给各价位补 ETF 行权价锚。"""
     if s.invalidation is None or not s.targets:
         return ""
     fmt = (lambda v: f"{v:,.0f}") if spot >= 500 else (lambda v: f"{v:,.1f}")
+    et = (lambda v: f"ETF {v / cpe:.1f}，") if cpe else (lambda v: "")
     breach = "收盘站上" if s.direction == "做空" else "收盘跌破"
     risk = abs(s.entry_ref - s.invalidation)
-    parts = [f"止损 = 失效线 {fmt(s.invalidation)}（{breach}即离场，日收盘口径；"
+    parts = [f"止损 = 失效线 {fmt(s.invalidation)}（{et(s.invalidation)}{breach}即离场，日收盘口径；"
              f"单位风险 {fmt(risk)} ≈ {100 * risk / s.entry_ref:.1f}%）"]
     if len(s.targets) >= 2:
         (t1, l1), (t2, l2) = s.targets[0], s.targets[1]
         r1 = s.rr[0] if s.rr else 0.0
         r2 = s.rr[1] if len(s.rr) > 1 else 0.0
-        parts.append(f"止盈分批 = 首目标 {fmt(t1)}（{l1}，R:R≈{r1:.1f}）减半仓，"
-                     f"次目标 {fmt(t2)}（{l2}，R:R≈{r2:.1f}）离场")
+        parts.append(f"止盈分批 = 首目标 {fmt(t1)}（{et(t1)}{l1}，R:R≈{r1:.1f}）减半仓，"
+                     f"次目标 {fmt(t2)}（{et(t2)}{l2}，R:R≈{r2:.1f}）离场")
     else:
         t1, l1 = s.targets[0]
         r1 = s.rr[0] if s.rr else 0.0
-        parts.append(f"止盈 = {fmt(t1)}（{l1}，R:R≈{r1:.1f}）")
-    parts.append(f"首目标达成后止损移至入场参考 {fmt(s.entry_ref)}（保本）")
+        parts.append(f"止盈 = {fmt(t1)}（{et(t1)}{l1}，R:R≈{r1:.1f}）")
+    parts.append(f"首目标达成后止损移至入场参考 {fmt(s.entry_ref)}（{et(s.entry_ref)}保本）")
     return "；".join(parts) + "。"
 
 
@@ -388,6 +397,8 @@ def build_strategy(o: Outlook, *, vol: VolSurface | None = None,
     use_comm = o.commodity_spot is not None
     spot = o.commodity_spot if use_comm else o.spot
     unit = "商品" if use_comm else "ETF"
+    # 商品价/ETF价 比值（=当日实时换算比）：给 exit_plan 的价位补 ETF 行权价锚
+    cpe = (o.commodity_spot / o.spot) if (use_comm and o.spot) else None
 
     if "偏空" in o.bias:
         direction = "做空"
@@ -445,7 +456,7 @@ def build_strategy(o: Outlook, *, vol: VolSurface | None = None,
                     s = replace(s, status_note=s.status_note + note)
             upgraded.append(s)
         scenarios = upgraded
-    scenarios = [replace(s, exit_plan=_exit_plan(s, spot)) for s in scenarios]
+    scenarios = [replace(s, exit_plan=_exit_plan(s, spot, cpe)) for s in scenarios]
 
     vetoes = _vetoes(direction, o, flip_v, spot, vol)
 

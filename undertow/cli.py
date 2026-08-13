@@ -27,6 +27,7 @@ from undertow.collect.cboe_history import CboeHistorySource
 from undertow.collect.yahoo_futures import YahooFuturesSource
 from undertow.collect.fred_macro import FredMacroSource
 from undertow.collect.cboe_vol import CboeVolSource
+from undertow.analyze.vrp_history import assess_vrp_history, render_markdown as vrp_md
 from undertow.analyze.positioning import analyze
 from undertow.analyze.signals import generate_signals, net_bias
 from undertow.analyze.gamma import analyze_gamma, structure_delta
@@ -43,6 +44,7 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_flow_section, render_macro_section, render_events_section,
                           render_tldr_section, render_strategy_section,
                           render_concentration_html, render_vol_regime_section,
+                          render_vol_analysis_section,
                           render_strategy_hub, render_condor_section)
 from undertow.analyze.volregime import assess_vol_regime
 from undertow.analyze.condor import assess_condor
@@ -455,6 +457,34 @@ def _archive_existing(path) -> None:
     path.rename(backup)
 
 
+def cmd_vol(args) -> int:
+    """波动率溢价（VRP）跨周期检验：这个卖方 edge 能不能穿越牛熊。"""
+    cfg = load_config()
+    try:
+        instruments = _resolve_instruments(cfg, args.instruments)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
+    vol_src, px_src = CboeVolSource(), CboeHistorySource()
+    rc = 0
+    for inst in instruments:
+        if not inst.vol_index or not inst.price:
+            print(f"[跳过] {inst.key}: 未配置波动率指数或价格源", file=sys.stderr)
+            continue
+        try:
+            iv = vol_src.fetch_series(inst.vol_index, use_cache=not args.no_cache)
+            ser = px_src.fetch_series(inst, use_cache=not args.no_cache)
+        except Exception as e:
+            print(f"[失败] {inst.key}: {type(e).__name__}: {e}", file=sys.stderr)
+            rc = 1
+            continue
+        h = assess_vrp_history(iv_series=iv, px_dates=ser.dates, px_closes=ser.closes,
+                               index_name=inst.vol_index, window=args.window)
+        print(vrp_md(h, inst.display_name))
+        print()
+    return rc
+
+
 def cmd_report(args) -> int:
     """综合研判报告：四层情报聚合 + 可视化 + 情景推演 → 自包含 HTML。"""
     cfg = load_config()
@@ -682,6 +712,19 @@ def cmd_report(args) -> int:
                 atm_iv_pp=(fa.vol.curr.atm_iv_pp if fa.vol is not None else None),
                 closes=vr_closes)
             volregime_html = render_vol_regime_section(vr)
+            # —— 波动率速览：最近水平（复用 vr）+ VRP 卖方溢价跨周期检验 ——
+            vrp_hist = None
+            if inst.vol_index and inst.price:
+                try:
+                    iv_ser = vol_src.fetch_series(inst.vol_index, use_cache=not args.no_cache)
+                    px_ser = px_src.fetch_series(inst, use_cache=not args.no_cache)
+                    vrp_hist = assess_vrp_history(
+                        iv_series=iv_ser, px_dates=px_ser.dates, px_closes=px_ser.closes,
+                        index_name=inst.vol_index)
+                except Exception as ve:
+                    print(f"[提示] {inst.key} VRP 跨周期跳过: {type(ve).__name__}: {ve}",
+                          file=sys.stderr)
+            vol_analysis_html = render_vol_analysis_section(vr, vrp_hist)
             # —— 铁鹰策略子模块 + 策略统筹（多子模块调度）——
             condor_plan = assess_condor(snap=curr, vr=vr, today=today, fa=fa)
             strategy_props = assemble_strategies(directional=plan, condor=condor_plan)
@@ -691,7 +734,8 @@ def cmd_report(args) -> int:
                                       flow_html, macro_html, events_html, tldr_html,
                                       strategy_html,
                                       conc_html=render_concentration_html(an.concentration),
-                                      volregime_html=volregime_html)
+                                      volregime_html=volregime_html,
+                                      vol_analysis_html=vol_analysis_html)
             fn = f"{inst.key}_{today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
@@ -785,6 +829,11 @@ def build_parser() -> argparse.ArgumentParser:
     pg.add_argument("--horizon", type=int, default=45, help="近月窗口天数（默认45）")
     pg.add_argument("--json", action="store_true", help="输出结构化 JSON")
     pg.set_defaults(func=cmd_gamma)
+
+    pv = sub.add_parser("vol", help="波动率溢价 VRP 跨周期检验（这个卖方 edge 能否穿越牛熊）")
+    pv.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")
+    pv.add_argument("--window", type=int, default=21, help="前视已实现波动窗口（默认21个交易日）")
+    pv.set_defaults(func=cmd_vol)
 
     psn = sub.add_parser("snapshot", help="落盘期权链原始快照（攒 flow 所需历史，纳入 git）")
     psn.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")

@@ -211,6 +211,84 @@ def render_vol_regime_section(vr) -> str:
             f'<div style="margin:4px 0 2px">{badge}</div>{nums}{reasons_html}{caveats_html}{edu}</div>')
 
 
+def render_vol_analysis_section(vr, vh) -> str:
+    """波动率速览卡：一栏答两个问题。
+      上半「最近波动率如何」：现值 / 近1年分位 / 近20日趋势 / 当前 IV−RV（数据到最新交易日）。
+      下半「卖方溢价能否穿越牛熊」：VRP 逐年检验（因前视对齐，样本天然滞后约1个月）。
+    """
+    has_now = vr is not None and getattr(vr, "has_content", False)
+    has_vrp = vh is not None and bool(getattr(vh, "year_stats", None))
+    if not has_now and not has_vrp:
+        return ""
+    parts = ['<div class="card"><h2>波动率速览 · 最近水平 &amp; 卖方溢价能否穿越牛熊</h2>']
+
+    # —— 上半：最近波动率水平（数据到最新）——
+    if has_now:
+        if vr.iv_pct is not None:
+            if vr.iv_pct >= 70:
+                lvl, lc = "偏高", "#c62828"
+            elif vr.iv_pct <= 30:
+                lvl, lc = "偏低", "#2e7d32"
+            else:
+                lvl, lc = "中位", "#6e7781"
+            badge = (f'<span style="display:inline-block;padding:3px 12px;border-radius:12px;'
+                     f'background:{lc};color:#fff;font-weight:600">最近波动率：{lvl}</span>')
+        else:
+            badge = ""
+        cells = []
+        if vr.iv_index_name and vr.iv_index_latest is not None:
+            cells.append(f"{_esc(vr.iv_index_name)} 现值 <b>{vr.iv_index_latest:.1f}</b>")
+        if vr.iv_pct is not None:
+            cells.append(f"近1年分位 <b>{vr.iv_pct:.0f}%</b>")
+        if vr.iv_chg_20d is not None:
+            if vr.iv_chg_20d >= 1:
+                tr = f"近20日抬升 <b>{vr.iv_chg_20d:+.1f}pp</b>（扩张）"
+            elif vr.iv_chg_20d <= -1:
+                tr = f"近20日回落 <b>{vr.iv_chg_20d:+.1f}pp</b>（收敛）"
+            else:
+                tr = f"近20日走平 <b>{vr.iv_chg_20d:+.1f}pp</b>"
+            cells.append(tr)
+        if vr.iv_minus_rv is not None:
+            dcol = "#8250df" if vr.iv_minus_rv >= 2 else ("#0969da" if vr.iv_minus_rv <= -2 else "#6e7781")
+            cells.append(f'当前 IV−RV <b style="color:{dcol}">{vr.iv_minus_rv:+.1f}pp</b>'
+                         f'（正=期权贵于近期实际波动）')
+        nums = f'<div class="sub" style="margin-top:8px">' + " · ".join(cells) + "</div>" if cells else ""
+        parts.append(f'<div style="margin:4px 0 2px">{badge}</div>{nums}')
+
+    # —— 下半：VRP 跨周期检验（滞后约1月）——
+    if has_vrp:
+        corr = (f'{vh.corr_with_direction:+.2f}' if vh.corr_with_direction is not None else "样本不足")
+        robust = "✅ 稳健" if vh.regime_robust else "❌ 不稳健"
+        rows = []
+        for y in vh.year_stats:
+            mcol = "#2e7d32" if y.mean_vrp > 2 else ("#c62828" if y.mean_vrp < 0 else "#6e7781")
+            rows.append(
+                f"<tr><td>{y.year}</td><td class='r'>{y.n}</td>"
+                f"<td class='r' style='color:{mcol};font-weight:600'>{y.mean_vrp:+.2f}</td>"
+                f"<td class='r'>{y.positive_share * 100:.0f}%</td>"
+                f"<td class='r'>{y.underlying_return:+.0f}%</td>"
+                f"<td class='r'>{y.verdict}</td></tr>")
+        neg = f"　为负年份：{vh.negative_years}" if vh.negative_years else ""
+        table = ("<table><tr><th>年份</th><th class='r'>样本</th><th class='r'>均值VRP</th>"
+                 "<th class='r'>&gt;0占比</th><th class='r'>标的年涨跌</th><th class='r'></th></tr>"
+                 + "".join(rows) + "</table>")
+        head = (f'<div style="font-weight:600;margin:14px 0 2px">VRP 卖方溢价 · 跨周期检验'
+                f'（{_esc(vh.index_name)}）</div>')
+        summ = (f'<div class="sub">全样本均值 <b>{vh.mean_vrp:+.2f}pp</b> · 为正占比 '
+                f'{vh.positive_share * 100:.0f}% · 与标的年涨跌相关性 <b>{corr}</b>'
+                f'（越接近 0 越像真溢价、越接近 +1 越像做多的伪装）· '
+                f'穿越牛熊：<b>{robust}</b>{neg}</div>')
+        note = (f'<small>口径：当日 {_esc(vh.index_name)} 减其后 {vh.window} 个交易日的已实现波动'
+                f'（前视对齐）。因需未来数据，样本止于 <b>{vh.end}</b>，故本半反映的是'
+                f'<b>卖方溢价的历史稳定性</b>，不是最近波动率——最近水平看上半。'
+                f'配对 {vh.n_pairs} 个里独立约 {vh.independent_samples} 个，显著性远低于表面；'
+                f'VRP 为毛溢价，实际到手须对冲 delta 且分布左偏（多数日子赚小钱、少数日子巨亏）。</small>')
+        parts.append(head + summ + table + note)
+
+    parts.append('</div>')
+    return "".join(parts)
+
+
 def render_flow_section(fa) -> str:
     """期权资金流买卖方卡片。两份快照→买卖方表；仅一份→单快照异常活跃。"""
     if fa is None:
@@ -590,7 +668,8 @@ def render_concentration_html(cs) -> str:
 def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        flow_html: str = "", macro_html: str = "", events_html: str = "",
                        tldr_html: str = "", strategy_html: str = "",
-                       conc_html: str = "", volregime_html: str = "") -> str:
+                       conc_html: str = "", volregime_html: str = "",
+                       vol_analysis_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -614,6 +693,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="chart">{price_svg}</div>'
         f'<div class="chart">{oi_svg}</div></div>'
         f'{flow_html}'
+        f'{vol_analysis_html}'
         f'{volregime_html}'
         f'<div class="card"><h2>方向因子投票（按回测可信度加权）</h2>{_votes_table(o)}</div>'
         f'{macro_html}'

@@ -149,10 +149,11 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
             # 墙放最前：与同价路径位并列时，稳定排序 + _uniq 让墙胜出、拿到标签
             merged = ([wall] if wall is not None else []) + list(levels)
             merged = _uniq(sorted(merged, key=val, reverse=reverse))[:3]
-            return "→".join(
-                f"{wall_cn} {fmt(val(k))}（{short(k.label)}）" if k is wall else fmt(val(k))
-                for k in merged
-            )
+
+            def _w(k):   # 墙位补 ETF 行权价锚（换算展示时）——分辨墙真动 vs 比值漂移
+                a = f"ETF {k.etf_level:.0f}，" if (use_comm and k.etf_level is not None) else ""
+                return f"{wall_cn} {fmt(val(k))}（{a}{short(k.label)}）"
+            return "→".join(_w(k) if k is wall else fmt(val(k)) for k in merged)
 
         up_seg = _seg(ups, res, "阻力", False) or "已在看涨墙上方、缺锚"
         if not dns and sup is None:   # 已破全部支撑
@@ -160,7 +161,8 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
             dn_seg = f"破位区（已破看跌墙 {fmt(val(broken))}）" if broken else "破位区、下方无支撑"
         else:
             dn_seg = _seg(dns, sup, "分界", True)
-        t = f"焦点 {fmt(pv)}（{short(pivot_k.label)}，{near}）。上：{up_seg}；下：{dn_seg}。"
+        pf = f"ETF {pivot_k.etf_level:.0f}，" if (use_comm and pivot_k.etf_level is not None) else ""
+        t = f"焦点 {fmt(pv)}（{pf}{short(pivot_k.label)}，{near}）。上：{up_seg}；下：{dn_seg}。"
         blocks.append(("关键位/路径", t))
 
 

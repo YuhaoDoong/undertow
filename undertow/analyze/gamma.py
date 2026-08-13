@@ -254,18 +254,22 @@ def structure_delta(prev: "GammaAnalysis", curr: "GammaAnalysis",
     conv = curr.to_commodity
     c_spot = conv(curr.spot) or curr.spot
     fmt = (lambda v: f"{conv(v):,.0f}") if c_spot >= 500 else (lambda v: f"{conv(v):,.1f}")
+    # ETF 行权价锚：仅当确有换算（商品价≠ETF价）时补，让读者一眼分辨"墙真动"vs"比值漂移"
+    scaled = conv(curr.spot) is not None and abs((conv(curr.spot) or curr.spot) - curr.spot) > 1e-6
+    def etf(v: float, dp: int = 0) -> str:
+        return f"（ETF {v:.{dp}f}）" if scaled else ""
     out: list[str] = []
 
     # 零伽马位移（相对现价的贴近/远离一并说明）
     if prev.zero_gamma is not None and curr.zero_gamma is not None:
         d_pct = 100.0 * (curr.zero_gamma - prev.zero_gamma) / prev.zero_gamma
         if abs(d_pct) < 0.15:
-            out.append(f"零伽马 {fmt(curr.zero_gamma)} 基本未动")
+            out.append(f"零伽马 {fmt(curr.zero_gamma)}{etf(curr.zero_gamma, 1)} 基本未动")
         else:
             word = "下移" if d_pct < 0 else "上移"
             closer = (abs(curr.zero_gamma - curr.spot) < abs(prev.zero_gamma - curr.spot))
             rel = "向现价贴近，收复/跌破它的门槛变近" if closer else "远离现价"
-            out.append(f"零伽马 {fmt(prev.zero_gamma)}→{fmt(curr.zero_gamma)}"
+            out.append(f"零伽马 {fmt(prev.zero_gamma)}→{fmt(curr.zero_gamma)}{etf(curr.zero_gamma, 1)}"
                        f"（{word} {abs(d_pct):.1f}%，{rel}）")
 
     prev_by_strike = {r.strike: r for r in prev.strike_rows}
@@ -281,14 +285,15 @@ def structure_delta(prev: "GammaAnalysis", curr: "GammaAnalysis",
                 base = (r.call_oi if kind == "C" else r.put_oi) if r else p_oi
             d = c_oi - base
             if abs(d) < max(200, base * 0.01):
-                out.append(f"{name} {fmt(c_w)} 未移，厚度基本不变（OI {c_oi:,}）")
+                out.append(f"{name} {fmt(c_w)}{etf(c_w)} 未移，厚度基本不变（OI {c_oi:,}）")
             else:
                 word = "增厚" if d > 0 else "削弱"
-                out.append(f"{name} {fmt(c_w)} 未移但{word}（OI {d:+,} 手，{role}"
+                out.append(f"{name} {fmt(c_w)}{etf(c_w)} 未移但{word}（OI {d:+,} 手，{role}"
                            f"{'更结实' if d > 0 else '在松动'}）")
         else:
             word = "上移" if c_w > p_w else "下移"
-            out.append(f"{name} {fmt(p_w)}→{fmt(c_w)}（{word}，新墙 OI {c_oi:,}）")
+            anchor = f"ETF {p_w:.0f}→{c_w:.0f}，" if scaled else ""
+            out.append(f"{name} {fmt(p_w)}→{fmt(c_w)}（{anchor}{word}，新墙 OI {c_oi:,}）")
 
     if prev.call_wall_oi > 0 and curr.call_wall_oi > 0:
         wall("C", prev.call_wall, prev.call_wall_oi, curr.call_wall, curr.call_wall_oi)

@@ -43,6 +43,10 @@ IV_MILD = 0.28              # 区分"轻微" vs 正常强度
 IV_STRONG = 1.0            # call 卖方"极强压制"门槛
 MAX_ABS_DELTA = 0.90       # |delta| 超过此=深 ITM，IV 不可靠，剔除
 REL_MIN_STRIKES = 8        # 行权价数 ≥ 此才做"相对化"(减中位 ΔIV，剔全局 vol 平移)
+# —— churning 折减：某方向大量换手但净 OI 小 = 结构调整/滚仓，方向压力打折 ——
+# 转化率 = |净ΔOI| / 毛|ΔOI|总额（作者口径"成交巨大但净 OI 只 +N = churning"）。
+# turnover ≥ 此视为干净方向仓（f=1）；低于则线性折减到 0，杜绝毛增仓被读成方向。
+TURNOVER_HEALTHY = 0.5
 # —— 价差结构识别（保守，宁缺勿滥，避免把相邻买卖方误配成价差）——
 SPREAD_MAX_WIDTH_FRAC = 0.08  # 两腿行权价间距 ≤ 短腿×此（垂直价差两腿应相近）
 SPREAD_MIN_SIZE = 2 * MIN_DOI  # 两腿较小者需 ≥ 此（双腿都明显高于噪音才算）
@@ -562,6 +566,10 @@ def analyze_flow(
     spreads: list[Spread] = []
     net_call = net_put = 0
     downside = upside = 0.0
+    # churning 折减用的分 kind 桶：方向压力按 call/put 拆分，便于按各自转化率缩放
+    up_call = dn_call = up_put = dn_put = 0.0
+    gabs_call = gabs_put = 0        # 毛 |ΔOI| 总额
+    nsig_call = nsig_put = 0        # 带符号净 ΔOI（含减仓，用于识破 churning）
     tilt = "—（仅一份快照，明天起可出 ΔOI/ΔIV 与买卖方判定）"
 
     if prev is not None:
@@ -646,11 +654,20 @@ def analyze_flow(
                     net_call += r["d_oi"]
                 else:
                     net_put += r["d_oi"]
+            # churning 度量：分 kind 累加带符号净额与毛 |ΔOI| 总额
+            if r["kind"] == "C":
+                nsig_call += r["d_oi"]; gabs_call += abs(r["d_oi"])
+            else:
+                nsig_put += r["d_oi"]; gabs_put += abs(r["d_oi"])
             mag = abs(r["d_oi"]) * w
             if bias == "bearish":
                 downside += mag
+                if r["kind"] == "C": dn_call += mag
+                else: dn_put += mag
             elif bias == "bullish":
                 upside += mag
+                if r["kind"] == "C": up_call += mag
+                else: up_put += mag
 
         changes.sort(key=lambda x: -abs(x.d_oi))
 
@@ -673,18 +690,40 @@ def analyze_flow(
                         p = min(abs(c.d_oi), sp.size) * c.weight
                         if c.bias == "bearish":
                             downside -= p
+                            if c.kind == "C": dn_call -= p
+                            else: dn_put -= p
                         else:
                             upside -= p
+                            if c.kind == "C": up_call -= p
+                            else: up_put -= p
             downside, upside = max(0.0, downside), max(0.0, upside)
+            dn_call, dn_put = max(0.0, dn_call), max(0.0, dn_put)
+            up_call, up_put = max(0.0, up_call), max(0.0, up_put)
             changes = [replace(c, spread_note=labels.get((c.strike, c.kind), "")) for c in changes]
+
+        # —— churning 折减：按各 kind 的净额/毛额转化率缩放方向压力 ——
+        # 作者口径：成交/毛增仓再大，若净 OI 几乎没动就是滚仓/结构调整，不是方向。
+        def _churn_f(nsig: int, gabs: int) -> float:
+            if gabs <= 0:
+                return 1.0
+            return min(1.0, (abs(nsig) / gabs) / TURNOVER_HEALTHY)
+        f_call, f_put = _churn_f(nsig_call, gabs_call), _churn_f(nsig_put, gabs_put)
+        downside = dn_call * f_call + dn_put * f_put
+        upside = up_call * f_call + up_put * f_put
+        cbits = []
+        if f_call < 0.9 and gabs_call > 0:   # 阈值对齐折减：只要明显缩放就标注，别让数字悄悄变小
+            cbits.append(f"call 端 churning 净 {nsig_call:+,}/毛 {gabs_call:,}→压力×{f_call:.2f}")
+        if f_put < 0.9 and gabs_put > 0:
+            cbits.append(f"put 端 churning 净 {nsig_put:+,}/毛 {gabs_put:,}→压力×{f_put:.2f}")
+        cnote = ("；" + "、".join(cbits)) if cbits else ""
 
         if downside or upside:
             if downside > upside * 1.3:
-                tilt = f"偏空（下行压力 {downside:,.0f} > 上行 {upside:,.0f}；put 买保护/call 卖压制占优）"
+                tilt = f"偏空（下行压力 {downside:,.0f} > 上行 {upside:,.0f}；put 买保护/call 卖压制占优{cnote}）"
             elif upside > downside * 1.3:
-                tilt = f"偏多（上行 {upside:,.0f} > 下行 {downside:,.0f}；call 买盘/put 卖方做支撑占优）"
+                tilt = f"偏多（上行 {upside:,.0f} > 下行 {downside:,.0f}；call 买盘/put 卖方做支撑占优{cnote}）"
             else:
-                tilt = f"分歧（下行 {downside:,.0f} ≈ 上行 {upside:,.0f}）"
+                tilt = f"分歧（下行 {downside:,.0f} ≈ 上行 {upside:,.0f}{cnote}）"
 
     return FlowAnalysis(
         instrument=curr.instrument,

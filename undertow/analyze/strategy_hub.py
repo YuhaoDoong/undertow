@@ -21,7 +21,7 @@ class StrategyProposal:
     headline: str      # 一句话结论
 
 
-def assemble_strategies(*, directional=None, condor=None) -> list[StrategyProposal]:
+def assemble_strategies(*, directional=None, condor=None, credit_spread=None) -> list[StrategyProposal]:
     """汇总各独立策略子模块 → 统一提案列表。参数均可为 None（该子模块未运行）。"""
     props: list[StrategyProposal] = []
 
@@ -32,6 +32,13 @@ def assemble_strategies(*, directional=None, condor=None) -> list[StrategyPropos
             applicable=applic,
             tag=directional.direction,
             headline=directional.verdict or f"方向：{directional.direction}"))
+
+    if credit_spread is not None:
+        props.append(StrategyProposal(
+            name="方向性信用价差（顺向卖方）",
+            applicable=credit_spread.applicable,
+            tag=(credit_spread.direction if credit_spread.applicable else "不适配"),
+            headline=credit_spread.headline))
 
     if condor is not None:
         props.append(StrategyProposal(

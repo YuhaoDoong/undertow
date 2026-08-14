@@ -638,6 +638,75 @@ def render_condor_section(cp) -> str:
             f'{reasons_html}{cavs}{edu}</div>')
 
 
+def render_credit_spread_section(cp) -> str:
+    """方向性信用价差子卡：顺方向单侧卖方结构 + 盈亏 + 适配体检。模块输出，非交易指令。"""
+    if cp is None:
+        return ""
+    fmt = (lambda v: f"{v:,.0f}") if (cp.spot or 0) >= 500 else (lambda v: f"{v:,.1f}")
+    head = '<h2>方向性信用价差（顺向卖方 · 策略子模块，非交易指令）</h2>'
+
+    if not cp.applicable:
+        why = "".join(f'<li>{_esc(r)}</li>' for r in cp.reasons)
+        cav = "<small>" + " ".join(_esc(c) for c in cp.caveats) + "</small>"
+        return (f'<div class="card">{head}'
+                f'<div style="margin:8px 0;padding:8px 12px;border-left:4px solid #6e7781;'
+                f'background:#6e77810f;border-radius:4px;color:#57606a">{_esc(cp.headline)}</div>'
+                f'{"<ul>" + why + "</ul>" if why else ""}{cav}</div>')
+
+    fit = cp.fit_score
+    fcol = "#2e7d32" if fit >= 75 else ("#d97706" if fit >= 55 else "#6e7781")
+    banner = (f'<div style="margin:8px 0;padding:8px 12px;border-left:4px solid {fcol};'
+              f'background:{fcol}12;border-radius:4px;font-weight:600">{_esc(cp.headline)}</div>')
+    badge = (f'<div style="margin:6px 0"><span class="pill" '
+             f'style="background:{fcol}1a;color:{fcol};font-weight:700">适配度 {fit}/100 · '
+             f'{_esc(cp.direction)}·{_esc(cp.spread_name)}</span></div>')
+
+    leg_rows = []
+    for lg in cp.legs:
+        acol = "#c62828" if lg.action == "卖出" else "#2e7d32"
+        leg_rows.append(
+            f'<tr style="border-top:1px solid #eaeef2">'
+            f'<td style="padding:4px 8px;color:{acol};font-weight:600">{lg.action} {lg.kind}</td>'
+            f'<td style="padding:4px 8px">{fmt(lg.strike)}</td>'
+            f'<td style="padding:4px 8px;color:#57606a">{lg.delta:+.3f}</td>'
+            f'<td style="padding:4px 8px;color:#57606a">{lg.iv_pp:.1f}%</td>'
+            f'<td style="padding:4px 8px;color:#57606a">{lg.bs_price:.3f}</td></tr>')
+    legs_tbl = (f'<table style="width:100%;border-collapse:collapse;font-size:12.5px;margin:6px 0">'
+                f'<tr style="color:#8a919a;font-size:11px"><th style="text-align:left;padding:2px 8px">腿</th>'
+                f'<th style="text-align:left;padding:2px 8px">行权</th>'
+                f'<th style="text-align:left;padding:2px 8px">Δ</th>'
+                f'<th style="text-align:left;padding:2px 8px">IV</th>'
+                f'<th style="text-align:left;padding:2px 8px">BS理论价</th></tr>'
+                f'{"".join(leg_rows)}</table>')
+
+    pnl = []
+    if cp.max_profit is not None:
+        pnl.append(f"理论净收 <b>${cp.max_profit:,.0f}</b>")
+    if cp.max_loss is not None:
+        pnl.append(f"最大亏损 ${cp.max_loss:,.0f}")
+    if cp.rr is not None:
+        pnl.append(f"盈亏比 {cp.rr:.2f}:1")
+    if cp.breakeven is not None:
+        pnl.append(f"盈亏平衡 {fmt(cp.breakeven)}")
+    if cp.buffer_pct is not None:
+        pnl.append(f"缓冲 {cp.buffer_pct:+.1f}%")
+    if cp.iv_minus_rv is not None:
+        pnl.append(f"IV−RV {cp.iv_minus_rv:+.1f}pp")
+    pnl_html = (f'<div style="font-size:12.5px;margin:4px 0;padding:6px 8px;'
+                f'background:#f6f8fa;border-radius:4px">📐 {"　·　".join(pnl)}</div>')
+
+    reasons = "".join(f'<li>{_esc(r)}</li>' for r in cp.reasons)
+    reasons_html = f'<ul style="margin:4px 0;font-size:12.5px">{reasons}</ul>' if reasons else ""
+    cavs = "<small>" + " ".join("· " + _esc(c) for c in cp.caveats) + "</small>"
+    edu = ('<div class="sub" style="color:#6e7781;margin-top:4px"><small>'
+           '信用价差 = 顺方向卖一道墙（收权利金）+ 买更外侧一翼（封顶亏损）；赌价格不往反方向大动、'
+           '时间价值衰减，怕方向突然反转。前置＝方向明确 + IV−RV 偏贵（期权贵于近期实际波动）；'
+           '正Gamma（横盘钉住）对它是利好而非否决。盈亏比天然低，靠胜率+时间价值盈利。</small></div>')
+
+    return (f'<div class="card">{head}{banner}{badge}{legs_tbl}{pnl_html}'
+            f'{reasons_html}{cavs}{edu}</div>')
+
+
 def render_concentration_html(cs) -> str:
     """大户集中度一行（作者口径 R10：前8大净空集中度上行=空头火力向大户集中）。"""
     if cs is None:

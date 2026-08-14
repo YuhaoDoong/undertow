@@ -45,9 +45,11 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_tldr_section, render_strategy_section,
                           render_concentration_html, render_vol_regime_section,
                           render_vol_analysis_section,
-                          render_strategy_hub, render_condor_section)
+                          render_strategy_hub, render_condor_section,
+                          render_credit_spread_section)
 from undertow.analyze.volregime import assess_vol_regime
 from undertow.analyze.condor import assess_condor
+from undertow.analyze.credit_spread import assess_credit_spread
 from undertow.analyze.strategy_hub import assemble_strategies
 
 
@@ -742,8 +744,11 @@ def cmd_report(args) -> int:
             vol_analysis_html = render_vol_analysis_section(vr, vol_svg)
             # —— 铁鹰策略子模块 + 策略统筹（多子模块调度）——
             condor_plan = assess_condor(snap=curr, vr=vr, today=today, fa=fa)
-            strategy_props = assemble_strategies(directional=plan, condor=condor_plan)
+            cs_plan = assess_credit_spread(snap=curr, vr=vr, outlook=outlook, today=today, fa=fa)
+            strategy_props = assemble_strategies(directional=plan, condor=condor_plan,
+                                                 credit_spread=cs_plan)
             strategy_html = (render_strategy_hub(strategy_props) + strategy_html
+                             + render_credit_spread_section(cs_plan)
                              + render_condor_section(condor_plan))
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,

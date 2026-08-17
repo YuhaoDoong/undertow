@@ -136,19 +136,24 @@ def assess_credit_spread(*, snap: OptionsSnapshot, vr, outlook, today: date,
 
     snap: 当前期权链快照（ETF 口径）。vr: volregime.VolRegime。outlook: analyze.Outlook。
     """
-    bias = getattr(outlook, "bias", "") or ""
+    # 方向跟【近端】(墙位/资金流·战术周期)——信用价差是战术卖方结构，跟短线结构而非
+    # 中期持仓面（作者卖沪银 Call 跟的是短线空、非其"中期看涨"）；缺省回退综合 bias。
+    bias = getattr(outlook, "near_bias", "") or getattr(outlook, "bias", "") or ""
     conf = getattr(outlook, "confidence", "") or ""
     regime = getattr(outlook, "regime", "") or ""
+    split_note = ("（近中分歧：中期持仓面为 "
+                  f"{getattr(outlook, 'mid_bias', '')}，本结构只跟近端战术周期）"
+                  if getattr(outlook, "horizon_split", False) else "")
     stance = getattr(vr, "stance", "数据不足")
     iv_mr = getattr(vr, "iv_minus_rv", None)
     spot = snap.spot
     fmt = _fmt_k(spot)
 
-    # —— 门槛 1：方向必须明确（分歧/中性/观望不做单侧价差）——
+    # —— 门槛 1：近端方向必须明确（分歧/中性/观望不做单侧价差）——
     directional = ("空" in bias or "多" in bias) and "分歧" not in bias
     if not directional:
-        return _na("观望", "", f"研判为「{bias or '中性'}」，无明确方向——单侧信用价差不适配"
-                   f"（分歧/中性宜用中性铁鹰或不动）。", [f"方向门槛未满足：bias=「{bias or '中性'}」。"],
+        return _na("观望", "", f"近端研判为「{bias or '中性'}」，无明确方向——单侧信用价差不适配"
+                   f"（分歧/中性宜用中性铁鹰或不动）。", [f"近端方向门槛未满足：near_bias=「{bias or '中性'}」。"],
                    stance=stance, iv_mr=iv_mr)
     short_side = "空" in bias
     direction = "做空" if short_side else "做多"
@@ -209,7 +214,8 @@ def assess_credit_spread(*, snap: OptionsSnapshot, vr, outlook, today: date,
     caveats: list[str] = []
     score = 100
 
-    reasons.append(f"方向来自研判「{bias}」（可信度{conf}）→ {direction}，做{spread_name}")
+    reasons.append(f"方向来自近端研判「{bias}」（战术周期·墙位/资金流）→ {direction}，做{spread_name}"
+                   + split_note)
     strong = iv_mr >= CREDIT_IV_STRONG
     reasons.append(f"波动率栏 IV−RV {iv_mr:+.1f}pp（期权贵于近期实际波动{'、溢价充沛' if strong else ''}）"
                    f"→ 卖方有正溢价，这是卖 vega 的入场理由")

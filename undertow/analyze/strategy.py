@@ -400,13 +400,22 @@ def build_strategy(o: Outlook, *, vol: VolSurface | None = None,
     # 商品价/ETF价 比值（=当日实时换算比）：给 exit_plan 的价位补 ETF 行权价锚
     cpe = (o.commodity_spot / o.spot) if (use_comm and o.spot) else None
 
-    if "偏空" in o.bias:
+    # 方向跟【近端】(墙位/资金流·战术周期)——战术交易跟短线结构，如作者的 bear call
+    # 跟短线空，而非中期持仓面；near_bias 缺省(旧数据/直接构造)时回退综合 bias。
+    tac_bias = getattr(o, "near_bias", "") or o.bias
+    tac_score = getattr(o, "near_score", None)
+    tac_score = tac_score if tac_score is not None else o.bias_score
+    if "偏空" in tac_bias:
         direction = "做空"
-    elif "偏多" in o.bias:
+    elif "偏多" in tac_bias:
         direction = "做多"
     else:
         direction = "观望"
-    dir_src = f"综合研判 {o.bias}（可信度{o.confidence}，加权分 {o.bias_score:+.1f}）→ 方向先行，再定点位"
+    split_note = ""
+    if getattr(o, "horizon_split", False):
+        split_note = f"；⚠近中分歧：中期(持仓/宏观)为 {o.mid_bias}，本策略只跟近端战术周期，逆中期而行需减仓控险"
+    dir_src = (f"近端研判 {tac_bias}（墙位/资金流·战术周期，近端分 {tac_score:+.1f}）"
+               f"→ 方向先行，再定点位{split_note}")
 
     atr, atr_note = compute_atr(series)
     atr_pct = 100.0 * atr / spot if (atr and spot) else None

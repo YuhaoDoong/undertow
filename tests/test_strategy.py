@@ -1,4 +1,5 @@
 """策略情景参数化：方向随 bias、位点随结构、缓冲随 ATR、否决票如实呈现。"""
+from dataclasses import replace
 from datetime import date, timedelta
 
 from undertow.analyze.flow import VolRead, VolSurface
@@ -66,6 +67,16 @@ def test_short_plan_scenarios_and_vetoes():
     # 现价 61.3 > 零伽马 60.6 → 顺结构情景未触发；正Gamma+价在翻转上方 = 至少 2 票否决
     assert trig.status == "未触发"
     assert len(plan.vetoes) >= 2 and "无有效做空信号" in plan.verdict
+
+
+def test_direction_follows_near_bias_over_blended():
+    """战术方向跟近端(near_bias)，非综合 bias——近空中多时应做空（如作者卖沪银）。"""
+    o = _outlook(61.3, SILVER_LEVELS, regime="正Gamma：做市商净多伽马")
+    o = replace(o, bias="偏多(弱)", near_bias="偏空(弱)", near_score=-1.1,
+                mid_bias="偏多", horizon_split=True)
+    plan = build_strategy(o, series=_series([58 + 0.2 * i for i in range(20)]))
+    assert plan.direction == "做空"          # 跟 near_bias 偏空，不跟综合偏多
+    assert any("近中分歧" in s for s in ([plan.verdict] + [plan.direction_source]))
 
 
 def test_long_plan_mirror():

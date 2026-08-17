@@ -73,6 +73,13 @@ class Outlook:
     bias_score: float
     confidence: str       # 高 / 中 / 低
     regime: str           # 波动率/对冲环境（来自 GEX）
+    # —— 双周期分层（综合分把慢/快因子压成一个数会掩盖"近空中多"，故并列拆出）——
+    # 近端＝Gamma 墙位/资金流（当日微观结构）；中期＝COT 持仓/宏观（周频·背景）。
+    near_bias: str = ""   # 近端方向（Gamma+Flow）
+    near_score: float = 0.0
+    mid_bias: str = ""    # 中期方向（COT+Macro）
+    mid_score: float = 0.0
+    horizon_split: bool = False   # 近端与中期方向相反（值得单独提示）
     votes: list[FactorVote] = field(default_factory=list)
     key_levels: list[KeyLevel] = field(default_factory=list)
     scenarios: list[Scenario] = field(default_factory=list)
@@ -117,6 +124,13 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
     dir_txt = f"{fmt(px)}{chg}，{o.bias}·可信度{o.confidence}。"
     if bias_trend and "持平" not in bias_trend:   # 分数无变化的"强度持平"是噪音，略去
         dir_txt += bias_trend.lstrip("；，。 ") + "。"
+    # 双周期分层：近端(墙位/资金流) vs 中期(持仓/宏观)。分歧时明说"近空中多/近多中空"，
+    # 呼应作者式的"战术方向≠中期结构"——单一综合分掩盖它（如银：近端偏空、中期偏多）。
+    if o.near_bias and o.mid_bias:
+        line = f"周期分层：近端(墙位/资金流) {o.near_bias} · 中期(持仓/宏观) {o.mid_bias}。"
+        if o.horizon_split:
+            line += "近中分歧——短线结构与中期持仓不同步，综合分是两者折中，按你的持仓周期择一为主。"
+        dir_txt += line
     if "负Gamma" in o.regime or "负伽马" in o.regime:
         dir_txt += "负伽马：对冲放大波动，易走过头，追单/接刀都需谨慎。"
     elif "正Gamma" in o.regime or "正伽马" in o.regime:
@@ -386,6 +400,20 @@ def _caveats(an: PositioningAnalysis, ga: GammaAnalysis, fa: FlowAnalysis,
     return cv
 
 
+NEAR_LAYERS = ("Gamma", "Flow")   # 近端·当日微观结构（墙位/资金流）
+MID_LAYERS = ("COT", "Macro")     # 中期·周频持仓 + 宏观背景
+
+
+def _horizon_bias(votes: list[FactorVote], layers) -> tuple[str, float]:
+    """某一周期（近端/中期）的方向标签与分数——只聚合该周期的因子票。"""
+    sub = [v for v in votes if v.layer in layers]
+    pos = sum(v.weight for v in sub if v.sign > 0)
+    neg = sum(v.weight for v in sub if v.sign < 0)
+    score = pos - neg
+    bias, _conf = _bias(score, pos, neg)
+    return bias, round(score, 2)
+
+
 def _bias(score: float, pos_sum: float, neg_sum: float) -> tuple[str, str]:
     """返回 (bias 文案, confidence)。"""
     # 双向都有较强票 → 分歧
@@ -427,6 +455,13 @@ def build_outlook(
     neg_sum = sum(v.weight for v in votes if v.sign < 0)
     score = pos_sum - neg_sum
     bias, conf = _bias(score, pos_sum, neg_sum)
+    # 双周期分层：近端(Gamma+Flow) vs 中期(COT+Macro)，各出方向
+    near_bias, near_score = _horizon_bias(votes, NEAR_LAYERS)
+    mid_bias, mid_score = _horizon_bias(votes, MID_LAYERS)
+    # "近中分歧"＝两周期都有明确方向且相反（一多一空），银 8/15"近空中多"即此
+    def _sgn(b: str) -> int:
+        return 1 if b.startswith("偏多") else (-1 if b.startswith("偏空") else 0)
+    horizon_split = _sgn(near_bias) * _sgn(mid_bias) < 0
     # 情景排序按 bias【标签】而非原始分数：中性/分歧时以"基准·区间"打头，不强行给方向
     bias_sign = 1 if bias.startswith("偏多") else (-1 if bias.startswith("偏空") else 0)
 
@@ -445,6 +480,11 @@ def build_outlook(
         bias=bias,
         bias_score=round(score, 2),
         confidence=conf,
+        near_bias=near_bias,
+        near_score=near_score,
+        mid_bias=mid_bias,
+        mid_score=mid_score,
+        horizon_split=horizon_split,
         regime=ga.gex_regime,
         votes=sorted(votes, key=lambda v: -v.weight),
         key_levels=_key_levels(ga, fa),

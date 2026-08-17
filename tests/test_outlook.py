@@ -83,6 +83,21 @@ def test_build_outlook_bearish_synthesis():
     assert any("拥挤反指" in c for c in o.caveats)
 
 
+def test_horizon_split_near_bear_mid_bull():
+    """双周期分层：中期(COT)看多 + 近端(Gamma墙位近顶 + 资金流 put 偏多)看空 → 近空中多。
+    复刻银 8/15：综合折中成偏多，但近端结构其实偏空，horizon_split 应点亮。"""
+    sigs = [Signal("SMART_ACCUM_BULL", "聪明钱吸筹", "bullish", "OR逆势增多", "强")]
+    ga = _ga(call_wall=102.0, put_wall=85.0)   # 上行空间 2% < 下行 15% → gamma 看空
+    o = build_outlook(_pos(), sigs, ga, _fa(), display_name="测试银")  # _fa put/call 1.6 → flow 看空
+    assert o.mid_bias.startswith("偏多"), o.mid_bias
+    assert o.near_bias.startswith("偏空"), o.near_bias
+    assert o.horizon_split is True
+    # 同向时不点亮
+    o2 = build_outlook(_pos(), sigs, _ga(), _fa(total_put_volume=100, total_call_volume=160),
+                       display_name="测试")
+    assert o2.horizon_split is False
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

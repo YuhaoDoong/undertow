@@ -54,6 +54,14 @@ def _esc(s) -> str:
 
 
 def _bias_badge(o: Outlook) -> str:
+    # 近中分歧时【不】单挑综合"偏多/偏空"（会误导），并列近端+中期两枚徽章，综合分退为小 pill。
+    if getattr(o, "horizon_split", False) and o.near_bias and o.mid_bias:
+        nc = _BIAS_COLOR.get(o.near_bias, "#6e7781")
+        mc = _BIAS_COLOR.get(o.mid_bias, "#6e7781")
+        return (f'<span class="badge" style="background:{nc}">近端 {_esc(o.near_bias)}</span>'
+                f'<span class="badge" style="background:{mc}">中期 {_esc(o.mid_bias)}</span>'
+                f'<span class="pill">近中分歧</span>'
+                f'<span class="pill">综合分 {o.bias_score:+.1f}·可信度 {_esc(o.confidence)}</span>')
     color = _BIAS_COLOR.get(o.bias, "#6e7781")
     return (f'<span class="badge" style="background:{color}">{_esc(o.bias)}</span>'
             f'<span class="pill">可信度 {_esc(o.confidence)}</span>'

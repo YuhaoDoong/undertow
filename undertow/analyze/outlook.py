@@ -121,16 +121,20 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
 
     # ── 方向：现价 + 日涨跌 + 研判 + 对冲环境（精简）──
     chg = f"（{'+' if day_chg_pct >= 0 else '−'}{abs(day_chg_pct):.1f}%）" if day_chg_pct is not None else ""
-    dir_txt = f"{fmt(px)}{chg}，{o.bias}·可信度{o.confidence}。"
+    # 开头研判：近中分歧时【不】以综合"偏多/偏空"打头（会误导），直接并列近端·中期两个周期。
+    split = getattr(o, "horizon_split", False) and o.near_bias and o.mid_bias
+    if split:
+        head = f"近端(墙位/资金流) {o.near_bias} · 中期(持仓/宏观) {o.mid_bias}——近中分歧"
+    else:
+        head = f"{o.bias}·可信度{o.confidence}"
+    dir_txt = f"{fmt(px)}{chg}，{head}。"
     if bias_trend and "持平" not in bias_trend:   # 分数无变化的"强度持平"是噪音，略去
         dir_txt += bias_trend.lstrip("；，。 ") + "。"
-    # 双周期分层：近端(墙位/资金流) vs 中期(持仓/宏观)。分歧时明说"近空中多/近多中空"，
-    # 呼应作者式的"战术方向≠中期结构"——单一综合分掩盖它（如银：近端偏空、中期偏多）。
-    if o.near_bias and o.mid_bias:
-        line = f"周期分层：近端(墙位/资金流) {o.near_bias} · 中期(持仓/宏观) {o.mid_bias}。"
-        if o.horizon_split:
-            line += "近中分歧——短线结构与中期持仓不同步，综合分是两者折中，按你的持仓周期择一为主。"
-        dir_txt += line
+    if split:
+        dir_txt += ("短线结构与中期持仓不同步，综合分是两者折中，按你的持仓周期择一为主"
+                    f"（综合 {o.bias}·可信度{o.confidence}）。")
+    elif o.near_bias and o.mid_bias:   # 不分歧时也点一句分层，供参考
+        dir_txt += f"周期分层：近端 {o.near_bias} · 中期 {o.mid_bias}（同向）。"
     if "负Gamma" in o.regime or "负伽马" in o.regime:
         dir_txt += "负伽马：对冲放大波动，易走过头，追单/接刀都需谨慎。"
     elif "正Gamma" in o.regime or "正伽马" in o.regime:

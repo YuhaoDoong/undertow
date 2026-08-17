@@ -29,9 +29,10 @@ def test_summary_core_sentences():
     assert "4,196" in s and "3.0%" in s          # 现价 + 日涨跌（精简格式）
     assert "偏空·可信度高" in s
     # 焦点=最接近现价的零伽马；上行终端=看涨墙 4,439；下行=分界看跌墙 3,995（合并去重）
-    assert "焦点 4,304（零伽马翻转" in s
-    assert "阻力 4,439（看涨墙）" in s
-    assert "分界 3,995（看跌墙）" in s
+    # 关键位带 ETF 锚点备注（换算噪音免疫），格式：4,304（ETF 391，零伽马翻转…）
+    assert "焦点 4,304（ETF" in s and "零伽马翻转" in s
+    assert "阻力 4,439（ETF" in s and "看涨墙）" in s
+    assert "分界 3,995（ETF" in s and "看跌墙）" in s
     assert "负伽马" in s
 
 

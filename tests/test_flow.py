@@ -104,6 +104,23 @@ def test_judge_matches_author():
         assert bias == exp_bias
 
 
+def test_abs_iv_gate_neutralizes_relative_false_signals():
+    """绝对 IV 闸门：相对判定与绝对 ΔIV 方向矛盾且绝对显著 → 存疑不投票。
+    复刻黄金 8/14：事件后 IV 齐落，415C 绝对 -1.18pp 却因相对化(adj +0.30)被误判买方。"""
+    # call 新建 + 相对偏买(adj>0)，但绝对 IV 大跌 → 假买方，闸门判 neutral
+    bias, judg, w = _judge("C", +69887, +0.30, True, -1.18)
+    assert bias == "neutral" and w == 0.0 and "存疑" in judg
+    # 同一腿若绝对 IV 未随市回落(绝对 +0.2，闸门不触发) → 仍是真买方
+    bias, judg, _w = _judge("C", +69887, +0.30, True, +0.20)
+    assert bias == "bullish" and "买方" in judg
+    # 对称：put 新建 + 相对偏卖(写权做支撑 adj<0)，但绝对 IV 却齐涨 → 假支撑，闸门 neutral
+    bias, judg, w = _judge("P", +5000, -0.40, True, +0.90)
+    assert bias == "neutral" and w == 0.0 and "存疑" in judg
+    # call 卖方压制(adj<0)且绝对 IV 也在跌(方向一致) → 不该被闸门误伤，仍是卖方压制
+    bias, judg, _w = _judge("C", +1434, -0.47, True, -1.95)
+    assert bias == "bearish" and "卖方压制" in judg
+
+
 def test_flow_buyer_seller_table():
     # 65P 加仓+IV升=买方保护(看空)；80C 加仓+IV大降=极强卖方压制(看空) → 偏空
     prev = _snap([_c(65, "P", oi=9000, iv=0.40), _c(80, "C", oi=6000, iv=0.35)], spot=70.0)

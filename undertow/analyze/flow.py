@@ -43,6 +43,14 @@ IV_MILD = 0.28              # 区分"轻微" vs 正常强度
 IV_STRONG = 1.0            # call 卖方"极强压制"门槛
 MAX_ABS_DELTA = 0.90       # |delta| 超过此=深 ITM，IV 不可靠，剔除
 REL_MIN_STRIKES = 8        # 行权价数 ≥ 此才做"相对化"(减中位 ΔIV，剔全局 vol 平移)
+# —— 绝对 IV 闸门：相对化(减中位数)会在全市场 IV 齐涨/齐落时制造【假买方/假卖方】——
+# 事件后(CPI/FOMC)IV 溢价整体释放时，call 端全在写权(绝对 IV 齐落)，但相对化后
+# "跌得比中位少"的腿会翻成正 adj_iv → 被误判为"买方抬价"(实例：黄金 8/14 415C
+# +69,887 手绝对 IV -1.18pp 却被判买方，把偏空硬翻成偏多)。作者是【绝对 IV 方向
+# (升=买方/降=卖方) + 相对 skew】两者都看；我们只留了相对、丢了绝对。闸门补回：某腿的
+# 相对判定(买方需 IV 升 / 卖方需 IV 降)与其【绝对 ΔIV】方向矛盾且绝对变化显著(≥此)时，
+# 判为"随市"存疑 → 不投方向票(neutral)。只在事件级 IV 整体位移时触发，日常小波动不误伤。
+IV_ABS_GATE = 0.5          # |绝对 ΔIV| ≥ 此(pp)且与相对判定方向矛盾 → 存疑，不计方向
 # —— churning 折减：某方向大量换手但净 OI 小 = 结构调整/滚仓，方向压力打折 ——
 # 转化率 = |净ΔOI| / 毛|ΔOI|总额（作者口径"成交巨大但净 OI 只 +N = churning"）。
 # turnover ≥ 此视为干净方向仓（f=1）；低于则线性折减到 0，杜绝毛增仓被读成方向。
@@ -352,11 +360,15 @@ def scan_unusual(snap: OptionsSnapshot, *, today: date,
     return out[:TOP_N]
 
 
-def _judge(kind: str, d_oi: int, adj_pp: float, prev_known: bool) -> tuple[str, str, float]:
+def _judge(kind: str, d_oi: int, adj_pp: float, prev_known: bool,
+           d_iv_abs_pp: float = 0.0) -> tuple[str, str, float]:
     """按 持仓C/P × OI增减 × Delta修正IV方向 判定买卖方。
     返回 (粗方向 bearish/bullish/neutral, 细判中文, 聚合权重系数 0~1)。
 
     复刻作者口径：IV 升=买方抬价、IV 降=卖方供给；OI 增=建仓、OI 减=平仓/撤退。
+    d_iv_abs_pp：该腿【绝对】ΔIV(未相对化，pp)。相对判定(adj_pp)与绝对方向矛盾且
+    绝对变化显著时触发闸门——买方需 IV 升、卖方需 IV 降，若绝对方向相反=相对化产生的
+    "随市"假信号(见 IV_ABS_GATE)，判存疑不投方向票。
     """
     if not prev_known:  # 无昨日 IV：无法判主动方，只按 OI 方向定性且降权
         if kind == "P":
@@ -369,23 +381,36 @@ def _judge(kind: str, d_oi: int, adj_pp: float, prev_known: bool) -> tuple[str, 
     up_oi = d_oi > 0
     strong = abs(a) >= IV_STRONG
     mild = abs(a) < IV_MILD
+    # 绝对 IV 闸门：相对判"买方"(需 IV 升)但绝对 IV 明显跌 / 相对判"卖方"(需 IV 降)但
+    # 绝对 IV 明显涨 = 相对化在全市场 IV 齐落/齐涨里造出的假信号，仅对【新建仓(OI 增)】
+    # 的方向票设闸(减仓/撤退本就半权定性、不受相对化拖累)。
+    abs_sell = d_iv_abs_pp <= -IV_ABS_GATE   # 绝对在写权（IV 齐落）
+    abs_buy = d_iv_abs_pp >= IV_ABS_GATE     # 绝对在抬价（IV 齐涨）
     if kind == "P":
         if a > 0:   # 买方抬 IV → 下方保护买盘（看跌）
             if up_oi:
+                if abs_sell:  # 绝对 IV 却随市回落 → 非真买保护，只是相对抗跌
+                    return "neutral", "保护买盘存疑(绝对IV随市回落)", 0.0
                 return "bearish", ("买方轻微保护" if mild else "买方保护"), (0.6 if mild else 1.0)
             return "bearish", "卖方撤退", 0.5          # OI 降 + IV 升：支撑卖方退场，偏空
         else:       # 卖方压 IV → 写 put 做支撑（看多）
             if up_oi:
+                if abs_buy:   # 绝对 IV 却随市抬升 → 非真写权支撑，只是相对抗涨
+                    return "neutral", "支撑写权存疑(绝对IV随市抬升)", 0.0
                 return "bullish", "卖方做支撑", 1.0
             return "bullish", "买方了结", 0.5
     else:  # CALL
         if a < 0:   # 卖方压 IV → 上方压制（看空）
             if up_oi:
+                if abs_buy:   # 绝对 IV 却随市抬升 → 非真写权压制，只是相对抗涨
+                    return "neutral", "压制写权存疑(绝对IV随市抬升)", 0.0
                 lvl = "极强卖方压制" if strong else ("轻微卖方压制" if mild else "卖方压制")
                 return "bearish", lvl, (1.3 if strong else (0.6 if mild else 1.0))
             return "bearish", "买方了结", 0.5
         else:       # 买方抬 IV → 上方突破买盘（看多）
             if up_oi:
+                if abs_sell:  # 绝对 IV 却随市回落 → 非真买方追涨，只是相对抗跌
+                    return "neutral", "买盘存疑(绝对IV随市回落)", 0.0
                 return "bullish", ("轻微买方" if mild else "买方"), (0.6 if mild else 1.0)
             return "bullish", "卖方撤退", 0.5
 
@@ -635,7 +660,10 @@ def analyze_flow(
         for r in rows:
             adj_iv_pp = ((r["corrected"] - ref) * 100.0) if r["known"] else 0.0
             d_iv_pp = r["d_iv"] * 100.0
-            bias, judgment, w = _judge(r["kind"], r["d_oi"], adj_iv_pp, r["known"])
+            # 闸门用【Delta 修正后的绝对】ΔIV(corrected*100)——剔除现价移动沿偏斜的机械项、
+            # 但保留全市场 vol 整体位移(正是要闸门看见的"齐落/齐涨")，比生 d_iv 更稳。
+            abs_iv_pp = (r["corrected"] * 100.0) if r["known"] else 0.0
+            bias, judgment, w = _judge(r["kind"], r["d_oi"], adj_iv_pp, r["known"], abs_iv_pp)
             on_wall = ""
             if call_wall is not None and abs(r["strike"] - call_wall) < 1e-6:
                 on_wall = "call墙"

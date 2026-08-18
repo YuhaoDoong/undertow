@@ -306,6 +306,91 @@ def render_flow_section(fa) -> str:
     return f'<div class="card">{head}{tilt}{body}</div>'
 
 
+def _tilt_color(tilt: str) -> str:
+    if tilt.startswith("偏空"):
+        return _FLOW_COLOR["bearish"]
+    if tilt.startswith("偏多"):
+        return _FLOW_COLOR["bullish"]
+    return "#6e7781"
+
+
+def _expiry_flow_rows_html(changes, conv=None, top: int = 6) -> str:
+    """逐到期的紧凑 ΔOI 买卖方表（C/P 混排，取 |ΔOI| 最大的前 top 行）。"""
+    items = sorted(changes, key=lambda x: -abs(x.d_oi))[:top]
+    if not items:
+        return ""
+    rows = []
+    for c in sorted(items, key=lambda x: (x.kind, x.strike)):
+        col = _FLOW_COLOR.get(c.bias, "#6e7781")
+        k = "P" if c.kind == "P" else "C"
+        stk = conv(c.strike) if conv else c.strike
+        wall = f' <span style="color:#9467bd">🧱{_esc(c.on_wall)}</span>' if c.on_wall else ""
+        sp = (f' <span style="color:#9467bd;font-weight:400">⟂{_esc(c.spread_note)}</span>'
+              if getattr(c, "spread_note", "") else "")
+        adj = f"{c.adj_iv_pp:+.2f}" if c.prev_iv > 0 else "—"
+        rows.append(
+            f'<tr><td>{k}</td><td class="r lvl">{stk:.1f}{wall}</td>'
+            f'<td class="r" style="color:{col}">{c.d_oi:+,}</td>'
+            f'<td class="r">{c.curr_oi:,}</td><td class="r">{_esc(adj)}</td>'
+            f'<td style="color:{col};font-weight:600">{_esc(c.judgment)}{sp}</td></tr>'
+        )
+    return ("<table><tr><th>C/P</th><th class='r'>行权价</th><th class='r'>ΔOI</th>"
+            "<th class='r'>当前OI</th><th class='r'>修正ΔIV</th><th>判断</th></tr>"
+            + "".join(rows) + "</table>")
+
+
+def render_expiry_ladder_section(slices, conv=None, unit: str = "") -> str:
+    """近周到期阶梯：逐到期（本周五/下周五/下下周五/月度OPEX）单独的墙位 + 买卖方。
+
+    专服务短线定到期价差：想做 X 日到期的 SLV 熊市看涨价差，直接看 X 日那条的
+    call 墙压在哪、当天范围内谁在卖 call。conv 把 ETF 行权价换算商品价（有真实比值时）。
+    """
+    if not slices:
+        return ""
+    u = _esc(unit)
+    cards = []
+    for s in slices:
+        cw = conv(s.call_wall) if conv else s.call_wall
+        pw = conv(s.put_wall) if conv else s.put_wall
+        # 墙位行：主墙 + 并列前三
+        def _walls(top, primary_oi):
+            bits = [f"{(conv(k) if conv else k):.1f}{u}({v:,})" for k, v in top[:3]]
+            return " · ".join(bits) if bits else "—"
+        cwall = (f'<b style="color:{_FLOW_COLOR["bearish"]}">call墙 {cw:.1f}{u}</b>'
+                 f'（OI {s.call_wall_oi:,}）') if s.call_wall_oi > 0 else "call墙 —"
+        pwall = (f'<b style="color:{_FLOW_COLOR["bullish"]}">put墙 {pw:.1f}{u}</b>'
+                 f'（OI {s.put_wall_oi:,}）') if s.put_wall_oi > 0 else "put墙 —"
+        monthly_tag = ('<span class="pill" style="background:#bc4c001a;color:#bc4c00">月度OPEX</span>'
+                       if s.is_monthly else "")
+        pcr_note = f"PCR {s.pcr:.2f}" if s.total_call_oi > 0 else ""
+        head = (f'<div style="font-weight:700;margin:12px 0 4px;font-size:15px">'
+                f'{_esc(s.expiry.isoformat())} · <b>{_esc(s.label)}</b> '
+                f'<span class="sub" style="font-weight:400">T-{s.days_out}</span> {monthly_tag}</div>')
+        meta = (f'<div class="sub">{cwall} ｜ {pwall} ｜ {_esc(pcr_note)}'
+                f'（总 Call {s.total_call_oi:,} / Put {s.total_put_oi:,}）</div>')
+        top_walls = (f'<div class="sub" style="margin-top:2px">上方阻力群 {_walls(s.call_walls_top, s.call_wall_oi)}'
+                     f' ｜ 下方支撑群 {_walls(s.put_walls_top, s.put_wall_oi)}</div>')
+        if s.has_flow and s.changes:
+            tcol = _tilt_color(s.flow_tilt)
+            flow = (f'<div class="sub" style="margin-top:4px">当日范围买卖方：'
+                    f'<b style="color:{tcol}">{_esc(s.flow_tilt)}</b></div>'
+                    + _expiry_flow_rows_html(s.changes, conv=conv))
+        else:
+            flow = ('<div class="sub" style="margin-top:4px">买卖方：仅一份快照或该到期昨日无仓，'
+                    'ΔOI 判定待下一份快照点亮（墙位不受影响）。</div>')
+        cards.append(f'<div style="border-left:3px solid #d0d7de;padding-left:10px;margin:6px 0">'
+                     f'{head}{meta}{top_walls}{flow}</div>')
+    return (
+        '<div class="card"><h2>近周到期阶梯（按周五定到期做价差用）</h2>'
+        '<div class="sub">把 60 天混在一起的墙/资金流拆回【单个到期日】：想做某周五到期的价差，'
+        '直接看那条的 call/put 墙压在哪、当天范围内谁在买卖。墙位口径同主报告，'
+        'ΔOI 买卖方 = 该到期昨→今独立 diff。</div>'
+        + "".join(cards)
+        + '<div class="sub" style="margin-top:8px">越近的周度到期 IV 噪音越大；ETF 代理位点仅定性。'
+          '只作波段级结构预警，非交易指令。</div></div>'
+    )
+
+
 def render_macro_section(ma) -> str:
     """宏观背景卡片（实际利率/美元/通胀预期 → 金银利多/利空）。"""
     if ma is None or not ma.drivers:
@@ -727,7 +812,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        flow_html: str = "", macro_html: str = "", events_html: str = "",
                        tldr_html: str = "", strategy_html: str = "",
                        conc_html: str = "", volregime_html: str = "",
-                       vol_analysis_html: str = "") -> str:
+                       vol_analysis_html: str = "", expiry_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -751,6 +836,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="chart">{price_svg}</div>'
         f'<div class="chart">{oi_svg}</div></div>'
         f'{flow_html}'
+        f'{expiry_html}'
         f'{vol_analysis_html}'
         f'{volregime_html}'
         f'<div class="card"><h2>方向因子投票（按回测可信度加权）</h2>{_votes_table(o)}</div>'

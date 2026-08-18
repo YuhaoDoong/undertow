@@ -370,3 +370,44 @@ def render_flow(fa, display_name: str) -> str:
 def render_flow_all(blocks: list[str]) -> str:
     header = "# 期权资金流 / 持仓异动速览（CBOE 延迟数据，自落盘快照）\n"
     return header + "\n" + FLOW_DISCLAIMER + "\n\n" + "\n---\n\n".join(blocks)
+
+
+def render_expiry_ladder(slices, display_name: str, spot: float,
+                         prev_date=None, curr_date=None) -> str:
+    """近周到期阶梯终端详版：逐周五/月度独立墙位 + 完整买卖方表。"""
+    L: list[str] = []
+    L.append(f"## {display_name} — 近周到期阶梯（按周五定到期做价差用）")
+    span = f"（{prev_date} → {curr_date}）" if prev_date else f"（{curr_date}，仅一份快照）"
+    L.append(f"现价 {spot:.2f}  ·  逐到期 = 单个到期日单独过滤后跑墙位+买卖方  ·  对比 {span}")
+    L.append("> 想做某周五到期的价差 → 直接看那条的 call/put 墙压在哪、当天范围内谁在买卖。"
+             "墙位口径同主报告；越近的周度 IV 噪音越大，ETF 代理位点仅定性，非交易指令。")
+    L.append("")
+    if not slices:
+        L.append("- 未来窗口内无满足条件（OI 达标、现价附近有墙）的周五/月度到期。")
+        L.append("")
+        return "\n".join(L)
+    for s in slices:
+        tag = " · 🗓️月度OPEX" if s.is_monthly else ""
+        L.append(f"### {s.expiry} · {s.label}（T-{s.days_out}）{tag}")
+        cw = f"{s.call_wall:.1f}（OI {s.call_wall_oi:,}）" if s.call_wall_oi > 0 else "—"
+        pw = f"{s.put_wall:.1f}（OI {s.put_wall_oi:,}）" if s.put_wall_oi > 0 else "—"
+        L.append(f"- **call墙 {cw}** ｜ **put墙 {pw}** ｜ "
+                 f"PCR {s.pcr:.2f}（总 Call {s.total_call_oi:,} / Put {s.total_put_oi:,}）")
+        cwt = " · ".join(f"{k:.1f}({v:,})" for k, v in s.call_walls_top[:3])
+        pwt = " · ".join(f"{k:.1f}({v:,})" for k, v in s.put_walls_top[:3])
+        if cwt or pwt:
+            L.append(f"- 上方阻力群 {cwt or '—'} ｜ 下方支撑群 {pwt or '—'}")
+        if s.has_flow and s.changes:
+            L.append(f"- **当日范围买卖方净倾向：{s.flow_tilt}**")
+            L.append("")
+            L += _flow_kind_table(s.changes, "P")
+            L += _flow_kind_table(s.changes, "C")
+        else:
+            L.append("- 买卖方：仅一份快照或该到期昨日无仓，ΔOI 判定待下一份快照（墙位不受影响）。")
+        L.append("")
+    return "\n".join(L)
+
+
+def render_expiry_ladder_all(blocks: list[str]) -> str:
+    header = "# 近周到期阶梯（CBOE 延迟数据 · ETF 代理 · 定到期价差参考）\n"
+    return header + "\n" + FLOW_DISCLAIMER + "\n\n" + "\n---\n\n".join(blocks)

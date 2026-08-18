@@ -36,6 +36,7 @@ from undertow.analyze.flow import (analyze_flow, counter_signals,
 from undertow.analyze.outlook import (build_outlook, macro_to_votes,
                                       plain_summary_blocks)
 from undertow.analyze.strategy import build_strategy
+from undertow.analyze.expiry_ladder import build_ladder
 from undertow.analyze.macro import analyze_macro, series_ids_for
 from undertow.analyze.backtest import run_backtest
 from undertow.report import markdown as report_mod
@@ -46,7 +47,7 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_concentration_html, render_vol_regime_section,
                           render_vol_analysis_section,
                           render_strategy_hub, render_condor_section,
-                          render_credit_spread_section)
+                          render_credit_spread_section, render_expiry_ladder_section)
 from undertow.analyze.volregime import assess_vol_regime
 from undertow.analyze.condor import assess_condor
 from undertow.analyze.credit_spread import assess_credit_spread
@@ -359,6 +360,43 @@ def cmd_flow(args) -> int:
 
     blocks = [report_mod.render_flow(fa, inst.display_name) for inst, fa in results]
     print(report_mod.render_flow_all(blocks))
+    return 0
+
+
+def cmd_expiry(args) -> int:
+    """近周到期阶梯：逐周五/月度独立墙位 + 买卖方（短线定到期价差用）。"""
+    cfg = load_config()
+    source = CboeOptionsSource()
+    store = SnapshotStore()
+    today = market_today()
+    try:
+        instruments = _resolve_instruments(cfg, args.instruments)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
+
+    blocks = []
+    for inst in instruments:
+        if inst.options is None:
+            print(f"[跳过] {inst.key} 未配置期权数据源", file=sys.stderr)
+            continue
+        try:
+            curr, prev, prev_date, curr_date_s = _load_curr_prev_snapshot(
+                store, source, inst, today, no_cache=args.no_cache, no_snapshot=args.no_snapshot)
+            # 用真实今天锚定周次/倒计时（墙位纯 OI，不涉 theta 权重，无需 obs_day）
+            ladder = build_ladder(prev, curr, today=today,
+                                  multiplier=inst.options.approx_commodity_multiplier,
+                                  proxy_quality=inst.options.proxy_quality)
+            blocks.append(report_mod.render_expiry_ladder(
+                ladder, inst.display_name, curr.spot,
+                prev_date=prev_date, curr_date=curr_date_s))
+        except Exception as e:
+            print(f"[警告] {inst.key} 到期阶梯失败: {e}", file=sys.stderr)
+
+    if not blocks:
+        print("没有可用结果。", file=sys.stderr)
+        return 1
+    print(report_mod.render_expiry_ladder_all(blocks))
     return 0
 
 
@@ -750,12 +788,24 @@ def cmd_report(args) -> int:
             strategy_html = (render_strategy_hub(strategy_props) + strategy_html
                              + render_credit_spread_section(cs_plan)
                              + render_condor_section(condor_plan))
+            # —— 近周到期阶梯：逐周五/月度独立墙位+买卖方（短线定到期价差用）——
+            expiry_html = ""
+            try:
+                # 阶梯用【真实今天】锚定周次/倒计时（墙位是纯 OI，不涉 theta 权重，
+                # 无需 obs_day；否则周一跑会把"本周五"错标成"下周五"）
+                ladder = build_ladder(prev, curr, today=today, multiplier=mult,
+                                      proxy_quality=inst.options.proxy_quality)
+                expiry_html = render_expiry_ladder_section(
+                    ladder, conv=(ga.to_commodity if ratio is not None else None))
+            except Exception as e:
+                print(f"[提示] {inst.key} 到期阶梯跳过: {e}", file=sys.stderr)
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,
                                       strategy_html,
                                       conc_html=render_concentration_html(an.concentration),
                                       volregime_html=volregime_html,
-                                      vol_analysis_html=vol_analysis_html)
+                                      vol_analysis_html=vol_analysis_html,
+                                      expiry_html=expiry_html)
             fn = f"{inst.key}_{today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
@@ -866,6 +916,12 @@ def build_parser() -> argparse.ArgumentParser:
                     help="不自动落盘今日快照（仅用已落盘数据分析）")
     pf.add_argument("--json", action="store_true", help="输出结构化 JSON")
     pf.set_defaults(func=cmd_flow)
+
+    pe = sub.add_parser("expiry", help="近周到期阶梯：逐周五/月度独立墙位+买卖方（定到期价差用）")
+    pe.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")
+    pe.add_argument("--no-snapshot", action="store_true",
+                    help="不自动落盘今日快照（仅用已落盘数据分析）")
+    pe.set_defaults(func=cmd_expiry)
 
     pb = sub.add_parser("backtest", help="回测 COT 信号的历史前瞻收益（校准阈值）")
     pb.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")

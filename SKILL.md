@@ -21,6 +21,7 @@ description: >-
 - 「COT 持仓 / 聪明钱 / 投机资金拥挤度」→ `analyze`
 - 「期权 OI 墙 / Gamma / 零伽马翻转」→ `gamma`
 - 「期权资金流 / 谁在买谁在卖 / 价差结构」→ `flow`
+- 「某个到期日（如本周五 / X 月 X 日到期）单独的持仓 / 我要做定到期的价差」→ `expiry`
 - 「这套信号历史上准不准」→ `backtest`
 - 「最近有什么大事件 / FOMC/CPI/非农 什么时候 / 临近哪些催化剂」→ `calendar`
 
@@ -36,6 +37,7 @@ description: >-
 | `python -m undertow analyze [品种...]` | COT 持仓分析（净头寸/拥挤度/聪明钱背离） | 终端 Markdown；`--json` 给结构化 |
 | `python -m undertow gamma [品种...]` | 期权 Gamma/OI 墙/零伽马 | 终端 Markdown |
 | `python -m undertow flow [品种...]` | 买卖方资金流 + 多腿价差识别 + 波动率面（ATM IV/25Δ·10Δ skew 日变化 → 期权端是否确认价格） | 终端 Markdown（需≥2 天快照） |
+| `python -m undertow expiry [品种...]` | **近周到期阶梯**：把 60 天混合的墙/资金流拆回【单个到期日】——未来 3 个周五 + 最近月度 OPEX 各自独立的 call/put 墙 + 逐 ΔOI 买卖方（定到期做价差用） | 终端 Markdown；也自动嵌入 `report` |
 | `python -m undertow backtest [品种...]` | COT 信号事件研究回测 | 终端 Markdown |
 | `python -m undertow snapshot [品种...]` | 落盘当日期权链原始全字段 | gzip 存 `data/snapshots/`（纳入 git） |
 | `python -m undertow calendar [品种...]` | 事件雷达：关键节点倒计时 + **实时预测/前值/影响**（本周自动拉 FairEconomy 公开 feed，远期用手维护锚点） | 终端；也自动嵌入 `report` 顶部。`--no-live` 仅用本地锚点 |

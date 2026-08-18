@@ -796,7 +796,8 @@ def cmd_report(args) -> int:
                 ladder = build_ladder(prev, curr, today=today, multiplier=mult,
                                       proxy_quality=inst.options.proxy_quality)
                 expiry_html = render_expiry_ladder_section(
-                    ladder, conv=(ga.to_commodity if ratio is not None else None))
+                    ladder, conv=(ga.to_commodity if ratio is not None else None),
+                    etf_symbol=inst.options.symbol)
             except Exception as e:
                 print(f"[提示] {inst.key} 到期阶梯跳过: {e}", file=sys.stderr)
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,

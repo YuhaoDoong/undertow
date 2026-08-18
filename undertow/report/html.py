@@ -314,11 +314,17 @@ def _tilt_color(tilt: str) -> str:
     return "#6e7781"
 
 
-def _expiry_flow_rows_html(changes, conv=None, top: int = 6) -> str:
-    """逐到期的紧凑 ΔOI 买卖方表（C/P 混排，取 |ΔOI| 最大的前 top 行）。"""
+def _expiry_flow_rows_html(changes, conv=None, top: int = 6, etf_symbol: str = "") -> str:
+    """逐到期的紧凑 ΔOI 买卖方表（C/P 混排，取 |ΔOI| 最大的前 top 行）。
+
+    有 conv（真实比值）时，行权价列显示【商品价 + ETF 行权价】——ETF 行权价才是
+    实盘下单选腿用的数（如 SLV 30.5），商品价（银 67.0）作跨报告对照。
+    """
     items = sorted(changes, key=lambda x: -abs(x.d_oi))[:top]
     if not items:
         return ""
+    show_etf = conv is not None
+    sym = _esc(etf_symbol)
     rows = []
     for c in sorted(items, key=lambda x: (x.kind, x.strike)):
         col = _FLOW_COLOR.get(c.bias, "#6e7781")
@@ -328,37 +334,49 @@ def _expiry_flow_rows_html(changes, conv=None, top: int = 6) -> str:
         sp = (f' <span style="color:#9467bd;font-weight:400">⟂{_esc(c.spread_note)}</span>'
               if getattr(c, "spread_note", "") else "")
         adj = f"{c.adj_iv_pp:+.2f}" if c.prev_iv > 0 else "—"
+        etf_cell = (f'<td class="r lvl" style="color:#0969da;font-weight:600">{c.strike:.1f}</td>'
+                    if show_etf else "")
         rows.append(
-            f'<tr><td>{k}</td><td class="r lvl">{stk:.1f}{wall}</td>'
+            f'<tr><td>{k}</td><td class="r lvl">{stk:.1f}{wall}</td>{etf_cell}'
             f'<td class="r" style="color:{col}">{c.d_oi:+,}</td>'
             f'<td class="r">{c.curr_oi:,}</td><td class="r">{_esc(adj)}</td>'
             f'<td style="color:{col};font-weight:600">{_esc(c.judgment)}{sp}</td></tr>'
         )
-    return ("<table><tr><th>C/P</th><th class='r'>行权价</th><th class='r'>ΔOI</th>"
+    etf_th = (f"<th class='r' style='color:#0969da'>{sym or 'ETF'}行权</th>"
+              if show_etf else "")
+    return ("<table><tr><th>C/P</th><th class='r'>行权价</th>" + etf_th
+            + "<th class='r'>ΔOI</th>"
             "<th class='r'>当前OI</th><th class='r'>修正ΔIV</th><th>判断</th></tr>"
             + "".join(rows) + "</table>")
 
 
-def render_expiry_ladder_section(slices, conv=None, unit: str = "") -> str:
+def render_expiry_ladder_section(slices, conv=None, unit: str = "", etf_symbol: str = "") -> str:
     """近周到期阶梯：逐到期（本周五/下周五/下下周五/月度OPEX）单独的墙位 + 买卖方。
 
     专服务短线定到期价差：想做 X 日到期的 SLV 熊市看涨价差，直接看 X 日那条的
-    call 墙压在哪、当天范围内谁在卖 call。conv 把 ETF 行权价换算商品价（有真实比值时）。
+    call 墙压在哪、当天范围内谁在卖 call。conv 把 ETF 行权价换算商品价（有真实比值时）；
+    有 conv 时同时显示 ETF 行权价（etf_symbol，如 SLV 30.5）——实盘下单选腿用它。
     """
     if not slices:
         return ""
     u = _esc(unit)
+    sym = _esc(etf_symbol)
+    show_etf = conv is not None
+    # 商品价旁的 ETF 行权价角标（raw = ETF 行权价原值）
+    def _etf(raw):
+        return (f' <span style="color:#0969da;font-weight:600">{sym}{raw:.1f}</span>'
+                if show_etf else "")
     cards = []
     for s in slices:
         cw = conv(s.call_wall) if conv else s.call_wall
         pw = conv(s.put_wall) if conv else s.put_wall
-        # 墙位行：主墙 + 并列前三
+        # 墙位行：主墙 + 并列前三（商品价 + ETF 行权价）
         def _walls(top, primary_oi):
-            bits = [f"{(conv(k) if conv else k):.1f}{u}({v:,})" for k, v in top[:3]]
+            bits = [f"{(conv(k) if conv else k):.1f}{u}{_etf(k)}({v:,})" for k, v in top[:3]]
             return " · ".join(bits) if bits else "—"
-        cwall = (f'<b style="color:{_FLOW_COLOR["bearish"]}">call墙 {cw:.1f}{u}</b>'
+        cwall = (f'<b style="color:{_FLOW_COLOR["bearish"]}">call墙 {cw:.1f}{u}</b>{_etf(s.call_wall)}'
                  f'（OI {s.call_wall_oi:,}）') if s.call_wall_oi > 0 else "call墙 —"
-        pwall = (f'<b style="color:{_FLOW_COLOR["bullish"]}">put墙 {pw:.1f}{u}</b>'
+        pwall = (f'<b style="color:{_FLOW_COLOR["bullish"]}">put墙 {pw:.1f}{u}</b>{_etf(s.put_wall)}'
                  f'（OI {s.put_wall_oi:,}）') if s.put_wall_oi > 0 else "put墙 —"
         monthly_tag = ('<span class="pill" style="background:#bc4c001a;color:#bc4c00">月度OPEX</span>'
                        if s.is_monthly else "")
@@ -374,7 +392,7 @@ def render_expiry_ladder_section(slices, conv=None, unit: str = "") -> str:
             tcol = _tilt_color(s.flow_tilt)
             flow = (f'<div class="sub" style="margin-top:4px">当日范围买卖方：'
                     f'<b style="color:{tcol}">{_esc(s.flow_tilt)}</b></div>'
-                    + _expiry_flow_rows_html(s.changes, conv=conv))
+                    + _expiry_flow_rows_html(s.changes, conv=conv, etf_symbol=etf_symbol))
         else:
             flow = ('<div class="sub" style="margin-top:4px">买卖方：仅一份快照或该到期昨日无仓，'
                     'ΔOI 判定待下一份快照点亮（墙位不受影响）。</div>')
@@ -384,7 +402,10 @@ def render_expiry_ladder_section(slices, conv=None, unit: str = "") -> str:
         '<div class="card"><h2>近周到期阶梯（按周五定到期做价差用）</h2>'
         '<div class="sub">把 60 天混在一起的墙/资金流拆回【单个到期日】：想做某周五到期的价差，'
         '直接看那条的 call/put 墙压在哪、当天范围内谁在买卖。墙位口径同主报告，'
-        'ΔOI 买卖方 = 该到期昨→今独立 diff。</div>'
+        'ΔOI 买卖方 = 该到期昨→今独立 diff。'
+        + ('<b style="color:#0969da"> 蓝色为 ETF 行权价（实盘下单选腿用它）</b>，'
+           '同行商品价作跨报告对照。' if slices and conv is not None else "")
+        + '</div>'
         + "".join(cards)
         + '<div class="sub" style="margin-top:8px">越近的周度到期 IV 噪音越大；ETF 代理位点仅定性。'
           '只作波段级结构预警，非交易指令。</div></div>'

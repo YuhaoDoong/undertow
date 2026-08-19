@@ -37,6 +37,8 @@ from undertow.analyze.outlook import (build_outlook, macro_to_votes,
                                       plain_summary_blocks)
 from undertow.analyze.strategy import build_strategy
 from undertow.analyze.expiry_ladder import build_ladder
+from undertow.analyze.fibonacci import build_fibonacci
+from undertow.analyze.risk_reward import build_risk_reward
 from undertow.analyze.macro import analyze_macro, series_ids_for
 from undertow.analyze.backtest import run_backtest
 from undertow.report import markdown as report_mod
@@ -47,7 +49,8 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_concentration_html, render_vol_regime_section,
                           render_vol_analysis_section,
                           render_strategy_hub, render_condor_section,
-                          render_credit_spread_section, render_expiry_ladder_section)
+                          render_credit_spread_section, render_expiry_ladder_section,
+                          render_fib_rr_section)
 from undertow.analyze.volregime import assess_vol_regime
 from undertow.analyze.condor import assess_condor
 from undertow.analyze.credit_spread import assess_credit_spread
@@ -397,6 +400,65 @@ def cmd_expiry(args) -> int:
         print("没有可用结果。", file=sys.stderr)
         return 1
     print(report_mod.render_expiry_ladder_all(blocks))
+    return 0
+
+
+def _fib_key_levels(ga, ratio):
+    """把 gamma 的 call/put 墙 + 零伽马翻转位收敛成 R:R 目标用的 KeyLevel 列表。"""
+    from undertow.analyze.outlook import KeyLevel
+    def comm(v):
+        return round(v * ratio, 2) if ratio else v
+    lv = []
+    if ga.call_wall_oi > 0:
+        lv.append(KeyLevel(f"看涨墙 {comm(ga.call_wall):.1f}", ga.call_wall,
+                           comm(ga.call_wall) if ratio else None, "resistance", ""))
+    if ga.put_wall_oi > 0:
+        lv.append(KeyLevel(f"看跌墙 {comm(ga.put_wall):.1f}", ga.put_wall,
+                           comm(ga.put_wall) if ratio else None, "support", ""))
+    if ga.zero_gamma:
+        lv.append(KeyLevel(f"零伽马 {comm(ga.zero_gamma):.1f}", ga.zero_gamma,
+                           comm(ga.zero_gamma) if ratio else None, "flip", ""))
+    return lv
+
+
+def cmd_fib(args) -> int:
+    """斐波那契回撤 + 盈亏比闸门：作者「先看盈亏比、别追、等回调」交易哲学的确定性落地。"""
+    cfg = load_config()
+    opt_src = CboeOptionsSource()
+    fut_src = YahooFuturesSource()
+    try:
+        instruments = _resolve_instruments(cfg, args.instruments)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
+
+    blocks = []
+    for inst in instruments:
+        if inst.commodity is None:
+            print(f"[跳过] {inst.key} 未配置真实期货价（斐波摆动腿需日线）", file=sys.stderr)
+            continue
+        try:
+            series, real_price, _asof = fut_src.fetch_for(inst, use_cache=not args.no_cache)
+            ratio, walls = None, []
+            if inst.options is not None:
+                try:
+                    snap = opt_src.fetch_snapshot(inst, use_cache=not args.no_cache)
+                    ratio = real_price / snap.spot if snap.spot else None
+                    ga = analyze_gamma(snap, multiplier=(ratio or inst.options.approx_commodity_multiplier),
+                                       proxy_quality=inst.options.proxy_quality)
+                    walls = _fib_key_levels(ga, ratio)
+                except Exception as e:
+                    print(f"[提示] {inst.key} 墙位取用失败（R:R 目标退回斐波扩展）: {e}", file=sys.stderr)
+            fib = build_fibonacci(series, ratio=ratio, spot=real_price, lookback=args.lookback)
+            plan = build_risk_reward(fib, o=None, key_levels=walls)
+            blocks.append(report_mod.render_fib_rr(fib, plan, inst.display_name))
+        except Exception as e:
+            print(f"[警告] {inst.key} 斐波/盈亏比失败: {e}", file=sys.stderr)
+
+    if not blocks:
+        print("没有可用结果。", file=sys.stderr)
+        return 1
+    print(report_mod.render_fib_rr_all(blocks))
     return 0
 
 
@@ -800,13 +862,24 @@ def cmd_report(args) -> int:
                     etf_symbol=inst.options.symbol)
             except Exception as e:
                 print(f"[提示] {inst.key} 到期阶梯跳过: {e}", file=sys.stderr)
+            # —— 斐波那契回撤 + 盈亏比闸门（作者"先看盈亏比、别追、等回调"哲学落地）——
+            fib_html = ""
+            try:
+                if real_series is not None:
+                    fib = build_fibonacci(real_series, ratio=ratio,
+                                          spot=(real_price if real_price else curr.spot))
+                    rr_plan = build_risk_reward(fib, o=outlook)
+                    fib_html = render_fib_rr_section(
+                        fib, rr_plan, etf_symbol=(inst.options.symbol if inst.options else ""))
+            except Exception as e:
+                print(f"[提示] {inst.key} 斐波/盈亏比跳过: {e}", file=sys.stderr)
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,
                                       strategy_html,
                                       conc_html=render_concentration_html(an.concentration),
                                       volregime_html=volregime_html,
                                       vol_analysis_html=vol_analysis_html,
-                                      expiry_html=expiry_html)
+                                      expiry_html=expiry_html, fib_html=fib_html)
             fn = f"{inst.key}_{today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
@@ -923,6 +996,11 @@ def build_parser() -> argparse.ArgumentParser:
     pe.add_argument("--no-snapshot", action="store_true",
                     help="不自动落盘今日快照（仅用已落盘数据分析）")
     pe.set_defaults(func=cmd_expiry)
+
+    pfib = sub.add_parser("fib", help="斐波那契回撤+盈亏比闸门：先看盈亏比、别追、等回调（作者交易哲学落地）")
+    pfib.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")
+    pfib.add_argument("--lookback", type=int, default=90, help="摆动腿检测回看的交易日数（默认 90）")
+    pfib.set_defaults(func=cmd_fib)
 
     pb = sub.add_parser("backtest", help="回测 COT 信号的历史前瞻收益（校准阈值）")
     pb.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")

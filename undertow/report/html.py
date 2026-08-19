@@ -412,6 +412,77 @@ def render_expiry_ladder_section(slices, conv=None, unit: str = "", etf_symbol: 
     )
 
 
+_GRADE_COLOR = {"差": "#cf222e", "中": "#bc4c00", "优": "#1a7f37"}
+
+
+def render_fib_rr_section(fib, plan, etf_symbol: str = "") -> str:
+    """斐波那契回撤 + 盈亏比闸门（作者「先看盈亏比、别追、等回调」交易哲学的确定性落地）。"""
+    if fib is None or not fib.ok:
+        return ""
+    sym = _esc(etf_symbol)
+    fnum = (lambda v: f"{v:,.0f}") if fib.spot >= 500 else (lambda v: f"{v:,.1f}")
+    show_etf = fib.ratio is not None
+
+    def _etf(v):
+        return (f' <span style="color:#0969da;font-weight:600">{sym}{v:.1f}</span>'
+                if (show_etf and v is not None) else "")
+
+    dir_cn = ("上涨腿（回撤=下方支撑，顺势=回调买）" if fib.direction == "up"
+              else "下跌腿（回撤=上方阻力，顺势=反抽卖）")
+
+    # 回撤位表
+    rrows = []
+    for lv in fib.retracements:
+        star = ' <span style="color:#bc4c00">⭐关键区</span>' if lv.is_key else ""
+        rrows.append(f'<tr><td>{_esc(lv.label)}{star}</td>'
+                     f'<td class="r lvl">{fnum(lv.price)}{_etf(lv.etf)}</td><td>回撤</td></tr>')
+    for lv in fib.extensions:
+        rrows.append(f'<tr><td>{_esc(lv.label)}</td>'
+                     f'<td class="r lvl">{fnum(lv.price)}{_etf(lv.etf)}</td><td>上行扩展目标</td></tr>')
+    retr_tbl = ('<table><tr><th>比率</th><th class="r">价位</th><th>说明</th></tr>'
+                + "".join(rrows) + "</table>")
+
+    # 盈亏比情景表
+    rr_block = ""
+    if plan is not None and plan.ok:
+        srows = []
+        for s in plan.setups:
+            gcol = _GRADE_COLOR.get(s.grade, "#6e7781")
+            srows.append(
+                f'<tr><td>{_esc(s.name)}</td>'
+                f'<td class="r lvl">{fnum(s.entry)}{_etf(s.entry_etf)}</td>'
+                f'<td class="r lvl">{fnum(s.stop)}{_etf(s.stop_etf)}</td>'
+                f'<td class="r lvl">{fnum(s.target)}{_etf(s.target_etf)} '
+                f'<span class="sub">{_esc(s.target_label)}</span></td>'
+                f'<td class="r" style="color:{gcol};font-weight:700">{s.rr:.2f}</td>'
+                f'<td style="color:{gcol};font-weight:600">{_esc(s.grade)}</td></tr>')
+        rr_tbl = ('<table><tr><th>情景</th><th class="r">入场</th><th class="r">止损</th>'
+                  '<th class="r">目标</th><th class="r">盈亏比</th><th>评级</th></tr>'
+                  + "".join(srows) + "</table>")
+        bias = (f'<div class="sub" style="margin-top:2px">{_esc(plan.bias_note)}</div>'
+                if plan.bias_note else "")
+        verds = "".join(f'<div class="sub">· {_esc(s.verdict)}</div>' for s in plan.setups)
+        cav = "".join(f'<div class="sub">› {_esc(c)}</div>' for c in plan.caveats)
+        rr_block = (f'<div style="font-weight:700;margin:12px 0 4px">盈亏比闸门（顺势 {_esc(plan.direction)}）</div>'
+                    f'<div class="sub" style="margin-bottom:4px"><b>{_esc(plan.headline)}</b></div>'
+                    f'{bias}{rr_tbl}{verds}'
+                    f'<div class="sub" style="margin-top:6px;color:#6e7781">{cav}</div>')
+
+    etf_hint = ('<b style="color:#0969da"> 蓝色为 ETF 行权价</b>；' if show_etf else "")
+    return (
+        '<div class="card"><h2>斐波那契回撤 + 盈亏比闸门</h2>'
+        '<div class="sub">作者交易哲学的确定性落地：<b>先看盈亏比、别追高、等回调给出好盈亏比再动手</b>。'
+        '摆动腿自动检测自真实期货日线；' + etf_hint
+        + '目标取自结构墙位/斐波扩展，非价格预测，仅波段级情景参考。</div>'
+        f'<div style="font-weight:700;margin:10px 0 4px">摆动腿：{_esc(dir_cn)}</div>'
+        f'<div class="sub">{_esc(fib.note)}；现价 {fnum(fib.spot)}'
+        + (f'（{sym}{fib.etf_spot:.1f}）' if fib.etf_spot else "")
+        + f' · {_esc(fib.current_zone)}</div>'
+        + retr_tbl + rr_block
+        + '</div>'
+    )
+
+
 def render_macro_section(ma) -> str:
     """宏观背景卡片（实际利率/美元/通胀预期 → 金银利多/利空）。"""
     if ma is None or not ma.drivers:
@@ -833,7 +904,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        flow_html: str = "", macro_html: str = "", events_html: str = "",
                        tldr_html: str = "", strategy_html: str = "",
                        conc_html: str = "", volregime_html: str = "",
-                       vol_analysis_html: str = "", expiry_html: str = "") -> str:
+                       vol_analysis_html: str = "", expiry_html: str = "",
+                       fib_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -865,6 +937,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="card"><h2>持仓结构</h2>{conc_html}<div class="chart">{cot_svg}</div></div>'
         f'<div class="card"><h2>情景推演（规则化 if-then，非点位预言）</h2>{_scenarios_html(o)}</div>'
         f'{strategy_html}'
+        f'{fib_html}'
         f'<div class="card">{_caveats_html(o)}</div>'
     )
     foot = ('<div class="foot">undertow · 规则化情景工具，非投资建议 · '

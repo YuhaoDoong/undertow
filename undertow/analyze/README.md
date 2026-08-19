@@ -47,6 +47,16 @@
 | `credit_spread.py` | 方向性信用价差：偏空→熊市看涨价差 / 偏多→牛市看跌价差（跟近端 bias）。<br>Directional credit spreads. |
 | `condor.py` | 铁鹰：区间震荡 + 偏卖方环境的规则化结构映射。<br>Iron condor for range/seller regimes. |
 
+## Trade planning / 交易计划（盈亏比 + 斐波，作者交易哲学落地）
+
+> 把方向研判翻译成"**能不能下手**"：先定结构锚，再算盈亏比闸门。纯确定性，LLM 不碰算术。
+> From a directional read to an actionable gate: structure anchors first, then a risk-reward gate.
+
+| 文件 | 作用 |
+|---|---|
+| `fibonacci.py` | zigzag 定位【当前摆动腿】→ 0.382/0.5/0.618 黄金回撤 + 1.272/1.618 扩展目标；传 ratio 补 ETF 行权价锚。<br>Zigzag swing → Fibonacci retracements/extensions (+ ETF strike anchor). |
+| `risk_reward.py` | 盈亏比闸门：对每个方向算「现价追」vs「等回调(0.5)」两情景的 R:R 并评级（差/中/优），入场锚斐波、止损锚起涨点、目标取结构墙位（退回扩展位），落地"先看盈亏比、别追、等回调"。<br>R:R gate grading chase-vs-pullback setups; fib entry, structural stop/target. |
+
 ## Boundary / 边界
 
 imports `core`（+ 少量分析层内部互引，如 `outlook` 吃 gamma/flow 结果）；**不 import** `collect`/`report`。输出只作**波段级风险情境**，非交易指令、非投资建议。

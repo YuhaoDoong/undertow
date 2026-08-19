@@ -411,3 +411,77 @@ def render_expiry_ladder(slices, display_name: str, spot: float,
 def render_expiry_ladder_all(blocks: list[str]) -> str:
     header = "# 近周到期阶梯（CBOE 延迟数据 · ETF 代理 · 定到期价差参考）\n"
     return header + "\n" + FLOW_DISCLAIMER + "\n\n" + "\n---\n\n".join(blocks)
+
+
+# ——————————————————————————————————————————————————————————
+# 斐波那契回撤 + 盈亏比闸门（作者交易哲学的落地）
+# ——————————————————————————————————————————————————————————
+
+FIB_DISCLAIMER = (
+    "> 斐波那契回撤/扩展 + 盈亏比闸门＝作者「先看盈亏比、别追高、等回调」交易哲学的确定性落地。"
+    "摆动腿自动检测自真实期货日线；目标取自结构墙位/斐波扩展，非价格预测。"
+    "盈亏比是【必要非充分】条件——达标也要自定胜率与仓位。仅波段级情景参考，非交易指令。"
+)
+
+
+def _fmt(v: float) -> str:
+    return f"{v:,.0f}" if abs(v) >= 500 else f"{v:,.1f}"
+
+
+def render_fib_rr(fib, plan, display_name: str) -> str:
+    """斐波那契 + 盈亏比 终端详版。fib=FibAnalysis, plan=RiskRewardPlan。"""
+    L: list[str] = []
+    L.append(f"## {display_name} — 斐波那契回撤 + 盈亏比闸门")
+    if not fib.ok:
+        L.append(f"- 无有效摆动腿：{fib.note}")
+        L.append("")
+        return "\n".join(L)
+
+    dir_cn = "上涨腿（回撤=下方支撑，顺势=回调买）" if fib.direction == "up" \
+        else "下跌腿（回撤=上方阻力，顺势=反抽卖）"
+    L.append(f"**摆动腿**：{dir_cn}")
+    L.append(f"- {fib.note}；现价 {_fmt(fib.spot)}"
+             + (f"（ETF {fib.etf_spot:.1f}）" if fib.etf_spot else "")
+             + f" · {fib.current_zone}")
+    L.append("")
+    L.append("**斐波那契回撤位**（入场/止损锚）：")
+    L.append("")
+    L.append("| 比率 | 价位 | ETF 行权 | 说明 |")
+    L.append("|---|---|---|---|")
+    for lv in fib.retracements:
+        etf = f"{lv.etf:.1f}" if lv.etf is not None else "—"
+        tag = " ⭐关键区" if lv.is_key else ""
+        L.append(f"| {lv.label} | {_fmt(lv.price)} | {etf} | 回撤{tag} |")
+    for lv in fib.extensions:
+        etf = f"{lv.etf:.1f}" if lv.etf is not None else "—"
+        L.append(f"| {lv.label} | {_fmt(lv.price)} | {etf} | 上行扩展目标 |")
+    L.append("")
+
+    if plan.ok:
+        L.append(f"**盈亏比闸门（顺势 {plan.direction}）**：{plan.headline}")
+        if plan.bias_note:
+            L.append(f"- {plan.bias_note}")
+        L.append("")
+        L.append("| 情景 | 入场 | 止损 | 目标 | 盈亏比 | 评级 |")
+        L.append("|---|---|---|---|---|---|")
+        for s in plan.setups:
+            ee = f"（ETF {s.entry_etf:.1f}）" if s.entry_etf else ""
+            se = f"（ETF {s.stop_etf:.1f}）" if s.stop_etf else ""
+            te = f"（ETF {s.target_etf:.1f}）" if s.target_etf else ""
+            L.append(f"| {s.name} | {_fmt(s.entry)}{ee} | {_fmt(s.stop)}{se} | "
+                     f"{_fmt(s.target)}{te} {s.target_label} | **{s.rr:.2f}** | {s.grade} |")
+        L.append("")
+        for s in plan.setups:
+            L.append(f"- {s.name}：{s.verdict}")
+        L.append("")
+        for c in plan.caveats:
+            L.append(f"> {c}")
+    else:
+        L.append(f"- 盈亏比闸门不适用：{plan.note}")
+    L.append("")
+    return "\n".join(L)
+
+
+def render_fib_rr_all(blocks: list[str]) -> str:
+    header = "# 斐波那契回撤 + 盈亏比闸门（交易哲学落地 · 波段级情景参考）\n"
+    return header + "\n" + FIB_DISCLAIMER + "\n\n" + "\n---\n\n".join(blocks)

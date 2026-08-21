@@ -34,9 +34,10 @@ def _put(strike, d_oi, bias, weight, delta=-0.30):
         on_wall="", note="", weight=weight)
 
 
-def _vs(d_spot_pct, d_atm_pp=0.0):
+def _vs(d_spot_pct, d_atm_pp=0.0, d_skew25_pp=0.0):
+    # skew25 = put IV − call IV；d_skew25 = curr − prev。给 prev 反号即得目标日变化。
     curr = VolRead(date(2026, 10, 16), 56, 23.0, 1.0, 2.0)
-    prev = VolRead(date(2026, 10, 16), 57, 23.0 - d_atm_pp, 1.0, 2.0)
+    prev = VolRead(date(2026, 10, 16), 57, 23.0 - d_atm_pp, 1.0 - d_skew25_pp, 2.0)
     return VolSurface(curr=curr, prev=prev, d_spot_pct=d_spot_pct, verdict="")
 
 
@@ -71,6 +72,19 @@ def test_bullish_extreme_with_vol_confirm():
     assert ss.vol_confirms is True
     assert ss.diverges is False, "综合=偏多 与看涨同向，不背离"
     print("PASS test_bullish_extreme_with_vol_confirm")
+
+
+def test_skew_flip_upgrades_to_extreme():
+    """无 ATM 追认，但 25Δ skew 向 call 大幅倾斜（call 变贵）→ 升级极强（外部分析者核心信号）。"""
+    changes = [_call(445, 4906, "bullish", 1.0), _call(425, 4856, "bullish", 1.0),
+               _call(455, 1521, "bullish", 1.0)]
+    # 价微跌、ATM 不追认，但 skew25 下降 1.2pp（put 相对 call 变便宜＝抢 call）
+    fa = _fa(changes, up=40609, dn=6782, vs=_vs(d_spot_pct=-0.3, d_atm_pp=0.0, d_skew25_pp=-1.2))
+    ss = detect_strong_signal(fa, outlook_bias="分歧(双向)")
+    assert ss is not None and ss.direction == "看涨", ss
+    assert ss.level == "极强" and ss.vol_confirms, ss
+    assert any("skew 向 call 倾斜" in r for r in ss.reasons), ss.reasons
+    print("PASS test_skew_flip_upgrades_to_extreme")
 
 
 def test_contra_gate_suppresses_defensive_puts():

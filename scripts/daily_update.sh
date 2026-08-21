@@ -36,7 +36,22 @@ if [[ -z $(git status --porcelain data/snapshots) ]]; then
     exit 0
 fi
 
-python3 -m undertow report gold silver wti qqq --no-snapshot
+REPORT_OUT=$(python3 -m undertow report gold silver wti qqq --no-snapshot)
+echo "$REPORT_OUT"
+
+# —— 强信号推送：报告若打出 ⚡（近端资金流一边倒），弹 macOS 通知 + 落一份告警文件兜底 ——
+# 动机：这种领先信号（复盘 8/19 黄金）值得当天就看到，别等翻报告。宁缺勿滥，多数日不触发。
+STRONG_LINES=$(printf '%s\n' "$REPORT_OUT" | grep '⚡' || true)
+if [[ -n "$STRONG_LINES" ]]; then
+    # 提炼 "品种 ⚡等级方向" 精简摘要（去掉路径/可信度噪音）
+    SUMMARY=$(printf '%s\n' "$STRONG_LINES" | sed -E 's/^ *([a-z]+) .*(⚡[^ ]*).*/\1 \2/' | paste -sd '；' -)
+    echo "[强信号] $SUMMARY"
+    # 兜底：写当日告警文件（即使通知没弹出也留痕；纳入 git 一并备份）
+    printf '%s | %s\n%s\n' "$ET_DATE" "$SUMMARY" "$STRONG_LINES" \
+        > "data/reports/ALERT_${ET_DATE}.txt"
+    # macOS 通知（launchd 跑在用户 GUI 会话，display notification 可弹；失败不影响主流程）
+    /usr/bin/osascript -e "display notification \"${SUMMARY}\" with title \"⚡ undertow 强信号\" subtitle \"近端资金流一边倒 · 点开报告看详情\" sound name \"Glass\"" 2>/dev/null || true
+fi
 
 git add data/snapshots data/reports data/history
 if git diff --cached --quiet; then

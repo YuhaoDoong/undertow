@@ -278,8 +278,8 @@ def _flow_vote(fa: FlowAnalysis) -> list[FactorVote]:
             return [FactorVote(
                 layer="Flow", factor="买卖方资金流", direction=_DIR_CN[sign], sign=sign,
                 weight=0.8, reliability="中",
-                detail=f"买卖方加权 下行压力 {dn:,.0f} vs 上行 {up:,.0f}"
-                       f"（OI增 × IV方向判买卖方）。",
+                detail=f"买卖方加权 看跌资金力 {dn:,.0f} vs 看涨 {up:,.0f}"
+                       f"（OI增 × IV方向判买卖方；非「上方阻力」，是推动价格的资金力量）。",
             )]
         return []
     # 仅单快照：用今日成交 put/call 比（弱）

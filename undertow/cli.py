@@ -40,6 +40,7 @@ from undertow.analyze.strategy import build_strategy
 from undertow.analyze.expiry_ladder import build_ladder
 from undertow.analyze.fibonacci import build_fibonacci
 from undertow.analyze.risk_reward import build_risk_reward
+from undertow.analyze.verdict import build_verdict
 from undertow.analyze.macro import analyze_macro, series_ids_for
 from undertow.analyze.backtest import run_backtest
 from undertow.report import markdown as report_mod
@@ -51,7 +52,8 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_vol_analysis_section,
                           render_strategy_hub, render_condor_section,
                           render_credit_spread_section, render_expiry_ladder_section,
-                          render_fib_rr_section, render_strong_signal_banner)
+                          render_fib_rr_section, render_strong_signal_banner,
+                          render_verdict_section)
 from undertow.analyze.volregime import assess_vol_regime
 from undertow.analyze.condor import assess_condor
 from undertow.analyze.credit_spread import assess_credit_spread
@@ -898,15 +900,24 @@ def cmd_report(args) -> int:
                 print(f"[提示] {inst.key} 到期阶梯跳过: {e}", file=sys.stderr)
             # —— 斐波那契回撤 + 盈亏比闸门（作者"先看盈亏比、别追、等回调"哲学落地）——
             fib_html = ""
+            fib_an = rr_plan = None
             try:
                 if real_series is not None:
-                    fib = build_fibonacci(real_series, ratio=ratio,
-                                          spot=(real_price if real_price else curr.spot))
-                    rr_plan = build_risk_reward(fib, o=outlook)
+                    fib_an = build_fibonacci(real_series, ratio=ratio,
+                                             spot=(real_price if real_price else curr.spot))
+                    rr_plan = build_risk_reward(fib_an, o=outlook)
                     fib_html = render_fib_rr_section(
-                        fib, rr_plan, etf_symbol=(inst.options.symbol if inst.options else ""))
+                        fib_an, rr_plan, etf_symbol=(inst.options.symbol if inst.options else ""))
             except Exception as e:
                 print(f"[提示] {inst.key} 斐波/盈亏比跳过: {e}", file=sys.stderr)
+            # —— 当日决策研判：规则化合成 近中分层＋资金流＋强信号＋盈亏比闸门（无 LLM）——
+            verdict = None
+            verdict_html = ""
+            try:
+                verdict = build_verdict(outlook, fa, strong_sig, fib_an, rr_plan)
+                verdict_html = render_verdict_section(verdict, inst.display_name)
+            except Exception as e:
+                print(f"[提示] {inst.key} 决策研判跳过: {e}", file=sys.stderr)
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,
                                       strategy_html,
@@ -914,11 +925,11 @@ def cmd_report(args) -> int:
                                       volregime_html=volregime_html,
                                       vol_analysis_html=vol_analysis_html,
                                       expiry_html=expiry_html, fib_html=fib_html,
-                                      strong_html=strong_html)
+                                      strong_html=strong_html, verdict_html=verdict_html)
             fn = f"{inst.key}_{today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
-            written.append((inst, outlook, fn, strong_sig))
+            written.append((inst, outlook, fn, strong_sig, verdict))
         except Exception as e:
             failed.append(inst.key)
             print(f"[警告] {inst.key} 研判报告失败: {e}", file=sys.stderr)
@@ -928,24 +939,26 @@ def cmd_report(args) -> int:
         return 1
 
     if args.json:
-        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _, _ in written],
+        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _, _, _ in written],
                          ensure_ascii=False, indent=2, default=str))
         return 0
 
     index_path = None
     if len(written) > 1:
         idx_items = [{"name": o.display_name, "fn": fn, "bias": o.bias,
-                      "conf": o.confidence, "summary": _index_summary(o), "signal": ss}
-                     for _, o, fn, ss in written]
+                      "conf": o.confidence, "summary": _index_summary(o), "signal": ss,
+                      "verdict_head": (v.headline if v and getattr(v, "ok", False) else "")}
+                     for _, o, fn, ss, v in written]
         index_html = render_index_html(idx_items, today.isoformat())
         index_path = reports_dir / f"index_{today.isoformat()}.html"
         _archive_existing(index_path)
         index_path.write_text(index_html, encoding="utf-8")
 
     print(f"已生成综合研判报告（{today}）:")
-    for inst, o, fn, ss in written:
+    for inst, o, fn, ss, v in written:
         flag = f"  ⚡{ss.level}{ss.direction}" if ss else ""
-        print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence}){flag}  → {reports_dir / fn}")
+        vh = f"  · {v.headline}" if v and getattr(v, "ok", False) else ""
+        print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence}){flag}{vh}  → {reports_dir / fn}")
     if index_path:
         print(f"  索引页 → {index_path}")
     if failed:

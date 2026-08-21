@@ -900,6 +900,29 @@ def render_concentration_html(cs) -> str:
             f'——净空集中度上行 = 空头火力向大户集中</div>')
 
 
+def render_verdict_section(v, display_name: str = "") -> str:
+    """当日决策研判卡片：做空?/现价追?/短线/长线 四问的规则化结论（置于报告靠前）。
+
+    确定性合成（近中分层＋资金流＋强信号＋斐波盈亏比闸门），无 LLM、数字来自上游。
+    """
+    if v is None or not getattr(v, "ok", False):
+        return ""
+    rows = ""
+    for b in v.bullets:
+        q, _, a = b.partition("：")
+        rows += (f'<tr><td style="padding:6px 10px;font-weight:700;white-space:nowrap;'
+                 f'vertical-align:top;color:#0969da">{_esc(q)}</td>'
+                 f'<td style="padding:6px 10px;line-height:1.6">{_esc(a)}</td></tr>')
+    return (
+        '<div class="card" style="border-left:4px solid #0969da">'
+        f'<h2 style="margin-top:0">🧭 当日决策研判 · {_esc(display_name)}</h2>'
+        f'<div style="font-size:16px;font-weight:800;margin:2px 0 10px;color:#0969da">{_esc(v.headline)}</div>'
+        f'<table style="border-collapse:collapse;width:100%">{rows}</table>'
+        f'<div class="sub" style="margin-top:10px;font-size:12px">{_esc(v.note)}</div>'
+        '</div>'
+    )
+
+
 def render_strong_signal_banner(ss, display_name: str = "") -> str:
     """近端资金流强信号置顶红/绿告警（一边倒时才由 detect_strong_signal 产出）。
 
@@ -943,7 +966,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        tldr_html: str = "", strategy_html: str = "",
                        conc_html: str = "", volregime_html: str = "",
                        vol_analysis_html: str = "", expiry_html: str = "",
-                       fib_html: str = "", strong_html: str = "") -> str:
+                       fib_html: str = "", strong_html: str = "",
+                       verdict_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -962,6 +986,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
     )
     body = (
         f'{strong_html}'
+        f'{verdict_html}'
         f'{tldr_html}'
         f'{events_html}'
         f'<div class="card"><h2>关键位点（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
@@ -1027,13 +1052,17 @@ def render_index_html(items: list[dict], asof: str) -> str:
             up = ss.direction == "看涨"
             sig_pill = (f'<span class="pill" style="background:{"#1a7f37" if up else "#cf222e"};'
                         f'color:#fff">⚡{_esc(ss.level)}{_esc(ss.direction)}</span>')
-        summary_div = (f'<div class="sub" style="margin-top:7px;line-height:1.5">{_esc(summary)}</div>'
+        verdict_head = it.get("verdict_head", "")
+        verdict_div = (f'<div style="margin-top:7px;font-weight:700;color:#0969da;'
+                       f'line-height:1.5">🧭 {_esc(verdict_head)}</div>' if verdict_head else "")
+        summary_div = (f'<div class="sub" style="margin-top:4px;line-height:1.5">{_esc(summary)}</div>'
                        if summary else "")
         cards.append(
             f'<a class="card" style="display:block;text-decoration:none;color:inherit" href="{_esc(fn)}">'
             f'<h1 style="font-size:17px">{_esc(name)}</h1>'
             f'<span class="badge" style="background:{color}">{_esc(bias)}</span>'
             f'<span class="pill">可信度 {_esc(conf)}</span>{sig_pill}'
+            f'{verdict_div}'
             f'{summary_div}'
             f'</a>'
         )

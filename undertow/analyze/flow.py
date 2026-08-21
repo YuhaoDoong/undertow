@@ -238,13 +238,24 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "") -> "Stro
         key = "多" if direction == "看涨" else "空"
         return key not in b   # 综合未同向（分歧/中性/反向）＝背离
 
-    def _vc(want_up: bool) -> bool:
+    def _atm_conf(want_up: bool) -> bool:
+        # 涨且 ATM IV 抬升 = 买方追价（看涨确认）；跌且 ATM IV 抬升 = 恐慌买保护（看跌确认）
         vs = fa.vol
         if not vs or not vs.prev:
             return False
-        # 涨且 ATM IV 抬升 = 买方追价（看涨确认）；跌且 ATM IV 抬升 = 恐慌买保护（看跌确认）
         return (vs.d_spot_pct > D_SPOT_SIG and vs.d_atm_pp > D_ATM_SIG) if want_up \
             else (vs.d_spot_pct < -D_SPOT_SIG and vs.d_atm_pp > D_ATM_SIG)
+
+    def _skew_conf(want_up: bool) -> bool:
+        # 25Δ skew = put IV − call IV：下降=call 相对变贵=抢 call（看涨）；上升=put 变贵（看跌）。
+        # 复刻剑锋"skew 全面向上倾斜(call 端)"＝转多的核心信号之一。
+        vs = fa.vol
+        if not vs or not vs.prev:
+            return False
+        return (vs.d_skew25_pp <= -D_SKEW_SIG) if want_up else (vs.d_skew25_pp >= D_SKEW_SIG)
+
+    def _vc(want_up: bool) -> bool:
+        return _atm_conf(want_up) or _skew_conf(want_up)
 
     # 价格背离闸门：当日价格朝信号反方向大幅移动＝该"压力"多半是移动后的对冲/防守
     # （如大涨日的 put 保护买盘），而非方向性建仓，不配置顶红标。d_spot 缺失时不设闸。
@@ -264,12 +275,15 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "") -> "Stro
         pr, wr = up / max(dn, 1.0), bull_wing / max(bear_wing, 0.5)
         vc = _vc(True)
         reasons = [
-            f"上行压力 {up:,.0f} ≫ 下行 {dn:,.0f}（{pr:.1f}×，压倒性）",
+            f"看涨资金力 {up:,.0f} ≫ 看跌 {dn:,.0f}（{pr:.1f}×，压倒性）"
+            f"——即 call 买盘＋put 卖方做支撑 全面压过 call 卖压＋put 买保护",
             f"主翼 20~45Δ call 买盘权重 {bull_wing:.1f} ≫ 卖压 {bear_wing:.1f}（{wr:.1f}×）",
             f"近月 call 净建仓 +{fa.net_call_doi:,} 手",
         ]
-        if vc:
-            reasons.append(f"波动率面追认：价涨 {fa.vol.d_spot_pct:+.1f}% 且 ATM IV {fa.vol.d_atm_pp:+.2f}pp（买方追价）")
+        if _atm_conf(True):
+            reasons.append(f"波动率面追认：价涨 {fa.vol.d_spot_pct:+.1f}% 且 ATM IV {fa.vol.d_atm_pp:+.2f}pp（买方追价，非空头回补）")
+        if _skew_conf(True):
+            reasons.append(f"skew 向 call 倾斜：25Δ(put−call) {fa.vol.d_skew25_pp:+.2f}pp（call 相对变贵＝抢 call）")
         return StrongSignal("看涨", "极强" if vc else "强", round(pr, 1), round(wr, 1),
                             fa.net_call_doi, vc, reasons, _diverges("看涨"), outlook_bias)
 
@@ -282,12 +296,15 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "") -> "Stro
         pr, wr = dn / max(up, 1.0), bear_wing / max(bull_wing, 0.5)
         vc = _vc(False)
         reasons = [
-            f"下行压力 {dn:,.0f} ≫ 上行 {up:,.0f}（{pr:.1f}×，压倒性）",
+            f"看跌资金力 {dn:,.0f} ≫ 看涨 {up:,.0f}（{pr:.1f}×，压倒性）"
+            f"——即 call 卖压＋put 买保护 全面压过 call 买盘＋put 卖方支撑",
             f"主翼 20~45Δ 卖压/买保护权重 {bear_wing:.1f} ≫ 反向 {bull_wing:.1f}（{wr:.1f}×）",
             f"近月 put 净建仓 +{fa.net_put_doi:,} 手",
         ]
-        if vc:
-            reasons.append(f"波动率面追认：价跌 {fa.vol.d_spot_pct:+.1f}% 且 ATM IV {fa.vol.d_atm_pp:+.2f}pp（买保护）")
+        if _atm_conf(False):
+            reasons.append(f"波动率面追认：价跌 {fa.vol.d_spot_pct:+.1f}% 且 ATM IV {fa.vol.d_atm_pp:+.2f}pp（恐慌买保护）")
+        if _skew_conf(False):
+            reasons.append(f"skew 向 put 倾斜：25Δ(put−call) {fa.vol.d_skew25_pp:+.2f}pp（put 相对变贵＝抢保护）")
         return StrongSignal("看跌", "极强" if vc else "强", round(pr, 1), round(wr, 1),
                             fa.net_put_doi, vc, reasons, _diverges("看跌"), outlook_bias)
 
@@ -854,11 +871,11 @@ def analyze_flow(
 
         if downside or upside:
             if downside > upside * 1.3:
-                tilt = f"偏空（下行压力 {downside:,.0f} > 上行 {upside:,.0f}；put 买保护/call 卖压制占优{cnote}）"
+                tilt = f"偏空（看跌资金力 {downside:,.0f} > 看涨 {upside:,.0f}；put 买保护/call 卖压制占优{cnote}）"
             elif upside > downside * 1.3:
-                tilt = f"偏多（上行 {upside:,.0f} > 下行 {downside:,.0f}；call 买盘/put 卖方做支撑占优{cnote}）"
+                tilt = f"偏多（看涨资金力 {upside:,.0f} > 看跌 {downside:,.0f}；call 买盘/put 卖方做支撑占优{cnote}）"
             else:
-                tilt = f"分歧（下行 {downside:,.0f} ≈ 上行 {upside:,.0f}{cnote}）"
+                tilt = f"分歧（看跌 {downside:,.0f} ≈ 看涨 {upside:,.0f}{cnote}）"
 
     return FlowAnalysis(
         instrument=curr.instrument,

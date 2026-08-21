@@ -928,7 +928,7 @@ def render_strong_signal_banner(ss, display_name: str = "") -> str:
         f'<div style="font-size:20px;font-weight:800;color:{accent}">'
         f'⚡ {name}近端资金流 <span style="font-size:23px">{arrow} {_esc(ss.level)}{_esc(ss.direction)}</span></div>'
         f'<div class="sub" style="margin:4px 0 6px">期权端"一边倒"教科书组合 · '
-        f'压力比 {ss.pressure_ratio}× · 主翼买卖比 {ss.wing_ratio}×'
+        f'资金力比 {ss.pressure_ratio}× · 主翼买卖比 {ss.wing_ratio}×'
         f'{" · 波动率面追认" if ss.vol_confirms else ""}</div>'
         f'<ul style="margin:6px 0 0;padding-left:20px;font-size:13.5px">{reasons}</ul>'
         f'{diverge}'
@@ -1011,7 +1011,7 @@ def render_index_html(items: list[dict], asof: str) -> str:
             f'border:2px solid {accent};background:{bg}" href="{_esc(it["fn"])}">'
             f'<div style="font-size:16px;font-weight:800;color:{accent}">'
             f'⚡ {_esc(it["name"])} 近端资金流 {arrow} {_esc(ss.level)}{_esc(ss.direction)}</div>'
-            f'<div class="sub" style="margin-top:3px">压力比 {ss.pressure_ratio}× · '
+            f'<div class="sub" style="margin-top:3px">资金力比 {ss.pressure_ratio}× · '
             f'主翼买卖比 {ss.wing_ratio}×{_esc(div)}</div></a>'
         )
 

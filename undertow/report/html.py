@@ -907,12 +907,14 @@ def render_verdict_section(v, display_name: str = "") -> str:
     """
     if v is None or not getattr(v, "ok", False):
         return ""
+    rows_data = [("做空？", v.short_answer), ("现价追？", v.chase_answer),
+                 ("短线仓", v.swing_action), ("长线仓", v.core_action)]
     rows = ""
-    for b in v.bullets:
-        q, _, a = b.partition("：")
-        rows += (f'<tr><td style="padding:6px 10px;font-weight:700;white-space:nowrap;'
-                 f'vertical-align:top;color:#0969da">{_esc(q)}</td>'
-                 f'<td style="padding:6px 10px;line-height:1.6">{_esc(a)}</td></tr>')
+    for label, ans in rows_data:
+        rows += (f'<tr>'
+                 f'<td style="padding:6px 12px 6px 0;font-weight:700;white-space:nowrap;'
+                 f'vertical-align:top;color:#0969da;width:1%">{_esc(label)}</td>'
+                 f'<td style="padding:6px 0;line-height:1.65">{_esc(ans.strip())}</td></tr>')
     return (
         '<div class="card" style="border-left:4px solid #0969da">'
         f'<h2 style="margin-top:0">🧭 当日决策研判 · {_esc(display_name)}</h2>'

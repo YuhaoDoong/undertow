@@ -32,7 +32,8 @@ from undertow.analyze.positioning import analyze
 from undertow.analyze.signals import generate_signals, net_bias
 from undertow.analyze.gamma import analyze_gamma, structure_delta
 from undertow.analyze.flow import (analyze_flow, counter_signals,
-                                   flip_driver_summary, structural_moves)
+                                   flip_driver_summary, structural_moves,
+                                   detect_strong_signal)
 from undertow.analyze.outlook import (build_outlook, macro_to_votes,
                                       plain_summary_blocks)
 from undertow.analyze.strategy import build_strategy
@@ -50,7 +51,7 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_vol_analysis_section,
                           render_strategy_hub, render_condor_section,
                           render_credit_spread_section, render_expiry_ladder_section,
-                          render_fib_rr_section)
+                          render_fib_rr_section, render_strong_signal_banner)
 from undertow.analyze.volregime import assess_vol_regime
 from undertow.analyze.condor import assess_condor
 from undertow.analyze.credit_spread import assess_credit_spread
@@ -596,6 +597,36 @@ def cmd_vol(args) -> int:
     return rc
 
 
+def _index_summary(o) -> str:
+    """index 卡片一句话摘要：方向分层 + 最近支撑/阻力 + 伽马环境（供综合研报速览）。"""
+    if getattr(o, "horizon_split", False) and o.near_bias and o.mid_bias:
+        dir_part = f"近端{o.near_bias} · 中期{o.mid_bias}（分歧）"
+    elif o.near_bias and o.mid_bias:
+        dir_part = f"近端{o.near_bias} · 中期{o.mid_bias}"
+    else:
+        dir_part = o.bias
+
+    def _fmt(v: float) -> str:
+        return f"{v:,.1f}" if abs(v) < 200 else f"{v:,.0f}"
+
+    def _v(kl):
+        return kl.commodity_level if kl.commodity_level is not None else kl.etf_level
+    sup = next((kl for kl in o.key_levels if kl.kind == "support"), None)
+    res = next((kl for kl in o.key_levels if kl.kind == "resistance"), None)
+    lv = []
+    if sup:
+        lv.append(f"支撑 {_fmt(_v(sup))}")
+    if res:
+        lv.append(f"阻力 {_fmt(_v(res))}")
+    lv_part = ("；" + " / ".join(lv)) if lv else ""
+    reg = ""
+    if "正" in o.regime and "Gamma" in o.regime or "正伽马" in o.regime:
+        reg = "；正伽马·假突破多"
+    elif "负" in o.regime and "Gamma" in o.regime or "负伽马" in o.regime:
+        reg = "；负伽马·追势顺畅"
+    return f"{dir_part}{lv_part}{reg}"
+
+
 def cmd_report(args) -> int:
     """综合研判报告：四层情报聚合 + 可视化 + 情景推演 → 自包含 HTML。"""
     cfg = load_config()
@@ -686,6 +717,9 @@ def cmd_report(args) -> int:
             outlook = build_outlook(an, signals, ga, fa, display_name=inst.display_name,
                                     commodity_symbol=comm_sym, commodity_basis=basis,
                                     extra_votes=macro_votes)
+            # —— 近端资金流强信号：一边倒时置顶告警，独立于综合投票（复盘 8/19 黄金埋没案）——
+            strong_sig = detect_strong_signal(fa, outlook_bias=outlook.bias)
+            strong_html = render_strong_signal_banner(strong_sig, inst.display_name)
 
             # —— 价格图：优先真实期货价 + 关键位换算到商品价；否则回退 ETF 日线 ——
             def lvl(etf_v):
@@ -879,11 +913,12 @@ def cmd_report(args) -> int:
                                       conc_html=render_concentration_html(an.concentration),
                                       volregime_html=volregime_html,
                                       vol_analysis_html=vol_analysis_html,
-                                      expiry_html=expiry_html, fib_html=fib_html)
+                                      expiry_html=expiry_html, fib_html=fib_html,
+                                      strong_html=strong_html)
             fn = f"{inst.key}_{today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
-            written.append((inst, outlook, fn))
+            written.append((inst, outlook, fn, strong_sig))
         except Exception as e:
             failed.append(inst.key)
             print(f"[警告] {inst.key} 研判报告失败: {e}", file=sys.stderr)
@@ -893,21 +928,24 @@ def cmd_report(args) -> int:
         return 1
 
     if args.json:
-        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _ in written],
+        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _, _ in written],
                          ensure_ascii=False, indent=2, default=str))
         return 0
 
     index_path = None
     if len(written) > 1:
-        idx_items = [(o.display_name, fn, o.bias, o.confidence) for _, o, fn in written]
+        idx_items = [{"name": o.display_name, "fn": fn, "bias": o.bias,
+                      "conf": o.confidence, "summary": _index_summary(o), "signal": ss}
+                     for _, o, fn, ss in written]
         index_html = render_index_html(idx_items, today.isoformat())
         index_path = reports_dir / f"index_{today.isoformat()}.html"
         _archive_existing(index_path)
         index_path.write_text(index_html, encoding="utf-8")
 
     print(f"已生成综合研判报告（{today}）:")
-    for inst, o, fn in written:
-        print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence})  → {reports_dir / fn}")
+    for inst, o, fn, ss in written:
+        flag = f"  ⚡{ss.level}{ss.direction}" if ss else ""
+        print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence}){flag}  → {reports_dir / fn}")
     if index_path:
         print(f"  索引页 → {index_path}")
     if failed:

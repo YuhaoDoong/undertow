@@ -56,6 +56,7 @@
 |---|---|
 | `fibonacci.py` | zigzag 定位【当前摆动腿】→ 0.382/0.5/0.618 黄金回撤 + 1.272/1.618 扩展目标；传 ratio 补 ETF 行权价锚。<br>Zigzag swing → Fibonacci retracements/extensions (+ ETF strike anchor). |
 | `risk_reward.py` | 盈亏比闸门：对每个方向算「现价追」vs「等回调(0.5)」两情景的 R:R 并评级（差/中/优），入场锚斐波、止损锚起涨点、目标取结构墙位（退回扩展位），落地"先看盈亏比、别追、等回调"。<br>R:R gate grading chase-vs-pullback setups; fib entry, structural stop/target. |
+| `verdict.py` | **当日决策研判**：规则化合成 近中分层＋资金流＋强信号＋盈亏比闸门 → 做空?/现价追?/短线/长线 四问。逆势微腿识别为回调买/反抽卖（不误报顺腿追）。全程确定性、无 LLM、数字来自上游，可跑无人值守定时任务；交互时 LLM 读它再叠流畅叙述。<br>Rule-based daily decision synthesis (short? chase? swing? core?); deterministic, LLM-free. |
 
 ## Boundary / 边界
 

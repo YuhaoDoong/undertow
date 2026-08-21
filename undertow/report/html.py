@@ -900,12 +900,50 @@ def render_concentration_html(cs) -> str:
             f'——净空集中度上行 = 空头火力向大户集中</div>')
 
 
+def render_strong_signal_banner(ss, display_name: str = "") -> str:
+    """近端资金流强信号置顶红/绿告警（一边倒时才由 detect_strong_signal 产出）。
+
+    动机：综合投票会把这种一边倒的领先信号对冲成"分歧/中性"而埋没（复盘 8/19 黄金），
+    故独立置顶、显著标识。背离时额外提示"近端资金流领先、可能抢跑于慢因子"。
+    """
+    if ss is None:
+        return ""
+    up = ss.direction == "看涨"
+    accent = "#1a7f37" if up else "#cf222e"
+    bg = "#e6f4ea" if up else "#ffebe9"
+    arrow = "▲" if up else "▼"
+    reasons = "".join(f'<li style="margin:2px 0">{_esc(r)}</li>' for r in ss.reasons)
+    diverge = ""
+    if ss.diverges:
+        diverge = (
+            f'<div style="margin-top:8px;padding:8px 10px;background:#fff8c5;'
+            f'border-radius:6px;font-size:13px;color:#7d4e00">'
+            f'⚠ <b>与综合研判方向背离</b>（综合＝{_esc(ss.outlook_bias or "—")}）：'
+            f'这是<b>近端资金流的领先信号</b>，可能抢跑于 COT/宏观等慢因子——'
+            f'综合层因多因子对冲暂显中性，但当日期权端已一边倒。近端权重更高，值得优先盯。</div>'
+        )
+    name = f'{_esc(display_name)} · ' if display_name else ""
+    return (
+        f'<div class="card" style="border:2px solid {accent};background:{bg}">'
+        f'<div style="font-size:20px;font-weight:800;color:{accent}">'
+        f'⚡ {name}近端资金流 <span style="font-size:23px">{arrow} {_esc(ss.level)}{_esc(ss.direction)}</span></div>'
+        f'<div class="sub" style="margin:4px 0 6px">期权端"一边倒"教科书组合 · '
+        f'压力比 {ss.pressure_ratio}× · 主翼买卖比 {ss.wing_ratio}×'
+        f'{" · 波动率面追认" if ss.vol_confirms else ""}</div>'
+        f'<ul style="margin:6px 0 0;padding-left:20px;font-size:13.5px">{reasons}</ul>'
+        f'{diverge}'
+        f'<div class="sub" style="margin-top:8px;font-size:12px">'
+        f'口径：近月主翼(20~45Δ)买卖方加权，独立于下方综合投票 · 波段级情景预警，非交易指令</div>'
+        f'</div>'
+    )
+
+
 def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        flow_html: str = "", macro_html: str = "", events_html: str = "",
                        tldr_html: str = "", strategy_html: str = "",
                        conc_html: str = "", volregime_html: str = "",
                        vol_analysis_html: str = "", expiry_html: str = "",
-                       fib_html: str = "") -> str:
+                       fib_html: str = "", strong_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -923,6 +961,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="sub">环境：{_esc(o.regime)}</div></div>'
     )
     body = (
+        f'{strong_html}'
         f'{tldr_html}'
         f'{events_html}'
         f'<div class="card"><h2>关键位点（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
@@ -950,22 +989,66 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
     )
 
 
-def render_index_html(items: list[tuple[str, str, str, str]], asof: str) -> str:
-    """多品种索引页。items=[(display_name, filename, bias, confidence)]。"""
+def render_index_html(items: list[dict], asof: str) -> str:
+    """多品种综合研报（每品种一句话摘要 + 强信号置顶），非仅链接。
+
+    items=[{name, fn, bias, conf, summary, signal}]，signal 为 StrongSignal|None。
+    有强信号的品种置顶并显著标识；其余按可信度默认顺序。
+    """
+    # 强信号品种置顶（看涨绿/看跌红），醒目
+    alerts = []
+    for it in items:
+        ss = it.get("signal")
+        if ss is None:
+            continue
+        up = ss.direction == "看涨"
+        accent = "#1a7f37" if up else "#cf222e"
+        bg = "#e6f4ea" if up else "#ffebe9"
+        arrow = "▲" if up else "▼"
+        div = ' · 与综合背离(近端领先)' if ss.diverges else ""
+        alerts.append(
+            f'<a class="card" style="display:block;text-decoration:none;color:inherit;'
+            f'border:2px solid {accent};background:{bg}" href="{_esc(it["fn"])}">'
+            f'<div style="font-size:16px;font-weight:800;color:{accent}">'
+            f'⚡ {_esc(it["name"])} 近端资金流 {arrow} {_esc(ss.level)}{_esc(ss.direction)}</div>'
+            f'<div class="sub" style="margin-top:3px">压力比 {ss.pressure_ratio}× · '
+            f'主翼买卖比 {ss.wing_ratio}×{_esc(div)}</div></a>'
+        )
+
     cards = []
-    for name, fn, bias, conf in items:
+    for it in items:
+        name, fn = it["name"], it["fn"]
+        bias, conf = it["bias"], it["conf"]
+        summary = it.get("summary", "")
         color = _BIAS_COLOR.get(bias, "#6e7781")
+        sig_pill = ""
+        ss = it.get("signal")
+        if ss is not None:
+            up = ss.direction == "看涨"
+            sig_pill = (f'<span class="pill" style="background:{"#1a7f37" if up else "#cf222e"};'
+                        f'color:#fff">⚡{_esc(ss.level)}{_esc(ss.direction)}</span>')
+        summary_div = (f'<div class="sub" style="margin-top:7px;line-height:1.5">{_esc(summary)}</div>'
+                       if summary else "")
         cards.append(
             f'<a class="card" style="display:block;text-decoration:none;color:inherit" href="{_esc(fn)}">'
             f'<h1 style="font-size:17px">{_esc(name)}</h1>'
             f'<span class="badge" style="background:{color}">{_esc(bias)}</span>'
-            f'<span class="pill">可信度 {_esc(conf)}</span></a>'
+            f'<span class="pill">可信度 {_esc(conf)}</span>{sig_pill}'
+            f'{summary_div}'
+            f'</a>'
         )
+
+    alert_block = ""
+    if alerts:
+        alert_block = (f'<div class="card" style="background:none;border:none;padding:6px 2px 0">'
+                       f'<h2 style="margin:0;font-size:15px">⚡ 强信号告警（近端资金流一边倒）</h2></div>'
+                       + "".join(alerts))
     return (
         '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
         f'<title>综合研判 {_esc(asof)}</title><style>{_CSS}</style></head>'
-        f'<body><div class="wrap"><div class="card"><h1>大宗商品综合研判</h1>'
-        f'<div class="sub">{_esc(asof)} · 点击进入各品种</div></div>{"".join(cards)}'
-        '<div class="foot">undertow · 纯标准库生成</div></div></body></html>'
+        f'<body><div class="wrap"><div class="card"><h1>大宗商品综合研报</h1>'
+        f'<div class="sub">{_esc(asof)} · 各品种摘要 + 强信号告警 · 点击进入详情</div></div>'
+        f'{alert_block}{"".join(cards)}'
+        '<div class="foot">undertow · 规则化情景工具，非投资建议 · 纯标准库生成</div></div></body></html>'
     )

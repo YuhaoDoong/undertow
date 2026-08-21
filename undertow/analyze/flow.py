@@ -73,6 +73,18 @@ VOL_MIN_ABS_DELTA = 0.02     # 太深 OTM 报价稀疏，也剔除
 D_ATM_SIG = 0.3              # |ΔATM IV| 超过此(pp)才算有信息
 D_SKEW_SIG = 0.5             # |Δskew| 超过此(pp)才算明显收敛/走陡
 D_SPOT_SIG = 0.5             # |Δspot%| 超过此才算"明显涨/跌"
+# —— 强信号检测：资金流"一边倒"的教科书组合，独立于综合投票，触发即置顶显著告警 ——
+# 动机(复盘 8/19 黄金)：综合层多因子投票会把单层强信号与慢因子(COT 周频滞后)/正伽马
+# 对冲成"分歧/中性"，埋没了"主翼 call 买盘一边倒 + 上行压力压倒下行"这种领先信号——
+# 该信号次日(8/20 晚)兑现为金银直线上涨。这里用远比投票严格的门槛(必须一边倒)把它单独
+# 拎出来置顶，宁缺勿滥：多数日子不触发，一旦触发就是值得盯的近端领先结构。
+STRONG_PRESSURE_RATIO = 3.0   # 顺向压力 ≥ 此×逆向 才算方向压力一边倒（投票只需 1.3）
+STRONG_WING_RATIO = 4.0       # 主翼(20~45Δ)买卖权重 ≥ 此×反向 才算主翼一边倒
+STRONG_MIN_WING_W = 3.0       # 一边倒方向的主翼最小权重（过滤清淡日的偶发单）
+STRONG_MIN_NET_DOI = 3_000    # 顺向净建仓 OI 最小规模（ETF 口径，过滤清淡日）
+STRONG_WING_DELTA_LO = 0.18   # 主翼 Delta 下界（更 OTM 的深尾不单独定性）
+STRONG_WING_DELTA_HI = 0.45   # 主翼 Delta 上界（避开 ATM 的方向含糊腿）
+STRONG_CONTRA_SPOT = 1.5      # 当日价格逆信号方向 ≥ 此% 则抑制（涨后防守型 put 买盘≠看空）
 
 
 @dataclass(frozen=True)
@@ -185,6 +197,101 @@ class FlowAnalysis:
     call_wall: float | None = None
     put_wall: float | None = None
     vol: VolSurface | None = None  # 波动率面：ATM IV / skew 日变化（买方确认检查）
+
+
+@dataclass(frozen=True)
+class StrongSignal:
+    """近端资金流"一边倒"的强信号（独立于综合投票，供置顶告警）。"""
+    direction: str           # 看涨 / 看跌
+    level: str               # 强 / 极强（极强＝波动率面同向追认）
+    pressure_ratio: float    # 顺向压力 / 逆向压力
+    wing_ratio: float        # 主翼顺向权重 / 逆向权重
+    net_doi: int             # 顺向净建仓 OI
+    vol_confirms: bool       # 波动率面是否同向追认
+    reasons: list[str] = field(default_factory=list)
+    diverges: bool = False   # 与综合研判方向背离（近端资金流领先/抢跑）
+    outlook_bias: str = ""
+
+
+def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "") -> "StrongSignal | None":
+    """检测资金流是否"一边倒"到值得置顶的强信号；不满足严格门槛则返回 None。
+
+    看涨：上行压力 ≫ 下行 + 主翼(20~45Δ)买盘(call 买 + put 卖支撑)权重 ≫ 反向 +
+    净建 call OI 显著。看跌为镜像。门槛远严于综合投票，宁缺勿滥。
+    与综合 outlook_bias 方向不一致时置 diverges（提示"近端领先、可能抢跑于慢因子"）。
+    """
+    if not fa.prev_date:
+        return None
+
+    def _wing(kind: str, bias: str) -> float:
+        return sum(c.weight for c in fa.changes
+                   if c.kind == kind and c.bias == bias and c.d_oi > 0
+                   and STRONG_WING_DELTA_LO <= abs(c.delta) <= STRONG_WING_DELTA_HI)
+
+    # 方向聚合：看涨=call 买盘 + put 卖方做支撑；看跌=call 卖压制 + put 买保护
+    bull_wing = _wing("C", "bullish") + _wing("P", "bullish")
+    bear_wing = _wing("C", "bearish") + _wing("P", "bearish")
+    up, dn = fa.upside_pressure, fa.downside_pressure
+
+    def _diverges(direction: str) -> bool:
+        b = outlook_bias or ""
+        key = "多" if direction == "看涨" else "空"
+        return key not in b   # 综合未同向（分歧/中性/反向）＝背离
+
+    def _vc(want_up: bool) -> bool:
+        vs = fa.vol
+        if not vs or not vs.prev:
+            return False
+        # 涨且 ATM IV 抬升 = 买方追价（看涨确认）；跌且 ATM IV 抬升 = 恐慌买保护（看跌确认）
+        return (vs.d_spot_pct > D_SPOT_SIG and vs.d_atm_pp > D_ATM_SIG) if want_up \
+            else (vs.d_spot_pct < -D_SPOT_SIG and vs.d_atm_pp > D_ATM_SIG)
+
+    # 价格背离闸门：当日价格朝信号反方向大幅移动＝该"压力"多半是移动后的对冲/防守
+    # （如大涨日的 put 保护买盘），而非方向性建仓，不配置顶红标。d_spot 缺失时不设闸。
+    dsp = fa.vol.d_spot_pct if (fa.vol and fa.vol.prev) else None
+
+    def _contra(want_up: bool) -> bool:
+        if dsp is None:
+            return False
+        return (dsp <= -STRONG_CONTRA_SPOT) if want_up else (dsp >= STRONG_CONTRA_SPOT)
+
+    # —— 看涨 ——
+    if (up >= STRONG_PRESSURE_RATIO * max(dn, 1.0)
+            and bull_wing >= STRONG_WING_RATIO * max(bear_wing, 0.5)
+            and bull_wing >= STRONG_MIN_WING_W
+            and fa.net_call_doi >= STRONG_MIN_NET_DOI
+            and not _contra(True)):
+        pr, wr = up / max(dn, 1.0), bull_wing / max(bear_wing, 0.5)
+        vc = _vc(True)
+        reasons = [
+            f"上行压力 {up:,.0f} ≫ 下行 {dn:,.0f}（{pr:.1f}×，压倒性）",
+            f"主翼 20~45Δ call 买盘权重 {bull_wing:.1f} ≫ 卖压 {bear_wing:.1f}（{wr:.1f}×）",
+            f"近月 call 净建仓 +{fa.net_call_doi:,} 手",
+        ]
+        if vc:
+            reasons.append(f"波动率面追认：价涨 {fa.vol.d_spot_pct:+.1f}% 且 ATM IV {fa.vol.d_atm_pp:+.2f}pp（买方追价）")
+        return StrongSignal("看涨", "极强" if vc else "强", round(pr, 1), round(wr, 1),
+                            fa.net_call_doi, vc, reasons, _diverges("看涨"), outlook_bias)
+
+    # —— 看跌 ——
+    if (dn >= STRONG_PRESSURE_RATIO * max(up, 1.0)
+            and bear_wing >= STRONG_WING_RATIO * max(bull_wing, 0.5)
+            and bear_wing >= STRONG_MIN_WING_W
+            and fa.net_put_doi >= STRONG_MIN_NET_DOI
+            and not _contra(False)):
+        pr, wr = dn / max(up, 1.0), bear_wing / max(bull_wing, 0.5)
+        vc = _vc(False)
+        reasons = [
+            f"下行压力 {dn:,.0f} ≫ 上行 {up:,.0f}（{pr:.1f}×，压倒性）",
+            f"主翼 20~45Δ 卖压/买保护权重 {bear_wing:.1f} ≫ 反向 {bull_wing:.1f}（{wr:.1f}×）",
+            f"近月 put 净建仓 +{fa.net_put_doi:,} 手",
+        ]
+        if vc:
+            reasons.append(f"波动率面追认：价跌 {fa.vol.d_spot_pct:+.1f}% 且 ATM IV {fa.vol.d_atm_pp:+.2f}pp（买保护）")
+        return StrongSignal("看跌", "极强" if vc else "强", round(pr, 1), round(wr, 1),
+                            fa.net_put_doi, vc, reasons, _diverges("看跌"), outlook_bias)
+
+    return None
 
 
 def _px_fmt(fa: "FlowAnalysis", conv):

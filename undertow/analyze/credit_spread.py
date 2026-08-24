@@ -137,7 +137,7 @@ def assess_credit_spread(*, snap: OptionsSnapshot, vr, outlook, today: date,
     snap: 当前期权链快照（ETF 口径）。vr: volregime.VolRegime。outlook: analyze.Outlook。
     """
     # 方向跟【近端】(墙位/资金流·战术周期)——信用价差是战术卖方结构，跟短线结构而非
-    # 中期持仓面（作者卖沪银 Call 跟的是短线空、非其"中期看涨"）；缺省回退综合 bias。
+    # 中期持仓面（此类短线卖 Call 跟的是短线空、非其"中期看涨"）；缺省回退综合 bias。
     bias = getattr(outlook, "near_bias", "") or getattr(outlook, "bias", "") or ""
     conf = getattr(outlook, "confidence", "") or ""
     regime = getattr(outlook, "regime", "") or ""

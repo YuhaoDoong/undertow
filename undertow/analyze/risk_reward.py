@@ -1,7 +1,7 @@
-"""盈亏比闸门（确定性计算）——把作者"交易哲学"里最硬的一条落地：
+"""盈亏比闸门（确定性计算）——把波段交易纪律里最硬的一条落地：
 **先看盈亏比、再看方不方向；现价追 vs 等回调分开算；不到 1:1 别做。**
 
-外部分析者原话框架（8/18「说一下大家近期关心的问题」）：
+这套波段纪律框架（8/18「说一下大家近期关心的问题」）：
   * 不能只考虑"会不会涨/能看到哪"，要先算盈亏比 = 潜在空间 / 止损风险；
   * 现价 4400 追、止损放起涨点 4020（风险 380）、目标 4800（空间 400）＝盈亏比≈1:1 → 差；
   * 等回调到斐波 0.5–0.618（4180–4235）再进，风险骤降、盈亏比才够；
@@ -9,7 +9,7 @@
   * 别用最终结果倒推当初决策是否正确（赌对≠决策对，大数定律最后要亏）。
 
 本模块吃 `fibonacci` 的摆动腿 + `outlook` 的结构墙位，为【顺摆动腿方向】各生成两张情景票——
-"现价追" vs "等回调到斐波区"，各自算 entry/stop/target 与盈亏比，套作者阈值给评级。
+"现价追" vs "等回调到斐波区"，各自算 entry/stop/target 与盈亏比，套机构阈值给评级。
 只作波段级情景参考，非交易指令、非投资建议。
 """
 from __future__ import annotations
@@ -19,8 +19,8 @@ from dataclasses import dataclass, field
 from undertow.analyze.fibonacci import FibAnalysis
 from undertow.analyze.outlook import Outlook, KeyLevel
 
-RR_MIN = 1.0              # 作者硬门槛：盈亏比不到 1:1 不做
-RR_GOOD = 2.0            # 作者：到 2:1 也要胜率≥~40% 才值得
+RR_MIN = 1.0              # 硬门槛：盈亏比不到 1:1 不做
+RR_GOOD = 2.0            # 纪律：到 2:1 也要胜率≥~40% 才值得
 STOP_BUF_PCT = 0.4       # 止损放摆动极值之外的缓冲（占价%），防扎针
 PULLBACK_RATIO = 0.5     # "等回调"情景默认锚在斐波 0.5（0.382–0.618 区中枢）
 
@@ -58,9 +58,9 @@ class RiskRewardPlan:
 
 def _grade(rr: float) -> tuple[str, str]:
     if rr < RR_MIN:
-        return "差", f"盈亏比 {rr:.1f} < 1:1——作者规则：不做（用差盈亏比赌不确定上涨是短线最大的坑）"
+        return "差", f"盈亏比 {rr:.1f} < 1:1——纪律：不做（用差盈亏比赌不确定上涨是短线最大的坑）"
     if rr < RR_GOOD:
-        return "中", f"盈亏比 {rr:.1f}（1–2）——作者：这种盈亏比胜率至少 ~40% 才考虑做"
+        return "中", f"盈亏比 {rr:.1f}（1–2）——纪律：这种盈亏比胜率至少 ~40% 才考虑做"
     return "优", f"盈亏比 {rr:.1f} ≥ 2:1——空间/风险结构占优（仍须自定胜率与仓位）"
 
 
@@ -118,7 +118,7 @@ def build_risk_reward(fib: FibAnalysis, o: Outlook | None = None,
         elif (long_side and "偏空" in nb) or (not long_side and "偏多" in nb):
             bias_note = f"⚠近端研判 {nb}——与顺摆动腿方向相反；顺势回调单仅作被动挂单参考，逆我方近端结构，须减仓控险。"
         else:
-            bias_note = f"近端研判 {nb}（中性/分歧）——正是作者说的'别追、等回调给出好盈亏比再动手'的场景。"
+            bias_note = f"近端研判 {nb}（中性/分歧）——正是所谓'别追、等回调给出好盈亏比再动手'的场景。"
 
     # 止损：放摆动腿起点（起涨/起跌点）之外一个缓冲——即斐波 1.0 的另一侧
     buf = spot * STOP_BUF_PCT / 100.0
@@ -142,11 +142,11 @@ def build_risk_reward(fib: FibAnalysis, o: Outlook | None = None,
 
     setups: list[Setup] = []
 
-    # ① 现价追：entry=现价（作者反复警示的坏盈亏比样板）
+    # ① 现价追：entry=现价（反复警示的坏盈亏比样板）
     rr_c = _rr(spot, stop, target)
     g_c, v_c = _grade(rr_c)
     setups.append(Setup(
-        kind="chase", name="现价追（作者反面样板）", direction=direction,
+        kind="chase", name="现价追（反面样板）", direction=direction,
         entry=spot, entry_label=f"现价 {spot:.1f}",
         stop=stop, stop_label=stop_label, target=target, target_label=target_label,
         rr=rr_c, grade=g_c, verdict=v_c,
@@ -159,19 +159,19 @@ def build_risk_reward(fib: FibAnalysis, o: Outlook | None = None,
         rr_p = _rr(pull_entry, stop, target)
         g_p, v_p = _grade(rr_p)
         setups.append(Setup(
-            kind="pullback", name=f"等回调到斐波 {PULLBACK_RATIO}（作者做法）", direction=direction,
+            kind="pullback", name=f"等回调到斐波 {PULLBACK_RATIO}（纪律做法）", direction=direction,
             entry=pull_entry, entry_label=f"斐波 {PULLBACK_RATIO} 回撤 {pull_entry:.1f}",
             stop=stop, stop_label=stop_label, target=target, target_label=target_label,
             rr=rr_p, grade=g_p, verdict=v_p,
             entry_etf=_etf(pull_entry), stop_etf=_etf(stop), target_etf=_etf(target)))
 
-    # 头条：把两张票的盈亏比对比讲成作者那句核心教训
+    # 头条：把两张票的盈亏比对比讲成那句核心教训
     if len(setups) == 2:
         c, p = setups[0], setups[1]
         better = p.rr - c.rr
         headline = (f"顺{'上涨' if long_side else '下跌'}腿{direction}：现价追盈亏比仅 {c.rr:.1f}（{c.grade}），"
                     f"等回调到斐波 {PULLBACK_RATIO} 则升到 {p.rr:.1f}（{p.grade}）"
-                    f"——{'差' + f'{better:.1f}' if better > 0 else '差别有限'}，印证作者'别追、等回调'。")
+                    f"——{'差' + f'{better:.1f}' if better > 0 else '差别有限'}，印证'别追、等回调'纪律。")
     else:
         c = setups[0]
         headline = f"顺{'上涨' if long_side else '下跌'}腿{direction}：现价追盈亏比 {c.rr:.1f}（{c.grade}）。"

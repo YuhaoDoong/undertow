@@ -70,7 +70,7 @@ def test_short_plan_scenarios_and_vetoes():
 
 
 def test_direction_follows_near_bias_over_blended():
-    """战术方向跟近端(near_bias)，非综合 bias——近空中多时应做空（如作者卖沪银）。"""
+    """战术方向跟近端(near_bias)，非综合 bias——近空中多时应做空（如近空中多时卖 Call 对冲）。"""
     o = _outlook(61.3, SILVER_LEVELS, regime="正Gamma：做市商净多伽马")
     o = replace(o, bias="偏多(弱)", near_bias="偏空(弱)", near_score=-1.1,
                 mid_bias="偏多", horizon_split=True)

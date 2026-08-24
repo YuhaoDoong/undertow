@@ -75,7 +75,7 @@ def test_bullish_extreme_with_vol_confirm():
 
 
 def test_skew_flip_upgrades_to_extreme():
-    """无 ATM 追认，但 25Δ skew 向 call 大幅倾斜（call 变贵）→ 升级极强（外部分析者核心信号）。"""
+    """无 ATM 追认，但 25Δ skew 向 call 大幅倾斜（call 变贵）→ 升级极强（核心信号）。"""
     changes = [_call(445, 4906, "bullish", 1.0), _call(425, 4856, "bullish", 1.0),
                _call(455, 1521, "bullish", 1.0)]
     # 价微跌、ATM 不追认，但 skew25 下降 1.2pp（put 相对 call 变便宜＝抢 call）

@@ -12,7 +12,7 @@ from undertow.analyze.risk_reward import build_risk_reward, RR_MIN
 
 
 def _series_uptrend() -> PriceSeries:
-    """构造一条'先跌到 4020、再涨到 4447、现价回到 4400'的序列（复刻作者例子）。
+    """构造一条'先跌到 4020、再涨到 4447、现价回到 4400'的序列（复刻范例）。
     低点在早段(idx5)、高点在后段(idx25) → 最近腿=上涨腿，起点 4020。"""
     lows, highs, closes, dates = [], [], [], []
     d0 = date(2026, 6, 1)
@@ -73,7 +73,7 @@ def test_fib_etf_anchor():
 
 
 def test_rr_pullback_beats_chase():
-    """核心：等回调的盈亏比必须高于现价追（作者'别追、等回调'的定量印证）。"""
+    """核心：等回调的盈亏比必须高于现价追（'别追、等回调'纪律的定量印证）。"""
     s = _series_uptrend()
     fib = build_fibonacci(s, spot=4400.0)
     # 上方阻力墙 4600（商品口径）

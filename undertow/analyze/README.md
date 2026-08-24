@@ -47,7 +47,7 @@
 | `credit_spread.py` | 方向性信用价差：偏空→熊市看涨价差 / 偏多→牛市看跌价差（跟近端 bias）。<br>Directional credit spreads. |
 | `condor.py` | 铁鹰：区间震荡 + 偏卖方环境的规则化结构映射。<br>Iron condor for range/seller regimes. |
 
-## Trade planning / 交易计划（盈亏比 + 斐波，作者交易哲学落地）
+## Trade planning / 交易计划（盈亏比 + 斐波，波段交易纪律落地）
 
 > 把方向研判翻译成"**能不能下手**"：先定结构锚，再算盈亏比闸门。纯确定性，LLM 不碰算术。
 > From a directional read to an actionable gate: structure anchors first, then a risk-reward gate.

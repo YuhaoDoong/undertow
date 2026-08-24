@@ -159,7 +159,7 @@ def _unusual_table_html(fa) -> str:
 
 
 def _vol_surface_html(v) -> str:
-    """波动率面小块：ATM IV / 25Δ·10Δ 偏斜的日变化 + 买方确认判读（作者口径）。"""
+    """波动率面小块：ATM IV / 25Δ·10Δ 偏斜的日变化 + 买方确认判读（机构口径）。"""
     if v is None:
         return ""
     head = (f'<div style="font-weight:600;margin:10px 0 2px">波动率面'
@@ -416,7 +416,7 @@ _GRADE_COLOR = {"差": "#cf222e", "中": "#bc4c00", "优": "#1a7f37"}
 
 
 def render_fib_rr_section(fib, plan, etf_symbol: str = "") -> str:
-    """斐波那契回撤 + 盈亏比闸门（作者「先看盈亏比、别追、等回调」交易哲学的确定性落地）。"""
+    """斐波那契回撤 + 盈亏比闸门（「先看盈亏比、别追、等回调」这套交易纪律的确定性落地）。"""
     if fib is None or not fib.ok:
         return ""
     sym = _esc(etf_symbol)
@@ -471,7 +471,7 @@ def render_fib_rr_section(fib, plan, etf_symbol: str = "") -> str:
     etf_hint = ('<b style="color:#0969da"> 蓝色为 ETF 行权价</b>；' if show_etf else "")
     return (
         '<div class="card"><h2>斐波那契回撤 + 盈亏比闸门</h2>'
-        '<div class="sub">作者交易哲学的确定性落地：<b>先看盈亏比、别追高、等回调给出好盈亏比再动手</b>。'
+        '<div class="sub">波段交易纪律的确定性落地：<b>先看盈亏比、别追高、等回调给出好盈亏比再动手</b>。'
         '摆动腿自动检测自真实期货日线；' + etf_hint
         + '目标取自结构墙位/斐波扩展，非价格预测，仅波段级情景参考。</div>'
         f'<div style="font-weight:700;margin:10px 0 4px">摆动腿：{_esc(dir_cn)}</div>'
@@ -893,7 +893,7 @@ def render_credit_spread_section(cp) -> str:
 
 
 def render_concentration_html(cs) -> str:
-    """大户集中度一行（作者口径 R10：前8大净空集中度上行=空头火力向大户集中）。"""
+    """大户集中度一行（机构口径 R10：前8大净空集中度上行=空头火力向大户集中）。"""
     if cs is None:
         return ""
     return (f'<div class="sub">大户集中度（CFTC 净口径，占 OI%）：{_esc(cs.note())}'

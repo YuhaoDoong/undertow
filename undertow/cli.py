@@ -296,7 +296,7 @@ def cmd_snapshot(args) -> int:
               f"→ 已累计 {n_dates} 天  ·  {path}")
     if any(nd < 2 for *_, nd in saved):
         print("\n提示：日对日 ΔOI/ΔIV 异动需要 ≥2 天快照。明天再跑一次 snapshot，"
-              "之后 `flow` 即可出作者那种「近月大单异动」。")
+              "之后 `flow` 即可出那种「近月大单异动」。")
     return 0
 
 
@@ -425,7 +425,7 @@ def _fib_key_levels(ga, ratio):
 
 
 def cmd_fib(args) -> int:
-    """斐波那契回撤 + 盈亏比闸门：作者「先看盈亏比、别追、等回调」交易哲学的确定性落地。"""
+    """斐波那契回撤 + 盈亏比闸门：「先看盈亏比、别追、等回调」这套交易纪律的确定性落地。"""
     cfg = load_config()
     opt_src = CboeOptionsSource()
     fut_src = YahooFuturesSource()
@@ -898,7 +898,7 @@ def cmd_report(args) -> int:
                     etf_symbol=inst.options.symbol)
             except Exception as e:
                 print(f"[提示] {inst.key} 到期阶梯跳过: {e}", file=sys.stderr)
-            # —— 斐波那契回撤 + 盈亏比闸门（作者"先看盈亏比、别追、等回调"哲学落地）——
+            # —— 斐波那契回撤 + 盈亏比闸门（"先看盈亏比、别追、等回调"纪律落地）——
             fib_html = ""
             fib_an = rr_plan = None
             try:
@@ -1048,7 +1048,7 @@ def build_parser() -> argparse.ArgumentParser:
                     help="不自动落盘今日快照（仅用已落盘数据分析）")
     pe.set_defaults(func=cmd_expiry)
 
-    pfib = sub.add_parser("fib", help="斐波那契回撤+盈亏比闸门：先看盈亏比、别追、等回调（作者交易哲学落地）")
+    pfib = sub.add_parser("fib", help="斐波那契回撤+盈亏比闸门：先看盈亏比、别追、等回调（波段交易纪律落地）")
     pfib.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")
     pfib.add_argument("--lookback", type=int, default=90, help="摆动腿检测回看的交易日数（默认 90）")
     pfib.set_defaults(func=cmd_fib)

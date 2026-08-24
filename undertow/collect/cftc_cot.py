@@ -168,7 +168,7 @@ class CftcCotSource(DataSource):
             nonreportable=category("nonreportable"),
             changes=changes,
             raw=rec,
-            # 集中度字段两种报告（Disaggregated/Legacy）同名（作者口径：前8大净空%）
+            # 集中度字段两种报告（Disaggregated/Legacy）同名（机构口径：前8大净空%）
             conc_net_4_long=conc("conc_net_le_4_tdr_long_all"),
             conc_net_4_short=conc("conc_net_le_4_tdr_short_all"),
             conc_net_8_long=conc("conc_net_le_8_tdr_long_all"),

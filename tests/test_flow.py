@@ -88,7 +88,7 @@ def test_flow_single_snapshot_only_unusual():
 
 
 def test_judge_matches_author():
-    # 用作者 WTI 6/22 表的代表行校验买卖方判定（IV 已是 Delta 修正后 pp）
+    # 用一张 WTI 期权流表的代表行校验买卖方判定（IV 已是 Delta 修正后 pp）
     cases = [
         ("P", +318, -0.30, "卖方做支撑", "bullish"),
         ("P", +1232, +0.33, "买方保护", "bearish"),
@@ -138,7 +138,7 @@ def test_flow_buyer_seller_table():
 
 def test_detect_bear_call_spread_strips_protective_leg():
     # 表面"上方大量买 75C"看似看涨，实为 Bear Call Spread 的封顶腿：
-    # 卖 72C(IV降=压制) + 买 75C(IV升=保护)，净看空（复刻作者 6/25 WTI 识破）。
+    # 卖 72C(IV降=压制) + 买 75C(IV升=保护)，净看空（复刻一次 WTI 识破案例）。
     prev = _snap([_c(72, "C", oi=2000, iv=0.30), _c(75, "C", oi=1500, iv=0.34)], spot=70.0)
     curr = _snap([_c(72, "C", oi=2300, vol=900, iv=0.28),
                   _c(75, "C", oi=1800, vol=900, iv=0.36)], spot=70.0)
@@ -198,7 +198,7 @@ if __name__ == "__main__":
 
 def test_structural_moves_detects_put_wall_roll():
     # 复刻 2026-07-08 黄金实况：put 墙 360 卖方撤退 / 370 买方保护进场，
-    # 双腿 IV 齐升 → 双 bearish → 结论必须点明"资本更看跌"（作者口径）
+    # 双腿 IV 齐升 → 双 bearish → 结论必须点明"资本更看跌"（机构口径）
     prev = _snap([
         _c(360, "P", oi=106_000, iv=0.200), _c(370, "P", oi=6_600, iv=0.200),
         _c(400, "C", oi=40_000, iv=0.20),

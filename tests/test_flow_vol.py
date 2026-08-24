@@ -1,6 +1,6 @@
 """波动率面（ATM IV / 25Δ·10Δ 偏斜）：读数、插值、买方确认判读。
 
-来自作者 7/2 黄金分析：大涨若无买方追价（ATM IV 反被压、skew 不收敛），
+一次黄金分析：大涨若无买方追价（ATM IV 反被压、skew 不收敛），
 上涨更像空头回补、动力存疑。
 """
 from datetime import date, timedelta
@@ -55,7 +55,7 @@ def test_read_vol_respects_forced_expiry_missing():
 
 
 def test_vol_surface_rally_without_buyer_confirmation():
-    """复刻作者 7/2 场景：价格 +2.6%、ATM IV 大降、skew 几乎不动 → 未确认涨势。"""
+    """复刻该场景：价格 +2.6%、ATM IV 大降、skew 几乎不动 → 未确认涨势。"""
     prev = _chain(spot=368.0, atm_iv=0.24)
     curr = _chain(spot=378.0, atm_iv=0.225)
     vs = vol_surface(prev, curr, today=TODAY)

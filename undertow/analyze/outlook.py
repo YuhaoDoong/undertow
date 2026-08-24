@@ -27,6 +27,7 @@ SIGNAL_RELIABILITY: dict[str, tuple[float, str, str]] = {
     "MM_FLOW_QUALITY":   (0.6, "低", "逐周变向、弱持续性时易反复"),
     "SWAP_DIR_SHORT":    (0.4, "低", "小样本 + OTC 对冲歧义"),
     "SWAP_DIR_LONG":     (0.4, "低", "小样本 + OTC 对冲歧义"),
+    "SHORT_SQUEEZE_SETUP":(1.0, "中", "高集中度净空=逼空燃料；突破放大上行，比朴素方向性净空更可信"),
 }
 _STRENGTH_W = {"强": 2.0, "中": 1.0, "弱": 0.5}
 _DIR_SIGN = {"bullish": 1, "risk-up": 1, "bearish": -1, "risk-down": -1, "neutral": 0}

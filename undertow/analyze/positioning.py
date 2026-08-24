@@ -66,7 +66,7 @@ class CategoryStats:
 class ConcentrationStats:
     """前 4/8 大交易商净持仓集中度（占 OI %，CFTC Concentration Ratios）。
 
-    作者读法（R10）：前 8 大净空集中度上行 = 空头火力向大户集中（如金 51.1→52.8%）。
+    机构读法（R10）：前 8 大净空集中度上行 = 空头火力向大户集中（如金 51.1→52.8%）。
     """
     net4_long: float
     net4_short: float

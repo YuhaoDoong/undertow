@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
 
 def test_concentration_stats_author_gold_case():
-    # 复刻作者 6/30 黄金实例：前8大净空 51.1% → 52.8%（+1.7pp），前8大净多微动
+    # 复刻一个黄金实例：前8大净空 51.1% → 52.8%（+1.7pp），前8大净多微动
     from dataclasses import replace as _rep
     hist = []
     for i, (l8, s8) in enumerate([(29.0, 50.2), (28.9, 51.1), (28.4, 52.8)]):

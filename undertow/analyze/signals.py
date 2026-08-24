@@ -19,6 +19,9 @@ CROWD_EXTREME_PCT = 95.0    # 极端拥挤
 CROWD_LOW_PCT = 15.0
 CROWD_EXTREME_LOW_PCT = 5.0
 WEAK_CONVICTION_ABS = 3000  # 净变化绝对值超过此才认为"显著"
+SQUEEZE_CONC_PCT = 85.0     # 前8大净空集中度历史分位 ≥ 此 = 空头火力高度集中
+SQUEEZE_CONC_ABS = 45.0     # 或前8大净空占 OI ≥ 此(%) 作绝对兜底
+SQUEEZE_STRONG_PCT = 93.0   # 分位 ≥ 此 → 逼空蓄势判为"强"
 
 
 @dataclass(frozen=True)
@@ -149,13 +152,59 @@ def _swap_dealer_pressure(an: PositioningAnalysis) -> list[Signal]:
     return []
 
 
+def _squeeze_setup(an: PositioningAnalysis) -> list[Signal]:
+    """高集中度净空堆积 + 投机资金持续押多 = 逼空蓄势（方向偏上行风险）。
+
+    单看某一类别，Swap Dealers 加空会被读成看空；但当空头高度集中在大户手里、
+    且投机多头同步加码（双方净变化几乎对冲、在高位一起建新仓），这堵净空墙更像
+    【逼空燃料】：价格一旦向上突破，被动回补 / 追加 Delta 对冲会放大上行，形成
+    非线性挤压。这条独立于方向投票，用来纠正"把方向性对冲净空误读成分歧/看空"的稀释。
+    """
+    conc = an.concentration
+    if conc is None:
+        return []
+    swap = an.categories["swap_dealers"]
+    mm = an.categories["managed_money"]
+    sd, md = swap.decomposition, mm.decomposition
+
+    # 空头是否高度集中在高位：历史分位高 或 绝对占比高
+    conc_extreme = (
+        (conc.pct8_short is not None and conc.pct8_short >= SQUEEZE_CONC_PCT)
+        or conc.net8_short >= SQUEEZE_CONC_ABS
+    )
+    # 双方在高位一起建新仓：Swap 方向性加空 且 投机资金同步押多
+    swap_building_short = sd.short_change > WEAK_CONVICTION_ABS and sd.spread_change < 0
+    mm_pressing_long = md.net_change > 0 and mm.net > 0
+    if not (conc_extreme and swap_building_short and mm_pressing_long):
+        return []
+
+    offset = abs(md.net_change + sd.net_change)  # 越接近 0 = 越像一一对冲的博弈
+    strong = conc.pct8_short is not None and conc.pct8_short >= SQUEEZE_STRONG_PCT
+    pcttxt = f"（历史分位 {conc.pct8_short:.0f}）" if conc.pct8_short is not None else ""
+    return [Signal(
+        code="SHORT_SQUEEZE_SETUP",
+        title="净空高位集中·逼空蓄势",
+        direction="risk-up",
+        strength="强" if strong else "中",
+        detail=(
+            f"前8大净空集中度 {conc.net8_short:.1f}%{pcttxt}，处历史高位；同期投机资金净多 "
+            f"{md.net_change:+,} 手、Swap Dealers 净空 {sd.net_change:+,} 手（两者净变化仅差 "
+            f"{offset:,} 手，更像高位对赌、双方一起建新仓，而非多头派发离场）。空头火力高度"
+            f"集中——价格一旦向上突破，被动回补/Delta 对冲易放大成非线性挤压，方向偏"
+            f"【上行风险】，非单纯看空。（同一批方向性净空，单看是压力、放进集中度语境是燃料）"
+        ),
+    )]
+
+
 def generate_signals(an: PositioningAnalysis) -> list[Signal]:
     """汇总所有规则信号。顺序大致按重要性。"""
     signals: list[Signal] = []
     signals += _crowding_signals(an)
     signals += _conviction_signal(an)
     signals += _smart_money_divergence(an)
-    signals += _swap_dealer_pressure(an)
+    # 逼空蓄势一旦成立，已把"方向性净空"重新语境化——抑制朴素的看空读法，避免同一事实两头投票。
+    squeeze = _squeeze_setup(an)
+    signals += squeeze if squeeze else _swap_dealer_pressure(an)
     return signals
 
 

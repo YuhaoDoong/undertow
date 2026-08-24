@@ -6,7 +6,7 @@
 模块，本模块只按规则把它们组织成决策问句。跑在每日无人值守定时任务里；交互式会话中，
 LLM（助手）可读它的结构化结论再叠流畅叙述，但结论与数字以本模块为准。
 
-复刻作者交易哲学：先看盈亏比、别追高、等回调、长短线资金分离、防守≠看空、趋势没坏别逆势。
+复刻波段交易纪律：先看盈亏比、别追高、等回调、长短线资金分离、防守≠看空、趋势没坏别逆势。
 仅波段级情景研判，非投资建议、非交易指令。
 """
 from __future__ import annotations
@@ -84,7 +84,7 @@ def build_verdict(o: Outlook, fa: FlowAnalysis | None,
     elif trend == 1:   # 中期偏多（或退回近端偏多）：趋势未坏
         extra = "近端在回调、正是买点不是卖点" if counter else "防守型买盘≠空头进场"
         short_answer = (f"不是做空位置：中期偏多、趋势未坏（{extra}）；"
-                        f"逆一个没坏的趋势去空，正是作者说的负 edge。")
+                        f"逆一个没坏的趋势去空，正是所谓负 edge。")
     elif "偏空" in near:   # 近端偏空但中期未确认（中性/分歧）
         short_answer = ("可轻仓短空跟近端，但中期未背书——只算弱势跟随、不是趋势空，"
                         "务必控仓、先过盈亏比闸门（别当反转来重仓）。")
@@ -107,7 +107,7 @@ def build_verdict(o: Outlook, fa: FlowAnalysis | None,
         tail = f"；更好的点在回调 {pull.entry_label}（R:R {pull.rr:.1f}）。" if pull else "。"
         chase_answer = f"现价{dirw}盈亏比 {chase.rr:.1f}（中，偏弱）——追不划算{tail}"
     else:  # 优
-        tail = (f"；回调到 {pull.entry_label} 更优（R:R {pull.rr:.1f}）,作者仍偏好等回调。"
+        tail = (f"；回调到 {pull.entry_label} 更优（R:R {pull.rr:.1f}）,纪律上仍偏好等回调。"
                 if (pull and pull.rr > chase.rr) else "（仍须自定胜率与仓位）。")
         chase_answer = f"现价{dirw}盈亏比 {chase.rr:.1f}（优）——空间/风险结构占优{tail}"
 

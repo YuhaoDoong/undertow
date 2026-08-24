@@ -400,7 +400,7 @@ def build_strategy(o: Outlook, *, vol: VolSurface | None = None,
     # 商品价/ETF价 比值（=当日实时换算比）：给 exit_plan 的价位补 ETF 行权价锚
     cpe = (o.commodity_spot / o.spot) if (use_comm and o.spot) else None
 
-    # 方向跟【近端】(墙位/资金流·战术周期)——战术交易跟短线结构，如作者的 bear call
+    # 方向跟【近端】(墙位/资金流·战术周期)——战术交易跟短线结构，如 bear call
     # 跟短线空，而非中期持仓面；near_bias 缺省(旧数据/直接构造)时回退综合 bias。
     tac_bias = getattr(o, "near_bias", "") or o.bias
     tac_score = getattr(o, "near_score", None)

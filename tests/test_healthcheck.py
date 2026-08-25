@@ -1,0 +1,89 @@
+"""持仓体检的确定性测试（函数式，不依赖 pytest / 网络）。
+
+锚定：复现本次对话暴露的坑——近到期被指派×资金不足、盈亏比过低、窄价差近到期。
+"""
+import sys
+from dataclasses import dataclass
+from datetime import date
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from undertow.analyze.portfolio import review_portfolio, InstrumentContext, AccountCapital
+from undertow.analyze.healthcheck import run_healthcheck
+
+
+@dataclass
+class _Pos:
+    symbol: str
+    name: str
+    quantity: float
+    cost_price: float
+
+
+def _ctx(spot, *, bias="偏多"):
+    return InstrumentContext(
+        etf_symbol="SLV", display_name="白银 Silver (COMEX)", spot=spot,
+        call_wall=70.0, put_wall=55.0, zero_gamma=None,
+        bias=bias, near_bias="中性", mid_bias="偏多",
+        verdict_head="不做空 · 长线拿住", proxy_quality="good", greeks=None)
+
+
+def _codes(findings):
+    return {f.code for f in findings}
+
+
+def test_assign_capital_gap_high_severity():
+    """近到期贴价短 put + 购买力远不够接货 → ASSIGN_CAPITAL_GAP，严重度高。"""
+    pos = [_Pos("SLV260826P61000.US", "SLV 260826 61 Put", -4, 0.46),
+           _Pos("SLV260826P60000.US", "SLV 260826 60 Put", 4, 0.27)]
+    cap = AccountCapital(buy_power=6.0, net_assets=630.0, cash_usd=6.0)
+    pr = review_portfolio(pos, {"SLV": _ctx(61.5)}, asof=date(2026, 8, 24), capital=cap)
+    hf = run_healthcheck(pr, cap)
+    gap = [f for f in hf if f.code == "ASSIGN_CAPITAL_GAP"]
+    assert gap, _codes(hf)
+    assert gap[0].severity == "高", gap[0]
+    assert "接货" in gap[0].detail and "购买力" in gap[0].detail, gap[0].detail
+    assert hf[0].severity == "高", "高危应排最前"
+    print(f"PASS test_assign_capital_gap_high_severity → {gap[0].title}")
+
+
+def test_poor_rr_flagged_with_winrate():
+    """牛市看跌价差 R:R<1（冒$324赚$76）→ POOR_RR，给出所需胜率≈81%。"""
+    pos = [_Pos("SLV260826P61000.US", "SLV 61 Put", -4, 0.46),
+           _Pos("SLV260826P60000.US", "SLV 60 Put", 4, 0.27)]
+    cap = AccountCapital(buy_power=6.0, net_assets=630.0, cash_usd=6.0)
+    pr = review_portfolio(pos, {"SLV": _ctx(63.0)}, asof=date(2026, 8, 24), capital=cap)
+    hf = run_healthcheck(pr, cap)
+    poor = [f for f in hf if f.code == "POOR_RR"]
+    assert poor, _codes(hf)
+    assert "81%" in poor[0].detail or "80%" in poor[0].detail, poor[0].detail
+    print(f"PASS test_poor_rr_flagged_with_winrate → {poor[0].detail}")
+
+
+def test_tight_near_spread_gamma_flag():
+    """$1 宽 + 近到期 → TIGHT_NEAR（gamma 风险）。"""
+    pos = [_Pos("SLV260826P61000.US", "SLV 61 Put", -4, 0.46),
+           _Pos("SLV260826P60000.US", "SLV 60 Put", 4, 0.27)]
+    pr = review_portfolio(pos, {"SLV": _ctx(63.0)}, asof=date(2026, 8, 24))
+    hf = run_healthcheck(pr, None)
+    assert "TIGHT_NEAR" in _codes(hf), _codes(hf)
+    print("PASS test_tight_near_spread_gamma_flag")
+
+
+def test_healthy_far_wide_spread_no_high_severity():
+    """远到期、够宽、现价远离行权 → 不该有"高"级预警。"""
+    pos = [_Pos("SLV261218P55000.US", "SLV 55 Put", -2, 1.5),
+           _Pos("SLV261218P50000.US", "SLV 50 Put", 2, 0.6)]
+    cap = AccountCapital(buy_power=5000.0, net_assets=20000.0, cash_usd=5000.0)
+    pr = review_portfolio(pos, {"SLV": _ctx(63.0)}, asof=date(2026, 8, 24), capital=cap)
+    hf = run_healthcheck(pr, cap)
+    assert not any(f.severity == "高" for f in hf), [f.title for f in hf]
+    print("PASS test_healthy_far_wide_spread_no_high_severity")
+
+
+if __name__ == "__main__":
+    fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
+    for fn in fns:
+        fn()
+    print(f"\n{len(fns)} tests passed.")

@@ -503,8 +503,12 @@ def _money(v) -> str:
     return f"{v:+,.0f}"
 
 
-def render_account_md(review, assets=None) -> str:
-    """实盘持仓评价 终端 Markdown。review=PortfolioReview, assets=AccountAssets|None。"""
+_SEV_ICON = {"高": "🔴", "中": "🟠", "低": "🟡"}
+
+
+def render_account_md(review, assets=None, health=None) -> str:
+    """实盘持仓评价 终端 Markdown。review=PortfolioReview, assets=AccountAssets|None,
+    health=list[HealthFinding]|None（持仓体检）。"""
     L: list[str] = []
     L.append("# 实盘持仓理论评价（只读复盘 · 波段级情景参考）")
     L.append("")
@@ -518,6 +522,14 @@ def render_account_md(review, assets=None) -> str:
         cash = "、".join(f"{k} {v:,.0f}" for k, v in assets.cash_by_ccy.items()) or "—"
         L.append(f"- 账户：净资产 ${assets.net_assets:,.0f} · 购买力 ${assets.buy_power:,.0f} · 可用现金 {cash}")
     L.append("")
+    if health:
+        n_hi = sum(1 for f in health if f.severity == "高")
+        L.append(f"## 🩺 持仓体检（{len(health)} 条" + (f"，含 {n_hi} 条🔴高危" if n_hi else "") + "）")
+        L.append("")
+        for f in health:
+            L.append(f"- {_SEV_ICON.get(f.severity, '·')} **[{f.severity}] {f.title}** —— {f.detail}")
+            L.append(f"  - 参考：{f.suggestion}")
+        L.append("")
 
     for g in review.groups:
         L.append(f"## {g.display_name}（{g.underlying}）")

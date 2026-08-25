@@ -1118,7 +1118,10 @@ def cmd_account(args) -> int:
 
     review = review_portfolio(positions, contexts, asof=today, capital=capital)
 
-    print(render_account_md(review, assets))
+    from undertow.analyze.healthcheck import run_healthcheck
+    health = run_healthcheck(review, capital)
+
+    print(render_account_md(review, assets, health))
 
     # —— 每次评价落一份数据快照：持仓+资产+资金流水+成交，为将来历史复盘攒数据 ——
     # 全部 gitignore（data/account/），不入公开仓库；失败不阻断评价。
@@ -1132,7 +1135,7 @@ def cmd_account(args) -> int:
         out_dir = DATA_DIR / "account"      # gitignore：敏感数据不入公开仓库
         out_dir.mkdir(parents=True, exist_ok=True)
         fn = out_dir / f"account_{today.isoformat()}.html"
-        fn.write_text(render_account_html(review, assets), encoding="utf-8")
+        fn.write_text(render_account_html(review, assets, health), encoding="utf-8")
         print(f"\n实盘评价 HTML（本地私有，未入 git）→ {fn}")
     return 0
 

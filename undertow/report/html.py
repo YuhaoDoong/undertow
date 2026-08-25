@@ -1109,7 +1109,29 @@ def _align_color(a: str) -> str:
     return "#6e7781"
 
 
-def render_account_html(review, assets=None) -> str:
+_SEV_COLOR = {"高": "#cf222e", "中": "#9a6700", "低": "#57606a"}
+_SEV_BG = {"高": "#ffebe9", "中": "#fff8c5", "低": "#f6f8fa"}
+
+
+def _health_html(health) -> str:
+    if not health:
+        return ""
+    n_hi = sum(1 for f in health if f.severity == "高")
+    rows = []
+    for f in health:
+        col = _SEV_COLOR.get(f.severity, "#57606a")
+        bg = _SEV_BG.get(f.severity, "#f6f8fa")
+        rows.append(
+            f'<div style="border-left:4px solid {col};background:{bg};border-radius:0 8px 8px 0;'
+            f'padding:8px 12px;margin:8px 0">'
+            f'<div style="font-weight:700;color:{col}">[{_esc(f.severity)}] {_esc(f.title)}</div>'
+            f'<div style="font-size:12.5px;margin:3px 0">{_esc(f.detail)}</div>'
+            f'<div style="font-size:12px;color:#57606a">参考：{_esc(f.suggestion)}</div></div>')
+    head = f'🩺 持仓体检（{len(health)} 条' + (f'，含 {n_hi} 条高危' if n_hi else '') + '）'
+    return f'<div class="card"><h1>{head}</h1>{"".join(rows)}</div>'
+
+
+def render_account_html(review, assets=None, health=None) -> str:
     """实盘持仓理论评价 → 自包含 HTML（本地私有，落 gitignore 的 data/account/）。
 
     review=PortfolioReview, assets=AccountAssets|None。只作波段级风险情景复盘，非投资建议。
@@ -1129,6 +1151,10 @@ def render_account_html(review, assets=None) -> str:
             + "".join(head_bits) +
             '<div class="warn" style="margin-top:10px">只作<b>波段级风险情景复盘</b>，非投资建议、非交易指令；'
             '理论中值来自 BS（无 bid/ask），方向与数字来自上游确定性模块。执行永远由你在券商端完成。</div></div>')
+
+        hh = _health_html(health)
+        if hh:
+            cards.append(hh)
 
         for g in review.groups:
             d = "—" if g.net_delta is None else f"{g.net_delta:+.0f}"

@@ -19,10 +19,11 @@
 
 | 文件 | 作用 |
 |---|---|
-| `profile.py` | 数据模型（`Rule` / `Weakness` / `Lesson` / `Limits` / `SoulProfile`）+ 读写 + `check_against_profile()` 确定性纪律核查 + 人读渲染。 |
+| `profile.py` | `init_from_template()` 从模板生成本地档案；数据模型（`Rule` / `Weakness` / `Lesson` / `Limits` / `SoulProfile`）+ 读写 + `check_against_profile()` 确定性纪律核查 + 人读渲染。 |
 
 ## 入口
 
+- `python -m undertow soul --init` —— 从公开模板 `config/soul.template.json` 生成**本地私有**档案（不覆盖已有）
 - `python -m undertow soul` —— 显示档案（铁律/纪律/限额/弱点/教训）
 - `python -m undertow soul --check` —— 用档案的限额**核查当前实盘持仓是否破戒**
 - `python -m undertow soul --json` —— 结构化输出
@@ -30,7 +31,7 @@
 
 ## 档案位置与隐私
 
-档案存 **`data/soul/profile.json`**，含个人交易史与心理弱点 —— **已 gitignore，绝不进公开仓库**
+**公开仓库只放模板** `config/soul.template.json`（不含任何个人内容）；**你的实际档案**存 **`data/soul/profile.json`**，含个人交易史与心理弱点 —— **已 gitignore，绝不进公开仓库**
 （与 `data/account/` 同等对待）。**模块代码**进公开仓库，**档案内容**只在本机。
 
 ## Boundary / 边界

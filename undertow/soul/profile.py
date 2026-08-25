@@ -52,7 +52,8 @@ class Limits:
     """可机器检查的限额。None = 该项不检查。"""
     max_risk_per_trade_pct: float | None = None   # 单笔最大风险占净资产 %
     max_concentration_pct: float | None = None    # 单品种风险资金占净资产 %
-    min_rr: float | None = None                   # 最低盈亏比
+    min_rr: float | None = None                   # 最低盈亏比（**仅方向性/借方结构**）
+    min_seller_edge_pp: float | None = None       # 收权金结构：隐含胜率−盈亏平衡胜率 的最低边际(pp)
     min_dte_open: int | None = None               # 新开仓最短到期天数
     min_dte_hold_short: int | None = None         # 空头腿最晚持有到剩几天（少于则应了结）
     max_trades_per_day: int | None = None         # 单日最多交易笔数（防冲动扎堆）
@@ -79,6 +80,24 @@ class SoulProfile:
 
 
 DEFAULT_PATH = Path("data/soul/profile.json")
+TEMPLATE_PATH = Path("config/soul.template.json")
+
+
+def init_from_template(dest: Path | None = None, template: Path | None = None) -> tuple[Path, bool]:
+    """把公开模板复制成本地私有档案。返回 (路径, 是否新建)；已存在则不覆盖。
+
+    模板 `config/soul.template.json` 进公开仓库（不含个人内容）；
+    生成的 `data/soul/profile.json` 已 gitignore，只留在本机。
+    """
+    d = Path(dest) if dest else DEFAULT_PATH
+    if d.exists():
+        return d, False
+    t = Path(template) if template else TEMPLATE_PATH
+    if not t.exists():
+        raise FileNotFoundError(f"模板不存在：{t}")
+    d.parent.mkdir(parents=True, exist_ok=True)
+    d.write_text(t.read_text(encoding="utf-8"), encoding="utf-8")
+    return d, True
 
 
 def load_profile(path: Path | None = None) -> SoulProfile | None:
@@ -159,13 +178,25 @@ def check_against_profile(review, capital, profile: SoulProfile | None) -> list[
                         detail=f"{c.label} 风险 ${c.capital_at_risk:,.0f} ≈ 净资产 {pct:.0f}%，"
                                f"超过你设的 {lim.max_risk_per_trade_pct:.0f}%。",
                         scope=f"{g.underlying} · {c.label}"))
-            # 最低盈亏比（对有明确最大盈亏的结构）
-            if lim.min_rr is not None and c.max_profit and c.max_loss:
+            # 闸门分两套：收权金结构比【胜率边际】，方向性/借方结构才比【盈亏比】
+            from undertow.analyze.healthcheck import seller_edge
+            is_credit = bool(c.net_credit and c.net_credit > 0)
+            edge = seller_edge(c) if is_credit else None
+            if edge is not None and lim.min_seller_edge_pp is not None:
+                be, implied, pp = edge
+                if pp < lim.min_seller_edge_pp:
+                    out.append(SoulViolation(
+                        severity="触碰纪律", rule_id="min_seller_edge_pp",
+                        title="卖方胜率边际低于自定闸门",
+                        detail=(f"{c.label}：需胜率 {be*100:.0f}%、隐含胜率 {implied*100:.0f}%，"
+                                f"边际 {pp:+.0f}pp < 你设的 {lim.min_seller_edge_pp:.0f}pp。"),
+                        scope=f"{g.underlying} · {c.label}"))
+            elif (not is_credit) and lim.min_rr is not None and c.max_profit and c.max_loss:
                 rr = c.max_profit / c.max_loss
                 if rr < lim.min_rr:
                     out.append(SoulViolation(
                         severity="触碰纪律", rule_id="min_rr",
-                        title="盈亏比低于自定闸门",
+                        title="方向性结构盈亏比低于自定闸门",
                         detail=f"{c.label} R:R {rr:.2f} < 你设的 {lim.min_rr:.1f}。",
                         scope=f"{g.underlying} · {c.label}"))
             # 风险未封顶（会被强平的结构）
@@ -213,7 +244,8 @@ def render_profile_md(p: SoulProfile | None) -> str:
     rows = [
         ("单笔最大风险", f"{lim.max_risk_per_trade_pct:.0f}% 净资产" if lim.max_risk_per_trade_pct else None),
         ("单品种集中度上限", f"{lim.max_concentration_pct:.0f}%" if lim.max_concentration_pct else None),
-        ("最低盈亏比", f"{lim.min_rr:.1f}" if lim.min_rr else None),
+        ("最低盈亏比（方向性/借方）", f"{lim.min_rr:.1f}" if lim.min_rr else None),
+        ("卖方胜率边际下限", f"{lim.min_seller_edge_pp:.0f}pp" if lim.min_seller_edge_pp else None),
         ("新开仓最短到期", f"{lim.min_dte_open} 天" if lim.min_dte_open else None),
         ("空头腿了结线", f"剩 {lim.min_dte_hold_short} 天前" if lim.min_dte_hold_short else None),
         ("单日最多交易", f"{lim.max_trades_per_day} 笔" if lim.max_trades_per_day else None),

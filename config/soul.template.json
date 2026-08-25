@@ -1,0 +1,70 @@
+{
+  "_comment": "交易灵魂档案【模板】。用 `python -m undertow soul --init` 复制到 data/soul/profile.json（已 gitignore）后按自己的情况改写。此模板不含任何个人内容；你的实际档案永远只留在本机。",
+  "_howto": [
+    "1) `python -m undertow soul --init` 生成本地档案；",
+    "2) 编辑 data/soul/profile.json：把 rules 改成【你自己】认可的纪律，limits 改成你的规模；",
+    "3) `python -m undertow soul --check` 用它核当前持仓是否破戒；",
+    "4) 档案会自动进 `consult` 上下文包并置于 prompt 最前——任何 AI 先读你的规则再给意见。",
+    "规则应随复盘演进，也应经得起质疑：写下『为什么有这条』（why）比规则本身更重要。"
+  ],
+  "schema": "undertow.soul/v1",
+  "updated": "",
+  "owner": "",
+  "phase": "示例：建立期——先证明能守住规则地活满 N 笔，再谈收益率",
+  "north_star": "示例：用『有没有守住规则』衡量自己，而不是用『赚了几倍』衡量。",
+  "rules": [
+    {
+      "id": "capped_risk_only",
+      "text": "示例：只做【风险封顶、且出场权在自己手上】的结构；避开会被强制平仓或需垫付全额的结构。",
+      "why": "写下这条规则来自哪次真实教训——没有 why 的规则守不住。",
+      "severity": "铁律"
+    },
+    {
+      "id": "gate_two_tier",
+      "text": "示例：进场闸门分两套——方向性/买方看盈亏比 R:R ≥ 1；卖方收权金结构看『隐含胜率(1−短腿|delta|) 高于盈亏平衡胜率至少 N pp』。",
+      "why": "卖方定义风险价差的 R:R 天生 <1，用 R:R 卡它是错的闸门。",
+      "severity": "铁律"
+    },
+    {
+      "id": "exit_first",
+      "text": "示例：进场同时写下目标价、止损价、最晚了结时点，三者缺一不进场。",
+      "why": "没有『这单结束了』的定义，利润就会回吐。",
+      "severity": "铁律"
+    },
+    {
+      "id": "size_cap",
+      "text": "示例：单笔风险不超过净资产 X%；换算成【具体张数】写在这里，免得规则和现实打架。",
+      "why": "规模应由净资产决定，不由『想赚多少』决定。",
+      "severity": "铁律"
+    }
+  ],
+  "weaknesses": [
+    {
+      "id": "example_weakness",
+      "name": "示例：某个你反复犯的错（如没有出场规则 / 追损 / 偏好近到期）",
+      "evidence": "尽量用【真实数据】佐证：成交记录里的统计、某几笔的结果。",
+      "trigger": "什么情形下最容易犯。",
+      "counter": "对应哪条规则来防它。"
+    }
+  ],
+  "lessons": [
+    {
+      "when": "YYYY-MM",
+      "what": "做了什么",
+      "outcome": "结果如何",
+      "lesson": "提炼出的一句话——这才是资产。"
+    }
+  ],
+  "limits": {
+    "max_risk_per_trade_pct": 10.0,
+    "max_concentration_pct": 40.0,
+    "min_rr": 1.0,
+    "min_seller_edge_pp": 10.0,
+    "min_dte_open": 21,
+    "min_dte_hold_short": 7,
+    "max_trades_per_day": 3,
+    "forbid_liquidation_risk": true,
+    "forbid_binary_event": true
+  },
+  "notes": "以上数值为示例默认，请按自己的账户规模、经验与风险承受力调整。本档案是你自己的纪律，不是投资建议。"
+}

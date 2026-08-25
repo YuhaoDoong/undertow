@@ -48,17 +48,51 @@ def test_assign_capital_gap_high_severity():
     print(f"PASS test_assign_capital_gap_high_severity → {gap[0].title}")
 
 
-def test_poor_rr_flagged_with_winrate():
-    """牛市看跌价差 R:R<1（冒$324赚$76）→ POOR_RR，给出所需胜率≈81%。"""
-    pos = [_Pos("SLV260826P61000.US", "SLV 61 Put", -4, 0.46),
-           _Pos("SLV260826P60000.US", "SLV 60 Put", 4, 0.27)]
-    cap = AccountCapital(buy_power=6.0, net_assets=630.0, cash_usd=6.0)
-    pr = review_portfolio(pos, {"SLV": _ctx(63.0)}, asof=date(2026, 8, 24), capital=cap)
-    hf = run_healthcheck(pr, cap)
+def _ctx_delta(spot, short_delta):
+    """构造带 greeks 的上下文：让短腿有指定 delta（用于胜率边际测试）。"""
+    def greeks(kind, strike, expiry):
+        return (-short_delta if kind == "P" else short_delta, 0.40)
+    return InstrumentContext(
+        etf_symbol="SLV", display_name="白银 Silver (COMEX)", spot=spot,
+        call_wall=70.0, put_wall=55.0, zero_gamma=None,
+        bias="偏多", near_bias="中性", mid_bias="偏多",
+        verdict_head="", proxy_quality="good", greeks=greeks)
+
+
+def test_seller_edge_thin_flagged():
+    """收权金结构：隐含胜率(1−0.35=65%) 略高于盈亏平衡(62%) 但边际仅 3pp < 10pp → 命中。"""
+    pos = [_Pos("SLV260918P60000.US", "60P", -1, 1.76),
+           _Pos("SLV260918P59000.US", "59P", 1, 1.38)]
+    pr = review_portfolio(pos, {"SLV": _ctx_delta(61.2, 0.35)}, asof=date(2026, 8, 25))
+    hf = run_healthcheck(pr, None)
+    thin = [f for f in hf if f.code == "SELLER_EDGE_THIN"]
+    assert thin, _codes(hf)
+    assert "隐含胜率" in thin[0].detail and "边际" in thin[0].detail, thin[0].detail
+    assert "POOR_RR" not in _codes(hf), "卖方结构不应再被 R:R<1 硬卡"
+    print(f"PASS test_seller_edge_thin_flagged → {thin[0].detail}")
+
+
+def test_seller_edge_sufficient_no_flag():
+    """短腿卖得够远（delta 0.12 → 隐含 88% vs 需 62%，边际 26pp）→ 不告警。"""
+    pos = [_Pos("SLV260918P60000.US", "60P", -1, 1.76),
+           _Pos("SLV260918P59000.US", "59P", 1, 1.38)]
+    pr = review_portfolio(pos, {"SLV": _ctx_delta(61.2, 0.12)}, asof=date(2026, 8, 25))
+    hf = run_healthcheck(pr, None)
+    assert "SELLER_EDGE_THIN" not in _codes(hf), [f.detail for f in hf]
+    print("PASS test_seller_edge_sufficient_no_flag")
+
+
+def test_poor_rr_still_flags_debit_structure():
+    """方向性/借方结构（付权金）仍走 R:R 闸门：付 0.6 赚 0.4 → R:R 0.67 < 1 → POOR_RR。"""
+    pos = [_Pos("SLV260918P61000.US", "买 61P", 1, 1.00),
+           _Pos("SLV260918P60000.US", "卖 60P", -1, 0.40)]   # 净付 0.60 的熊市看跌价差
+    pr = review_portfolio(pos, {"SLV": _ctx(63.0)}, asof=date(2026, 8, 24))
+    hf = run_healthcheck(pr, None)
     poor = [f for f in hf if f.code == "POOR_RR"]
     assert poor, _codes(hf)
-    assert "81%" in poor[0].detail or "80%" in poor[0].detail, poor[0].detail
-    print(f"PASS test_poor_rr_flagged_with_winrate → {poor[0].detail}")
+    assert "R:R" in poor[0].detail, poor[0].detail
+    assert "SELLER_EDGE_THIN" not in _codes(hf), "借方结构不该走卖方边际闸门"
+    print(f"PASS test_poor_rr_still_flags_debit_structure → {poor[0].detail}")
 
 
 def test_tight_near_spread_gamma_flag():

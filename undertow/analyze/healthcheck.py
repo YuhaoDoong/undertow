@@ -16,8 +16,10 @@ from dataclasses import dataclass, field
 # —— 阈值（集中可调）——
 NEAR_EXPIRY_DTE = 7          # DTE ≤ 此算"近到期"
 TIGHT_WIDTH_PCT = 0.03       # 价差宽度/现价 ≤ 此算"窄价差"
-POOR_RR_SELLER = 1.0         # 卖方 max_profit/max_loss < 此 = 盈亏比偏低
+POOR_RR_SELLER = 1.0         # 方向性/借方结构 max_profit/max_loss < 此 = 盈亏比偏低
 CONC_HIGH_FRAC = 0.40        # 单品种风险资金 / 净资产 ≥ 此 = 集中度偏高
+SELLER_EDGE_MIN_PP = 10.0    # 收权金结构：隐含胜率 − 盈亏平衡胜率 至少要有的安全边际(pp)
+CONTRACT_MULT = 100
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,35 @@ def _breakeven_winrate(max_profit, max_loss) -> float | None:
     return ml / (ml + mp) if (ml + mp) > 0 else None
 
 
+def seller_edge(combo):
+    """收权金结构的【胜率边际】——卖方该用的闸门，而不是裸看 R:R。
+
+    卖方定义风险价差的 R:R 天生 < 1（收 0.38 / 宽 1 → 0.61），拿 R:R≥1 卡它是错的闸门。
+    正确比较：**隐含胜率 vs 盈亏平衡胜率**。
+      盈亏平衡胜率 = 最大亏 / (最大亏 + 最大盈)
+      隐含胜率     ≈ 1 − |短腿每股 delta|（delta 作到期价内概率的常用代理）
+      边际(pp)     = (隐含 − 盈亏平衡) × 100
+    返回 (盈亏平衡胜率, 隐含胜率, 边际pp)；非收权金结构或缺 delta 时返回 None。
+    """
+    if not getattr(combo, "net_credit", None) or combo.net_credit <= 0:
+        return None
+    be = _breakeven_winrate(combo.max_profit, combo.max_loss)
+    if be is None:
+        return None
+    shorts = [l for l in combo.legs
+              if getattr(l, "qty", 0) < 0 and getattr(l, "pos_delta", None) is not None and l.qty]
+    if not shorts:
+        return None
+    # 短腿每股 delta（pos_delta = 每股delta × 100 × 张数，含方向；取绝对值还原）
+    def _per_share(l):
+        return abs(l.pos_delta / (CONTRACT_MULT * abs(l.qty)))
+    d = max(_per_share(l) for l in shorts)
+    if not (0.0 < d < 1.0):
+        return None
+    implied = 1.0 - d
+    return be, implied, (implied - be) * 100.0
+
+
 def _combo_min_dte(combo) -> int | None:
     dtes = [l.dte for l in combo.legs if getattr(l, "dte", None) is not None]
     return min(dtes) if dtes else None
@@ -54,23 +85,41 @@ def check_group(g, capital) -> list[HealthFinding]:
     # —— 组合级：盈亏比 / 窄价差近到期 / 未封顶 ——
     for c in g.combos:
         dte = _combo_min_dte(c)
-        # 卖方盈亏比过低（收权金结构：max_profit 小、max_loss 大）
-        if c.net_credit and c.net_credit > 0 and c.max_profit and c.max_loss:
-            rr = c.max_profit / c.max_loss
-            if rr < POOR_RR_SELLER:
-                wr = _breakeven_winrate(c.max_profit, c.max_loss)
-                sev = "中"
-                extra = ""
-                if dte is not None and dte <= NEAR_EXPIRY_DTE:
-                    sev = "高"
-                    extra = f"，且剩 {dte} 天近到期（gamma 大、无时间修复）"
+        # 闸门分两套：收权金结构看【胜率边际】；方向性/借方结构看【盈亏比】
+        is_credit = bool(c.net_credit and c.net_credit > 0 and c.max_profit and c.max_loss)
+        edge = seller_edge(c) if is_credit else None
+        if edge is not None:
+            be, implied, pp = edge
+            if pp < SELLER_EDGE_MIN_PP:
+                sev = "高" if (dte is not None and dte <= NEAR_EXPIRY_DTE) else "中"
                 out.append(HealthFinding(
-                    severity=sev, code="POOR_RR", title="盈亏比偏低的收权金结构",
-                    detail=(f"{c.label}：最大盈 ${c.max_profit:,.0f} / 最大亏 ${c.max_loss:,.0f}"
-                            f"（R:R {rr:.2f}）"
-                            + (f"，折算需胜率 > {wr*100:.0f}% 才不亏期望" if wr else "") + extra),
-                    suggestion="冒大险赚小钱要靠高胜率；先看盈亏比：<1 的卖方结构要么放宽间距/拉远到期提升权金，要么控制仓位。",
+                    severity=sev, code="SELLER_EDGE_THIN", title="卖方胜率边际不足",
+                    detail=(f"{c.label}：盈亏平衡需胜率 {be*100:.0f}%，短腿 delta 隐含胜率仅约 "
+                            f"{implied*100:.0f}%，边际 {pp:+.0f}pp（低于 {SELLER_EDGE_MIN_PP:.0f}pp 安全线）"
+                            + (f"；且剩 {dte} 天近到期（gamma 大、无时间修复）"
+                               if dte is not None and dte <= NEAR_EXPIRY_DTE else "")),
+                    suggestion="卖方该比的是【隐含胜率 vs 盈亏平衡胜率】而非 R:R：把短腿卖得更远(delta 更小)、"
+                               "或放宽间距提升权金，把边际拉开。",
                     scope=f"{g.underlying} · {c.label}"))
+        elif is_credit:
+            # 缺 delta 无法算边际 → 退回用所需胜率提示（不拿 R:R<1 硬卡卖方结构）
+            wr = _breakeven_winrate(c.max_profit, c.max_loss)
+            if wr and wr >= 0.70:
+                out.append(HealthFinding(
+                    severity=("高" if (dte is not None and dte <= NEAR_EXPIRY_DTE) else "中"),
+                    code="HIGH_WINRATE_NEEDED", title="收权金结构所需胜率偏高",
+                    detail=(f"{c.label}：最大盈 ${c.max_profit:,.0f} / 最大亏 ${c.max_loss:,.0f}，"
+                            f"折算需胜率 > {wr*100:.0f}% 才不亏期望（无 delta 数据，未能算隐含胜率）"),
+                    suggestion="需要极高胜率的结构容错很低；放宽间距/拉远到期提升权金，或降规模。",
+                    scope=f"{g.underlying} · {c.label}"))
+        elif c.max_profit and c.max_loss and (c.max_profit / c.max_loss) < POOR_RR_SELLER:
+            # 方向性/借方结构：仍用盈亏比闸门
+            out.append(HealthFinding(
+                severity="中", code="POOR_RR", title="方向性结构盈亏比偏低",
+                detail=f"{c.label}：最大盈 ${c.max_profit:,.0f} / 最大亏 ${c.max_loss:,.0f}"
+                       f"（R:R {c.max_profit / c.max_loss:.2f} < 1）",
+                suggestion="低胜率的买方/方向性结构要靠大赔率：R:R < 1 直接不做，2:1 才配得上一次进场。",
+                scope=f"{g.underlying} · {c.label}"))
         # 窄价差 + 近到期（gamma 风险，本次对话那条教训）
         if len(c.legs) == 2 and dte is not None and dte <= NEAR_EXPIRY_DTE:
             strikes = [l.strike for l in c.legs if l.strike is not None]

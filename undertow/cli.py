@@ -1283,7 +1283,20 @@ def _build_news_digest(inst, events, today, *, limit=12):
 
 def cmd_soul(args) -> int:
     """交易灵魂档案：显示你的交易体系/纪律/弱点；--check 用它核当前持仓。"""
-    from undertow.soul.profile import load_profile, render_profile_md, check_against_profile
+    from undertow.soul.profile import (load_profile, render_profile_md,
+                                       check_against_profile, init_from_template)
+    if getattr(args, "init", False):
+        try:
+            path, created = init_from_template()
+        except FileNotFoundError as e:
+            print(f"[失败] {e}", file=sys.stderr)
+            return 2
+        if created:
+            print(f"已从模板生成本地私有档案 → {path}\n（该文件已 gitignore，绝不进公开仓库；"
+                  f"请按自己的情况改写 rules / limits，再跑 `undertow soul` 查看）")
+        else:
+            print(f"档案已存在，未覆盖 → {path}")
+        return 0
     prof = load_profile()
     if getattr(args, "json", False):
         import dataclasses as _dc
@@ -1645,6 +1658,8 @@ def build_parser() -> argparse.ArgumentParser:
     psv.set_defaults(func=cmd_serve)
 
     psl = sub.add_parser("soul", help="交易灵魂档案：你的交易体系/铁律/弱点；--check 核当前持仓是否破戒")
+    psl.add_argument("--init", action="store_true",
+                     help="从公开模板 config/soul.template.json 生成本地私有档案（不覆盖已有）")
     psl.add_argument("--check", action="store_true", help="用档案的限额核查当前实盘持仓")
     psl.add_argument("--json", action="store_true", help="输出结构化档案")
     psl.set_defaults(func=cmd_soul)

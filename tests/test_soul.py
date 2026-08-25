@@ -34,7 +34,7 @@ def _ctx(spot=61.2):
 
 def _profile(**over):
     lim = Limits(**{"max_risk_per_trade_pct": 10.0, "max_concentration_pct": 40.0,
-                    "min_rr": 1.0, "min_dte_hold_short": 7,
+                    "min_rr": 1.0, "min_seller_edge_pp": 10.0, "min_dte_hold_short": 7,
                     "forbid_liquidation_risk": True, **over})
     return SoulProfile(updated="2026-08-25", owner="t", phase="重建期",
                        north_star="守规则优先于赚倍数",
@@ -81,7 +81,7 @@ def test_violations_detected():
     ids = {v.rule_id for v in vios}
     assert "max_concentration_pct" in ids, ids
     assert "max_risk_per_trade_pct" in ids, ids
-    assert "min_rr" in ids, ids
+    assert "min_seller_edge_pp" in ids, ids   # 卖方结构走胜率边际闸门，不走 R:R
     assert "min_dte_hold_short" in ids, ids       # 61P 剩 1 天 < 7
     assert any(v.severity == "违反铁律" for v in vios)
     print(f"PASS test_violations_detected → {sorted(ids)}")
@@ -93,7 +93,7 @@ def test_compliant_position_no_violation():
     pos = [_Pos("SLV261218P55000.US", "SLV 55 Put", -1, 2.0),
            _Pos("SLV261218P50000.US", "SLV 50 Put", 1, 0.5)]
     rv = review_portfolio(pos, {"SLV": _ctx()}, asof=date(2026, 8, 25), capital=cap)
-    vios = check_against_profile(rv, cap, _profile(min_rr=0.2))
+    vios = check_against_profile(rv, cap, _profile(min_rr=0.2, min_seller_edge_pp=None))
     assert not vios, [v.title for v in vios]
     print("PASS test_compliant_position_no_violation")
 

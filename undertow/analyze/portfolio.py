@@ -483,7 +483,12 @@ def _single_combo(lg: PositionReview, qty: int) -> Combo:
         cap = (lg.strike * CONTRACT_MULT * qty) if lg.kind == "P" else None
         defined = False; mloss = None
     else:
-        cap = prem; defined = True; mloss = prem     # 买方最大亏=已付权金
+        # 买方最大亏 = 已付权金；但【往前还能亏多少】是**当前市值**（成本里含已实现的部分，
+        # 尤其部分平仓后券商会把已实现亏损滚进剩余腿的成本基准，用成本会高估前瞻风险）。
+        mloss = prem
+        cur = (lg.est_value * CONTRACT_MULT * qty) if lg.est_value is not None else None
+        cap = min(prem, cur) if cur is not None else prem
+        defined = True
     return Combo(underlying=lg.underlying,
                  expiry_label=lg.expiry.isoformat() if lg.expiry else "—",
                  label=label, stance=stance, legs=[lg], qty=qty,

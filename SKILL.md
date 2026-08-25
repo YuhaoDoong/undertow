@@ -47,6 +47,7 @@ description: >-
 | `python -m undertow backtest [品种...]` | COT 信号事件研究回测 | 终端 Markdown |
 | `python -m undertow snapshot [品种...]` | 落盘当日期权链原始全字段 | gzip 存 `data/snapshots/`（纳入 git） |
 | `python -m undertow calendar [品种...]` | 事件雷达：关键节点倒计时 + **实时预测/前值/影响**（本周自动拉 FairEconomy 公开 feed，远期用手维护锚点） | 终端；也自动嵌入 `report` 顶部。`--no-live` 仅用本地锚点 |
+| `python -m undertow soul [--check]` | **交易灵魂档案（个人专属·只读）**：你的交易体系/铁律/纪律/已知弱点/教训；`--check` 用其中的机器限额（单笔风险%/集中度/最低R:R/空头腿了结线/禁强平结构）**核查当前持仓是否破戒**。档案自动进 `consult` 并置于 prompt 最前——任何 AI 先读你的规则再给意见 | 终端 Markdown；档案存 gitignore 的 `data/soul/` |
 | `python -m undertow tech [品种...]` | **技术面（短线过热度 + 趋势结构）**：从真实价序确定性算 均线排列/RSI/KDJ/MACD/布林/CCI/BIAS + 多窗口涨幅 → 超买-超卖综合分。与期权结构层**正交交叉印证**（如"结构偏多 + 短线超买→别追"） | 终端 Markdown；也进 `consult` 上下文包与 InstrumentContext |
 | `python -m undertow news [品种...]` | **事件感知（只读）**：品种相关新闻（长桥）+ 影响本品种的临近关键事件；**高影响事件临近（≤3天）置顶告警**（如"到期日撞 Core PCE"）。新闻只作背景/催化剂旁证，不改判方向 | 终端 Markdown；也进 `consult` 上下文包 |
 | `python -m undertow list` | 列出品种与各自数据层 | 终端 |

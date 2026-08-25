@@ -1281,6 +1281,41 @@ def _build_news_digest(inst, events, today, *, limit=12):
     return build_news_digest(inst.key, inst.display_name, items, events, today)
 
 
+def cmd_soul(args) -> int:
+    """交易灵魂档案：显示你的交易体系/纪律/弱点；--check 用它核当前持仓。"""
+    from undertow.soul.profile import load_profile, render_profile_md, check_against_profile
+    prof = load_profile()
+    if getattr(args, "json", False):
+        import dataclasses as _dc
+        print(json.dumps(_dc.asdict(prof) if prof else {}, ensure_ascii=False, indent=2))
+        return 0
+    print(render_profile_md(prof))
+    if not getattr(args, "check", False):
+        return 0
+    if prof is None:
+        print("\n（无档案，跳过持仓核查）", file=sys.stderr)
+        return 0
+    from undertow.collect import longbridge_account as lb
+    try:
+        bundle = _load_account_review(args.no_cache)
+    except lb.LongbridgeUnavailable as e:
+        print(f"\n[长桥账户不可用] {e}", file=sys.stderr)
+        return 2
+    if bundle["review"] is None:
+        print("\n当前无持仓，无需核查。")
+        return 0
+    vios = check_against_profile(bundle["review"], bundle.get("capital"), prof)
+    print("\n## 🧭 纪律核查（对照你自己的规则）\n")
+    if not vios:
+        print("- ✅ 当前持仓未触碰你设定的任何限额。")
+        return 0
+    for v in vios:
+        print(f"- **[{v.severity}] {v.title}** —— {v.detail}")
+        if v.scope:
+            print(f"  - 涉及：{v.scope}")
+    return 0
+
+
 def cmd_tech(args) -> int:
     """技术面：短线过热度 + 趋势结构（从真实价序确定性算 RSI/KDJ/MACD/布林/均线）。"""
     from undertow.analyze.technicals import analyze_technicals, render_md
@@ -1392,10 +1427,21 @@ def cmd_consult(args) -> int:
     except Exception as e:
         print(f"[提示] 事件感知跳过：{str(e)[:80]}", file=sys.stderr)
 
+    # 灵魂档案：用户专属交易体系 + 当前纪律核查（优先于一切建议）
+    soul = None
+    try:
+        from undertow.soul.profile import load_profile, check_against_profile
+        prof = load_profile()
+        if prof is not None:
+            target = pre_trade["review"] if pre_trade else review
+            soul = (prof, check_against_profile(target, capital, prof))
+    except Exception as e:
+        print(f"[提示] 灵魂档案跳过：{str(e)[:80]}", file=sys.stderr)
+
     packet = build_consult_packet(
         review=review, health=health, contexts=contexts, capital=capital,
         question=(args.question or ""), mode=mode, pre_trade=pre_trade,
-        news=news, asof=today)
+        news=news, soul=soul, asof=today)
 
     if getattr(args, "json", False):
         print(json.dumps(packet, ensure_ascii=False, indent=2))
@@ -1597,6 +1643,11 @@ def build_parser() -> argparse.ArgumentParser:
     psv.add_argument("--port", type=int, default=8787, help="端口（默认 8787）")
     psv.add_argument("--host", default="127.0.0.1", help="绑定地址（默认 127.0.0.1，仅本机）")
     psv.set_defaults(func=cmd_serve)
+
+    psl = sub.add_parser("soul", help="交易灵魂档案：你的交易体系/铁律/弱点；--check 核当前持仓是否破戒")
+    psl.add_argument("--check", action="store_true", help="用档案的限额核查当前实盘持仓")
+    psl.add_argument("--json", action="store_true", help="输出结构化档案")
+    psl.set_defaults(func=cmd_soul)
 
     pt = sub.add_parser("tech", help="技术面：短线过热度 + 趋势结构（RSI/KDJ/MACD/布林/均线，确定性）")
     pt.add_argument("instruments", nargs="*", help="品种，留空=全部")

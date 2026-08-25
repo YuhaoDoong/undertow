@@ -24,6 +24,9 @@ GUIDANCE = [
     "输出是**波段级风险情景与权衡参考，不是投资建议、不是交易指令**；是否下单、下什么，由用户自己决定。",
     "你（及任何接入的 AI）**只读**：绝不代替用户下单/撤单/改单；执行永远由用户在券商端完成。",
     "如信息不足以回答（如缺某标的的期权代理、快照过期），如实说明，不要编造。",
+    "若本包含 soul（用户专属交易体系）：**它优先于一切**——不得建议任何违反其铁律的做法；"
+    "当用户的提问本身流露出档案里记录的已知弱点（如回本心态、追损、想一击翻倍），**要直接点出来**，"
+    "而不是顺着回答。诚实优先于顺从。",
 ]
 
 
@@ -109,9 +112,25 @@ def _news_brief(digests) -> list:
     return out
 
 
+def _soul_brief(profile, violations) -> dict | None:
+    """用户专属交易体系（灵魂档案）+ 当前纪律核查结果。"""
+    if profile is None or not getattr(profile, "ok", False):
+        return None
+    lim = profile.limits
+    return {
+        "north_star": profile.north_star, "phase": profile.phase,
+        "rules": [{"severity": r.severity, "text": r.text, "why": r.why} for r in profile.rules],
+        "weaknesses": [{"name": w.name, "trigger": w.trigger, "counter": w.counter}
+                       for w in profile.weaknesses],
+        "limits": {k: v for k, v in _jsonable(lim).items() if v not in (None, False)},
+        "violations": [{"severity": v.severity, "title": v.title, "detail": v.detail}
+                       for v in (violations or [])],
+    }
+
+
 def build_consult_packet(*, review, health, contexts, capital=None,
                          question: str = "", mode: str = "review",
-                         pre_trade=None, news=None, asof: date) -> dict:
+                         pre_trade=None, news=None, soul=None, asof: date) -> dict:
     """组装咨询包。
 
     review：当前持仓 PortfolioReview；health：list[HealthFinding]；
@@ -133,6 +152,7 @@ def build_consult_packet(*, review, health, contexts, capital=None,
         "portfolio": _portfolio_brief(review),
         "healthcheck": [_jsonable(f) for f in (health or [])],
         "news": _news_brief(news),
+        "soul": _soul_brief(*(soul if soul else (None, None))),
     }
     if pre_trade is not None:
         packet["pre_trade"] = {
@@ -152,6 +172,27 @@ def render_prompt(packet: dict) -> str:
     for g in packet["guidance"]:
         L.append(f"  - {g}")
     L.append("")
+    sl = packet.get("soul")
+    if sl:
+        L.append("【用户专属交易体系（灵魂档案）—— 回答必须遵守这些规则，不得建议破戒】")
+        if sl.get("north_star"):
+            L.append(f"  总纲：{sl['north_star']}")
+        if sl.get("phase"):
+            L.append(f"  当前阶段：{sl['phase']}")
+        for r in sl.get("rules", []):
+            L.append(f"  [{r['severity']}] {r['text']}")
+        if sl.get("limits"):
+            lim = "、".join(f"{k}={v}" for k, v in sl["limits"].items())
+            L.append(f"  机器限额：{lim}")
+        if sl.get("weaknesses"):
+            L.append("  已知弱点（提问里若出现这些苗头，请直接点出来）：")
+            for w in sl["weaknesses"]:
+                L.append(f"    · {w['name']}｜触发：{w['trigger']}｜对策：{w['counter']}")
+        if sl.get("violations"):
+            L.append("  ⚠️ 当前持仓已触碰的自定纪律：")
+            for v in sl["violations"]:
+                L.append(f"    · [{v['severity']}] {v['title']}：{v['detail']}")
+        L.append("")
     if packet.get("account"):
         a = packet["account"]
         L.append(f"【账户】净资产 ${a['net_assets']:,.0f} · 购买力 ${a['buy_power']:,.0f} · "

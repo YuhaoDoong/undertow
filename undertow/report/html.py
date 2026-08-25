@@ -1083,3 +1083,88 @@ def render_index_html(items: list[dict], asof: str) -> str:
         f'{alert_block}{"".join(cards)}'
         '<div class="foot">undertow · 规则化情景工具，非投资建议 · 纯标准库生成</div></div></body></html>'
     )
+
+
+# ————————————————————————————————————————————————————————— 实盘持仓评价
+
+def _align_color(a: str) -> str:
+    if a == "顺势":
+        return "#1a7f37"
+    if a == "逆势":
+        return "#b62324"
+    return "#6e7781"
+
+
+def render_account_html(review, assets=None) -> str:
+    """实盘持仓理论评价 → 自包含 HTML（本地私有，落 gitignore 的 data/account/）。
+
+    review=PortfolioReview, assets=AccountAssets|None。只作波段级风险情景复盘，非投资建议。
+    """
+    cards: list[str] = []
+    if not review.ok or (not review.groups and not review.unmapped):
+        cards.append('<div class="card"><h1>实盘持仓评价</h1><div class="sub">当前无持仓或无法评价</div></div>')
+    else:
+        head_bits = [f'<div class="sub">基准日 {_esc(review.asof.isoformat())}</div>']
+        if assets is not None:
+            cash = "、".join(f"{_esc(k)} {v:,.0f}" for k, v in assets.cash_by_ccy.items()) or "—"
+            head_bits.append(f'<div class="sub">净资产 ${assets.net_assets:,.0f} · 购买力 '
+                             f'${assets.buy_power:,.0f} · 可用现金 {cash}</div>')
+        cards.append(
+            '<div class="card"><h1>实盘持仓理论评价</h1>'
+            f'<div class="sub" style="font-size:14px;color:#24292f;margin:6px 0"><b>{_esc(review.headline)}</b></div>'
+            + "".join(head_bits) +
+            '<div class="warn" style="margin-top:10px">只作<b>波段级风险情景复盘</b>，非投资建议、非交易指令；'
+            '理论中值来自 BS（无 bid/ask），方向与数字来自上游确定性模块。执行永远由你在券商端完成。</div></div>')
+
+        for g in review.groups:
+            d = "—" if g.net_delta is None else f"{g.net_delta:+.0f}"
+            pnl = "—" if g.total_pnl is None else f"{g.total_pnl:+,.0f}"
+            bcol = _BIAS_COLOR.get(g.bias, "#6e7781")
+            rows = []
+            for lg in g.legs:
+                dte = "—"
+                if lg.expiry is not None and lg.dte is not None:
+                    dte = f"{_esc(lg.expiry.isoformat())}<br><small>{lg.dte}天</small>"
+                acol = _align_color(lg.align)
+                pnl_l = "—" if lg.pnl is None else f"{lg.pnl:+,.0f}"
+                pcol = "#1a7f37" if (lg.pnl or 0) > 0 else ("#b62324" if (lg.pnl or 0) < 0 else "#6e7781")
+                flagtxt = ("<br>" + "<br>".join(f'<span style="color:#b62324">⚠ {_esc(x)}</span>' for x in lg.flags)) if lg.flags else ""
+                rows.append(
+                    f'<tr><td><b>{_esc(lg.name)}</b><br><small>{_esc(lg.side)} × {lg.qty:g}</small></td>'
+                    f'<td>{dte}</td><td>{_esc(lg.moneyness)}</td>'
+                    f'<td><small>{_esc(lg.wall_note or "—")}</small></td>'
+                    f'<td style="color:{acol};font-weight:700">{_esc(lg.align)}</td>'
+                    f'<td class="r" style="color:{pcol}">{pnl_l}</td>'
+                    f'<td><small>{_esc(lg.comment)}{flagtxt}</small></td></tr>')
+            spread_html = ""
+            if g.spreads:
+                sp = []
+                for s in g.spreads:
+                    sp.append(f'<div class="scn"><b>{_esc(s.label)}</b>（{s.qty} 组）'
+                              f'<div class="t">{_esc(s.note)}</div>'
+                              f'<div class="t">最大盈 <b style="color:#1a7f37">{s.max_profit:+,.0f}</b> · '
+                              f'最大亏 <b style="color:#b62324">{s.max_loss:-,.0f}</b></div></div>')
+                spread_html = "".join(sp)
+            cards.append(
+                f'<div class="card"><h1>{_esc(g.display_name)}<span class="pill">{_esc(g.underlying)}</span></h1>'
+                f'<div style="margin:6px 0"><span class="badge" style="background:{bcol}">{_esc(g.bias)}</span>'
+                f'<span class="pill">净Δ {d}</span><span class="pill">浮盈亏 {pnl}</span></div>'
+                + (f'<div class="sub">🧭 {_esc(g.verdict_head)}</div>' if g.verdict_head else "")
+                + spread_html +
+                '<table><thead><tr><th>持仓</th><th>到期</th><th>价性</th><th>行权 vs 墙</th>'
+                '<th>顺逆</th><th class="r">浮盈亏</th><th>评价</th></tr></thead>'
+                f'<tbody>{"".join(rows)}</tbody></table>'
+                f'<div class="sub" style="margin-top:8px">{_esc(g.summary)}</div></div>')
+
+        if review.unmapped:
+            items = "".join(f'<li>{_esc(lg.name)}（{_esc(lg.side)} {lg.qty:g}）</li>' for lg in review.unmapped)
+            cards.append('<div class="card"><h2>未接入研判的标的（无 undertow 期权代理，仅列出）</h2>'
+                         f'<ul>{items}</ul></div>')
+
+    return (
+        '<!doctype html><html lang="zh"><head><meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        '<title>实盘持仓评价</title><style>' + _CSS + '</style></head>'
+        '<body><div class="wrap">' + "".join(cards) +
+        '<div class="foot">undertow · 实盘理论复盘，只读、非投资建议 · 本地私有未入 git</div></div></body></html>'
+    )

@@ -993,6 +993,137 @@ def _gamma_jsonable(inst, ga) -> dict:
     }
 
 
+def _account_context(inst, store, sources, today, *, no_cache):
+    """为某标的组装 InstrumentContext（现价+Gamma墙+近中研判+当日决策+链上greeks）。
+
+    复用 report 的四层聚合，但只取持仓评价需要的字段。失败抛异常，调用方降级跳过。
+    """
+    from undertow.analyze.portfolio import InstrumentContext
+    cot_src, opt_src, fut_src, fred_src, vol_src = sources
+    lookback = load_config().lookback_weeks
+
+    an = analyze(cot_src.fetch_history(inst, lookback=lookback, use_cache=not no_cache))
+    signals = generate_signals(an)
+    curr, prev, prev_date, curr_date_s = _load_curr_prev_snapshot(
+        store, opt_src, inst, today, no_cache=no_cache, no_snapshot=True)
+
+    ratio, real_series, real_price = None, None, None
+    if inst.commodity is not None:
+        try:
+            real_series, real_price, _asof = fut_src.fetch_for(inst, use_cache=not no_cache)
+            if curr.spot > 0:
+                ratio = real_price / curr.spot
+        except Exception:
+            pass
+    mult = ratio if ratio is not None else inst.options.approx_commodity_multiplier
+    obs_day = _prev_weekday(date.fromisoformat(curr_date_s)) if curr_date_s else _prev_weekday(today)
+
+    ga = analyze_gamma(curr, multiplier=mult, proxy_quality=inst.options.proxy_quality,
+                       today=obs_day, horizon_days=45)
+    fa = analyze_flow(prev, curr, today=obs_day, horizon_days=45,
+                      call_wall=ga.call_wall, put_wall=ga.put_wall,
+                      prev_date=prev_date, curr_date=curr_date_s)
+
+    macro_votes = []
+    try:
+        sids = series_ids_for(inst.asset_class)
+        smap = {sid: fred_src.fetch_series(sid, use_cache=not no_cache) for sid in sids}
+        vseries = vol_src.fetch_series(inst.vol_index, use_cache=not no_cache) if inst.vol_index else None
+        macro_votes = macro_to_votes(analyze_macro(smap, asset_class=inst.asset_class,
+                                                    vol_name=inst.vol_index, vol_series=vseries))
+    except Exception:
+        pass
+
+    outlook = build_outlook(an, signals, ga, fa, display_name=inst.display_name,
+                            extra_votes=macro_votes)
+    strong_sig = detect_strong_signal(fa, outlook_bias=outlook.bias)
+    verdict = None
+    try:
+        fib_an = build_fibonacci(real_series, ratio=ratio,
+                                 spot=(real_price if real_price else curr.spot)) if real_series is not None else None
+        rr_plan = build_risk_reward(fib_an, o=outlook) if fib_an is not None else None
+        verdict = build_verdict(outlook, fa, strong_sig, fib_an, rr_plan)
+    except Exception:
+        pass
+
+    # 链上 greeks 查询（ETF 口径行权价；持仓也是 ETF 行权价，直接匹配）
+    lut = {}
+    for c in curr.with_oi():
+        lut[(c.kind, round(c.strike, 3), c.expiry)] = (c.delta, c.iv)
+
+    def greeks(kind, strike, expiry):
+        return lut.get((kind, round(strike, 3), expiry))
+
+    return InstrumentContext(
+        etf_symbol=inst.options.symbol, display_name=inst.display_name,
+        spot=curr.spot, call_wall=ga.call_wall, put_wall=ga.put_wall,
+        zero_gamma=ga.zero_gamma, bias=outlook.bias,
+        near_bias=outlook.near_bias or "", mid_bias=outlook.mid_bias or "",
+        verdict_head=(verdict.headline if verdict else ""),
+        proxy_quality=inst.options.proxy_quality, greeks=greeks)
+
+
+def cmd_account(args) -> int:
+    """实盘持仓理论评价：读长桥账户当前持仓 → 逐笔对 undertow 研判做复盘。
+
+    **只读**（绝不下单）；持仓/资金属敏感数据，HTML 落 gitignore 的 data/account/。
+    """
+    from undertow.collect import longbridge_account as lb
+    from undertow.analyze.portfolio import review_portfolio
+    from undertow.report.html import render_account_html
+    from undertow.report.markdown import render_account_md
+
+    try:
+        positions = lb.fetch_positions()
+    except lb.LongbridgeUnavailable as e:
+        print(f"[长桥账户不可用] {e}", file=sys.stderr)
+        return 2
+    if not positions:
+        print("账户当前无持仓。")
+        return 0
+
+    cfg = load_config()
+    etf_to_inst = {i.options.symbol.upper(): i for i in cfg.instruments.values()
+                   if i.options is not None}
+    from undertow.analyze.portfolio import parse_symbol
+    held_roots = {parse_symbol(p.symbol).underlying for p in positions}
+
+    store = SnapshotStore()
+    today = market_today()
+    sources = (CftcCotSource(), CboeOptionsSource(), YahooFuturesSource(),
+               FredMacroSource(), CboeVolSource())
+    contexts = {}
+    for root in sorted(held_roots):
+        inst = etf_to_inst.get(root)
+        if inst is None:
+            continue
+        try:
+            contexts[root] = _account_context(inst, store, sources, today,
+                                              no_cache=args.no_cache)
+        except Exception as e:
+            print(f"[提示] {root} 研判上下文构建失败，该标的仅列出不评方向: {str(e)[:120]}",
+                  file=sys.stderr)
+
+    review = review_portfolio(positions, contexts, asof=today)
+
+    # 账户资产（可选，失败不阻断）
+    assets = None
+    try:
+        assets = lb.fetch_assets()
+    except lb.LongbridgeUnavailable:
+        pass
+
+    print(render_account_md(review, assets))
+
+    if not getattr(args, "no_html", False):
+        out_dir = DATA_DIR / "account"      # gitignore：敏感数据不入公开仓库
+        out_dir.mkdir(parents=True, exist_ok=True)
+        fn = out_dir / f"account_{today.isoformat()}.html"
+        fn.write_text(render_account_html(review, assets), encoding="utf-8")
+        print(f"\n实盘评价 HTML（本地私有，未入 git）→ {fn}")
+    return 0
+
+
 def _to_jsonable(inst, an, signals) -> dict:
     return {
         "instrument": inst.key,
@@ -1072,6 +1203,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     pl = sub.add_parser("list", help="列出已配置品种")
     pl.set_defaults(func=cmd_list)
+
+    pac = sub.add_parser("account", help="实盘持仓理论评价：读长桥账户当前持仓，逐笔对 undertow 研判复盘（只读，不下单）")
+    pac.add_argument("--no-html", action="store_true", help="只出终端，不写本地 HTML")
+    pac.set_defaults(func=cmd_account)
 
     pc = sub.add_parser("calendar", help="事件雷达：未来关键节点（FOMC/数据/COT/到期）+ 实时预测")
     pc.add_argument("instruments", nargs="*", help="品种 key（留空=全部/全局事件）")

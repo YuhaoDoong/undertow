@@ -58,6 +58,15 @@
 | `risk_reward.py` | 盈亏比闸门：对每个方向算「现价追」vs「等回调(0.5)」两情景的 R:R 并评级（差/中/优），入场锚斐波、止损锚起涨点、目标取结构墙位（退回扩展位），落地"先看盈亏比、别追、等回调"。<br>R:R gate grading chase-vs-pullback setups; fib entry, structural stop/target. |
 | `verdict.py` | **当日决策研判**：规则化合成 近中分层＋资金流＋强信号＋盈亏比闸门 → 做空?/现价追?/短线/长线 四问。逆势微腿识别为回调买/反抽卖（不误报顺腿追）。全程确定性、无 LLM、数字来自上游，可跑无人值守定时任务；交互时 LLM 读它再叠流畅叙述。<br>Rule-based daily decision synthesis (short? chase? swing? core?); deterministic, LLM-free. |
 
+## Live account review / 实盘持仓复盘
+
+> 把研判从"标的怎么看"接到"手上的仓怎么看"。纯确定性，只读，敏感数据不进公开仓库。
+> From an instrument read to a review of your actual positions. Deterministic, read-only.
+
+| 文件 | 作用 |
+|---|---|
+| `portfolio.py` | **实盘持仓理论评价**：解析长桥期权代码 → 逐笔对该标的研判语境复盘（顺势/逆势、行权价 vs Gamma 墙、临近到期/被行权风险、垂直价差结构识别、净 Delta、浮动盈亏）。价差保护腿不单独判逆势。数据源＝`collect/longbridge_account.py`（只读 CLI 包装）。<br>Rule-based review of live positions against undertow's read; deterministic, read-only. |
+
 ## Boundary / 边界
 
-imports `core`（+ 少量分析层内部互引，如 `outlook` 吃 gamma/flow 结果）；**不 import** `collect`/`report`。输出只作**波段级风险情境**，非交易指令、非投资建议。
+imports `core`（+ 少量分析层内部互引，如 `outlook` 吃 gamma/flow 结果；`portfolio` 吃 blackscholes）；**不 import** `collect`/`report`（`portfolio` 只吃调用方喂入的 `InstrumentContext`，账户数据由 CLI 层从 `collect/longbridge_account` 取后注入）。输出只作**波段级风险情境**，非交易指令、非投资建议。

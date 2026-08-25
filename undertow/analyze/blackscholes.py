@@ -45,6 +45,27 @@ def price(S: float, K: float, T: float, sigma: float, kind: str = "C",
     return disc_k * _norm_cdf(-d2) - disc_s * _norm_cdf(-d1)
 
 
+def delta(S: float, K: float, T: float, sigma: float, kind: str = "C",
+          r: float = 0.04, q: float = 0.0) -> float:
+    """期权每股 delta（call 0~1、put −1~0）。
+
+    仅在链上查不到某腿的 delta 时（无 OI 的行权价/到期）用来兜底估算持仓方向敞口。
+    到期(T≤0)退化为示性：ITM 返回 ±1、OTM 返回 0；无效输入返回 0。
+    """
+    if S <= 0 or K <= 0:
+        return 0.0
+    if T <= 0 or sigma <= 0:
+        if kind == "C":
+            return 1.0 if S > K else 0.0
+        return -1.0 if S < K else 0.0
+    vol_sqrt_t = sigma * math.sqrt(T)
+    d1 = (math.log(S / K) + (r - q + 0.5 * sigma * sigma) * T) / vol_sqrt_t
+    disc = math.exp(-q * T)
+    if kind == "C":
+        return disc * _norm_cdf(d1)
+    return disc * (_norm_cdf(d1) - 1.0)
+
+
 def gamma(S: float, K: float, T: float, sigma: float, r: float = 0.04, q: float = 0.0) -> float:
     """期权每股 gamma（call 与 put 相同）。
 

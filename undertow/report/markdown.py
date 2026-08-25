@@ -485,3 +485,70 @@ def render_fib_rr(fib, plan, display_name: str) -> str:
 def render_fib_rr_all(blocks: list[str]) -> str:
     header = "# 斐波那契回撤 + 盈亏比闸门（交易哲学落地 · 波段级情景参考）\n"
     return header + "\n" + FIB_DISCLAIMER + "\n\n" + "\n---\n\n".join(blocks)
+
+
+# ————————————————————————————————————————————————————————— 实盘持仓评价
+
+ACCOUNT_DISCLAIMER = (
+    "> ⚠️ 实盘持仓**理论复盘**：把每笔持仓放到 undertow 对该标的的研判语境里看方向是否顺势、"
+    "行权价与 Gamma 墙的关系、临近到期/被行权风险、结构与净 Delta。**只作波段级风险情景参考，"
+    "非投资建议、非交易指令**；理论中值来自 BS（无 bid/ask，实盘略有出入），方向与数字均来自"
+    "上游确定性模块。执行永远由你自己在券商端完成。"
+)
+
+
+def _money(v) -> str:
+    if v is None:
+        return "—"
+    return f"{v:+,.0f}"
+
+
+def render_account_md(review, assets=None) -> str:
+    """实盘持仓评价 终端 Markdown。review=PortfolioReview, assets=AccountAssets|None。"""
+    L: list[str] = []
+    L.append("# 实盘持仓理论评价（只读复盘 · 波段级情景参考）")
+    L.append("")
+    L.append(ACCOUNT_DISCLAIMER)
+    L.append("")
+    if not review.ok:
+        L.append(f"- {review.note or '无法评价'}")
+        return "\n".join(L)
+    L.append(f"**{review.headline}**  ·  基准日 {review.asof.isoformat()}")
+    if assets is not None:
+        cash = "、".join(f"{k} {v:,.0f}" for k, v in assets.cash_by_ccy.items()) or "—"
+        L.append(f"- 账户：净资产 ${assets.net_assets:,.0f} · 购买力 ${assets.buy_power:,.0f} · 可用现金 {cash}")
+    L.append("")
+
+    for g in review.groups:
+        L.append(f"## {g.display_name}（{g.underlying}）")
+        d = "—" if g.net_delta is None else f"{g.net_delta:+.0f}"
+        L.append(f"- 组合：净 Delta {d} · 浮动盈亏 {_money(g.total_pnl)} · 综合研判 **{g.bias}**"
+                 + (f" · 决策：{g.verdict_head}" if g.verdict_head else ""))
+        if g.spreads:
+            for s in g.spreads:
+                L.append(f"- 结构：**{s.label}** {s.note}（{s.qty} 组）→ 最大盈 {s.max_profit:+,.0f} / 最大亏 {s.max_loss:-,.0f}")
+        L.append("")
+        L.append("| 持仓 | 方向 | 数量 | 到期(DTE) | 价性 | 行权 vs 墙 | 顺逆 | 浮盈亏 | 评价 |")
+        L.append("|---|---|---:|---|---|---|---|---:|---|")
+        for lg in g.legs:
+            dte = "—" if lg.dte is None else f"{lg.expiry.isoformat()}({lg.dte})" if lg.expiry else "—"
+            strike = f"{lg.strike:g}{lg.kind}" if lg.strike is not None else lg.kind
+            L.append(f"| {lg.name} | {lg.side} | {lg.qty:g} | {dte} | {lg.moneyness} | "
+                     f"{lg.wall_note or '—'} | {lg.align} | {_money(lg.pnl)} | {lg.comment} |")
+        L.append("")
+        flags = [f for lg in g.legs for f in lg.flags]
+        if flags:
+            L.append("**风险旗标**：")
+            for f in dict.fromkeys(flags):
+                L.append(f"- ⚠ {f}")
+            L.append("")
+        L.append(f"> {g.summary}")
+        L.append("")
+
+    if review.unmapped:
+        L.append("## 未接入研判的标的（仅列出，无 undertow 期权代理）")
+        L.append("")
+        for lg in review.unmapped:
+            L.append(f"- {lg.name}（{lg.side} {lg.qty:g}）")
+        L.append("")
+    return "\n".join(L)

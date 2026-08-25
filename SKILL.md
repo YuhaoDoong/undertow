@@ -24,6 +24,7 @@ description: >-
 - 「某个到期日（如本周五 / X 月 X 日到期）单独的持仓 / 我要做定到期的价差」→ `expiry`
 - 「现价能不能追 / 该在哪加仓 / 盈亏比划不划算 / 回调到哪买」→ `fib`
 - 「这套信号历史上准不准」→ `backtest`
+- 「帮我看看我的实盘持仓 / 我这几张期权仓怎么样 / 卖的 put 有没有被行权风险 / 我的仓和你的研判一致吗」→ `account`
 - 「最近有什么大事件 / FOMC/CPI/非农 什么时候 / 临近哪些催化剂」→ `calendar`
 
 ## 前置
@@ -40,6 +41,7 @@ description: >-
 | `python -m undertow flow [品种...]` | 买卖方资金流 + 多腿价差识别 + 波动率面（ATM IV/25Δ·10Δ skew 日变化 → 期权端是否确认价格） | 终端 Markdown（需≥2 天快照） |
 | `python -m undertow expiry [品种...]` | **近周到期阶梯**：把 60 天混合的墙/资金流拆回【单个到期日】——未来 3 个周五 + 最近月度 OPEX 各自独立的 call/put 墙 + 逐 ΔOI 买卖方（定到期做价差用） | 终端 Markdown；也自动嵌入 `report` |
 | `python -m undertow fib [品种...]` | **斐波那契回撤 + 盈亏比闸门**：确定性定位当前摆动腿 → 0.382/0.5/0.618 黄金回撤区 + 扩展目标，再算「现价追」vs「等回调」两情景的盈亏比并评级（差/中/优），把「先看盈亏比、别追、等回调」这套交易纪律落成数字（含 ETF 行权价锚，实盘定腿用） | 终端 Markdown；也自动嵌入 `report` |
+| `python -m undertow account` | **实盘持仓理论评价（只读）**：读长桥账户当前持仓，逐笔放进 undertow 对该标的的研判语境复盘——顺势/逆势、行权价 vs Gamma 墙、临近到期/被行权风险、垂直价差结构识别、净 Delta、浮动盈亏。**绝不下单**；持仓属敏感数据，HTML 落 gitignore 的 `data/account/` | 终端 Markdown + 本地私有 HTML。`--no-html` 仅终端 |
 | `python -m undertow backtest [品种...]` | COT 信号事件研究回测 | 终端 Markdown |
 | `python -m undertow snapshot [品种...]` | 落盘当日期权链原始全字段 | gzip 存 `data/snapshots/`（纳入 git） |
 | `python -m undertow calendar [品种...]` | 事件雷达：关键节点倒计时 + **实时预测/前值/影响**（本周自动拉 FairEconomy 公开 feed，远期用手维护锚点） | 终端；也自动嵌入 `report` 顶部。`--no-live` 仅用本地锚点 |
@@ -116,3 +118,21 @@ python -m undertow snapshot      # 落盘当日全品种期权链；休市重复
 **混合模式**：定时任务/index 用这套确定性结论打底；**当用户在交互式会话里让你（LLM 助手）分析时，你应先读
 报告/`verdict` 的结构化结论与数字，再在其上叠一段像样的流畅叙述**（拆短线/长线、点名关键位、带盈亏比数字），
 但**方向结论与所有数字以 `verdict`/上游模块为准，你不得自行改判或臆算**——这正是"LLM 不碰算术"的落地。
+
+## 实盘持仓理论评价（`account` · 只读复盘）
+`python -m undertow account` 把研判从"标的应该怎么看"接到"你手上的仓该怎么看"：读长桥证券账户当前持仓，
+逐笔放进 undertow 对该标的的研判语境里复盘（`collect/longbridge_account.py` 只读接口 + `analyze/portfolio.py`
+确定性评价引擎）：
+1. **方向顺逆** —— 卖put/买call/正股多＝看多敞口，买put/卖call＝看空敞口；与综合 bias 比是顺势/逆势。
+2. **行权价 vs Gamma 墙** —— 卖 put 想落在 put 墙（支撑）之上、卖 call 想落在 call 墙之下。
+3. **临近到期/被行权风险** —— DTE≤7 且贴价/价内的空头腿置旗标。
+4. **垂直价差结构识别** —— 同标的同到期一空一多相邻行权→牛市看跌/熊市看涨等价差，算最大盈/最大亏；
+   **价差保护腿不单独判逆势**（方向由价差整体承载）。
+5. **净 Delta / 浮动盈亏** —— 每腿理论中值走 BS（无 bid/ask，实盘略有出入），组合级汇总。
+
+**三条铁律（务必）**：
+- **只读**——本模块永不下单/撤单/改单；undertow 只做研判与复盘，实盘执行永远由用户在券商端完成。
+- **纯标准库**——长桥走 `longbridge` CLI（device-flow 鉴权、token 在 `~/.longbridge/`），subprocess 调用，
+  不引入 pip 依赖；未接入时优雅降级、不崩。
+- **敏感数据不进公开仓库**——持仓/资金/盈亏与生成的评价 HTML 一律落 gitignore 的 `data/account/`，绝不提交。
+- 输出只作**波段级风险情景复盘**，非投资建议、非交易指令。

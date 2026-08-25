@@ -1,6 +1,10 @@
 # 临时缓存（可由 API 重新拉取，不必入库）
 data/cache/
 
+# ── 实盘账户敏感数据：持仓/资金/盈亏，只本地保留，永不入公开仓库 ──
+# undertow 是公开仓库；`undertow account` 生成的评价 HTML 与任何账户快照落此目录。
+data/account/
+
 # Python
 __pycache__/
 *.py[cod]

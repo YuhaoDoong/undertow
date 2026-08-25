@@ -51,6 +51,22 @@ def _instrument_brief(ctx) -> dict:
         "verdict_head": ctx.verdict_head, "proxy_quality": ctx.proxy_quality,
         "spot_source": getattr(ctx, "spot_source", "snapshot"),
         "price_note": getattr(ctx, "price_note", ""),
+        "technicals": _tech_brief(getattr(ctx, "technicals", None)),
+    }
+
+
+def _tech_brief(tr) -> dict | None:
+    if tr is None or not getattr(tr, "ok", False):
+        return None
+    return {
+        "headline": tr.headline, "trend": tr.trend,
+        "heat": tr.heat, "heat_score": tr.heat_score,
+        "rsi6": tr.rsi6, "rsi14": tr.rsi14,
+        "kdj_j": tr.kdj[2] if tr.kdj else None,
+        "cci": tr.cci, "bias6": tr.bias6,
+        "boll_pctb": tr.boll[3] if tr.boll else None,
+        "macd_above_zero": (tr.macd[0] > 0) if tr.macd else None,
+        "rets": tr.rets,
     }
 
 
@@ -147,6 +163,12 @@ def render_prompt(packet: dict) -> str:
         L.append(f"  · {ins['display_name']}({k})：综合 {ins['bias']}（近 {ins['near_bias']}/"
                  f"中 {ins['mid_bias']}）；现价 {ins['spot']:.2f}；put墙 {ins['put_wall']:.1f}/"
                  f"call墙 {ins['call_wall']:.1f}；决策：{ins['verdict_head']}")
+        tc = ins.get("technicals")
+        if tc:
+            L.append(f"      技术面：{tc['trend']} · 短线{tc['heat']}(过热分{tc['heat_score']:+d})"
+                     + (f" · RSI6 {tc['rsi6']:.0f}" if tc.get("rsi6") is not None else "")
+                     + (f"/KDJ-J {tc['kdj_j']:.0f}" if tc.get("kdj_j") is not None else "")
+                     + (f"/CCI {tc['cci']:.0f}" if tc.get("cci") is not None else ""))
     L.append("")
     L.append("【当前持仓】" + packet["portfolio"]["headline"])
     for g in packet["portfolio"]["groups"]:

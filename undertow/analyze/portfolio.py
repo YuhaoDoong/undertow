@@ -89,6 +89,7 @@ class InstrumentContext:
     spot_source: str = "snapshot"       # 现价来源：snapshot(快照收盘)/夜盘/盘后/盘前/常规
     live_opt: dict = None               # {occ_symbol: (last_price, iv)} 期权实时价（可选）
     price_note: str = ""                # 报价源说明（渲染用）
+    technicals: object = None           # TechnicalRead（短线过热度/趋势结构，可选）
 
     def live_of(self, symbol: str):
         """取该合约的期权实时 (last, iv)；无则 None。"""

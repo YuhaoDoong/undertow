@@ -1016,6 +1016,8 @@ def _account_context(inst, store, sources, today, *, no_cache, live_quotes=None)
                 ratio = real_price / curr.spot
         except Exception:
             pass
+    from undertow.analyze.technicals import analyze_technicals
+    technicals = analyze_technicals(real_series) if real_series is not None else None
     mult = ratio if ratio is not None else inst.options.approx_commodity_multiplier
     obs_day = _prev_weekday(date.fromisoformat(curr_date_s)) if curr_date_s else _prev_weekday(today)
 
@@ -1078,7 +1080,8 @@ def _account_context(inst, store, sources, today, *, no_cache, live_quotes=None)
         near_bias=outlook.near_bias or "", mid_bias=outlook.mid_bias or "",
         verdict_head=(verdict.headline if verdict else ""),
         proxy_quality=inst.options.proxy_quality, greeks=greeks,
-        spot_source=spot_source, live_opt=live_opt, price_note=price_note)
+        spot_source=spot_source, live_opt=live_opt, price_note=price_note,
+        technicals=technicals)
 
 
 def _fetch_live_quotes(positions):
@@ -1260,6 +1263,36 @@ def _build_news_digest(inst, events, today, *, limit=12):
         except Exception as e:
             print(f"[提示] {inst.key} 新闻获取跳过：{str(e)[:80]}", file=sys.stderr)
     return build_news_digest(inst.key, inst.display_name, items, events, today)
+
+
+def cmd_tech(args) -> int:
+    """技术面：短线过热度 + 趋势结构（从真实价序确定性算 RSI/KDJ/MACD/布林/均线）。"""
+    from undertow.analyze.technicals import analyze_technicals, render_md
+    cfg = load_config()
+    try:
+        instruments = _resolve_instruments(cfg, args.instruments)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
+    fut_src = YahooFuturesSource()
+    px_src = CboeHistorySource()
+    blocks = []
+    for inst in instruments:
+        ser = None
+        if inst.commodity is not None:
+            try:
+                ser, _p, _a = fut_src.fetch_for(inst, use_cache=not args.no_cache)
+            except Exception as e:
+                print(f"[提示] {inst.key} 期货价序取失败：{str(e)[:70]}", file=sys.stderr)
+        if ser is None and inst.price is not None:
+            try:
+                ser = px_src.fetch_series(inst, use_cache=not args.no_cache)
+            except Exception:
+                pass
+        blocks.append(render_md(analyze_technicals(ser), inst.display_name))
+    print("# 技术面（短线过热度 + 趋势结构 · 与期权结构层正交交叉印证）\n")
+    print("\n\n---\n\n".join(blocks))
+    return 0
 
 
 def cmd_news(args) -> int:
@@ -1548,6 +1581,10 @@ def build_parser() -> argparse.ArgumentParser:
     psv.add_argument("--port", type=int, default=8787, help="端口（默认 8787）")
     psv.add_argument("--host", default="127.0.0.1", help="绑定地址（默认 127.0.0.1，仅本机）")
     psv.set_defaults(func=cmd_serve)
+
+    pt = sub.add_parser("tech", help="技术面：短线过热度 + 趋势结构（RSI/KDJ/MACD/布林/均线，确定性）")
+    pt.add_argument("instruments", nargs="*", help="品种，留空=全部")
+    pt.set_defaults(func=cmd_tech)
 
     pn = sub.add_parser("news", help="事件感知：品种相关新闻 + 临近关键事件（高影响临近置顶告警，只读）")
     pn.add_argument("instruments", nargs="*", help="品种，留空=全部")

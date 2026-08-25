@@ -16,6 +16,16 @@
 | `fred_macro.py` | 宏观：FRED（DFII10 实际利率 / DTWEXBGS 美元 / T10YIE 通胀预期），免 key | 免费·日频 T+1 |
 | `faireconomy_cal.py` | 经济日历实时 feed：FairEconomy 公开 JSON（ForexFactory 数据方，带预测/前值/影响） | 免费·公开 feed |
 
+## Live brokerage (read-only) / 实盘券商（只读）
+
+> 长桥证券，走 `longbridge` CLI（device-flow 鉴权、token 在 `~/.longbridge/`），subprocess 封装、
+> 不引 pip 依赖。**只读**：绝不下单/撤单/改单。账户数据属敏感，落盘一律 gitignore 的 `data/account/`。
+
+| 文件 | 作用 | 说明 |
+|---|---|---|
+| `longbridge_account.py` | 持仓（股票+期权 option_list）+ 账户资产 + 资金流水(cash-flow) + 历史成交(order executions) | 只读·需 `longbridge auth login` |
+| `longbridge_quote.py` | 实时报价：ETF 最新场次股价（夜盘/盘后/盘前/常规）+ 期权实时 last/IV（需 OPRA 订阅，无则优雅降级到仅股价） | 只读·两级降级 |
+
 ## Infrastructure / 基础设施
 
 | 文件 | 作用 |

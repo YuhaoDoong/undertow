@@ -58,6 +58,16 @@ class Trigger:
 
 
 @dataclass(frozen=True)
+class OpenQuestion:
+    """待用数据回答的问题——不拍脑袋，攒够样本再下结论。"""
+    id: str
+    question: str
+    why: str = ""
+    how_to_answer: str = ""
+    status: str = "待数据"
+
+
+@dataclass(frozen=True)
 class Limits:
     """可机器检查的限额。None = 该项不检查。"""
     max_risk_per_trade_pct: float | None = None   # 单笔最大风险占净资产 %
@@ -82,6 +92,7 @@ class SoulProfile:
     weaknesses: list = field(default_factory=list)     # list[Weakness]
     lessons: list = field(default_factory=list)        # list[Lesson]
     triggers: list = field(default_factory=list)       # list[Trigger] 待执行的触发计划
+    open_questions: list = field(default_factory=list) # list[OpenQuestion] 待数据回答的问题
     limits: Limits = field(default_factory=Limits)
     notes: str = ""
 
@@ -130,6 +141,7 @@ def load_profile(path: Path | None = None) -> SoulProfile | None:
         weaknesses=[Weakness(**w) for w in raw.get("weaknesses", [])],
         lessons=[Lesson(**l) for l in raw.get("lessons", [])],
         triggers=[Trigger(**t) for t in raw.get("triggers", [])],
+        open_questions=[OpenQuestion(**q) for q in raw.get("open_questions", [])],
         limits=Limits(**raw.get("limits", {})),
         notes=raw.get("notes", ""),
     )
@@ -300,6 +312,15 @@ def render_profile_md(p: SoulProfile | None) -> str:
         for t in p.triggers:
             if t.note:
                 L.append(f"- {t.instrument}：{t.note}")
+        L.append("")
+    if p.open_questions:
+        L.append("## ❓ 待研究（攒够数据再回答，不拍脑袋）")
+        for q in p.open_questions:
+            L.append(f"- **{q.question}**　`{q.status}`")
+            if q.why:
+                L.append(f"  - 为什么问：{q.why}")
+            if q.how_to_answer:
+                L.append(f"  - 怎么回答：{q.how_to_answer}")
         L.append("")
     if p.notes:
         L.append(f"> {p.notes}")

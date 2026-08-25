@@ -49,6 +49,8 @@ def _instrument_brief(ctx) -> dict:
         "zero_gamma": ctx.zero_gamma, "bias": ctx.bias,
         "near_bias": ctx.near_bias, "mid_bias": ctx.mid_bias,
         "verdict_head": ctx.verdict_head, "proxy_quality": ctx.proxy_quality,
+        "spot_source": getattr(ctx, "spot_source", "snapshot"),
+        "price_note": getattr(ctx, "price_note", ""),
     }
 
 

@@ -993,10 +993,11 @@ def _gamma_jsonable(inst, ga) -> dict:
     }
 
 
-def _account_context(inst, store, sources, today, *, no_cache):
+def _account_context(inst, store, sources, today, *, no_cache, live_quotes=None):
     """为某标的组装 InstrumentContext（现价+Gamma墙+近中研判+当日决策+链上greeks）。
 
     复用 report 的四层聚合，但只取持仓评价需要的字段。失败抛异常，调用方降级跳过。
+    live_quotes：{ETF符号: {spot, spot_kind, options:{occ:(last,iv)}}} 实时价（可选）。
     """
     from undertow.analyze.portfolio import InstrumentContext
     cot_src, opt_src, fut_src, fred_src, vol_src = sources
@@ -1054,16 +1055,73 @@ def _account_context(inst, store, sources, today, *, no_cache):
     def greeks(kind, strike, expiry):
         return lut.get((kind, round(strike, 3), expiry))
 
+    # —— 实时价覆盖：有则用最新股价当现价（修快照收盘过期）、期权实时 last/IV 供估值 ——
+    spot = curr.spot
+    spot_source = "snapshot"
+    price_note = f"ETF 快照收盘 {curr.spot:.2f}（{curr_date_s}）"
+    lq = (live_quotes or {}).get(inst.options.symbol.upper())
+    if lq is not None:
+        if lq.get("spot"):
+            spot = lq["spot"]
+            spot_source = lq.get("spot_kind", "实时")
+            price_note = f"实时{spot_source}股价 {spot:.2f}"
+    live_opt = (lq or {}).get("options") if lq else None
+    if live_opt:
+        price_note += f" · {len(live_opt)} 个持仓期权用实时价估值"
+    elif lq is not None:
+        price_note += " · 无期权行情权限，期权用 BS 理论估值"
+
     return InstrumentContext(
         etf_symbol=inst.options.symbol, display_name=inst.display_name,
-        spot=curr.spot, call_wall=ga.call_wall, put_wall=ga.put_wall,
+        spot=spot, call_wall=ga.call_wall, put_wall=ga.put_wall,
         zero_gamma=ga.zero_gamma, bias=outlook.bias,
         near_bias=outlook.near_bias or "", mid_bias=outlook.mid_bias or "",
         verdict_head=(verdict.headline if verdict else ""),
-        proxy_quality=inst.options.proxy_quality, greeks=greeks)
+        proxy_quality=inst.options.proxy_quality, greeks=greeks,
+        spot_source=spot_source, live_opt=live_opt, price_note=price_note)
 
 
-def _build_contexts(positions, no_cache):
+def _fetch_live_quotes(positions):
+    """取实时报价：每个持仓 ETF 的最新股价 + 各期权合约的实时 last/IV。
+
+    两级降级：有 OPRA 订阅→期权也实时；无订阅/非长桥→只股价；全失败→返回 {}（回退快照）。
+    返回 {ETF符号大写: {spot, spot_kind, options:{occ:(last,iv)}}}。
+    """
+    from undertow.collect import longbridge_quote as lq
+    from undertow.analyze.portfolio import parse_symbol
+    if not lq.available():
+        return {}
+    # 归类：ETF 标的 + 各标的的期权合约
+    etf_syms, opt_by_etf = set(), {}
+    for p in positions:
+        ps = parse_symbol(p.symbol)
+        etf = ps.underlying
+        etf_syms.add(f"{etf}.US")
+        if ps.is_option:
+            opt_by_etf.setdefault(etf, []).append(p.symbol)
+    out = {}
+    try:
+        sq = lq.fetch_stock_quotes(sorted(etf_syms))
+    except lq.LiveQuotesUnavailable as e:
+        print(f"[提示] 实时股价不可用，回退快照价：{str(e)[:80]}", file=sys.stderr)
+        return {}
+    for full, q in sq.items():
+        root = full.split(".")[0].upper()
+        out[root] = {"spot": q.freshest, "spot_kind": q.freshest_kind, "options": None}
+    # 期权实时价（需订阅；失败则只保留股价）
+    for etf, occs in opt_by_etf.items():
+        try:
+            oq = lq.fetch_option_quotes(occs)
+            om = {s: (o.last, o.iv) for s, o in oq.items()}
+            if etf in out:
+                out[etf]["options"] = om
+        except lq.LiveQuotesUnavailable as e:
+            print(f"[提示] {etf} 期权实时报价不可用（未订阅？），期权用 BS 估值：{str(e)[:70]}",
+                  file=sys.stderr)
+    return out
+
+
+def _build_contexts(positions, no_cache, live_quotes=None):
     """为持仓涉及的品种构建 {ETF根: InstrumentContext}（复用四层聚合）。"""
     from undertow.analyze.portfolio import parse_symbol
     cfg = load_config()
@@ -1080,7 +1138,8 @@ def _build_contexts(positions, no_cache):
         if inst is None:
             continue
         try:
-            contexts[root] = _account_context(inst, store, sources, today, no_cache=no_cache)
+            contexts[root] = _account_context(inst, store, sources, today,
+                                              no_cache=no_cache, live_quotes=live_quotes)
         except Exception as e:
             print(f"[提示] {root} 研判上下文构建失败，该标的仅列出不评方向: {str(e)[:120]}",
                   file=sys.stderr)
@@ -1099,7 +1158,12 @@ def _load_account_review(no_cache):
     positions = lb.fetch_positions()
     if not positions:
         return {"positions": [], "review": None, "today": market_today()}
-    contexts, today = _build_contexts(positions, no_cache)
+    live_quotes = {}
+    try:
+        live_quotes = _fetch_live_quotes(positions)
+    except Exception as e:
+        print(f"[提示] 实时报价获取跳过，回退快照价：{str(e)[:100]}", file=sys.stderr)
+    contexts, today = _build_contexts(positions, no_cache, live_quotes=live_quotes)
     assets = None
     try:
         assets = lb.fetch_assets()
@@ -1120,7 +1184,6 @@ def cmd_account(args) -> int:
 
     **只读**（绝不下单）；持仓/资金属敏感数据，HTML 落 gitignore 的 data/account/。
     """
-    from undertow.collect import longbridge_account as lb
     from undertow.collect import longbridge_account as lb
     from undertow.report.html import render_account_html
     from undertow.report.markdown import render_account_md
@@ -1214,7 +1277,7 @@ def cmd_consult(args) -> int:
             return 2
         # 拟开仓涉及的品种也要有上下文
         pt_contexts, _ = _build_contexts(pt_positions, args.no_cache)
-        merged = {**contexts, **pt_contexts}
+        merged = {**pt_contexts, **contexts}
         contexts = merged
         pt_review = review_portfolio(pt_positions, contexts, asof=today, capital=capital)
         pt_health = run_healthcheck(pt_review, capital)
@@ -1265,7 +1328,7 @@ def cmd_serve(args) -> int:
             mode = "pre_trade"
             pos = _parse_pretrade_spec(pre_trade)
             ptc, _ = _build_contexts(pos, args.no_cache)
-            contexts = {**contexts, **ptc}
+            contexts = {**ptc, **contexts}
             pr = review_portfolio(pos, contexts, asof=today, capital=capital)
             pt = {"spec": pre_trade, "review": pr, "health": run_healthcheck(pr, capital)}
         if review is None:

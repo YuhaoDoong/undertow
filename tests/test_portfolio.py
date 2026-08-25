@@ -185,6 +185,23 @@ def test_naked_short_put_capital_gate():
     print("PASS test_naked_short_put_capital_gate")
 
 
+def test_live_option_price_used_for_valuation():
+    """有期权实时价时，浮盈亏用真实 last（不是 BS 理论），并标〔实时价〕。"""
+    pos = [_Pos("SLV260826P61000.US", "SLV 61 Put", -4, 0.46)]
+    ctx = InstrumentContext(
+        etf_symbol="SLV", display_name="白银 Silver (COMEX)", spot=61.2,
+        call_wall=70.0, put_wall=55.0, zero_gamma=None,
+        bias="偏多", near_bias="中性", mid_bias="偏多", verdict_head="",
+        proxy_quality="good", greeks=None,
+        live_opt={"SLV260826P61000.US": (0.30, 0.387)})   # 真实 last 0.30
+    pr = review_portfolio(pos, {"SLV": ctx}, asof=date(2026, 8, 24))
+    lg = pr.groups[0].legs[0]
+    assert abs(lg.est_value - 0.30) < 1e-9, lg.est_value          # 用真实 last
+    assert abs(lg.pnl - (0.30 - 0.46) * 100 * (-4)) < 1e-6, lg.pnl  # 卖出：+64
+    assert "实时价" in lg.comment, lg.comment
+    print(f"PASS test_live_option_price_used_for_valuation → pnl {lg.pnl:+.0f}")
+
+
 def test_unmapped_underlying_listed_not_evaluated():
     """无 undertow 期权代理的标的（如 TSLA）只列出、不评方向、不崩。"""
     pos = [_Pos("TSLA260918C300000.US", "TSLA 260918 300 Call", 1, 5.0)]

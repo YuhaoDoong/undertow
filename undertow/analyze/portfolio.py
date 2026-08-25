@@ -86,6 +86,15 @@ class InstrumentContext:
     verdict_head: str = ""              # 当日决策一句话总纲
     proxy_quality: str = "good"
     greeks: object = None               # callable(kind,strike,expiry)->(delta,iv)|None
+    spot_source: str = "snapshot"       # 现价来源：snapshot(快照收盘)/夜盘/盘后/盘前/常规
+    live_opt: dict = None               # {occ_symbol: (last_price, iv)} 期权实时价（可选）
+    price_note: str = ""                # 报价源说明（渲染用）
+
+    def live_of(self, symbol: str):
+        """取该合约的期权实时 (last, iv)；无则 None。"""
+        if self.live_opt:
+            return self.live_opt.get(symbol)
+        return None
 
     def look(self, kind: str, strike: float, expiry: date) -> tuple[float, float]:
         """取每股 delta 与 iv：链上有用链上，没有回退 BS（iv 用同标的近端 ATM 近似）。"""
@@ -216,7 +225,21 @@ def _review_leg(pos, parsed: ParsedSymbol, ctx: InstrumentContext | None) -> Pos
     dte = (parsed.expiry - _today_ref()).days
     d_share, iv = ctx.look(parsed.kind, parsed.strike, parsed.expiry)
     T = max(dte, 0) / 365.0
-    est = bs.price(ctx.spot, parsed.strike, T, iv, kind=parsed.kind, r=RISK_FREE)
+    live = ctx.live_of(pos.symbol)          # 期权实时 (last, iv)
+    live_priced = False
+    if live is not None:
+        live_last, live_iv = live
+        if live_iv and live_iv > 0:
+            iv = live_iv                    # 用真实 IV
+        # 用真实 IV + 现价重算每股 delta（比快照 delta 更贴当下）
+        d_share = bs.delta(ctx.spot, parsed.strike, T, iv, kind=parsed.kind, r=RISK_FREE)
+        if live_last > 0:
+            est = live_last                 # 真实市价估值（优于 BS 理论）
+            live_priced = True
+        else:
+            est = bs.price(ctx.spot, parsed.strike, T, iv, kind=parsed.kind, r=RISK_FREE)
+    else:
+        est = bs.price(ctx.spot, parsed.strike, T, iv, kind=parsed.kind, r=RISK_FREE)
     pnl = (est - pos.cost_price) * CONTRACT_MULT * pos.quantity
     pos_delta = d_share * CONTRACT_MULT * pos.quantity
     money, dist = _moneyness(parsed.kind, ctx.spot, parsed.strike)
@@ -235,6 +258,8 @@ def _review_leg(pos, parsed: ParsedSymbol, ctx: InstrumentContext | None) -> Pos
         flags.append(f"{ctx.etf_symbol} 代理质量{ctx.proxy_quality}，位点仅定性")
 
     comment = _leg_comment(parsed, short, money, align, wall, dte)
+    if live_priced:
+        comment += "〔实时价〕"
     return PositionReview(**base, dte=dte, est_value=est, pnl=pnl, pos_delta=pos_delta,
                           moneyness=money, dist_pct=dist, wall_note=wall,
                           align=align, flags=flags, comment=comment)
@@ -306,6 +331,9 @@ class UnderlyingGroup:
     capital_note: str = ""        # 资金分配/够不够接货
     summary: str = ""
     advice: list[str] = field(default_factory=list)
+    spot: float = 0.0             # 评价所用现价
+    spot_source: str = "snapshot" # 现价来源
+    price_note: str = ""          # 报价源说明
 
 
 @dataclass(frozen=True)
@@ -707,7 +735,9 @@ def review_portfolio(positions, contexts: dict, asof: date,
                 bias=ctx.bias, verdict_head=ctx.verdict_head,
                 legs=legs, combos=combos, stance=stance, capital_note=cap_note,
                 summary=_group_summary(und, legs, combos, ctx),
-                advice=_group_advice(combos, legs, ctx, capital)))
+                advice=_group_advice(combos, legs, ctx, capital),
+                spot=ctx.spot, spot_source=getattr(ctx, "spot_source", "snapshot"),
+                price_note=getattr(ctx, "price_note", "")))
 
         headline = _portfolio_headline(groups, unmapped)
         return PortfolioReview(ok=True, asof=asof, groups=groups, unmapped=unmapped,

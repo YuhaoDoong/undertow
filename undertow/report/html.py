@@ -1198,6 +1198,7 @@ def render_account_html(review, assets=None, health=None) -> str:
                 f'<div style="margin:6px 0"><span class="badge" style="background:{bcol}">{_esc(g.bias)}</span>'
                 f'<span class="pill">净Δ {d}</span><span class="pill">浮盈亏 {pnl}</span></div>'
                 + (f'<div class="sub">🧭 {_esc(g.verdict_head)}</div>' if g.verdict_head else "")
+                + (f'<div class="sub">📈 报价源：{_esc(g.price_note)}</div>' if getattr(g, "price_note", "") else "")
                 + stance_html + combo_html +
                 '<table><thead><tr><th>持仓</th><th>到期</th><th>价性</th><th>行权 vs 墙</th>'
                 '<th>顺逆</th><th class="r">浮盈亏</th><th>评价</th></tr></thead>'

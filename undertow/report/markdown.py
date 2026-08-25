@@ -536,6 +536,9 @@ def render_account_md(review, assets=None, health=None) -> str:
         d = "—" if g.net_delta is None else f"{g.net_delta:+.0f}"
         L.append(f"- 综合：净 Delta {d} · 浮动盈亏 {_money(g.total_pnl)} · 综合研判 **{g.bias}**"
                  + (f" · 决策：{g.verdict_head}" if g.verdict_head else ""))
+        pn = getattr(g, "price_note", "")
+        if pn:
+            L.append(f"- 报价源：{pn}")
         if g.stance:
             L.append(f"- **整体姿态**：{g.stance}")
         if g.capital_note:

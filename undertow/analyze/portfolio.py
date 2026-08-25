@@ -265,18 +265,30 @@ def _leg_comment(parsed: ParsedSymbol, short: bool, money: str, align: str,
 
 
 @dataclass(frozen=True)
-class SpreadStruct:
+class AccountCapital:
+    """账户资金口径，喂给评价引擎做"资金够不够接货"这类约束。"""
+    buy_power: float          # 购买力（可用于新开/接货）
+    net_assets: float         # 净资产
+    cash_usd: float           # 可用美元现金
+
+
+@dataclass(frozen=True)
+class Combo:
+    """一个"组合期权"——同品种下按(到期)聚合、或跨期识别出的多腿结构。
+
+    max_loss=None 表示风险未封顶（裸卖/裸空）；capital_at_risk=占用或最坏风险资金（美元）。
+    """
     underlying: str
-    expiry: date
-    kind: str                # C / P
-    label: str               # 牛市看跌价差 / 熊市看涨价差 / 垂直价差
-    short_strike: float
-    long_strike: float
-    width: float
+    expiry_label: str        # "2026-08-26" / "跨期 08-26→09-18"
+    label: str               # 牛市看跌价差 / 空头跨式 / 铁鹰 / 日历价差 / 单腿买call ...
+    stance: str              # 保守做多 / 激进做多 / 中性收权金 / 保守做空 / 方向对冲 ...
+    legs: list               # 成员 PositionReview
     qty: int
-    net_credit: float        # 每份净权金（>0=收，<0=付）
-    max_profit: float        # 组合最大盈（美元）
-    max_loss: float          # 组合最大亏（美元）
+    net_credit: float | None # 每组净权金（>0=收，<0=付；None=不适用）
+    max_profit: float | None
+    max_loss: float | None   # None=风险未封顶
+    defined_risk: bool
+    capital_at_risk: float | None
     note: str
 
 
@@ -289,7 +301,9 @@ class UnderlyingGroup:
     bias: str
     verdict_head: str
     legs: list[PositionReview]
-    spreads: list[SpreadStruct] = field(default_factory=list)
+    combos: list[Combo] = field(default_factory=list)
+    stance: str = ""              # 整品种策略姿态一句话
+    capital_note: str = ""        # 资金分配/够不够接货
     summary: str = ""
     advice: list[str] = field(default_factory=list)
 
@@ -304,168 +318,362 @@ class PortfolioReview:
     note: str = ""
 
 
-def _detect_spreads(legs: list[PositionReview]) -> list[SpreadStruct]:
-    """同标的同到期同类型里，一空一多相邻行权 → 垂直价差。"""
-    out: list[SpreadStruct] = []
-    by = {}
-    for lg in legs:
-        if lg.kind not in ("C", "P") or lg.strike is None or lg.expiry is None:
-            continue
-        by.setdefault((lg.underlying, lg.expiry, lg.kind), []).append(lg)
-    for (und, exp, kind), grp in by.items():
-        shorts = [x for x in grp if x.qty < 0]
-        longs = [x for x in grp if x.qty > 0]
-        for s in shorts:
-            for l in longs:
-                qty = int(min(abs(s.qty), abs(l.qty)))
-                if qty <= 0:
-                    continue
-                width = abs(s.strike - l.strike)
-                if width <= 0:
-                    continue
-                net_credit = s.cost_price - l.cost_price   # 卖收 − 买付
-                if kind == "P":
-                    label = "牛市看跌价差(收权金)" if s.strike > l.strike else "熊市看跌价差(付权金)"
-                else:
-                    label = "熊市看涨价差(收权金)" if s.strike < l.strike else "牛市看涨价差(付权金)"
-                credit_pos = net_credit > 0
-                max_profit = (net_credit if credit_pos else (width + net_credit)) * CONTRACT_MULT * qty
-                max_loss = ((width - net_credit) if credit_pos else (-net_credit)) * CONTRACT_MULT * qty
-                out.append(SpreadStruct(
-                    underlying=und, expiry=exp, kind=kind, label=label,
-                    short_strike=s.strike, long_strike=l.strike, width=width, qty=qty,
-                    net_credit=net_credit, max_profit=max_profit, max_loss=max_loss,
-                    note=f"卖{s.strike:g}/买{l.strike:g}，宽{width:g}，净{'收' if credit_pos else '付'}权金 {abs(net_credit):.2f}"))
+# 短腿权金已收回多少比例才提示"可考虑落袋"
+TAKE_PROFIT_FRAC = 0.70
+
+
+@dataclass(frozen=True)
+class _Vert:
+    """一对垂直价差的中间量（内部用）。"""
+    kind: str
+    short: PositionReview
+    long: PositionReview
+    qty: int
+    width: float
+    credit: float             # 每份净权金（>0=收）
+    max_profit: float
+    max_loss: float
+    label: str
+    stance: str
+
+
+def _pair_vertical(shorts, longs, kind):
+    """从同类型的空/多腿各取一条配一个垂直价差；配不出返回 None。"""
+    for s in shorts:
+        for l in longs:
+            width = abs(s.strike - l.strike)
+            if width <= 0:
+                continue
+            qty = int(min(abs(s.qty), abs(l.qty)))
+            if qty <= 0:
+                continue
+            credit = s.cost_price - l.cost_price
+            cpos = credit > 0
+            if kind == "P":
+                bull = s.strike > l.strike
+                label = "牛市看跌价差(收权金)" if bull else "熊市看跌价差(付权金)"
+                stance = "保守做多" if bull else "保守做空"
+            else:
+                bear = s.strike < l.strike
+                label = "熊市看涨价差(收权金)" if bear else "牛市看涨价差(付权金)"
+                stance = "保守做空" if bear else "保守做多"
+            max_profit = (credit if cpos else (width + credit)) * CONTRACT_MULT * qty
+            max_loss = ((width - credit) if cpos else (-credit)) * CONTRACT_MULT * qty
+            return _Vert(kind, s, l, qty, width, credit, max_profit, max_loss, label, stance)
+    return None
+
+
+def _vertical_combo(exp, v: _Vert, ctx) -> Combo:
+    note = (f"卖{v.short.strike:g}/买{v.long.strike:g}，宽{v.width:g}，"
+            f"净{'收' if v.credit > 0 else '付'}权金 {abs(v.credit):.2f}")
+    return Combo(underlying=v.short.underlying, expiry_label=exp.isoformat(),
+                 label=v.label, stance=v.stance, legs=[v.short, v.long], qty=v.qty,
+                 net_credit=v.credit, max_profit=v.max_profit, max_loss=v.max_loss,
+                 defined_risk=True, capital_at_risk=v.max_loss, note=note)
+
+
+def _iron_combo(exp, pv: _Vert, cv: _Vert, ctx) -> Combo:
+    qty = min(pv.qty, cv.qty)
+    butterfly = pv.short.strike == cv.short.strike
+    label = "铁蝶(收权金)" if butterfly else "铁鹰(收权金)"
+    max_profit = pv.max_profit + cv.max_profit
+    max_loss = max(pv.max_loss, cv.max_loss)   # 铁鹰只可能一侧被击穿
+    note = (f"put 侧 卖{pv.short.strike:g}/买{pv.long.strike:g} + "
+            f"call 侧 卖{cv.short.strike:g}/买{cv.long.strike:g}；赌区间震荡")
+    return Combo(underlying=pv.short.underlying, expiry_label=exp.isoformat(),
+                 label=label, stance="中性收权金(区间)",
+                 legs=[pv.short, pv.long, cv.short, cv.long], qty=qty,
+                 net_credit=pv.credit + cv.credit, max_profit=max_profit, max_loss=max_loss,
+                 defined_risk=True, capital_at_risk=max_loss, note=note)
+
+
+def _straddle_combos(exp, calls, puts, ctx, used) -> list[Combo]:
+    """剩余未配对的 call+put：同号→跨式/宽跨式，异号→合成/风险反转。"""
+    out = []
+    for c in list(calls):
+        for p in list(puts):
+            if id(c) in used or id(p) in used:
+                continue
+            qty = int(min(abs(c.qty), abs(p.qty)))
+            if qty <= 0:
+                continue
+            same_k = c.strike == p.strike
+            if c.qty < 0 and p.qty < 0:            # 双卖
+                label = "空头跨式(收权金)" if same_k else "空头宽跨式(收权金)"
+                stance = "中性收权金(赌不动)"
+                credit = c.cost_price + p.cost_price
+                cap = None; mloss = None; defined = False
+            elif c.qty > 0 and p.qty > 0:          # 双买
+                label = "多头跨式" if same_k else "多头宽跨式"
+                stance = "博大波动(方向中性)"
+                credit = -(c.cost_price + p.cost_price)
+                cap = (c.cost_price + p.cost_price) * CONTRACT_MULT * qty
+                mloss = cap; defined = True
+            else:                                   # 一买一卖不同类=合成/风险反转
+                bull = (p.qty < 0 and c.qty > 0)
+                label = "风险反转(合成做多)" if bull else "风险反转(合成做空)"
+                stance = "激进做多" if bull else "激进做空"
+                credit = (c.cost_price if c.qty < 0 else -c.cost_price) + \
+                         (p.cost_price if p.qty < 0 else -p.cost_price)
+                cap = None; mloss = None; defined = False
+            used.add(id(c)); used.add(id(p))
+            out.append(Combo(underlying=c.underlying, expiry_label=exp.isoformat(),
+                             label=label, stance=stance, legs=[c, p], qty=qty,
+                             net_credit=credit, max_profit=None, max_loss=mloss,
+                             defined_risk=defined, capital_at_risk=cap,
+                             note=f"call {c.strike:g}{'卖' if c.qty<0 else '买'} + put {p.strike:g}{'卖' if p.qty<0 else '买'}"))
     return out
 
 
-def _reclassify_spread_legs(legs: list[PositionReview],
-                            spreads: list[SpreadStruct]) -> list[PositionReview]:
-    """价差成员腿不再单独判顺/逆势——方向由价差整体承载（保护腿≠逆势押注）。
+def _single_combo(lg: PositionReview, ctx) -> Combo:
+    short = lg.qty < 0
+    prem = lg.cost_price * CONTRACT_MULT * abs(lg.qty)
+    if lg.kind == "C":
+        stance = "保守做空(压顶收权金)" if short else "激进做多(凸性上行)"
+        label = f"单腿{'卖' if short else '买'}call {lg.strike:g}"
+    else:
+        stance = "保守做多(收权金愿接货)" if short else "激进做空/对冲(买跌)"
+        label = f"单腿{'卖' if short else '买'}put {lg.strike:g}"
+    if short:
+        # 裸卖：put 接货全额 / call 上行无限——风险未封顶
+        cap = (lg.strike * CONTRACT_MULT * abs(lg.qty)) if lg.kind == "P" else None
+        defined = False; mloss = None
+    else:
+        cap = prem; defined = True; mloss = prem     # 买方最大亏=已付权金
+    return Combo(underlying=lg.underlying,
+                 expiry_label=lg.expiry.isoformat() if lg.expiry else "—",
+                 label=label, stance=stance, legs=[lg], qty=int(abs(lg.qty)),
+                 net_credit=(lg.cost_price if short else -lg.cost_price),
+                 max_profit=(prem if short else None), max_loss=mloss,
+                 defined_risk=defined, capital_at_risk=cap,
+                 note=f"{'卖出收权金' if short else '买入付权金'} {lg.cost_price:.2f}")
 
-    只改 align → 「价差腿(结构)」并去掉误报的「方向与综合研判相反」旗标；
-    被行权/到期等真实风险旗标保留。
+
+def _calendar_combos(leftover, ctx, used) -> list[Combo]:
+    """跨到期同类型、同/异行权：一近一远反向 → 日历(同行权)/对角(异行权)价差。
+
+    长桥不会把这类显示成组合，靠这里自己识别。
     """
-    members: set[tuple] = set()
-    for s in spreads:
-        members.add((s.underlying, s.expiry, s.kind, s.short_strike))
-        members.add((s.underlying, s.expiry, s.kind, s.long_strike))
-    out: list[PositionReview] = []
+    out = []
+    by_kind = {}
+    for lg in leftover:
+        if id(lg) in used:
+            continue
+        by_kind.setdefault(lg.kind, []).append(lg)
+    for kind, grp in by_kind.items():
+        grp = sorted(grp, key=lambda x: x.expiry)
+        for i in range(len(grp)):
+            for j in range(len(grp)):
+                a, b = grp[i], grp[j]
+                if id(a) in used or id(b) in used or a is b:
+                    continue
+                if a.expiry == b.expiry or (a.qty < 0) == (b.qty < 0):
+                    continue
+                near, far = (a, b) if a.expiry < b.expiry else (b, a)
+                # 典型日历=卖近买远（收 theta）；反之为反向日历
+                same_k = near.strike == far.strike
+                label = ("日历价差" if same_k else "对角价差") + \
+                        ("(卖近买远)" if near.qty < 0 else "(买近卖远)")
+                stance = "中性偏收(theta)" if same_k else "方向+theta混合"
+                used.add(id(a)); used.add(id(b))
+                out.append(Combo(underlying=near.underlying,
+                                 expiry_label=f"跨期 {near.expiry:%m-%d}→{far.expiry:%m-%d}",
+                                 label=label, stance=stance, legs=[near, far],
+                                 qty=int(min(abs(near.qty), abs(far.qty))),
+                                 net_credit=None, max_profit=None, max_loss=None,
+                                 defined_risk=False, capital_at_risk=None,
+                                 note=f"{kind} 近{near.strike:g}({near.expiry:%m-%d})/远{far.strike:g}({far.expiry:%m-%d})"))
+    return out
+
+
+def _classify_underlying(legs: list[PositionReview], ctx) -> list[Combo]:
+    """把一个品种的全部腿识别成组合：先按到期内组合，再跨期日历/对角，剩下按单腿。"""
+    opts = [l for l in legs if l.kind in ("C", "P") and l.strike is not None and l.expiry is not None]
+    used: set = set()
+    combos: list[Combo] = []
+
+    by_exp: dict = {}
+    for l in opts:
+        by_exp.setdefault(l.expiry, []).append(l)
+
+    for exp in sorted(by_exp):
+        grp = by_exp[exp]
+        calls = [l for l in grp if l.kind == "C"]
+        puts = [l for l in grp if l.kind == "P"]
+        pv = _pair_vertical([x for x in puts if x.qty < 0], [x for x in puts if x.qty > 0], "P")
+        cv = _pair_vertical([x for x in calls if x.qty < 0], [x for x in calls if x.qty > 0], "C")
+        # 铁鹰/铁蝶：put 侧与 call 侧各一个收权金垂直价差
+        if pv and cv and pv.credit > 0 and cv.credit > 0:
+            for l in (pv.short, pv.long, cv.short, cv.long):
+                used.add(id(l))
+            combos.append(_iron_combo(exp, pv, cv, ctx))
+            continue
+        if pv:
+            used.add(id(pv.short)); used.add(id(pv.long))
+            combos.append(_vertical_combo(exp, pv, ctx))
+        if cv:
+            used.add(id(cv.short)); used.add(id(cv.long))
+            combos.append(_vertical_combo(exp, cv, ctx))
+        rem_c = [l for l in calls if id(l) not in used]
+        rem_p = [l for l in puts if id(l) not in used]
+        combos += _straddle_combos(exp, rem_c, rem_p, ctx, used)
+
+    leftover = [l for l in opts if id(l) not in used]
+    combos += _calendar_combos(leftover, ctx, used)
+    for l in opts:
+        if id(l) not in used:
+            combos.append(_single_combo(l, ctx))
+            used.add(id(l))
+    return combos
+
+
+def _reclassify_combo_legs(legs, combos):
+    """多腿组合的成员腿不再单独判顺/逆势——方向由组合整体承载。"""
+    multi = set()
+    for c in combos:
+        if len(c.legs) >= 2:
+            for l in c.legs:
+                multi.add(id(l))
+    out = []
     for lg in legs:
-        key = (lg.underlying, lg.expiry, lg.kind, lg.strike)
-        if key in members and lg.align in ("顺势", "逆势"):
+        if id(lg) in multi and lg.align in ("顺势", "逆势"):
             out.append(replace(
-                lg, align="价差腿(结构)",
+                lg, align="组合腿(结构)",
                 flags=[f for f in lg.flags if "相反" not in f],
-                comment=lg.comment.replace("（顺势）", "（价差腿）").replace("（逆势）", "（价差腿）")))
+                comment=lg.comment.replace("（顺势）", "（组合腿）").replace("（逆势）", "（组合腿）")))
         else:
             out.append(lg)
     return out
 
 
-# 短腿权金已收回多少比例才提示"可考虑落袋"
-TAKE_PROFIT_FRAC = 0.70
+def _book_stance(combos, ctx, capital) -> tuple[str, str]:
+    """整品种策略姿态 + 资金分配一句话。"""
+    if not combos:
+        return "", ""
+    aggr = [c for c in combos if "激进" in c.stance]
+    cons = [c for c in combos if "保守" in c.stance]
+    neut = [c for c in combos if "中性" in c.stance or "对冲" in c.stance or "theta" in c.stance]
+    long_bias = _bull(ctx.bias)
+    dir_word = "偏多" if long_bias > 0 else ("偏空" if long_bias < 0 else "中性")
+    layers = "；".join(f"{c.stance}（{c.label}）" for c in combos)
+    stance = f"整体≈{dir_word}·{len(combos)} 层结构：{layers}"
+
+    # 资金分配：激进(买方付权金) vs 保守(定义风险最大亏)
+    def cap_of(cs):
+        return sum(c.capital_at_risk for c in cs if c.capital_at_risk is not None)
+    ca, cc = cap_of(aggr), cap_of(cons)
+    parts = []
+    if ca or cc:
+        na = capital.net_assets if capital else 0
+        seg = []
+        if ca:
+            seg.append(f"激进 ${ca:,.0f}" + (f"（≈净资产{ca/na*100:.0f}%）" if na else ""))
+        if cc:
+            seg.append(f"保守 ${cc:,.0f}" + (f"（≈净资产{cc/na*100:.0f}%）" if na else ""))
+        parts.append("资金投入/风险：" + " · ".join(seg))
+        if ca and cc and 0.5 <= ca / cc <= 2.0:
+            parts.append("两层大致半仓激进、半仓保守")
+    # 资金够不够接货
+    if capital is not None:
+        naked_puts = [c for c in combos if "单腿卖put" in c.label]
+        need = sum((c.capital_at_risk or 0) for c in naked_puts)
+        if need > 0 and capital.buy_power < need:
+            parts.append(f"⚠ 购买力 ${capital.buy_power:,.0f} < 裸卖 put 接货全额 ${need:,.0f}，"
+                         f"资金不足接货——这些腿只能到期前平仓/展期，不能走接货路径")
+    return stance, "。".join(parts)
 
 
-def _spread_of(lg: PositionReview, spreads: list[SpreadStruct]):
-    """该腿是否属于某个已识别价差；返回 SpreadStruct 或 None。"""
-    for s in spreads:
-        if s.underlying == lg.underlying and s.expiry == lg.expiry and s.kind == lg.kind \
-           and lg.strike in (s.short_strike, s.long_strike):
-            return s
-    return None
-
-
-def _group_advice(legs: list[PositionReview], spreads: list[SpreadStruct],
-                  ctx: InstrumentContext) -> list[str]:
-    """规则化建议（权衡/参考口径，**非投资指令**）。数字全确定性算出。
-
-    车轮/价差语境：卖 put 收权金愿低位接货；定义风险价差下行有保护腿封顶；
-    临近到期给"展期/接货/平仓"权衡；深度获利腿提示落袋免尾部风险。
-    """
+def _group_advice(combos, legs, ctx, capital) -> list[str]:
+    """规则化建议（💡权衡/参考口径，**非投资指令**）。数字全确定性算出，含资金约束。"""
     adv: list[str] = []
     spot = ctx.spot
+    bp = capital.buy_power if capital else None
 
-    # 价差级：盈亏平衡 + 现价位置 + 封顶
-    for s in spreads:
-        if s.kind == "P" and s.net_credit > 0:      # 牛市看跌价差（收权金）
-            be = s.short_strike - s.net_credit
+    for c in combos:
+        # 收权金垂直价差：盈亏平衡 + 封顶 + 资金真相
+        if c.label.startswith("牛市看跌价差") and c.net_credit and c.net_credit > 0:
+            sshort = max(l.strike for l in c.legs)
+            slong = min(l.strike for l in c.legs)
+            be = sshort - c.net_credit
             room = (spot - be) / spot * 100 if spot else 0
             adv.append(
-                f"【{s.label}】盈亏平衡≈短腿−净权金={be:.2f}；现价 {spot:.2f} 在其"
-                f"{'上方' if spot > be else '下方'} {abs(room):.1f}%。跌破 {be:.2f} 才转亏，"
-                f"最大亏已被买{s.long_strike:g}腿封顶 {s.max_loss:-,.0f}——被行权风险有限，"
-                f"时间站你这边，可持有到期让权金归零。")
-        elif s.kind == "C" and s.net_credit > 0:    # 熊市看涨价差（收权金）
-            be = s.short_strike + s.net_credit
-            adv.append(f"【{s.label}】盈亏平衡≈{be:.2f}；站上 {be:.2f} 才转亏，"
-                       f"上行被买{s.long_strike:g}腿封顶。")
+                f"【{c.label}】盈亏平衡≈{be:.2f}；现价 {spot:.2f} 在其{'上方' if spot > be else '下方'}"
+                f" {abs(room):.1f}%。跌破 {be:.2f} 才转亏，**真正现金风险=价差最大亏 ${c.max_loss:,.0f}**"
+                f"（已被买{slong:g}腿封顶），不是全额接货。时间站你这边，可持有到期让权金归零。")
+        elif c.label.startswith("熊市看涨价差") and c.net_credit and c.net_credit > 0:
+            sshort = min(l.strike for l in c.legs)
+            be = sshort + c.net_credit
+            adv.append(f"【{c.label}】盈亏平衡≈{be:.2f}；站上 {be:.2f} 转亏，最大亏 ${c.max_loss:,.0f} 封顶。")
+        elif c.label.startswith("单腿买call"):
+            lg = c.legs[0]
+            adv.append(f"【{c.label}】激进做多、凸性上行；最大亏=已付权金 ${c.capital_at_risk:,.0f}"
+                       f"（占净资产不小，属博弹性的那半仓）。看涨墙 {ctx.call_wall:.1f} 是上行目标参考。")
+        elif c.label == "铁鹰(收权金)" or c.label == "铁蝶(收权金)":
+            adv.append(f"【{c.label}】赌区间震荡收权金，两侧风险均被买腿封顶（最大亏 ${c.max_loss:,.0f}）；"
+                       f"现价越靠中间越舒服，逼近任一短腿要考虑调整。")
+
+    # 卖出腿的临近到期处理（资金约束是关键）
+    def _in_defined(lg):
+        # 按合约代码匹配（重分类后 leg 对象已变，不能用对象相等）
+        return any(c.defined_risk and any(m.symbol == lg.symbol for m in c.legs) for c in combos)
 
     for lg in legs:
-        if lg.kind not in ("C", "P") or lg.strike is None or lg.dte is None:
+        if lg.kind not in ("C", "P") or lg.strike is None or lg.dte is None or lg.qty >= 0:
             continue
-        short = lg.qty < 0
-        sp = _spread_of(lg, spreads)
-        # 卖出腿的建议（车轮核心）
-        if short:
-            # 已收回权金比例（est 越接近 0 越收满）
-            captured = (lg.cost_price - lg.est_value) / lg.cost_price if lg.cost_price and lg.est_value is not None else 0
-            if any("被行权" in f for f in lg.flags):
-                if lg.kind == "P":
-                    assign_cost = lg.strike * CONTRACT_MULT * abs(lg.qty)
-                    capped = "（有买保护腿封顶，接货即被行权也亏损有限）" if sp else "（裸卖，接货需全额现金/保证金）"
+        in_defined = _in_defined(lg)
+        captured = (lg.cost_price - lg.est_value) / lg.cost_price if lg.cost_price and lg.est_value is not None else 0
+        if any("被行权" in f for f in lg.flags):
+            if lg.kind == "P":
+                assign = lg.strike * CONTRACT_MULT * abs(lg.qty)
+                if bp is not None and bp < assign:
+                    if in_defined:
+                        adv.append(
+                            f"⚠【{lg.name}】剩 {lg.dte} 天且{lg.moneyness}。你**购买力仅 ${bp:,.0f}、"
+                            f"远不够接货 ${assign:,.0f}**——虽有保护腿把最终亏损封顶，但若到期被指派仍需短暂"
+                            f"垫付全额现金，账户扛不住。**务必到期前平仓或展期(roll)，别让它到期指派**。")
+                    else:
+                        adv.append(
+                            f"⚠【{lg.name}】裸卖、剩 {lg.dte} 天且{lg.moneyness}，接货需 ${assign:,.0f} 但"
+                            f"购买力仅 ${bp:,.0f}——**不能接货**，只能到期前平仓/展期，或纪律止损。")
+                else:
                     adv.append(
-                        f"⚠【{lg.name}】剩 {lg.dte} 天且{lg.moneyness}，被行权概率上升。权衡三选一："
-                        f"①愿在≈{lg.strike:g}接货→持有等行权（接货成本约 ${assign_cost:,.0f}{capped}，"
-                        f"接后可转卖 covered call 继续车轮）；②不愿接货→到期前平仓或向下/向后展期(roll)收新权金；"
-                        f"③已亏则纪律止损。put 墙 {ctx.put_wall:.1f} 是结构支撑，可作接货成本参考。")
-                else:  # 卖 call 被行权（被叫走）
-                    adv.append(f"⚠【{lg.name}】剩 {lg.dte} 天且{lg.moneyness}，被叫走概率上升；"
-                               f"若持正股可接受被行权兑现，否则考虑平仓/向上展期。")
-            elif lg.moneyness == "价外" and captured >= TAKE_PROFIT_FRAC:
-                adv.append(f"【{lg.name}】已收回约 {captured*100:.0f}% 权金且仍价外，"
-                           f"可考虑提前平仓落袋、免尾部被行权风险（车轮纪律：赚到大头就滚下一轮）。")
-            elif lg.moneyness == "价外" and lg.dte <= NEAR_EXPIRY_DTE:
-                adv.append(f"【{lg.name}】价外、剩 {lg.dte} 天，大概率归零收满权金，"
-                           f"可等到期或提前平仓释放保证金。")
-        # 逆势的独立方向腿（非价差成员）提示
-        elif lg.align == "逆势":
-            adv.append(f"【{lg.name}】方向与综合研判（{ctx.bias}）相反，属逆势押注，注意风险自担。")
+                        f"⚠【{lg.name}】剩 {lg.dte} 天且{lg.moneyness}：①愿接货→持有等行权"
+                        f"（约 ${assign:,.0f}，接后转卖 covered call 继续车轮）；②不愿→平仓/向下向后展期收新权金；③止损。")
+            else:
+                adv.append(f"⚠【{lg.name}】卖 call 剩 {lg.dte} 天且{lg.moneyness}，被叫走概率上升；"
+                           f"持正股可接受，否则平仓/向上展期。")
+        elif lg.moneyness == "价外" and captured >= TAKE_PROFIT_FRAC:
+            adv.append(f"【{lg.name}】已收回约 {captured*100:.0f}% 权金且仍价外，可提前平仓落袋、免尾部风险。")
 
-    # 组合级顺逆总结
+    # 组合级顺逆
     b = _bull(ctx.bias)
     if b != 0:
         dir_legs = [lg for lg in legs if lg.align in ("顺势", "逆势")]
         if dir_legs and all(lg.align == "顺势" for lg in dir_legs):
-            adv.append(f"整体方向与综合研判（{ctx.bias}）一致，可按纪律持有；"
-                       f"加仓/新开先过盈亏比闸门（别追、等回调）。")
+            adv.append(f"整体方向与综合研判（{ctx.bias}）一致，可按纪律持有；加仓/新开先过盈亏比闸门（别追、等回调）。")
     return adv
 
 
-def _group_summary(und: str, legs: list[PositionReview], spreads: list[SpreadStruct],
-                   ctx: InstrumentContext) -> str:
-    aligns = [lg.align for lg in legs if lg.align in ("顺势", "逆势")]
-    n_ok = aligns.count("顺势")
-    n_bad = aligns.count("逆势")
+def _group_summary(und, legs, combos, ctx) -> str:
     risk = [f for lg in legs for f in lg.flags if "被行权" in f or "已过期" in f]
     parts = [f"综合研判 {ctx.bias}（近{ctx.near_bias}/中{ctx.mid_bias}）"]
     if ctx.verdict_head:
         parts.append(f"决策：{ctx.verdict_head}")
-    if spreads:
-        parts.append("；".join(s.label + s.note for s in spreads))
-    if n_ok or n_bad:
-        parts.append(f"仓位方向：{n_ok} 顺势 / {n_bad} 逆势")
+    if combos:
+        parts.append("组合：" + "；".join(f"{c.label}" for c in combos))
     if risk:
         parts.append("⚠ " + "；".join(dict.fromkeys(risk)))
     return "。".join(parts)
 
 
-def review_portfolio(positions, contexts: dict, asof: date) -> PortfolioReview:
+def review_portfolio(positions, contexts: dict, asof: date,
+                     capital: AccountCapital | None = None) -> PortfolioReview:
     """核心入口。
 
     positions：list（需有 symbol/name/quantity/cost_price 字段）。
     contexts：{ETF根: InstrumentContext}，如 {'SLV': ctx_silver}。
     asof：评价基准日（注入，纯函数可测）。
+    capital：账户资金口径（可选）；给了才做"够不够接货"的资金约束建议。
     """
     global _TODAY
     _TODAY = asof
@@ -487,18 +695,19 @@ def review_portfolio(positions, contexts: dict, asof: date) -> PortfolioReview:
 
         for und, legs in by_und.items():
             ctx = contexts[und]
-            spreads = _detect_spreads(legs)
-            legs = _reclassify_spread_legs(legs, spreads)
+            combos = _classify_underlying(legs, ctx)
+            legs = _reclassify_combo_legs(legs, combos)
             deltas = [lg.pos_delta for lg in legs if lg.pos_delta is not None]
             pnls = [lg.pnl for lg in legs if lg.pnl is not None]
+            stance, cap_note = _book_stance(combos, ctx, capital)
             groups.append(UnderlyingGroup(
                 underlying=und, display_name=ctx.display_name,
                 net_delta=sum(deltas) if deltas else None,
                 total_pnl=sum(pnls) if pnls else None,
                 bias=ctx.bias, verdict_head=ctx.verdict_head,
-                legs=legs, spreads=spreads,
-                summary=_group_summary(und, legs, spreads, ctx),
-                advice=_group_advice(legs, spreads, ctx)))
+                legs=legs, combos=combos, stance=stance, capital_note=cap_note,
+                summary=_group_summary(und, legs, combos, ctx),
+                advice=_group_advice(combos, legs, ctx, capital)))
 
         headline = _portfolio_headline(groups, unmapped)
         return PortfolioReview(ok=True, asof=asof, groups=groups, unmapped=unmapped,

@@ -1150,21 +1150,29 @@ def render_account_html(review, assets=None) -> str:
                     f'<td style="color:{acol};font-weight:700">{_esc(lg.align)}</td>'
                     f'<td class="r" style="color:{pcol}">{pnl_l}</td>'
                     f'<td><small>{_esc(lg.comment)}{flagtxt}</small></td></tr>')
-            spread_html = ""
-            if g.spreads:
+            combo_html = ""
+            if g.combos:
                 sp = []
-                for s in g.spreads:
-                    sp.append(f'<div class="scn"><b>{_esc(s.label)}</b>（{s.qty} 组）'
-                              f'<div class="t">{_esc(s.note)}</div>'
-                              f'<div class="t">最大盈 <b style="color:#1a7f37">{s.max_profit:+,.0f}</b> · '
-                              f'最大亏 <b style="color:#b62324">{s.max_loss:-,.0f}</b></div></div>')
-                spread_html = "".join(sp)
+                for c in g.combos:
+                    mp = "—" if c.max_profit is None else f'<b style="color:#1a7f37">{c.max_profit:+,.0f}</b>'
+                    ml = ('<b style="color:#9a6700">风险未封顶</b>' if c.max_loss is None
+                          else f'<b style="color:#b62324">{c.max_loss:-,.0f}</b>')
+                    sp.append(f'<div class="scn"><b>{_esc(c.label)}</b> '
+                              f'<span class="pill">{_esc(c.stance)}</span> '
+                              f'<small>{_esc(c.expiry_label)} · {c.qty} 组</small>'
+                              f'<div class="t">{_esc(c.note)}</div>'
+                              f'<div class="t">最大盈 {mp} · 最大亏 {ml}</div></div>')
+                combo_html = "".join(sp)
+            stance_html = (f'<div class="warn" style="margin:8px 0;background:#ddf4ff;border-color:#54aeff66">'
+                           f'<b>整体姿态</b>：{_esc(g.stance)}'
+                           + (f'<br><b>资金</b>：{_esc(g.capital_note)}' if g.capital_note else "")
+                           + '</div>') if g.stance else ""
             cards.append(
                 f'<div class="card"><h1>{_esc(g.display_name)}<span class="pill">{_esc(g.underlying)}</span></h1>'
                 f'<div style="margin:6px 0"><span class="badge" style="background:{bcol}">{_esc(g.bias)}</span>'
                 f'<span class="pill">净Δ {d}</span><span class="pill">浮盈亏 {pnl}</span></div>'
                 + (f'<div class="sub">🧭 {_esc(g.verdict_head)}</div>' if g.verdict_head else "")
-                + spread_html +
+                + stance_html + combo_html +
                 '<table><thead><tr><th>持仓</th><th>到期</th><th>价性</th><th>行权 vs 墙</th>'
                 '<th>顺逆</th><th class="r">浮盈亏</th><th>评价</th></tr></thead>'
                 f'<tbody>{"".join(rows)}</tbody></table>'

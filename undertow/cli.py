@@ -1104,14 +1104,19 @@ def cmd_account(args) -> int:
             print(f"[提示] {root} 研判上下文构建失败，该标的仅列出不评方向: {str(e)[:120]}",
                   file=sys.stderr)
 
-    review = review_portfolio(positions, contexts, asof=today)
-
-    # 账户资产（可选，失败不阻断）
+    # 账户资产（可选，失败不阻断）——先取，喂给评价做"够不够接货"的资金约束
     assets = None
     try:
         assets = lb.fetch_assets()
     except lb.LongbridgeUnavailable:
         pass
+    from undertow.analyze.portfolio import AccountCapital
+    capital = None
+    if assets is not None:
+        capital = AccountCapital(buy_power=assets.buy_power, net_assets=assets.net_assets,
+                                 cash_usd=assets.cash_by_ccy.get("USD", 0.0))
+
+    review = review_portfolio(positions, contexts, asof=today, capital=capital)
 
     print(render_account_md(review, assets))
 

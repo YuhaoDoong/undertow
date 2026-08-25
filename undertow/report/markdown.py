@@ -522,11 +522,18 @@ def render_account_md(review, assets=None) -> str:
     for g in review.groups:
         L.append(f"## {g.display_name}（{g.underlying}）")
         d = "—" if g.net_delta is None else f"{g.net_delta:+.0f}"
-        L.append(f"- 组合：净 Delta {d} · 浮动盈亏 {_money(g.total_pnl)} · 综合研判 **{g.bias}**"
+        L.append(f"- 综合：净 Delta {d} · 浮动盈亏 {_money(g.total_pnl)} · 综合研判 **{g.bias}**"
                  + (f" · 决策：{g.verdict_head}" if g.verdict_head else ""))
-        if g.spreads:
-            for s in g.spreads:
-                L.append(f"- 结构：**{s.label}** {s.note}（{s.qty} 组）→ 最大盈 {s.max_profit:+,.0f} / 最大亏 {s.max_loss:-,.0f}")
+        if g.stance:
+            L.append(f"- **整体姿态**：{g.stance}")
+        if g.capital_note:
+            L.append(f"- **资金**：{g.capital_note}")
+        if g.combos:
+            for c in g.combos:
+                mp = "—" if c.max_profit is None else f"{c.max_profit:+,.0f}"
+                ml = "风险未封顶" if c.max_loss is None else f"{c.max_loss:-,.0f}"
+                L.append(f"- 组合：**{c.label}**〔{c.stance}〕{c.note}（{c.qty} 组·{c.expiry_label}）"
+                         f"→ 最大盈 {mp} / 最大亏 {ml}")
         L.append("")
         L.append("| 持仓 | 方向 | 数量 | 到期(DTE) | 价性 | 行权 vs 墙 | 顺逆 | 浮盈亏 | 评价 |")
         L.append("|---|---|---:|---|---|---|---|---:|---|")

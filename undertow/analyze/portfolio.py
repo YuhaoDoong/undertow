@@ -145,6 +145,7 @@ class PositionReview:
     align: str               # 顺势 / 逆势 / 中性 / —
     flags: list[str] = field(default_factory=list)   # 风险旗标
     comment: str = ""        # 一句话评价
+    iv: float | None = None  # 该腿隐含波动率（链上/实时，供买方边际估算）
 
 
 def _side(kind: str, qty: float) -> str:
@@ -261,7 +262,7 @@ def _review_leg(pos, parsed: ParsedSymbol, ctx: InstrumentContext | None) -> Pos
     comment = _leg_comment(parsed, short, money, align, wall, dte)
     if live_priced:
         comment += "〔实时价〕"
-    return PositionReview(**base, dte=dte, est_value=est, pnl=pnl, pos_delta=pos_delta,
+    return PositionReview(**base, dte=dte, est_value=est, iv=iv, pnl=pnl, pos_delta=pos_delta,
                           moneyness=money, dist_pct=dist, wall_note=wall,
                           align=align, flags=flags, comment=comment)
 

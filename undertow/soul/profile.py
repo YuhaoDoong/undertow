@@ -48,6 +48,16 @@ class Lesson:
 
 
 @dataclass(frozen=True)
+class Trigger:
+    """待执行的触发计划：等到什么价、过什么闸门、才动手。"""
+    instrument: str
+    level: str                 # 触发价位
+    basis: str = ""            # 依据（墙位/斐波/共振）
+    gate: str = ""             # 到位后仍须通过的闸门
+    note: str = ""
+
+
+@dataclass(frozen=True)
 class Limits:
     """可机器检查的限额。None = 该项不检查。"""
     max_risk_per_trade_pct: float | None = None   # 单笔最大风险占净资产 %
@@ -71,6 +81,7 @@ class SoulProfile:
     rules: list = field(default_factory=list)          # list[Rule]
     weaknesses: list = field(default_factory=list)     # list[Weakness]
     lessons: list = field(default_factory=list)        # list[Lesson]
+    triggers: list = field(default_factory=list)       # list[Trigger] 待执行的触发计划
     limits: Limits = field(default_factory=Limits)
     notes: str = ""
 
@@ -118,6 +129,7 @@ def load_profile(path: Path | None = None) -> SoulProfile | None:
         rules=[Rule(**r) for r in raw.get("rules", [])],
         weaknesses=[Weakness(**w) for w in raw.get("weaknesses", [])],
         lessons=[Lesson(**l) for l in raw.get("lessons", [])],
+        triggers=[Trigger(**t) for t in raw.get("triggers", [])],
         limits=Limits(**raw.get("limits", {})),
         notes=raw.get("notes", ""),
     )
@@ -277,6 +289,17 @@ def render_profile_md(p: SoulProfile | None) -> str:
         for ls in p.lessons:
             L.append(f"- **{ls.when}** {ls.what} → {ls.outcome}")
             L.append(f"  - 提炼：{ls.lesson}")
+        L.append("")
+    if p.triggers:
+        L.append("## 🎯 触发计划（等到位、过闸门，才动手）")
+        L.append("")
+        L.append("| 品种 | 触发位 | 依据 | 闸门 |")
+        L.append("|---|---|---|---|")
+        for t in p.triggers:
+            L.append(f"| {t.instrument} | **{t.level}** | {t.basis} | {t.gate} |")
+        for t in p.triggers:
+            if t.note:
+                L.append(f"- {t.instrument}：{t.note}")
         L.append("")
     if p.notes:
         L.append(f"> {p.notes}")

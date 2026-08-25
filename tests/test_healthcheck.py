@@ -82,17 +82,27 @@ def test_seller_edge_sufficient_no_flag():
     print("PASS test_seller_edge_sufficient_no_flag")
 
 
-def test_poor_rr_still_flags_debit_structure():
-    """方向性/借方结构（付权金）仍走 R:R 闸门：付 0.6 赚 0.4 → R:R 0.67 < 1 → POOR_RR。"""
+def test_buyer_edge_thin_flagged():
+    """借方结构走【买方边际】：现价 63 却买 61/60 看跌价差 → 盈亏平衡价远在下方，边际深负。"""
     pos = [_Pos("SLV260918P61000.US", "买 61P", 1, 1.00),
            _Pos("SLV260918P60000.US", "卖 60P", -1, 0.40)]   # 净付 0.60 的熊市看跌价差
     pr = review_portfolio(pos, {"SLV": _ctx(63.0)}, asof=date(2026, 8, 24))
     hf = run_healthcheck(pr, None)
-    poor = [f for f in hf if f.code == "POOR_RR"]
-    assert poor, _codes(hf)
-    assert "R:R" in poor[0].detail, poor[0].detail
+    thin = [f for f in hf if f.code == "BUYER_EDGE_THIN"]
+    assert thin, _codes(hf)
+    assert "盈亏平衡" in thin[0].detail and "边际" in thin[0].detail, thin[0].detail
     assert "SELLER_EDGE_THIN" not in _codes(hf), "借方结构不该走卖方边际闸门"
-    print(f"PASS test_poor_rr_still_flags_debit_structure → {poor[0].detail}")
+    print(f"PASS test_buyer_edge_thin_flagged → {thin[0].detail}")
+
+
+def test_buyer_edge_sufficient_no_flag():
+    """买得价内、赔率合理的借方结构 → 边际充足，不告警。"""
+    pos = [_Pos("SLV260918C58000.US", "买 58C", 1, 4.20),
+           _Pos("SLV260918C64000.US", "卖 64C", -1, 1.20)]   # 付 3.0、宽 6 的牛市看涨价差
+    pr = review_portfolio(pos, {"SLV": _ctx(62.0)}, asof=date(2026, 8, 24))
+    hf = run_healthcheck(pr, None)
+    assert "BUYER_EDGE_THIN" not in _codes(hf), [f.detail for f in hf]
+    print("PASS test_buyer_edge_sufficient_no_flag")
 
 
 def test_tight_near_spread_gamma_flag():

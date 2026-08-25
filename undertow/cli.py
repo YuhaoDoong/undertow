@@ -173,6 +173,22 @@ def cmd_analyze(args) -> int:
     return 0
 
 
+def _realtime_multiplier(inst, spot, *, no_cache):
+    """真实期货价/ETF现价的【实时比值】——与 report 口径统一，免静态乘数漂移。
+
+    取不到真实期货价时回退静态乘数（inst.options.approx_commodity_multiplier）。
+    """
+    static = inst.options.approx_commodity_multiplier if inst.options else None
+    if inst.commodity is not None and spot and spot > 0:
+        try:
+            _s, real_price, _a = YahooFuturesSource().fetch_for(inst, use_cache=not no_cache)
+            if real_price and real_price > 0:
+                return real_price / spot
+        except Exception:
+            pass
+    return static
+
+
 def cmd_gamma(args) -> int:
     cfg = load_config()
     source = CboeOptionsSource()
@@ -191,7 +207,7 @@ def cmd_gamma(args) -> int:
             snap = source.fetch_snapshot(inst, use_cache=not args.no_cache)
             ga = analyze_gamma(
                 snap,
-                multiplier=inst.options.approx_commodity_multiplier,
+                multiplier=_realtime_multiplier(inst, snap.spot, no_cache=args.no_cache),
                 proxy_quality=inst.options.proxy_quality,
                 horizon_days=args.horizon,
             )
@@ -344,8 +360,8 @@ def cmd_flow(args) -> int:
                 curr = snapshot_from_payload(payload, inst.key, sym)
                 prev, prev_date, curr_date_s = None, None, today.isoformat()
 
-            # 拿静态墙位叠加
-            ga = analyze_gamma(curr, multiplier=inst.options.approx_commodity_multiplier,
+            # 拿静态墙位叠加（乘数用实时比值，与 report 口径统一）
+            ga = analyze_gamma(curr, multiplier=_realtime_multiplier(inst, curr.spot, no_cache=args.no_cache),
                                proxy_quality=inst.options.proxy_quality, today=today,
                                horizon_days=args.horizon)
             fa = analyze_flow(prev, curr, today=today, horizon_days=args.horizon,

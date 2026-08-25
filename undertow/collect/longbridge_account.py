@@ -149,6 +149,12 @@ def fetch_cash_flow(start: str | None = None, end: str | None = None) -> list[di
     return [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
 
 
+def fetch_today_executions() -> list[dict]:
+    """当日成交（非 history 接口——历史接口不含当天）。原样返回。"""
+    data = _run(["order", "executions"])
+    return [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
+
+
 def fetch_executions(start: str | None = None, end: str | None = None) -> list[dict]:
     """历史成交（逐笔 fills：order_id/price/quantity/side/symbol/time）。原样返回。
 

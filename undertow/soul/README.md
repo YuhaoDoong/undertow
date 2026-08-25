@@ -19,6 +19,7 @@
 
 | 文件 | 作用 |
 |---|---|
+| `journal.py` | **交易日记**：`capture_trades()` 从券商成交+资金流水自动抓当日明细（含手续费）；JournalEntry 记录成交/账户变化/市场语境/起作用的规则/复盘/盖棺定论/**心情**。档案管『我该怎么做』，日记管『我实际做了什么、结果如何、当时什么心情』。 |
 | `plan.py` | **计划交易**：TradePlan（触发价/进场腿/出场四要素/闸门/规模）+ `check_plans()` 用实时价核触发与接近 + `render_orders()` 输出可照抄的下单参数。**只读、只告警，绝不下单**——两段式方案：本模块做计划与监控，券商端条件单负责自动执行。 |
 | `profile.py` | `init_from_template()` 从模板生成本地档案；数据模型（`Rule` / `Weakness` / `Lesson` / `Limits` / `SoulProfile`）+ 读写 + `check_against_profile()` 确定性纪律核查 + 人读渲染。 |
 

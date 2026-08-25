@@ -1330,6 +1330,50 @@ def cmd_soul(args) -> int:
     return 0
 
 
+def cmd_journal(args) -> int:
+    """交易日记：记录成交明细/复盘/盖棺定论/心情。--capture 从券商自动抓当日成交。**只读。**"""
+    from undertow.soul.journal import (load_journal, save_journal, capture_trades,
+                                       JournalEntry, render_journal_md, render_entry_md)
+    entries = load_journal()
+    if getattr(args, "capture", False):
+        from undertow.collect import longbridge_account as lb
+        day = market_today().isoformat()
+        try:
+            ex = lb.fetch_today_executions() or lb.fetch_executions(start=day)
+            cf = lb.fetch_cash_flow(start=day)
+        except Exception as e:
+            print(f"[抓取失败] {str(e)[:120]}", file=sys.stderr)
+            return 2
+        trades = capture_trades(ex, cf, day=day)
+        if not trades:
+            print(f"{day} 无成交记录。")
+            return 0
+        fees = sum(t.fee for t in trades)
+        assets = None
+        try:
+            assets = lb.fetch_assets()
+        except Exception:
+            pass
+        e = JournalEntry(date=day, title="（待补标题）", trades=trades, fees=fees,
+                         net_assets_after=(assets.net_assets if assets else None),
+                         buy_power_after=(assets.buy_power if assets else None),
+                         analysis="（待复盘）", verdict="", mood="")
+        entries = [x for x in entries if x.date != day] + [e]
+        save_journal(sorted(entries, key=lambda x: x.date, reverse=True))
+        print(render_entry_md(e))
+        print("\n> 已抓取落盘。复盘/定论/心情可直接编辑 data/soul/journal.json，或让我帮你写。")
+        return 0
+    if getattr(args, "date", None):
+        hit = [e for e in entries if e.date == args.date]
+        if not hit:
+            print(f"[无记录] {args.date}", file=sys.stderr)
+            return 2
+        print(render_entry_md(hit[0]))
+        return 0
+    print(render_journal_md(entries, limit=getattr(args, "limit", 0) or 0))
+    return 0
+
+
 def cmd_plan(args) -> int:
     """计划交易：记录/监控触发与出场条件，输出可照抄的下单参数。**只读，绝不下单。**"""
     from undertow.soul.plan import (load_plans, check_plans, render_plans_md, render_orders)
@@ -1705,6 +1749,12 @@ def build_parser() -> argparse.ArgumentParser:
     psl.add_argument("--check", action="store_true", help="用档案的限额核查当前实盘持仓")
     psl.add_argument("--json", action="store_true", help="输出结构化档案")
     psl.set_defaults(func=cmd_soul)
+
+    pjr = sub.add_parser("journal", help="交易日记：成交明细+复盘+盖棺定论+心情（--capture 自动抓当日成交）")
+    pjr.add_argument("--capture", action="store_true", help="从券商抓当日成交与费用，落盘成一条日记")
+    pjr.add_argument("--date", metavar="YYYY-MM-DD", help="只看某天")
+    pjr.add_argument("--limit", type=int, default=0, help="最多显示几条")
+    pjr.set_defaults(func=cmd_journal)
 
     ppl = sub.add_parser("plan", help="计划交易：记录/监控触发与出场条件，输出可照抄的下单参数（只读，绝不下单）")
     ppl.add_argument("--check", action="store_true", help="抓实时价核查触发/接近")

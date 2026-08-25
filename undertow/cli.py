@@ -1241,6 +1241,47 @@ def _parse_pretrade_spec(spec: str):
     return out
 
 
+def _news_symbol(inst):
+    """品种取新闻用的标的代码：优先期权 ETF 代理（GLD/SLV/USO/QQQ）。"""
+    if inst.options is not None and inst.options.symbol:
+        return f"{inst.options.symbol}.US"
+    return None
+
+
+def _build_news_digest(inst, events, today, *, limit=12):
+    """为某品种组装事件感知 digest（新闻 + 临近事件）。新闻失败则只出事件。"""
+    from undertow.analyze.newsfeed import build_news_digest
+    items = []
+    sym = _news_symbol(inst)
+    if sym:
+        try:
+            from undertow.collect import longbridge_news as ln
+            items = ln.fetch_news(sym, limit=limit)
+        except Exception as e:
+            print(f"[提示] {inst.key} 新闻获取跳过：{str(e)[:80]}", file=sys.stderr)
+    return build_news_digest(inst.key, inst.display_name, items, events, today)
+
+
+def cmd_news(args) -> int:
+    """事件感知：品种相关新闻 + 临近关键事件（高影响事件临近置顶告警）。只读。"""
+    from undertow.analyze.newsfeed import render_digest_md
+    cfg = load_config()
+    try:
+        instruments = _resolve_instruments(cfg, args.instruments)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
+    events, _src = _merged_events(getattr(args, "no_live", False), args.no_cache)
+    today = market_today()
+    blocks = []
+    for inst in instruments:
+        dg = _build_news_digest(inst, events, today)
+        blocks.append(render_digest_md(dg))
+    print("# 事件感知（新闻 + 临近关键事件 · 只读背景层）\n")
+    print("\n\n---\n\n".join(blocks))
+    return 0
+
+
 def cmd_consult(args) -> int:
     """咨询：把研判+持仓评价+体检+你的问题装成"咨询上下文包"，供 AI 给意见。
 
@@ -1288,9 +1329,24 @@ def cmd_consult(args) -> int:
         review = review_portfolio([], contexts, asof=today, capital=capital)
         health = []
 
+    # 事件感知：为涉及的品种拉新闻 + 临近事件（失败不阻断）
+    news = []
+    try:
+        cfg = load_config()
+        etf_to_inst = {i.options.symbol.upper(): i for i in cfg.instruments.values()
+                       if i.options is not None}
+        events, _src = _merged_events(getattr(args, "no_live", False), args.no_cache)
+        for root in contexts:
+            inst = etf_to_inst.get(root)
+            if inst is not None:
+                news.append(_build_news_digest(inst, events, today))
+    except Exception as e:
+        print(f"[提示] 事件感知跳过：{str(e)[:80]}", file=sys.stderr)
+
     packet = build_consult_packet(
         review=review, health=health, contexts=contexts, capital=capital,
-        question=(args.question or ""), mode=mode, pre_trade=pre_trade, asof=today)
+        question=(args.question or ""), mode=mode, pre_trade=pre_trade,
+        news=news, asof=today)
 
     if getattr(args, "json", False):
         print(json.dumps(packet, ensure_ascii=False, indent=2))
@@ -1492,6 +1548,11 @@ def build_parser() -> argparse.ArgumentParser:
     psv.add_argument("--port", type=int, default=8787, help="端口（默认 8787）")
     psv.add_argument("--host", default="127.0.0.1", help="绑定地址（默认 127.0.0.1，仅本机）")
     psv.set_defaults(func=cmd_serve)
+
+    pn = sub.add_parser("news", help="事件感知：品种相关新闻 + 临近关键事件（高影响临近置顶告警，只读）")
+    pn.add_argument("instruments", nargs="*", help="品种，留空=全部")
+    pn.add_argument("--no-live", action="store_true", help="事件仅用手维护锚点，不拉实时 feed")
+    pn.set_defaults(func=cmd_news)
 
     pc = sub.add_parser("calendar", help="事件雷达：未来关键节点（FOMC/数据/COT/到期）+ 实时预测")
     pc.add_argument("instruments", nargs="*", help="品种 key（留空=全部/全局事件）")

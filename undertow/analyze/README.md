@@ -67,6 +67,7 @@
 |---|---|
 | `portfolio.py` | **实盘持仓理论评价**：解析长桥期权代码 → 按(品种,到期)识别**组合期权**（垂直/跨式/铁鹰/日历/对角/风险反转）→ 逐笔对研判语境复盘（顺逆、行权 vs Gamma 墙、被指派风险、净 Delta、浮盈亏）+ **整品种策略姿态** + **资金约束**（够不够接货）。有实时期权价则用真实市价估值，否则 BS。<br>Combo-aware review of live positions; deterministic, read-only. |
 | `healthcheck.py` | **持仓/拟开仓体检**：确定性规则分级预警（高/中/低）——近到期×资金不够接货、卖方盈亏比过低（折算所需胜率）、窄价差+近到期 gamma、裸卖未封顶、逆势、单品种集中度。<br>Rule-based position health checks. |
+| `newsfeed.py` | **事件感知**：品种相关新闻 + 影响本品种的临近关键事件（复用 `core.calendar`），高影响事件≤3天置顶告警。只作背景/催化剂旁证，不改判方向。<br>News + upcoming-event awareness; background only. |
 
 ## Boundary / 边界
 

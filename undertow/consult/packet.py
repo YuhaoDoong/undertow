@@ -77,9 +77,25 @@ def _portfolio_brief(review) -> dict:
             "unmapped": [l.name for l in review.unmapped]}
 
 
+def _news_brief(digests) -> list:
+    """把 NewsDigest 列表转 JSON 安全结构。"""
+    out = []
+    for dg in digests or []:
+        out.append({
+            "instrument": dg.instrument, "display_name": dg.display_name,
+            "alert": dg.alert, "alert_level": dg.alert_level,
+            "events": [{"date": e.date.isoformat(), "days_until": e.days_until(dg.asof),
+                        "name": e.name, "importance": e.importance,
+                        "forecast": e.forecast, "previous": e.previous} for e in dg.events],
+            "news": [{"date": it.published_date.isoformat() if it.published_date else None,
+                      "title": it.title} for it in dg.items],
+        })
+    return out
+
+
 def build_consult_packet(*, review, health, contexts, capital=None,
                          question: str = "", mode: str = "review",
-                         pre_trade=None, asof: date) -> dict:
+                         pre_trade=None, news=None, asof: date) -> dict:
     """组装咨询包。
 
     review：当前持仓 PortfolioReview；health：list[HealthFinding]；
@@ -100,6 +116,7 @@ def build_consult_packet(*, review, health, contexts, capital=None,
         "instruments": {k: _instrument_brief(v) for k, v in contexts.items()},
         "portfolio": _portfolio_brief(review),
         "healthcheck": [_jsonable(f) for f in (health or [])],
+        "news": _news_brief(news),
     }
     if pre_trade is not None:
         packet["pre_trade"] = {
@@ -147,6 +164,18 @@ def render_prompt(packet: dict) -> str:
         L.append("【持仓体检】")
         for f in packet["healthcheck"]:
             L.append(f"  [{f['severity']}] {f['title']}：{f['detail']} → 参考：{f['suggestion']}")
+    if packet.get("news"):
+        L.append("")
+        L.append("【事件感知（新闻 + 临近关键事件 · 只作背景/催化剂旁证，不改判方向）】")
+        for nb in packet["news"]:
+            if nb["alert"]:
+                L.append(f"  {nb['display_name']}：{nb['alert']}")
+            for e in nb["events"][:6]:
+                imp = {"high": "🔴", "medium": "🟠", "low": "🟡"}.get(e["importance"], "")
+                fp = f"（预测 {e['forecast'] or '—'}/前值 {e['previous'] or '—'}）" if (e["forecast"] or e["previous"]) else ""
+                L.append(f"    · {e['date']}（{e['days_until']}天后）{imp} {e['name']}{fp}")
+            for it in nb["news"][:5]:
+                L.append(f"    - [{it['date'] or '—'}] {it['title']}")
     if packet.get("pre_trade"):
         pt = packet["pre_trade"]
         L.append("")

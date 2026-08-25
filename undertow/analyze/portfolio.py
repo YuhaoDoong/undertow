@@ -291,6 +291,7 @@ class UnderlyingGroup:
     legs: list[PositionReview]
     spreads: list[SpreadStruct] = field(default_factory=list)
     summary: str = ""
+    advice: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -362,6 +363,85 @@ def _reclassify_spread_legs(legs: list[PositionReview],
     return out
 
 
+# 短腿权金已收回多少比例才提示"可考虑落袋"
+TAKE_PROFIT_FRAC = 0.70
+
+
+def _spread_of(lg: PositionReview, spreads: list[SpreadStruct]):
+    """该腿是否属于某个已识别价差；返回 SpreadStruct 或 None。"""
+    for s in spreads:
+        if s.underlying == lg.underlying and s.expiry == lg.expiry and s.kind == lg.kind \
+           and lg.strike in (s.short_strike, s.long_strike):
+            return s
+    return None
+
+
+def _group_advice(legs: list[PositionReview], spreads: list[SpreadStruct],
+                  ctx: InstrumentContext) -> list[str]:
+    """规则化建议（权衡/参考口径，**非投资指令**）。数字全确定性算出。
+
+    车轮/价差语境：卖 put 收权金愿低位接货；定义风险价差下行有保护腿封顶；
+    临近到期给"展期/接货/平仓"权衡；深度获利腿提示落袋免尾部风险。
+    """
+    adv: list[str] = []
+    spot = ctx.spot
+
+    # 价差级：盈亏平衡 + 现价位置 + 封顶
+    for s in spreads:
+        if s.kind == "P" and s.net_credit > 0:      # 牛市看跌价差（收权金）
+            be = s.short_strike - s.net_credit
+            room = (spot - be) / spot * 100 if spot else 0
+            adv.append(
+                f"【{s.label}】盈亏平衡≈短腿−净权金={be:.2f}；现价 {spot:.2f} 在其"
+                f"{'上方' if spot > be else '下方'} {abs(room):.1f}%。跌破 {be:.2f} 才转亏，"
+                f"最大亏已被买{s.long_strike:g}腿封顶 {s.max_loss:-,.0f}——被行权风险有限，"
+                f"时间站你这边，可持有到期让权金归零。")
+        elif s.kind == "C" and s.net_credit > 0:    # 熊市看涨价差（收权金）
+            be = s.short_strike + s.net_credit
+            adv.append(f"【{s.label}】盈亏平衡≈{be:.2f}；站上 {be:.2f} 才转亏，"
+                       f"上行被买{s.long_strike:g}腿封顶。")
+
+    for lg in legs:
+        if lg.kind not in ("C", "P") or lg.strike is None or lg.dte is None:
+            continue
+        short = lg.qty < 0
+        sp = _spread_of(lg, spreads)
+        # 卖出腿的建议（车轮核心）
+        if short:
+            # 已收回权金比例（est 越接近 0 越收满）
+            captured = (lg.cost_price - lg.est_value) / lg.cost_price if lg.cost_price and lg.est_value is not None else 0
+            if any("被行权" in f for f in lg.flags):
+                if lg.kind == "P":
+                    assign_cost = lg.strike * CONTRACT_MULT * abs(lg.qty)
+                    capped = "（有买保护腿封顶，接货即被行权也亏损有限）" if sp else "（裸卖，接货需全额现金/保证金）"
+                    adv.append(
+                        f"⚠【{lg.name}】剩 {lg.dte} 天且{lg.moneyness}，被行权概率上升。权衡三选一："
+                        f"①愿在≈{lg.strike:g}接货→持有等行权（接货成本约 ${assign_cost:,.0f}{capped}，"
+                        f"接后可转卖 covered call 继续车轮）；②不愿接货→到期前平仓或向下/向后展期(roll)收新权金；"
+                        f"③已亏则纪律止损。put 墙 {ctx.put_wall:.1f} 是结构支撑，可作接货成本参考。")
+                else:  # 卖 call 被行权（被叫走）
+                    adv.append(f"⚠【{lg.name}】剩 {lg.dte} 天且{lg.moneyness}，被叫走概率上升；"
+                               f"若持正股可接受被行权兑现，否则考虑平仓/向上展期。")
+            elif lg.moneyness == "价外" and captured >= TAKE_PROFIT_FRAC:
+                adv.append(f"【{lg.name}】已收回约 {captured*100:.0f}% 权金且仍价外，"
+                           f"可考虑提前平仓落袋、免尾部被行权风险（车轮纪律：赚到大头就滚下一轮）。")
+            elif lg.moneyness == "价外" and lg.dte <= NEAR_EXPIRY_DTE:
+                adv.append(f"【{lg.name}】价外、剩 {lg.dte} 天，大概率归零收满权金，"
+                           f"可等到期或提前平仓释放保证金。")
+        # 逆势的独立方向腿（非价差成员）提示
+        elif lg.align == "逆势":
+            adv.append(f"【{lg.name}】方向与综合研判（{ctx.bias}）相反，属逆势押注，注意风险自担。")
+
+    # 组合级顺逆总结
+    b = _bull(ctx.bias)
+    if b != 0:
+        dir_legs = [lg for lg in legs if lg.align in ("顺势", "逆势")]
+        if dir_legs and all(lg.align == "顺势" for lg in dir_legs):
+            adv.append(f"整体方向与综合研判（{ctx.bias}）一致，可按纪律持有；"
+                       f"加仓/新开先过盈亏比闸门（别追、等回调）。")
+    return adv
+
+
 def _group_summary(und: str, legs: list[PositionReview], spreads: list[SpreadStruct],
                    ctx: InstrumentContext) -> str:
     aligns = [lg.align for lg in legs if lg.align in ("顺势", "逆势")]
@@ -417,7 +497,8 @@ def review_portfolio(positions, contexts: dict, asof: date) -> PortfolioReview:
                 total_pnl=sum(pnls) if pnls else None,
                 bias=ctx.bias, verdict_head=ctx.verdict_head,
                 legs=legs, spreads=spreads,
-                summary=_group_summary(und, legs, spreads, ctx)))
+                summary=_group_summary(und, legs, spreads, ctx),
+                advice=_group_advice(legs, spreads, ctx)))
 
         headline = _portfolio_headline(groups, unmapped)
         return PortfolioReview(ok=True, asof=asof, groups=groups, unmapped=unmapped,

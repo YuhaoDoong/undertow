@@ -130,3 +130,35 @@ def fetch_assets() -> AccountAssets:
         net_assets=_f(row, "net_assets") or _f(row, "total_assets"),
         cash_by_ccy=cash,
     )
+
+
+# —— 交易流水（原样落盘，供将来历史复盘；不做加工，字段随 CLI）——
+
+
+def fetch_cash_flow(start: str | None = None, end: str | None = None) -> list[dict]:
+    """资金流水（入金/出金/分红/结算/期权买卖/换汇/手续费）。原样返回。
+
+    start/end 缺省=CLI 默认近 30 天。历史复盘要更长窗口就传 start。
+    """
+    args = ["cash-flow"]
+    if start:
+        args += ["--start", start]
+    if end:
+        args += ["--end", end]
+    data = _run(args)
+    return [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []
+
+
+def fetch_executions(start: str | None = None, end: str | None = None) -> list[dict]:
+    """历史成交（逐笔 fills：order_id/price/quantity/side/symbol/time）。原样返回。
+
+    单笔真实费用明细在 `order detail <id>` 的 charges 里（本函数不逐单展开，
+    落盘 order_id 供将来按需拉取校准费率）。
+    """
+    args = ["order", "executions", "--history"]
+    if start:
+        args += ["--start", start]
+    if end:
+        args += ["--end", end]
+    data = _run(args)
+    return [r for r in data if isinstance(r, dict)] if isinstance(data, list) else []

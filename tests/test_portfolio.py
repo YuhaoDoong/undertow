@@ -115,6 +115,29 @@ def test_full_wheel_headline_and_netdelta():
     print(f"PASS test_full_wheel_headline_and_netdelta → {pr.headline}")
 
 
+def test_advice_bull_put_spread_breakeven():
+    """牛市看跌价差应给出盈亏平衡与封顶建议；现价在盈亏平衡上方判『时间站你这边』。"""
+    pos = [_Pos("SLV260826P61000.US", "SLV 260826 61 Put", -4, 0.46),
+           _Pos("SLV260826P60000.US", "SLV 260826 60 Put", 4, 0.27)]
+    pr = review_portfolio(pos, {"SLV": _ctx(63.0)}, asof=date(2026, 8, 20))
+    adv = pr.groups[0].advice
+    assert adv, "应给出建议"
+    joined = " ".join(adv)
+    assert "盈亏平衡" in joined and "60.81" in joined, joined   # 61 − 0.19
+    assert "封顶" in joined, joined
+    print(f"PASS test_advice_bull_put_spread_breakeven → {adv[0]}")
+
+
+def test_advice_assignment_rollup_when_near_expiry_itm():
+    """卖 put 临近到期价内 → 给『接货/展期/止损』三选一建议，带接货成本数字。"""
+    pos = [_Pos("SLV260826P61000.US", "SLV 260826 61 Put", -4, 0.46)]
+    pr = review_portfolio(pos, {"SLV": _ctx(59.0)}, asof=date(2026, 8, 24))
+    joined = " ".join(pr.groups[0].advice)
+    assert "接货" in joined and ("展期" in joined or "roll" in joined), joined
+    assert "24,400" in joined or "24400" in joined, joined   # 61×100×4 接货成本
+    print("PASS test_advice_assignment_rollup_when_near_expiry_itm")
+
+
 def test_unmapped_underlying_listed_not_evaluated():
     """无 undertow 期权代理的标的（如 TSLA）只列出、不评方向、不崩。"""
     pos = [_Pos("TSLA260918C300000.US", "TSLA 260918 300 Call", 1, 5.0)]

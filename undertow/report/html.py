@@ -1087,6 +1087,20 @@ def render_index_html(items: list[dict], asof: str) -> str:
 
 # ————————————————————————————————————————————————————————— 实盘持仓评价
 
+def _advice_html(advice: list) -> str:
+    """建议板块（权衡/参考口径，非投资指令）。⚠ 开头的高亮显示。"""
+    if not advice:
+        return ""
+    items = []
+    for a in advice:
+        warn = a.startswith("⚠")
+        col = "#9a6700" if warn else "#24292f"
+        items.append(f'<li style="margin:4px 0;color:{col}">{_esc(a)}</li>')
+    return ('<div style="margin-top:10px"><div style="font-weight:700;font-size:13px;margin-bottom:2px">'
+            '💡 建议 <small>（权衡/参考，非投资指令）</small></div>'
+            f'<ul style="margin:2px 0 0;padding-left:20px;font-size:12.5px;line-height:1.6">{"".join(items)}</ul></div>')
+
+
 def _align_color(a: str) -> str:
     if a == "顺势":
         return "#1a7f37"
@@ -1154,7 +1168,8 @@ def render_account_html(review, assets=None) -> str:
                 '<table><thead><tr><th>持仓</th><th>到期</th><th>价性</th><th>行权 vs 墙</th>'
                 '<th>顺逆</th><th class="r">浮盈亏</th><th>评价</th></tr></thead>'
                 f'<tbody>{"".join(rows)}</tbody></table>'
-                f'<div class="sub" style="margin-top:8px">{_esc(g.summary)}</div></div>')
+                + _advice_html(g.advice)
+                + f'<div class="sub" style="margin-top:8px">{_esc(g.summary)}</div></div>')
 
         if review.unmapped:
             items = "".join(f'<li>{_esc(lg.name)}（{_esc(lg.side)} {lg.qty:g}）</li>' for lg in review.unmapped)

@@ -542,6 +542,11 @@ def render_account_md(review, assets=None) -> str:
             for f in dict.fromkeys(flags):
                 L.append(f"- ⚠ {f}")
             L.append("")
+        if g.advice:
+            L.append("**建议（权衡/参考，非投资指令）**：")
+            for a in g.advice:
+                L.append(f"- {a}")
+            L.append("")
         L.append(f"> {g.summary}")
         L.append("")
 

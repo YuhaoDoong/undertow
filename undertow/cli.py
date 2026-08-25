@@ -1115,6 +1115,14 @@ def cmd_account(args) -> int:
 
     print(render_account_md(review, assets))
 
+    # —— 每次评价落一份数据快照：持仓+资产+资金流水+成交，为将来历史复盘攒数据 ——
+    # 全部 gitignore（data/account/），不入公开仓库；失败不阻断评价。
+    if not getattr(args, "no_save", False):
+        try:
+            _save_account_snapshot(lb, positions, assets, today, no_cache=args.no_cache)
+        except Exception as e:
+            print(f"[提示] 账户数据快照保存失败（不影响评价）: {str(e)[:120]}", file=sys.stderr)
+
     if not getattr(args, "no_html", False):
         out_dir = DATA_DIR / "account"      # gitignore：敏感数据不入公开仓库
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -1122,6 +1130,45 @@ def cmd_account(args) -> int:
         fn.write_text(render_account_html(review, assets), encoding="utf-8")
         print(f"\n实盘评价 HTML（本地私有，未入 git）→ {fn}")
     return 0
+
+
+def _save_account_snapshot(lb, positions, assets, today, *, no_cache, lookback_days=120):
+    """把当次账户全貌（持仓+资产+近 N 天资金流水+成交）落一份 JSON 到本地私有目录。
+
+    这是"每次评价即攒一份不可再生历史"的习惯（对齐期权快照思路）——CBOE/券商都不
+    保证长期回溯，日后做历史成交复盘（进场时点 vs 当时信号、真实费用校准、已实现盈亏）
+    要靠这些逐次快照拼起来。全部 gitignore，绝不进公开仓库。
+    """
+    import dataclasses as _dc
+    from datetime import timedelta
+    snap_dir = DATA_DIR / "account" / "snapshots"
+    snap_dir.mkdir(parents=True, exist_ok=True)
+    start = (today - timedelta(days=lookback_days)).isoformat()
+
+    cash_flow, executions = [], []
+    try:
+        cash_flow = lb.fetch_cash_flow(start=start)
+    except lb.LongbridgeUnavailable as e:
+        print(f"[提示] 资金流水拉取跳过: {str(e)[:80]}", file=sys.stderr)
+    try:
+        executions = lb.fetch_executions(start=start)
+    except lb.LongbridgeUnavailable as e:
+        print(f"[提示] 历史成交拉取跳过: {str(e)[:80]}", file=sys.stderr)
+
+    payload = {
+        "asof": today.isoformat(),
+        "saved_at": market_today().isoformat(),
+        "window_start": start,
+        "positions": [_dc.asdict(p) for p in positions],
+        "assets": _dc.asdict(assets) if assets is not None else None,
+        "cash_flow": cash_flow,
+        "executions": executions,
+    }
+    fn = snap_dir / f"account_{today.isoformat()}.json"
+    fn.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"账户数据快照（本地私有，未入 git；供将来历史复盘）→ {fn}"
+          f"（持仓 {len(positions)} · 流水 {len(cash_flow)} · 成交 {len(executions)}）")
+    return fn
 
 
 def _to_jsonable(inst, an, signals) -> dict:
@@ -1206,6 +1253,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     pac = sub.add_parser("account", help="实盘持仓理论评价：读长桥账户当前持仓，逐笔对 undertow 研判复盘（只读，不下单）")
     pac.add_argument("--no-html", action="store_true", help="只出终端，不写本地 HTML")
+    pac.add_argument("--no-save", action="store_true", help="不落账户数据快照（默认每次评价都攒一份供将来历史复盘）")
     pac.set_defaults(func=cmd_account)
 
     pc = sub.add_parser("calendar", help="事件雷达：未来关键节点（FOMC/数据/COT/到期）+ 实时预测")

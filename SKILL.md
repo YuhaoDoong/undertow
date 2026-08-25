@@ -41,7 +41,9 @@ description: >-
 | `python -m undertow flow [品种...]` | 买卖方资金流 + 多腿价差识别 + 波动率面（ATM IV/25Δ·10Δ skew 日变化 → 期权端是否确认价格） | 终端 Markdown（需≥2 天快照） |
 | `python -m undertow expiry [品种...]` | **近周到期阶梯**：把 60 天混合的墙/资金流拆回【单个到期日】——未来 3 个周五 + 最近月度 OPEX 各自独立的 call/put 墙 + 逐 ΔOI 买卖方（定到期做价差用） | 终端 Markdown；也自动嵌入 `report` |
 | `python -m undertow fib [品种...]` | **斐波那契回撤 + 盈亏比闸门**：确定性定位当前摆动腿 → 0.382/0.5/0.618 黄金回撤区 + 扩展目标，再算「现价追」vs「等回调」两情景的盈亏比并评级（差/中/优），把「先看盈亏比、别追、等回调」这套交易纪律落成数字（含 ETF 行权价锚，实盘定腿用） | 终端 Markdown；也自动嵌入 `report` |
-| `python -m undertow account` | **实盘持仓理论评价（只读）**：读长桥账户当前持仓，逐笔放进 undertow 对该标的的研判语境复盘——顺势/逆势、行权价 vs Gamma 墙、临近到期/被行权风险、垂直价差结构识别、净 Delta、浮动盈亏。**绝不下单**；持仓属敏感数据，HTML 落 gitignore 的 `data/account/` | 终端 Markdown + 本地私有 HTML。`--no-html` 仅终端 |
+| `python -m undertow account` | **实盘持仓理论评价（只读）**：读长桥账户当前持仓，逐笔放进 undertow 研判语境复盘——组合期权识别(垂直/铁鹰/日历)、整品种策略姿态、资金约束、**🩺持仓体检**(近到期/盈亏比/gamma/集中度分级预警)。**绝不下单**；持仓属敏感数据，HTML 落 gitignore 的 `data/account/` | 终端 Markdown + 本地私有 HTML。`--no-html` 仅终端 |
+| `python -m undertow consult ["问题"]` | **咨询/开仓前问诊（只读）**：把研判＋持仓评价＋体检＋你的问题装成"咨询上下文包"（数字全由确定性引擎算好），供 AI 给意见。`--pre-trade SPEC` 对拟开仓做开仓前问诊；`--json` 出机器可读完整包（供其它 AI 接入） | 默认打印可投喂任意 LLM 的 prompt；`--json` 出 JSON 包 |
+| `python -m undertow serve` | **本地只读 HTTP API**：把咨询上下文包暴露成 localhost 端点（标准库 http.server），方便接入其它 AI。`GET /consult?q=...`、`/prompt`、`/positions`、`/health`；**无任何下单端点** | 本地 HTTP 服务（默认 127.0.0.1:8787） |
 | `python -m undertow backtest [品种...]` | COT 信号事件研究回测 | 终端 Markdown |
 | `python -m undertow snapshot [品种...]` | 落盘当日期权链原始全字段 | gzip 存 `data/snapshots/`（纳入 git） |
 | `python -m undertow calendar [品种...]` | 事件雷达：关键节点倒计时 + **实时预测/前值/影响**（本周自动拉 FairEconomy 公开 feed，远期用手维护锚点） | 终端；也自动嵌入 `report` 顶部。`--no-live` 仅用本地锚点 |
@@ -142,6 +144,18 @@ python -m undertow snapshot      # 落盘当日全品种期权链；休市重复
 (cash-flow：期权买卖/手续费/换汇/分红/结算)＋**历史成交**(order executions 逐笔 fills)。对齐"期权快照
 每天攒不可再生历史"的思路：券商不保证长期回溯，日后做**历史成交复盘**（进场时点 vs 当时信号、真实
 费用校准、已实现盈亏）要靠这些逐次快照拼起来。`--no-save` 可关；`--no-html` 只出终端。
+
+## 咨询 & 开放给其它 AI（`consult` / `serve` · 混合模式的接口化）
+把"你和 AI 对话复盘/开仓前问诊"这件事**接口化、模型无关**：`consult/packet.py` 确定性组装一个
+「咨询上下文包」——品种研判＋持仓评价＋🩺体检＋你的问题（＋`--pre-trade` 拟开仓评估），JSON 可序列化，
+外加一段渲染好、可直接投喂任意 LLM 的 prompt。**所有数字都在包里、由上游确定性模块算好，AI 只解读、
+不臆算**（这正是"LLM 不碰算术"的接口化落地）。
+- `undertow consult "问题"`：本地由我（Claude）直接消费这个包给意见；`--json` 出机器可读完整包。
+- `undertow consult --pre-trade "代码:数量:成本,…"`：**开仓前问诊**——用同一套确定性引擎评拟开仓的
+  盈亏比/盈亏平衡/资金占用/体检，开仓前就把坑喊出来。
+- `undertow serve`：标准库 `http.server` 起**本地只读** HTTP API（默认 127.0.0.1），别的 AI 用
+  `GET /consult?q=…` 拿确定性上下文包→喂给它自己的 LLM。**没有任何写/下单端点**，POST 一律 405。
+- 铁律不变：只读、非投资建议、执行永远由用户在券商端完成；账户数据只在本机流转、绝不进公开仓库。
 
 **三条铁律（务必）**：
 - **只读**——本模块永不下单/撤单/改单；undertow 只做研判与复盘，实盘执行永远由用户在券商端完成。

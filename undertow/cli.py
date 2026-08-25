@@ -1063,31 +1063,13 @@ def _account_context(inst, store, sources, today, *, no_cache):
         proxy_quality=inst.options.proxy_quality, greeks=greeks)
 
 
-def cmd_account(args) -> int:
-    """实盘持仓理论评价：读长桥账户当前持仓 → 逐笔对 undertow 研判做复盘。
-
-    **只读**（绝不下单）；持仓/资金属敏感数据，HTML 落 gitignore 的 data/account/。
-    """
-    from undertow.collect import longbridge_account as lb
-    from undertow.analyze.portfolio import review_portfolio
-    from undertow.report.html import render_account_html
-    from undertow.report.markdown import render_account_md
-
-    try:
-        positions = lb.fetch_positions()
-    except lb.LongbridgeUnavailable as e:
-        print(f"[长桥账户不可用] {e}", file=sys.stderr)
-        return 2
-    if not positions:
-        print("账户当前无持仓。")
-        return 0
-
+def _build_contexts(positions, no_cache):
+    """为持仓涉及的品种构建 {ETF根: InstrumentContext}（复用四层聚合）。"""
+    from undertow.analyze.portfolio import parse_symbol
     cfg = load_config()
     etf_to_inst = {i.options.symbol.upper(): i for i in cfg.instruments.values()
                    if i.options is not None}
-    from undertow.analyze.portfolio import parse_symbol
     held_roots = {parse_symbol(p.symbol).underlying for p in positions}
-
     store = SnapshotStore()
     today = market_today()
     sources = (CftcCotSource(), CboeOptionsSource(), YahooFuturesSource(),
@@ -1098,28 +1080,62 @@ def cmd_account(args) -> int:
         if inst is None:
             continue
         try:
-            contexts[root] = _account_context(inst, store, sources, today,
-                                              no_cache=args.no_cache)
+            contexts[root] = _account_context(inst, store, sources, today, no_cache=no_cache)
         except Exception as e:
             print(f"[提示] {root} 研判上下文构建失败，该标的仅列出不评方向: {str(e)[:120]}",
                   file=sys.stderr)
+    return contexts, today
 
-    # 账户资产（可选，失败不阻断）——先取，喂给评价做"够不够接货"的资金约束
+
+def _load_account_review(no_cache):
+    """读实盘持仓 → 构建研判上下文 + 资金 → 评价 + 体检。**只读**。
+
+    返回 dict：positions/contexts/review/health/capital/assets/today；无持仓时 review=None。
+    """
+    from undertow.collect import longbridge_account as lb
+    from undertow.analyze.portfolio import review_portfolio, AccountCapital
+    from undertow.analyze.healthcheck import run_healthcheck
+
+    positions = lb.fetch_positions()
+    if not positions:
+        return {"positions": [], "review": None, "today": market_today()}
+    contexts, today = _build_contexts(positions, no_cache)
     assets = None
     try:
         assets = lb.fetch_assets()
     except lb.LongbridgeUnavailable:
         pass
-    from undertow.analyze.portfolio import AccountCapital
     capital = None
     if assets is not None:
         capital = AccountCapital(buy_power=assets.buy_power, net_assets=assets.net_assets,
                                  cash_usd=assets.cash_by_ccy.get("USD", 0.0))
-
     review = review_portfolio(positions, contexts, asof=today, capital=capital)
-
-    from undertow.analyze.healthcheck import run_healthcheck
     health = run_healthcheck(review, capital)
+    return {"positions": positions, "contexts": contexts, "review": review,
+            "health": health, "capital": capital, "assets": assets, "today": today}
+
+
+def cmd_account(args) -> int:
+    """实盘持仓理论评价：读长桥账户当前持仓 → 逐笔对 undertow 研判做复盘。
+
+    **只读**（绝不下单）；持仓/资金属敏感数据，HTML 落 gitignore 的 data/account/。
+    """
+    from undertow.collect import longbridge_account as lb
+    from undertow.collect import longbridge_account as lb
+    from undertow.report.html import render_account_html
+    from undertow.report.markdown import render_account_md
+
+    try:
+        bundle = _load_account_review(args.no_cache)
+    except lb.LongbridgeUnavailable as e:
+        print(f"[长桥账户不可用] {e}", file=sys.stderr)
+        return 2
+    if bundle["review"] is None:
+        print("账户当前无持仓。")
+        return 0
+    positions = bundle["positions"]
+    review, health, assets = bundle["review"], bundle["health"], bundle["assets"]
+    today = bundle["today"]
 
     print(render_account_md(review, assets, health))
 
@@ -1137,6 +1153,144 @@ def cmd_account(args) -> int:
         fn = out_dir / f"account_{today.isoformat()}.html"
         fn.write_text(render_account_html(review, assets, health), encoding="utf-8")
         print(f"\n实盘评价 HTML（本地私有，未入 git）→ {fn}")
+    return 0
+
+
+def _parse_pretrade_spec(spec: str):
+    """解析拟开仓 spec → 合成持仓对象列表。
+
+    格式：`合约代码:数量:成本` 逗号分隔，如
+      SLV260919P60000.US:-4:0.5,SLV260919P58000.US:4:0.25
+    数量正=买/负=卖。合约代码用长桥格式（行权价×1000 不补零）。
+    """
+    from undertow.collect.longbridge_account import RawPosition
+    out = []
+    for part in spec.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        f = part.split(":")
+        if len(f) != 3:
+            raise ValueError(f"spec 段格式应为 代码:数量:成本，收到：{part}")
+        sym, qty, cost = f[0].strip(), float(f[1]), float(f[2])
+        out.append(RawPosition(symbol=sym, name=sym, quantity=qty, cost_price=cost,
+                               currency="USD", market="US"))
+    return out
+
+
+def cmd_consult(args) -> int:
+    """咨询：把研判+持仓评价+体检+你的问题装成"咨询上下文包"，供 AI 给意见。
+
+    默认打印可投喂任意 LLM 的 prompt；--json 打印机器可读的完整包（供其它 AI 接入）。
+    --pre-trade 给拟开仓 spec 做开仓前问诊。**只读，不下单。**
+    """
+    from undertow.collect import longbridge_account as lb
+    from undertow.analyze.portfolio import review_portfolio
+    from undertow.analyze.healthcheck import run_healthcheck
+    from undertow.consult.packet import build_consult_packet
+
+    try:
+        bundle = _load_account_review(args.no_cache)
+    except lb.LongbridgeUnavailable as e:
+        print(f"[长桥账户不可用] {e}", file=sys.stderr)
+        return 2
+    if bundle["review"] is None:
+        print("账户当前无持仓（可仍用 --pre-trade 做开仓前问诊）。", file=sys.stderr)
+
+    contexts = bundle.get("contexts", {})
+    capital = bundle.get("capital")
+    today = bundle["today"]
+    review = bundle["review"]
+    health = bundle.get("health", [])
+
+    mode = "review"
+    pre_trade = None
+    if getattr(args, "pre_trade", None):
+        mode = "pre_trade"
+        try:
+            pt_positions = _parse_pretrade_spec(args.pre_trade)
+        except ValueError as e:
+            print(f"[spec 解析失败] {e}", file=sys.stderr)
+            return 2
+        # 拟开仓涉及的品种也要有上下文
+        pt_contexts, _ = _build_contexts(pt_positions, args.no_cache)
+        merged = {**contexts, **pt_contexts}
+        contexts = merged
+        pt_review = review_portfolio(pt_positions, contexts, asof=today, capital=capital)
+        pt_health = run_healthcheck(pt_review, capital)
+        pre_trade = {"spec": args.pre_trade, "review": pt_review, "health": pt_health}
+
+    # 无持仓且仅问诊：用空评价占位
+    if review is None:
+        review = review_portfolio([], contexts, asof=today, capital=capital)
+        health = []
+
+    packet = build_consult_packet(
+        review=review, health=health, contexts=contexts, capital=capital,
+        question=(args.question or ""), mode=mode, pre_trade=pre_trade, asof=today)
+
+    if getattr(args, "json", False):
+        print(json.dumps(packet, ensure_ascii=False, indent=2))
+    else:
+        print(packet["prompt"])
+    return 0
+
+
+def cmd_serve(args) -> int:
+    """本地只读 HTTP API：把咨询上下文包暴露给其它 AI 接入（localhost，无下单端点）。"""
+    from undertow.collect import longbridge_account as lb
+    from undertow.analyze.portfolio import review_portfolio
+    from undertow.analyze.healthcheck import run_healthcheck
+    from undertow.consult.packet import build_consult_packet, _portfolio_brief
+    from undertow.consult.server import serve
+
+    def _bundle():
+        return _load_account_review(args.no_cache)
+
+    def build_positions():
+        b = _bundle()
+        if b["review"] is None:
+            return {"headline": "账户当前无持仓", "groups": []}
+        return _portfolio_brief(b["review"])
+
+    def build_packet(question, pre_trade):
+        b = _bundle()
+        contexts = b.get("contexts", {})
+        capital = b.get("capital")
+        today = b["today"]
+        review = b["review"]
+        health = b.get("health", [])
+        mode, pt = "review", None
+        if pre_trade:
+            mode = "pre_trade"
+            pos = _parse_pretrade_spec(pre_trade)
+            ptc, _ = _build_contexts(pos, args.no_cache)
+            contexts = {**contexts, **ptc}
+            pr = review_portfolio(pos, contexts, asof=today, capital=capital)
+            pt = {"spec": pre_trade, "review": pr, "health": run_healthcheck(pr, capital)}
+        if review is None:
+            review = review_portfolio([], contexts, asof=today, capital=capital)
+            health = []
+        return build_consult_packet(review=review, health=health, contexts=contexts,
+                                    capital=capital, question=question or "", mode=mode,
+                                    pre_trade=pt, asof=today)
+
+    try:
+        httpd = serve(build_packet, build_positions, host=args.host, port=args.port)
+    except OSError as e:
+        print(f"[启动失败] {e}（端口可能被占用，换 --port）", file=sys.stderr)
+        return 2
+    url = f"http://{args.host}:{args.port}"
+    print(f"undertow 咨询 API 已启动（只读，仅本机）：{url}", file=sys.stderr)
+    print(f"  {url}/            端点清单", file=sys.stderr)
+    print(f"  {url}/consult?q=这个价差该平还是展期   完整咨询包", file=sys.stderr)
+    print(f"  {url}/prompt?q=...  只取 prompt 文本（喂给任意 LLM）", file=sys.stderr)
+    print("  Ctrl-C 停止。数字均由确定性引擎算好，接入的 AI 只解读、不臆算。", file=sys.stderr)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\n已停止。", file=sys.stderr)
+        httpd.shutdown()
     return 0
 
 
@@ -1263,6 +1417,18 @@ def build_parser() -> argparse.ArgumentParser:
     pac.add_argument("--no-html", action="store_true", help="只出终端，不写本地 HTML")
     pac.add_argument("--no-save", action="store_true", help="不落账户数据快照（默认每次评价都攒一份供将来历史复盘）")
     pac.set_defaults(func=cmd_account)
+
+    pcs = sub.add_parser("consult", help="咨询：把研判+持仓+体检+你的问题装成上下文包供 AI 给意见（只读）")
+    pcs.add_argument("question", nargs="?", default="", help="你的问题，如 '这个价差该平还是展期?'")
+    pcs.add_argument("--pre-trade", dest="pre_trade", metavar="SPEC",
+                     help="开仓前问诊：拟开仓 spec，如 'SLV260919P60000.US:-4:0.5,SLV260919P58000.US:4:0.25'")
+    pcs.add_argument("--json", action="store_true", help="打印机器可读的完整咨询包（供其它 AI 接入）")
+    pcs.set_defaults(func=cmd_consult)
+
+    psv = sub.add_parser("serve", help="本地只读 HTTP API：把咨询上下文包暴露给其它 AI 接入（localhost）")
+    psv.add_argument("--port", type=int, default=8787, help="端口（默认 8787）")
+    psv.add_argument("--host", default="127.0.0.1", help="绑定地址（默认 127.0.0.1，仅本机）")
+    psv.set_defaults(func=cmd_serve)
 
     pc = sub.add_parser("calendar", help="事件雷达：未来关键节点（FOMC/数据/COT/到期）+ 实时预测")
     pc.add_argument("instruments", nargs="*", help="品种 key（留空=全部/全局事件）")

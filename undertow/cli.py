@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import subprocess
 import json
 import sys
 from datetime import date, timedelta
@@ -1329,6 +1330,47 @@ def cmd_soul(args) -> int:
     return 0
 
 
+def cmd_plan(args) -> int:
+    """计划交易：记录/监控触发与出场条件，输出可照抄的下单参数。**只读，绝不下单。**"""
+    from undertow.soul.plan import (load_plans, check_plans, render_plans_md, render_orders)
+    plans = load_plans()
+    if getattr(args, "orders", None):
+        hit = [p for p in plans if p.id == args.orders]
+        if not hit:
+            print(f"[未找到] 计划 id={args.orders}；现有：{[p.id for p in plans]}", file=sys.stderr)
+            return 2
+        print(render_orders(hit[0]))
+        return 0
+
+    alerts = []
+    if getattr(args, "check", False) and plans:
+        spots = {}
+        try:
+            from undertow.collect import longbridge_quote as lq
+            syms = sorted({f"{p.underlying}.US" for p in plans if p.status == "waiting"})
+            for full, q in lq.fetch_stock_quotes(syms).items():
+                spots[full.split(".")[0].upper()] = q.freshest
+        except Exception as e:
+            print(f"[提示] 实时价获取失败，跳过触发核查：{str(e)[:80]}", file=sys.stderr)
+        alerts = check_plans(plans, spots)
+    print(render_plans_md(plans, alerts))
+    if getattr(args, "notify", False) and alerts:
+        fired = [a for a in alerts if a.kind == "触发"]
+        if fired:
+            msg = "；".join(a.detail[:60] for a in fired[:2])
+            try:
+                subprocess.run(["/usr/bin/osascript", "-e",
+                                f'display notification "{msg}" with title "🎯 undertow 计划触发" sound name "Glass"'],
+                               check=False, timeout=10)
+            except Exception:
+                pass
+            out = DATA_DIR / "account"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / f"PLAN_ALERT_{market_today().isoformat()}.txt").write_text(
+                "\n".join(a.detail for a in fired), encoding="utf-8")
+    return 0
+
+
 def cmd_tech(args) -> int:
     """技术面：短线过热度 + 趋势结构（从真实价序确定性算 RSI/KDJ/MACD/布林/均线）。"""
     from undertow.analyze.technicals import analyze_technicals, render_md
@@ -1663,6 +1705,12 @@ def build_parser() -> argparse.ArgumentParser:
     psl.add_argument("--check", action="store_true", help="用档案的限额核查当前实盘持仓")
     psl.add_argument("--json", action="store_true", help="输出结构化档案")
     psl.set_defaults(func=cmd_soul)
+
+    ppl = sub.add_parser("plan", help="计划交易：记录/监控触发与出场条件，输出可照抄的下单参数（只读，绝不下单）")
+    ppl.add_argument("--check", action="store_true", help="抓实时价核查触发/接近")
+    ppl.add_argument("--notify", action="store_true", help="触发时弹 macOS 通知并落 ALERT 文件")
+    ppl.add_argument("--orders", metavar="ID", help="打印该计划的下单参数（供你自己执行）")
+    ppl.set_defaults(func=cmd_plan)
 
     pt = sub.add_parser("tech", help="技术面：短线过热度 + 趋势结构（RSI/KDJ/MACD/布林/均线，确定性）")
     pt.add_argument("instruments", nargs="*", help="品种，留空=全部")

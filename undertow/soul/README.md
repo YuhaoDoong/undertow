@@ -19,6 +19,7 @@
 
 | 文件 | 作用 |
 |---|---|
+| `plan.py` | **计划交易**：TradePlan（触发价/进场腿/出场四要素/闸门/规模）+ `check_plans()` 用实时价核触发与接近 + `render_orders()` 输出可照抄的下单参数。**只读、只告警，绝不下单**——两段式方案：本模块做计划与监控，券商端条件单负责自动执行。 |
 | `profile.py` | `init_from_template()` 从模板生成本地档案；数据模型（`Rule` / `Weakness` / `Lesson` / `Limits` / `SoulProfile`）+ 读写 + `check_against_profile()` 确定性纪律核查 + 人读渲染。 |
 
 ## 入口

@@ -126,6 +126,26 @@ def test_healthy_far_wide_spread_no_high_severity():
     print("PASS test_healthy_far_wide_spread_no_high_severity")
 
 
+def test_single_long_lottery_flagged():
+    """单腿深度价外买 call：回本需 >1σ 且 delta<0.3 → SINGLE_LONG_THIN（复刻 70C）。"""
+    pos = [_Pos("SLV260918C70000.US", "SLV 70 Call", 3, 1.05)]
+    pr = review_portfolio(pos, {"SLV": _ctx_delta(61.2, 0.15)}, asof=date(2026, 8, 25))
+    hf = run_healthcheck(pr, None)
+    thin = [f for f in hf if f.code == "SINGLE_LONG_THIN"]
+    assert thin, _codes(hf)
+    assert "回本" in thin[0].detail and ("σ" in thin[0].detail or "delta" in thin[0].detail)
+    print(f"PASS test_single_long_lottery_flagged → {thin[0].detail}")
+
+
+def test_single_long_efficient_no_flag():
+    """价内买 call（delta 0.6、回本近）→ 不告警。"""
+    pos = [_Pos("SLV260918C58000.US", "SLV 58 Call", 1, 4.20)]
+    pr = review_portfolio(pos, {"SLV": _ctx_delta(61.2, 0.60)}, asof=date(2026, 8, 25))
+    hf = run_healthcheck(pr, None)
+    assert "SINGLE_LONG_THIN" not in _codes(hf), [f.detail for f in hf]
+    print("PASS test_single_long_efficient_no_flag")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for fn in fns:

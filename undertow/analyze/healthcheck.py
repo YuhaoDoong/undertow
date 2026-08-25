@@ -21,6 +21,8 @@ TIGHT_WIDTH_PCT = 0.03       # 价差宽度/现价 ≤ 此算"窄价差"
 POOR_RR_SELLER = 1.0         # 方向性/借方结构 max_profit/max_loss < 此 = 盈亏比偏低
 CONC_HIGH_FRAC = 0.40        # 单品种风险资金 / 净资产 ≥ 此 = 集中度偏高
 SELLER_EDGE_MIN_PP = 10.0    # 收权金结构：隐含胜率 − 盈亏平衡胜率 至少要有的安全边际(pp)
+SINGLE_LONG_MAX_SIGMA = 1.0  # 单腿买方：回本幅度不应超过到期前 1σ（超过=彩票腿）
+SINGLE_LONG_MIN_DELTA = 0.30 # 单腿买方：delta 下限（低于此＝标的动了也赚不到）
 CONTRACT_MULT = 100
 
 
@@ -106,6 +108,34 @@ def buyer_edge(combo, spot: float | None = None):
     return be_wr, d, (d - be_wr) * 100.0
 
 
+def single_long_edge(combo, spot: float | None = None):
+    """**单腿买方**的闸门（无宽度、无最大盈，套不了价差那套）。
+
+    单腿买方赢的条件是"价格走到回本点之外"，所以该问两件事：
+      ① **回本要走的幅度，相对到期前的合理波动够不够近**
+         1σ 幅度 ≈ IV × √(DTE/365)；σ倍数 = 回本涨跌幅 ÷ 1σ。>1σ = 彩票腿。
+      ② **delta 够不够**（效率）：delta 太小＝标的动了你也赚不到。
+    返回 (回本价, 回本幅度%, σ倍数, delta)；非单腿买方/数据不足返回 None。
+    """
+    legs = getattr(combo, "legs", [])
+    if len(legs) != 1 or not spot or spot <= 0:
+        return None
+    lg = legs[0]
+    if getattr(lg, "qty", 0) <= 0 or lg.kind not in ("C", "P"):
+        return None
+    if lg.strike is None or lg.dte is None or lg.dte <= 0:
+        return None
+    cost = lg.cost_price
+    be = lg.strike + cost if lg.kind == "C" else lg.strike - cost
+    move_pct = abs(be - spot) / spot * 100.0
+    iv = getattr(lg, "iv", None) or 0.35
+    sigma1 = iv * ((lg.dte / 365.0) ** 0.5) * 100.0
+    if sigma1 <= 0:
+        return None
+    delta = abs(lg.pos_delta / (CONTRACT_MULT * abs(lg.qty))) if lg.pos_delta and lg.qty else None
+    return be, move_pct, move_pct / sigma1, delta
+
+
 def _combo_min_dte(combo) -> int | None:
     dtes = [l.dte for l in combo.legs if getattr(l, "dte", None) is not None]
     return min(dtes) if dtes else None
@@ -146,6 +176,23 @@ def check_group(g, capital) -> list[HealthFinding]:
                             f"折算需胜率 > {wr*100:.0f}% 才不亏期望（无 delta 数据，未能算隐含胜率）"),
                     suggestion="需要极高胜率的结构容错很低；放宽间距/拉远到期提升权金，或降规模。",
                     scope=f"{g.underlying} · {c.label}"))
+        elif len(c.legs) == 1 and c.legs[0].qty > 0 and c.legs[0].kind in ("C", "P"):
+            # 单腿买方：看【回本σ倍数 + delta 下限】
+            sl = single_long_edge(c, getattr(g, "spot", None))
+            if sl is not None:
+                be_px, move, sig, dlt = sl
+                bad = []
+                if sig > SINGLE_LONG_MAX_SIGMA:
+                    bad.append(f"回本需走 {move:.1f}%＝{sig:.2f}σ（>{SINGLE_LONG_MAX_SIGMA:.0f}σ 属彩票腿）")
+                if dlt is not None and dlt < SINGLE_LONG_MIN_DELTA:
+                    bad.append(f"delta 仅 {dlt:.2f}（<{SINGLE_LONG_MIN_DELTA:.2f}，标的动了也赚不到）")
+                if bad:
+                    out.append(HealthFinding(
+                        severity="中", code="SINGLE_LONG_THIN", title="单腿买方效率不足",
+                        detail=f"{c.label}：回本价 {be_px:.2f}；" + "；".join(bad),
+                        suggestion="买方效率看 delta 与回本距离：换更价内的行权价(delta≥0.3)、"
+                                   "或改用价差把成本降下来，别用深度价外博弹性。",
+                        scope=f"{g.underlying} · {c.label}"))
         else:
             # 借方/方向性结构：先看胜率边际（同一原理、不同算法），再用盈亏比兜底
             bedge = buyer_edge(c, getattr(g, "spot", None))

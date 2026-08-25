@@ -350,81 +350,95 @@ class PortfolioReview:
 TAKE_PROFIT_FRAC = 0.70
 
 
+# —— 数量感知的组合识别：按【张数】消耗，残余数量单独成腿（比例/数量不等价差不丢腿）——
+
+
 @dataclass(frozen=True)
 class _Vert:
-    """一对垂直价差的中间量（内部用）。"""
+    """一对垂直价差的每张中间量（qty 由消耗时决定，金额按 qty 现算）。"""
     kind: str
     short: PositionReview
     long: PositionReview
-    qty: int
     width: float
     credit: float             # 每份净权金（>0=收）
-    max_profit: float
-    max_loss: float
     label: str
     stance: str
 
 
-def _pair_vertical(shorts, longs, kind):
-    """从同类型的空/多腿各取一条配一个垂直价差；配不出返回 None。"""
-    for s in shorts:
-        for l in longs:
-            width = abs(s.strike - l.strike)
-            if width <= 0:
-                continue
-            qty = int(min(abs(s.qty), abs(l.qty)))
-            if qty <= 0:
-                continue
-            credit = s.cost_price - l.cost_price
-            cpos = credit > 0
-            if kind == "P":
-                bull = s.strike > l.strike
-                label = "牛市看跌价差(收权金)" if bull else "熊市看跌价差(付权金)"
-                stance = "保守做多" if bull else "保守做空"
-            else:
-                bear = s.strike < l.strike
-                label = "熊市看涨价差(收权金)" if bear else "牛市看涨价差(付权金)"
-                stance = "保守做空" if bear else "保守做多"
-            max_profit = (credit if cpos else (width + credit)) * CONTRACT_MULT * qty
-            max_loss = ((width - credit) if cpos else (-credit)) * CONTRACT_MULT * qty
-            return _Vert(kind, s, l, qty, width, credit, max_profit, max_loss, label, stance)
-    return None
+def _make_vert(s, l, kind) -> _Vert:
+    width = abs(s.strike - l.strike)
+    credit = s.cost_price - l.cost_price
+    if kind == "P":
+        bull = s.strike > l.strike
+        label = "牛市看跌价差(收权金)" if bull else "熊市看跌价差(付权金)"
+        stance = "保守做多" if bull else "保守做空"
+    else:
+        bear = s.strike < l.strike
+        label = "熊市看涨价差(收权金)" if bear else "牛市看涨价差(付权金)"
+        stance = "保守做空" if bear else "保守做多"
+    return _Vert(kind, s, l, width, credit, label, stance)
 
 
-def _vertical_combo(exp, v: _Vert, ctx) -> Combo:
+def _vert_amounts(v: _Vert, qty: int) -> tuple[float, float]:
+    """给定张数，算垂直价差最大盈 / 最大亏（美元）。"""
+    cpos = v.credit > 0
+    mp = (v.credit if cpos else (v.width + v.credit)) * CONTRACT_MULT * qty
+    ml = ((v.width - v.credit) if cpos else (-v.credit)) * CONTRACT_MULT * qty
+    return mp, ml
+
+
+def _extract_verticals(shorts, longs, kind, rem) -> list[tuple[_Vert, int]]:
+    """贪心按【最近行权价】配对垂直价差，按张数消耗 rem，残余留待后续。"""
+    out: list[tuple[_Vert, int]] = []
+    for s in sorted(shorts, key=lambda x: x.strike):
+        while rem[id(s)] > 0:
+            cands = [l for l in longs if rem[id(l)] > 0 and l.strike != s.strike]
+            if not cands:
+                break
+            l = min(cands, key=lambda x: (abs(x.strike - s.strike), x.strike))
+            q = min(rem[id(s)], rem[id(l)])
+            out.append((_make_vert(s, l, kind), q))
+            rem[id(s)] -= q
+            rem[id(l)] -= q
+    return out
+
+
+def _vertical_combo(exp, v: _Vert, qty: int) -> Combo:
+    mp, ml = _vert_amounts(v, qty)
     note = (f"卖{v.short.strike:g}/买{v.long.strike:g}，宽{v.width:g}，"
             f"净{'收' if v.credit > 0 else '付'}权金 {abs(v.credit):.2f}")
     return Combo(underlying=v.short.underlying, expiry_label=exp.isoformat(),
-                 label=v.label, stance=v.stance, legs=[v.short, v.long], qty=v.qty,
-                 net_credit=v.credit, max_profit=v.max_profit, max_loss=v.max_loss,
-                 defined_risk=True, capital_at_risk=v.max_loss, note=note)
+                 label=v.label, stance=v.stance, legs=[v.short, v.long], qty=qty,
+                 net_credit=v.credit, max_profit=mp, max_loss=ml,
+                 defined_risk=True, capital_at_risk=ml, note=note)
 
 
-def _iron_combo(exp, pv: _Vert, cv: _Vert, ctx) -> Combo:
-    qty = min(pv.qty, cv.qty)
+def _iron_combo(exp, pv: _Vert, cv: _Vert, qty: int) -> Combo:
     butterfly = pv.short.strike == cv.short.strike
     label = "铁蝶(收权金)" if butterfly else "铁鹰(收权金)"
-    max_profit = pv.max_profit + cv.max_profit
-    max_loss = max(pv.max_loss, cv.max_loss)   # 铁鹰只可能一侧被击穿
+    total_credit = pv.credit + cv.credit
+    max_profit = total_credit * CONTRACT_MULT * qty
+    # 铁鹰只可能一侧被击穿：最大亏 = 较宽一侧宽度 − 两侧总权金
+    max_loss = (max(pv.width, cv.width) - total_credit) * CONTRACT_MULT * qty
     note = (f"put 侧 卖{pv.short.strike:g}/买{pv.long.strike:g} + "
             f"call 侧 卖{cv.short.strike:g}/买{cv.long.strike:g}；赌区间震荡")
     return Combo(underlying=pv.short.underlying, expiry_label=exp.isoformat(),
                  label=label, stance="中性收权金(区间)",
                  legs=[pv.short, pv.long, cv.short, cv.long], qty=qty,
-                 net_credit=pv.credit + cv.credit, max_profit=max_profit, max_loss=max_loss,
+                 net_credit=total_credit, max_profit=max_profit, max_loss=max_loss,
                  defined_risk=True, capital_at_risk=max_loss, note=note)
 
 
-def _straddle_combos(exp, calls, puts, ctx, used) -> list[Combo]:
-    """剩余未配对的 call+put：同号→跨式/宽跨式，异号→合成/风险反转。"""
+def _straddle_combos(exp, calls, puts, rem, ctx) -> list[Combo]:
+    """剩余未配对的 call+put：同号→跨式/宽跨式，异号→合成/风险反转。按张数消耗 rem。"""
     out = []
-    for c in list(calls):
-        for p in list(puts):
-            if id(c) in used or id(p) in used:
+    for c in sorted(calls, key=lambda x: x.strike):
+        for p in sorted(puts, key=lambda x: x.strike):
+            if rem[id(c)] <= 0:
+                break
+            if rem[id(p)] <= 0:
                 continue
-            qty = int(min(abs(c.qty), abs(p.qty)))
-            if qty <= 0:
-                continue
+            qty = min(rem[id(c)], rem[id(p)])
             same_k = c.strike == p.strike
             if c.qty < 0 and p.qty < 0:            # 双卖
                 label = "空头跨式(收权金)" if same_k else "空头宽跨式(收权金)"
@@ -444,7 +458,7 @@ def _straddle_combos(exp, calls, puts, ctx, used) -> list[Combo]:
                 credit = (c.cost_price if c.qty < 0 else -c.cost_price) + \
                          (p.cost_price if p.qty < 0 else -p.cost_price)
                 cap = None; mloss = None; defined = False
-            used.add(id(c)); used.add(id(p))
+            rem[id(c)] -= qty; rem[id(p)] -= qty
             out.append(Combo(underlying=c.underlying, expiry_label=exp.isoformat(),
                              label=label, stance=stance, legs=[c, p], qty=qty,
                              net_credit=credit, max_profit=None, max_loss=mloss,
@@ -453,9 +467,9 @@ def _straddle_combos(exp, calls, puts, ctx, used) -> list[Combo]:
     return out
 
 
-def _single_combo(lg: PositionReview, ctx) -> Combo:
+def _single_combo(lg: PositionReview, qty: int) -> Combo:
     short = lg.qty < 0
-    prem = lg.cost_price * CONTRACT_MULT * abs(lg.qty)
+    prem = lg.cost_price * CONTRACT_MULT * qty
     if lg.kind == "C":
         stance = "保守做空(压顶收权金)" if short else "激进做多(凸性上行)"
         label = f"单腿{'卖' if short else '买'}call {lg.strike:g}"
@@ -464,50 +478,45 @@ def _single_combo(lg: PositionReview, ctx) -> Combo:
         label = f"单腿{'卖' if short else '买'}put {lg.strike:g}"
     if short:
         # 裸卖：put 接货全额 / call 上行无限——风险未封顶
-        cap = (lg.strike * CONTRACT_MULT * abs(lg.qty)) if lg.kind == "P" else None
+        cap = (lg.strike * CONTRACT_MULT * qty) if lg.kind == "P" else None
         defined = False; mloss = None
     else:
         cap = prem; defined = True; mloss = prem     # 买方最大亏=已付权金
     return Combo(underlying=lg.underlying,
                  expiry_label=lg.expiry.isoformat() if lg.expiry else "—",
-                 label=label, stance=stance, legs=[lg], qty=int(abs(lg.qty)),
+                 label=label, stance=stance, legs=[lg], qty=qty,
                  net_credit=(lg.cost_price if short else -lg.cost_price),
                  max_profit=(prem if short else None), max_loss=mloss,
                  defined_risk=defined, capital_at_risk=cap,
                  note=f"{'卖出收权金' if short else '买入付权金'} {lg.cost_price:.2f}")
 
 
-def _calendar_combos(leftover, ctx, used) -> list[Combo]:
-    """跨到期同类型、同/异行权：一近一远反向 → 日历(同行权)/对角(异行权)价差。
-
-    长桥不会把这类显示成组合，靠这里自己识别。
-    """
+def _calendar_combos(opts, rem, ctx) -> list[Combo]:
+    """跨到期同类型、异向：一近一远反向 → 日历(同行权)/对角(异行权)。按张数消耗 rem。"""
     out = []
-    by_kind = {}
-    for lg in leftover:
-        if id(lg) in used:
-            continue
-        by_kind.setdefault(lg.kind, []).append(lg)
+    by_kind: dict = {}
+    for lg in opts:
+        if rem[id(lg)] > 0:
+            by_kind.setdefault(lg.kind, []).append(lg)
     for kind, grp in by_kind.items():
-        grp = sorted(grp, key=lambda x: x.expiry)
-        for i in range(len(grp)):
-            for j in range(len(grp)):
-                a, b = grp[i], grp[j]
-                if id(a) in used or id(b) in used or a is b:
+        shorts = sorted([x for x in grp if x.qty < 0], key=lambda x: x.expiry)
+        longs = sorted([x for x in grp if x.qty > 0], key=lambda x: x.expiry)
+        for s in shorts:
+            for l in longs:
+                if rem[id(s)] <= 0:
+                    break
+                if rem[id(l)] <= 0 or s.expiry == l.expiry:
                     continue
-                if a.expiry == b.expiry or (a.qty < 0) == (b.qty < 0):
-                    continue
-                near, far = (a, b) if a.expiry < b.expiry else (b, a)
-                # 典型日历=卖近买远（收 theta）；反之为反向日历
+                near, far = (s, l) if s.expiry < l.expiry else (l, s)
+                q = min(rem[id(s)], rem[id(l)])
                 same_k = near.strike == far.strike
                 label = ("日历价差" if same_k else "对角价差") + \
                         ("(卖近买远)" if near.qty < 0 else "(买近卖远)")
                 stance = "中性偏收(theta)" if same_k else "方向+theta混合"
-                used.add(id(a)); used.add(id(b))
+                rem[id(s)] -= q; rem[id(l)] -= q
                 out.append(Combo(underlying=near.underlying,
                                  expiry_label=f"跨期 {near.expiry:%m-%d}→{far.expiry:%m-%d}",
-                                 label=label, stance=stance, legs=[near, far],
-                                 qty=int(min(abs(near.qty), abs(far.qty))),
+                                 label=label, stance=stance, legs=[near, far], qty=q,
                                  net_credit=None, max_profit=None, max_loss=None,
                                  defined_risk=False, capital_at_risk=None,
                                  note=f"{kind} 近{near.strike:g}({near.expiry:%m-%d})/远{far.strike:g}({far.expiry:%m-%d})"))
@@ -515,9 +524,12 @@ def _calendar_combos(leftover, ctx, used) -> list[Combo]:
 
 
 def _classify_underlying(legs: list[PositionReview], ctx) -> list[Combo]:
-    """把一个品种的全部腿识别成组合：先按到期内组合，再跨期日历/对角，剩下按单腿。"""
+    """把一个品种的全部腿识别成组合（数量感知）：到期内(铁鹰/垂直/跨式) → 跨期日历/对角 → 残余单腿。
+
+    以【剩余张数】rem 逐步消耗，比例价差/数量不等/多同类腿不会丢腿或错配。
+    """
     opts = [l for l in legs if l.kind in ("C", "P") and l.strike is not None and l.expiry is not None]
-    used: set = set()
+    rem = {id(l): int(round(abs(l.qty))) for l in opts}
     combos: list[Combo] = []
 
     by_exp: dict = {}
@@ -528,30 +540,43 @@ def _classify_underlying(legs: list[PositionReview], ctx) -> list[Combo]:
         grp = by_exp[exp]
         calls = [l for l in grp if l.kind == "C"]
         puts = [l for l in grp if l.kind == "P"]
-        pv = _pair_vertical([x for x in puts if x.qty < 0], [x for x in puts if x.qty > 0], "P")
-        cv = _pair_vertical([x for x in calls if x.qty < 0], [x for x in calls if x.qty > 0], "C")
-        # 铁鹰/铁蝶：put 侧与 call 侧各一个收权金垂直价差
-        if pv and cv and pv.credit > 0 and cv.credit > 0:
-            for l in (pv.short, pv.long, cv.short, cv.long):
-                used.add(id(l))
-            combos.append(_iron_combo(exp, pv, cv, ctx))
-            continue
-        if pv:
-            used.add(id(pv.short)); used.add(id(pv.long))
-            combos.append(_vertical_combo(exp, pv, ctx))
-        if cv:
-            used.add(id(cv.short)); used.add(id(cv.long))
-            combos.append(_vertical_combo(exp, cv, ctx))
-        rem_c = [l for l in calls if id(l) not in used]
-        rem_p = [l for l in puts if id(l) not in used]
-        combos += _straddle_combos(exp, rem_c, rem_p, ctx, used)
+        # 1) 各侧垂直价差（可多对、按张数）
+        pverts = _extract_verticals([x for x in puts if x.qty < 0],
+                                    [x for x in puts if x.qty > 0], "P", rem)
+        cverts = _extract_verticals([x for x in calls if x.qty < 0],
+                                    [x for x in calls if x.qty > 0], "C", rem)
+        # 2) 铁鹰/铁蝶：一个收权金 put 价差 + 一个收权金 call 价差，按 min 张数合并，残余留作垂直
+        p_credit = [[v, q] for v, q in pverts if v.credit > 0]
+        c_credit = [[v, q] for v, q in cverts if v.credit > 0]
+        leftover_verts = [(v, q) for v, q in pverts if v.credit <= 0] + \
+                         [(v, q) for v, q in cverts if v.credit <= 0]
+        i = j = 0
+        while i < len(p_credit) and j < len(c_credit):
+            q = min(p_credit[i][1], c_credit[j][1])
+            combos.append(_iron_combo(exp, p_credit[i][0], c_credit[j][0], q))
+            p_credit[i][1] -= q
+            c_credit[j][1] -= q
+            if p_credit[i][1] == 0:
+                i += 1
+            if c_credit[j][1] == 0:
+                j += 1
+        leftover_verts += [(v, q) for v, q in p_credit if q > 0]
+        leftover_verts += [(v, q) for v, q in c_credit if q > 0]
+        for v, q in leftover_verts:
+            if q > 0:
+                combos.append(_vertical_combo(exp, v, q))
+        # 3) 剩余对侧腿 → 跨式/宽跨式/风险反转
+        rem_c = [l for l in calls if rem[id(l)] > 0]
+        rem_p = [l for l in puts if rem[id(l)] > 0]
+        combos += _straddle_combos(exp, rem_c, rem_p, rem, ctx)
 
-    leftover = [l for l in opts if id(l) not in used]
-    combos += _calendar_combos(leftover, ctx, used)
+    # 4) 跨期日历/对角
+    combos += _calendar_combos(opts, rem, ctx)
+    # 5) 残余单腿
     for l in opts:
-        if id(l) not in used:
-            combos.append(_single_combo(l, ctx))
-            used.add(id(l))
+        if rem[id(l)] > 0:
+            combos.append(_single_combo(l, rem[id(l)]))
+            rem[id(l)] = 0
     return combos
 
 

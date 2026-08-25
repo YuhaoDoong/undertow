@@ -202,6 +202,51 @@ def test_live_option_price_used_for_valuation():
     print(f"PASS test_live_option_price_used_for_valuation → pnl {lg.pnl:+.0f}")
 
 
+def test_ratio_spread_residual_not_dropped():
+    """卖4×61P + 买2×60P → 1 个 qty2 牛市看跌价差 + 残余 2 张裸卖 put（不能丢腿）。"""
+    pos = [_Pos("SLV260826P61000.US", "SLV 61 Put", -4, 0.46),
+           _Pos("SLV260826P60000.US", "SLV 60 Put", 2, 0.27)]
+    pr = review_portfolio(pos, {"SLV": _ctx(63.0)}, asof=date(2026, 8, 20))
+    combos = pr.groups[0].combos
+    labels = [c.label for c in combos]
+    vert = [c for c in combos if "牛市看跌价差" in c.label]
+    naked = [c for c in combos if c.label.startswith("单腿卖put")]
+    assert vert and vert[0].qty == 2, labels
+    assert naked and naked[0].qty == 2, labels          # 残余 2 张裸卖 put 必须出现
+    assert not naked[0].defined_risk, naked[0]           # 裸卖=风险未封顶
+    print(f"PASS test_ratio_spread_residual_not_dropped → {labels}")
+
+
+def test_iron_condor_unequal_wings_residual():
+    """put侧2组 + call侧3组 → 铁鹰 qty2 + 残余 call 价差 qty1（两翼数量不等不错算）。"""
+    pos = [_Pos("SLV260918P55000.US", "55P", -2, 0.5),
+           _Pos("SLV260918P53000.US", "53P", 2, 0.25),
+           _Pos("SLV260918C70000.US", "70C", -3, 0.6),
+           _Pos("SLV260918C72000.US", "72C", 3, 0.3)]
+    pr = review_portfolio(pos, {"SLV": _ctx(63.0)}, asof=date(2026, 8, 20))
+    combos = pr.groups[0].combos
+    iron = [c for c in combos if "铁鹰" in c.label]
+    resid = [c for c in combos if "熊市看涨价差" in c.label]
+    assert iron and iron[0].qty == 2, [c.label + str(c.qty) for c in combos]
+    assert resid and resid[0].qty == 1, [c.label + str(c.qty) for c in combos]
+    # 铁鹰最大亏 = 较宽翼宽 − 两侧总权金，再×100×qty；此处两翼宽都=2，总权金=(0.25+0.30)=0.55
+    assert abs(iron[0].max_loss - (2 - 0.55) * 100 * 2) < 1e-6, iron[0].max_loss
+    print(f"PASS test_iron_condor_unequal_wings_residual → iron qty{iron[0].qty} + {resid[0].label} qty{resid[0].qty}")
+
+
+def test_three_same_kind_legs_no_crash():
+    """3 条同类型腿（短61/长60/长59 put）：配出一个价差 + 残余一条长 put，不崩不丢。"""
+    pos = [_Pos("SLV260826P61000.US", "61P", -2, 0.46),
+           _Pos("SLV260826P60000.US", "60P", 2, 0.27),
+           _Pos("SLV260826P59000.US", "59P", 2, 0.15)]
+    pr = review_portfolio(pos, {"SLV": _ctx(63.0)}, asof=date(2026, 8, 20))
+    combos = pr.groups[0].combos
+    total_legs_qty = sum(c.qty for c in combos)
+    assert any("牛市看跌价差" in c.label for c in combos), [c.label for c in combos]
+    assert any(c.label.startswith("单腿买put") for c in combos), [c.label for c in combos]
+    print(f"PASS test_three_same_kind_legs_no_crash → {[c.label for c in combos]}")
+
+
 def test_unmapped_underlying_listed_not_evaluated():
     """无 undertow 期权代理的标的（如 TSLA）只列出、不评方向、不崩。"""
     pos = [_Pos("TSLA260918C300000.US", "TSLA 260918 300 Call", 1, 5.0)]

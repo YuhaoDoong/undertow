@@ -146,6 +146,42 @@ def test_single_long_efficient_no_flag():
     print("PASS test_single_long_efficient_no_flag")
 
 
+def test_negative_ev_after_fees():
+    """毛期望 +$3.0 但手续费 $3.20 → 净期望为负，判高危（复刻 60/59 实例）。"""
+    pos = [_Pos("SLV260918P60000.US", "60P", -1, 1.76),
+           _Pos("SLV260918P59000.US", "59P", 1, 1.38)]
+    pr = review_portfolio(pos, {"SLV": _ctx_delta(61.2, 0.35)}, asof=date(2026, 8, 25))
+    hf = run_healthcheck(pr, None)
+    neg = [f for f in hf if f.code == "NEGATIVE_EV_AFTER_FEES"]
+    assert neg and neg[0].severity == "高", _codes(hf)
+    assert "净期望" in neg[0].detail and "手续费" in neg[0].detail, neg[0].detail
+    print(f"PASS test_negative_ev_after_fees → {neg[0].detail[:70]}")
+
+
+def test_after_fee_ev_math():
+    """扣费后期望值公式：毛期望=p×最大盈−(1−p)×最大亏；费=腿×张×费率×2。"""
+    from undertow.analyze.healthcheck import after_fee_ev, FEE_PER_CONTRACT
+    pos = [_Pos("SLV260918P60000.US", "60P", -2, 1.76),
+           _Pos("SLV260918P59000.US", "59P", 2, 1.38)]
+    pr = review_portfolio(pos, {"SLV": _ctx_delta(61.2, 0.20)}, asof=date(2026, 8, 25))
+    c = pr.groups[0].combos[0]
+    gross, fees, net, frac = after_fee_ev(c, spot=61.2)
+    assert abs(fees - 2 * 2 * FEE_PER_CONTRACT * 2) < 1e-9, fees   # 2腿×2张×费率×2
+    assert abs(gross - (0.80 * c.max_profit - 0.20 * c.max_loss)) < 1e-6
+    assert abs(net - (gross - fees)) < 1e-9
+    print(f"PASS test_after_fee_ev_math → 毛{gross:+.1f} 费{fees:.2f} 净{net:+.1f}")
+
+
+def test_fees_ok_when_edge_thick():
+    """边际够厚时费用占比小，不告警。"""
+    pos = [_Pos("SLV260918P55000.US", "55P", -1, 1.20),
+           _Pos("SLV260918P50000.US", "50P", 1, 0.30)]
+    pr = review_portfolio(pos, {"SLV": _ctx_delta(62.0, 0.08)}, asof=date(2026, 8, 25))
+    hf = run_healthcheck(pr, None)
+    assert "NEGATIVE_EV_AFTER_FEES" not in _codes(hf), [f.detail for f in hf]
+    print("PASS test_fees_ok_when_edge_thick")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for fn in fns:

@@ -24,6 +24,8 @@ SELLER_EDGE_MIN_PP = 10.0    # 收权金结构：隐含胜率 − 盈亏平衡�
 SINGLE_LONG_MAX_SIGMA = 1.0  # 单腿买方：回本幅度不应超过到期前 1σ（超过=彩票腿）
 SINGLE_LONG_MIN_DELTA = 0.30 # 单腿买方：delta 下限（低于此＝标的动了也赚不到）
 CONTRACT_MULT = 100
+FEE_PER_CONTRACT = 0.80      # 实测长桥期权费率（$/张/笔），可按券商改
+FEE_MAX_FRAC_OF_EV = 0.30    # 手续费占毛期望值超过此比例 = 被费用吃掉太多
 
 
 @dataclass(frozen=True)
@@ -136,6 +138,35 @@ def single_long_edge(combo, spot: float | None = None):
     return be, move_pct, move_pct / sigma1, delta
 
 
+def after_fee_ev(combo, implied_p: float | None = None, spot: float | None = None):
+    """**扣费后期望值**——比"获利 > 手续费"严格得多的检验。
+
+    关键修正：手续费该跟【期望盈利】比，不是跟【最大盈利】比。最大盈利你拿不到，
+    期望值才是长期兑现的那个数。
+      毛期望 = p × 最大盈 − (1−p) × 最大亏
+      手续费 = 腿数 × 张数 × 每张费 × 2（开 + 平）
+      净期望 = 毛期望 − 手续费
+    p 优先用调用方给的隐含胜率（卖方=1−短腿delta；买方=盈亏平衡价delta）。
+    返回 (毛期望, 手续费, 净期望, 费用占毛期望比)；数据不足返回 None。
+    """
+    if not combo.max_profit or not combo.max_loss:
+        return None
+    if implied_p is None:
+        e = seller_edge(combo) or buyer_edge(combo, spot)
+        if e is None:
+            return None
+        implied_p = e[1]
+    if not (0.0 < implied_p < 1.0):
+        return None
+    gross = implied_p * combo.max_profit - (1 - implied_p) * combo.max_loss
+    n_legs = max(len(getattr(combo, "legs", [])), 1)
+    qty = max(int(getattr(combo, "qty", 1) or 1), 1)
+    fees = n_legs * qty * FEE_PER_CONTRACT * 2
+    net = gross - fees
+    frac = (fees / gross) if gross > 0 else None
+    return gross, fees, net, frac
+
+
 def _combo_min_dte(combo) -> int | None:
     dtes = [l.dte for l in combo.legs if getattr(l, "dte", None) is not None]
     return min(dtes) if dtes else None
@@ -211,6 +242,27 @@ def check_group(g, capital) -> list[HealthFinding]:
                     detail=f"{c.label}：最大盈 ${c.max_profit:,.0f} / 最大亏 ${c.max_loss:,.0f}"
                            f"（R:R {c.max_profit / c.max_loss:.2f} < 1）",
                     suggestion="低胜率的买方/方向性结构要靠大赔率：R:R < 1 直接不做，2:1 才配得上一次进场。",
+                    scope=f"{g.underlying} · {c.label}"))
+        # 扣费后期望值——费用按张数计，小仓位尤其致命
+        fe = after_fee_ev(c, spot=getattr(g, "spot", None))
+        if fe is not None:
+            gross, fees, net, frac = fe
+            if net <= 0:
+                out.append(HealthFinding(
+                    severity="高", code="NEGATIVE_EV_AFTER_FEES", title="扣除手续费后期望值为负",
+                    detail=(f"{c.label}：毛期望 ${gross:+,.1f}、手续费 ${fees:.2f}"
+                            f"（{len(c.legs)}腿×{c.qty}张×${FEE_PER_CONTRACT:.2f}×开平2次）"
+                            f"→ **净期望 ${net:+,.1f}**。最大盈看着够大，但你拿到的是期望值。"),
+                    suggestion="把边际拉开（短腿卖更远/放宽间距）、或减少腿数与张数；"
+                               "费用按张计，近月便宜合约张数多＝费用膨胀。",
+                    scope=f"{g.underlying} · {c.label}"))
+            elif frac is not None and frac > FEE_MAX_FRAC_OF_EV:
+                out.append(HealthFinding(
+                    severity="中", code="FEE_HEAVY", title="手续费吃掉过多期望值",
+                    detail=(f"{c.label}：手续费 ${fees:.2f} 占毛期望 ${gross:,.1f} 的 "
+                            f"{frac*100:.0f}%（>{FEE_MAX_FRAC_OF_EV*100:.0f}% 安全线），净期望仅 ${net:+,.1f}"),
+                    suggestion="小仓位的费用占比天然高：要么把边际做厚、要么降低交易频率——"
+                               "费用是按【张数×腿数×开平】累加的。",
                     scope=f"{g.underlying} · {c.label}"))
         # 窄价差 + 近到期（gamma 风险，本次对话那条教训）
         if len(c.legs) == 2 and dte is not None and dte <= NEAR_EXPIRY_DTE:

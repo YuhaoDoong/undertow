@@ -24,7 +24,10 @@ import math
 import statistics
 from dataclasses import dataclass, field
 
-from .stretch import (BANDS, DD_LOOK, MA_N, PCT_WINDOW, REGIME_N,
+# ⚠️ ATR 只在 stretch.py 里实现一次。早先本文件复制了一份，虽当时数值一致，
+# 但两份实现必然漂移——今晚已在 verdict.py 抓到同类 bug（标签与结论两套并行 if 链
+# 漂出三处自相矛盾）。凡是同一个量有两处算法，一律合并到一处。
+from .stretch import (BANDS, DD_LOOK, MA_N, PCT_WINDOW, REGIME_N, _atr_series,
                       band_of, drawdown_series, stretch_series)
 
 DRIFT_N = 60        # 局部漂移窗口
@@ -40,22 +43,6 @@ def _sma_series(xs, n):
             s -= xs[i - n]
         if i >= n - 1:
             out[i] = s / n
-    return out
-
-
-def _atr_series(highs, lows, closes, n=14):
-    tr = [None] * len(closes)
-    for i in range(1, len(closes)):
-        tr[i] = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]),
-                    abs(lows[i] - closes[i - 1]))
-    out = [None] * len(closes)
-    run = 0.0
-    for i in range(1, len(closes)):
-        run += tr[i]
-        if i > n:
-            run -= tr[i - n]
-        if i >= n:
-            out[i] = run / n
     return out
 
 

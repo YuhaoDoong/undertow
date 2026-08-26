@@ -609,6 +609,46 @@ def _persist_vrp(key: str, h) -> None:
         encoding="utf-8")
 
 
+def _persist_resonance(row: dict) -> None:
+    """共振层每日联合状态落盘（append，按品种一个文件，同日覆盖）。
+
+    共振能不能用，只能靠自己攒数据回答——期权结构快照目前只有 22~46 天，
+    远不够回测。与事件快照同一思路：不可再生的横截面，先落盘再说。
+    forward_* 留空，日后由校准脚本按真实价格回填。
+    """
+    d = DATA_DIR / "history" / "resonance"
+    d.mkdir(parents=True, exist_ok=True)
+    p = d / f"{row['instrument']}.json"
+    rows = []
+    if p.exists():
+        try:
+            rows = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            rows = []
+    rows = [r for r in rows if r.get("date") != row["date"]]
+    rows.append(row)
+    rows.sort(key=lambda r: r.get("date", ""))
+    p.write_text(json.dumps(rows, ensure_ascii=False, indent=1, default=str),
+                 encoding="utf-8")
+
+
+def _persist_containment(acc: dict, *, horizon: int, mode: str, spans: list) -> None:
+    """不突破率校准表落盘存档 —— 卖方选行权价距离时直接查这张表。
+
+    与 VRP 同类：这是"回测产出的参数"，纳入 git 备份，改指标后重跑覆盖。
+    """
+    d = DATA_DIR / "history" / "containment"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / f"h{horizon}_{mode}.json").write_text(json.dumps({
+        "asof": market_today().isoformat(), "horizon": horizon, "mode": mode,
+        "panel": spans, "unit": "ATR14 倍数",
+        "note": ("终值=到期收盘在行权价内；路径=期间一次都没碰到。"
+                 "超买档看向上不突破(卖call)，超卖档看向下不突破(卖put)。"
+                 "提升才是 edge，绝对值高只是因为虚值远。"),
+        "bands": acc,
+    }, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+
+
 def cmd_vol(args) -> int:
     """波动率溢价（VRP）跨周期检验：这个卖方 edge 能不能穿越牛熊。"""
     cfg = load_config()
@@ -943,14 +983,21 @@ def cmd_report(args) -> int:
             # —— 技术面 · 超买超卖（拉伸度，带回测校准）——
             #    用 series_done（剔掉未完成的当日盘中 bar），否则 MA/ATR/分位会被半根 K 污染。
             tech_html = ""
-            tech_read = stretch_read = None
+            tech_read = stretch_read = res_read = None
             try:
                 from undertow.analyze.technicals import analyze_technicals
                 from undertow.analyze.stretch import analyze_stretch
+                from undertow.analyze.resonance import assess_resonance, snapshot_row
                 if series_done is not None:
                     tech_read = analyze_technicals(series_done)
                     stretch_read = analyze_stretch(series_done)
-                    tech_html = render_technicals_section(tech_read, stretch_read)
+                    # 共振：期权结构（近端 bias = Gamma墙位+资金流）为主，超买超卖为辅
+                    res_read = assess_resonance(outlook.near_bias, stretch_read)
+                    tech_html = render_technicals_section(tech_read, stretch_read, res_read)
+                    # 落盘当日联合状态——共振能不能用只能靠自己攒数据回答
+                    _persist_resonance(snapshot_row(
+                        inst.key, today.isoformat(), res_read, stretch_read,
+                        spot=(real_price if real_price else ga.spot)))
             except Exception as e:
                 print(f"[提示] {inst.key} 技术面跳过: {e}", file=sys.stderr)
             # —— 当日决策研判：规则化合成 近中分层＋资金流＋强信号＋盈亏比闸门（无 LLM）——
@@ -1620,7 +1667,7 @@ def cmd_backtest_stretch(args) -> int:
     from undertow.analyze.stretch import CALIB_ASOF
     src = YahooFuturesSource()
     syms = [(s, s) for s in args.symbols] if args.symbols else CALIB_PANEL
-    samples, spans = [], []
+    samples, spans, contain = [], [], []
     for sym, name in syms:
         try:
             ser = src.fetch_series(sym, rng="max", use_cache=not args.no_cache)
@@ -1633,6 +1680,9 @@ def cmd_backtest_stretch(args) -> int:
             print(f"[跳过] {sym}: 历史不足（{len(ser.closes)} 根）", file=sys.stderr)
             continue
         samples += got
+        # 不突破率必须按品种算（要用各自的 ATR 与高低价），再加权合并
+        contain.append(sb.containment_stats(name, ser.highs, ser.lows, ser.closes, got,
+                                            horizon=args.horizon))
         spans.append(f"{name} {ser.dates[0]}→{ser.dates[-1]} ({len(ser.closes)}根)")
         print(f"  {name:<10} {len(ser.closes):>6} 根 → {len(got):>6} 样本", file=sys.stderr)
     if not samples:
@@ -1650,6 +1700,13 @@ def cmd_backtest_stretch(args) -> int:
     print("|---|" + "---:|" * len(args.horizons))
     for band, row in prof.items():
         print(f"| {band} | " + " | ".join(f"{row.get(k, 0):+.3f}pp" for k in args.horizons) + " |")
+
+    # 卖方口径：不突破率（卖方赢的条件不是猜对方向，是价格别再朝反方向走出去）
+    acc = sb.merge_containment(contain)
+    if acc:
+        print()
+        print(sb.render_containment_md(acc, horizon=args.horizon))
+        _persist_containment(acc, horizon=args.horizon, mode=args.mode, spans=spans)
 
     # 两维分歧：分歧时该信谁？（答案应是"都别太信"）
     dv = sb.diverge_stats(samples, horizon=args.horizon)

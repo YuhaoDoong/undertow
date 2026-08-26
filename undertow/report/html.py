@@ -185,7 +185,26 @@ def _vol_surface_html(v) -> str:
               '偏斜是否收敛比 ATM IV 单独一条更干净。</small>')
 
 
-def render_technicals_section(tr, sr) -> str:
+def render_resonance_banner(rr) -> str:
+    """共振条：期权结构（主）与超买超卖（辅）是否同向。
+
+    刻意做得克制——未校准的东西不配拿醒目配色。共振/背离用浅底细边，
+    并且把"未校准 + COT 层反证"直接写在条里，避免读者按信号强度理解它。
+    """
+    if rr is None or not getattr(rr, "ok", False) or rr.state in ("无信号", "仅结构"):
+        return ""
+    tone = {"共振看多": ("#0969da", "#ddf4ff"), "共振看空": ("#cf222e", "#ffebe9"),
+            "背离": ("#9a6700", "#fff8c5")}.get(rr.state, ("#6e7781", "#f6f8fa"))
+    col, bg = tone
+    return (f'<div style="margin-top:10px;padding:8px 10px;background:{bg};'
+            f'border-left:3px solid {col};border-radius:4px">'
+            f'<b style="color:{col}">共振层 · {_esc(rr.state)}</b>'
+            f'<div class="sub" style="margin-top:3px">{_esc(rr.headline)}</div>'
+            f'<div class="sub" style="margin-top:4px"><small>⚠️ {_esc(rr.caveat)}</small></div>'
+            f'</div>')
+
+
+def render_technicals_section(tr, sr, rr=None) -> str:
     """技术面卡片：超买超卖（拉伸度，回测校准）+ 趋势结构 + 传统指标读数。
 
     刻意的展示顺序：**先给回测校准过的拉伸度，再给传统指标**。因为过热分那五个
@@ -303,7 +322,8 @@ def render_technicals_section(tr, sr) -> str:
            '<b>仅日线成立</b>——1H/4H 回测分离度全在 ±0.2pp 且符号不稳定，是噪音。'
            '重跑校准：<code>undertow backtest-stretch --emit --compare</code>。</small>')
     return (f'<div class="card"><h2>技术面 · 超买超卖（回测校准）</h2>'
-            + "".join(parts) + f'<div style="margin-top:10px">{edu}</div></div>')
+            + "".join(parts) + render_resonance_banner(rr)
+            + f'<div style="margin-top:10px">{edu}</div></div>')
 
 
 def render_vol_regime_section(vr) -> str:

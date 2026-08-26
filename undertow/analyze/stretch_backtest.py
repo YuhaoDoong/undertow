@@ -43,6 +43,22 @@ def _sma_series(xs, n):
     return out
 
 
+def _atr_series(highs, lows, closes, n=14):
+    tr = [None] * len(closes)
+    for i in range(1, len(closes)):
+        tr[i] = max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]),
+                    abs(lows[i] - closes[i - 1]))
+    out = [None] * len(closes)
+    run = 0.0
+    for i in range(1, len(closes)):
+        run += tr[i]
+        if i > n:
+            run -= tr[i - n]
+        if i >= n:
+            out[i] = run / n
+    return out
+
+
 def _pct_rank_series(xs, window=PCT_WINDOW):
     out = [None] * len(xs)
     for i in range(len(xs)):
@@ -213,6 +229,132 @@ def render_calib_literal(cal: dict) -> str:
             L.append(f'    ("{band}", "{regime}"): '
                      f'({r["edge_pp"]:+.3f}, {r["win_rate"]:.0f}, {r["n"]}, {r["t"]:.2f}),')
     L.append("}")
+    return "\n".join(L)
+
+
+# ── 卖方口径：不突破率 ────────────────────────────────────────────────
+# 买方问"会不会朝我这边走"，卖方问的是**"会不会继续朝反方向走"**——卖一张虚值 call，
+# 只要价格不涨破行权价就赢，根本不需要它跌。所以对卖方价差而言，正确的准确率是
+# 【不突破率】，而不是方向准确率。
+#
+# 两种口径都要给，因为它们对应两种真实风险：
+#   * 终值不突破 —— 到期时是否在行权价之内（决定到期损益）
+#   * 路径不突破 —— 期间是否一次都没碰到（决定被指派焦虑与止损出局）
+# 路径口径必然更严格，两者之差就是"中途吓一跳但最后没事"的比例。
+#
+# 距离一律用 ATR 倍数表示：行权价该离多远本就该按波动率定，用百分比会让
+# 白银(IV≈黄金两倍)和黄金的同一个数字含义完全不同。
+DEFAULT_DISTANCES = (1.0, 1.5, 2.0, 3.0)     # 单位：ATR14
+
+
+def containment_stats(name, highs, lows, closes, samples, *,
+                      horizon: int = 5, distances=DEFAULT_DISTANCES,
+                      atr_n: int = 14) -> dict:
+    """各档位的【不突破率】：此后 horizon 日内，价格没有继续朝原方向走出 d 个 ATR。
+
+    超买档看【向上】不突破（对应卖 call / 熊市看涨价差）；
+    超卖档看【向下】不突破（对应卖 put / 牛市看跌价差）。
+    中性桶同时给出两个方向，作为基准。
+    """
+    atr = _atr_series(highs, lows, closes, atr_n)
+    out: dict = {}
+    for s in samples:
+        i = s.i
+        if atr[i] is None or not atr[i] or i + horizon >= len(closes):
+            continue
+        base, a = closes[i], atr[i]
+        end = closes[i + horizon]
+        seg = closes[i + 1:i + horizon + 1]
+        hi = max(highs[i + 1:i + horizon + 1])
+        lo = min(lows[i + 1:i + horizon + 1])
+        band = band_of(s.pctile)
+        rec = out.setdefault(band, {"n": 0, "atr_pct": [],
+                                    "up_end": {d: 0 for d in distances},
+                                    "up_path": {d: 0 for d in distances},
+                                    "dn_end": {d: 0 for d in distances},
+                                    "dn_path": {d: 0 for d in distances}})
+        rec["n"] += 1
+        rec["atr_pct"].append(a / base * 100)
+        for d in distances:
+            up_k, dn_k = base + d * a, base - d * a
+            if end < up_k:
+                rec["up_end"][d] += 1
+            if hi < up_k:
+                rec["up_path"][d] += 1
+            if end > dn_k:
+                rec["dn_end"][d] += 1
+            if lo > dn_k:
+                rec["dn_path"][d] += 1
+        _ = seg
+    for rec in out.values():
+        n = rec["n"] or 1
+        for k in ("up_end", "up_path", "dn_end", "dn_path"):
+            rec[k] = {d: v / n * 100 for d, v in rec[k].items()}
+        rec["atr_pct"] = statistics.fmean(rec["atr_pct"]) if rec["atr_pct"] else 0.0
+    return out
+
+
+def merge_containment(parts: list) -> dict:
+    """把多品种的 containment_stats 按样本数加权合并。"""
+    acc: dict = {}
+    for p in parts:
+        for band, rec in p.items():
+            a = acc.setdefault(band, {"n": 0, "atr_pct": 0.0,
+                                      "up_end": {}, "up_path": {},
+                                      "dn_end": {}, "dn_path": {}})
+            w = rec["n"]
+            a["atr_pct"] += rec["atr_pct"] * w
+            for k in ("up_end", "up_path", "dn_end", "dn_path"):
+                for d, v in rec[k].items():
+                    a[k][d] = a[k].get(d, 0.0) + v * w
+            a["n"] += w
+    for a in acc.values():
+        n = a["n"] or 1
+        a["atr_pct"] /= n
+        for k in ("up_end", "up_path", "dn_end", "dn_path"):
+            a[k] = {d: v / n for d, v in a[k].items()}
+    return acc
+
+
+def render_containment_md(acc: dict, *, horizon: int, distances=DEFAULT_DISTANCES) -> str:
+    """卖方视角表：超买档看向上不突破、超卖档看向下不突破，均与中性桶对照。"""
+    order = [n for _, n in BANDS]
+    neu = acc.get("中性")
+    L = [f"### 不突破率（卖方口径，+{horizon} 日）", "",
+         "*卖方赢的条件不是「方向猜对」，而是「价格不继续朝反方向走出去」。*",
+         "*行权价距离用 ATR14 倍数表示——该离多远本就按波动率定，用百分比会让不同品种不可比。*", ""]
+
+    def block(title, end_key, path_key, bands):
+        L.append(f"**{title}**")
+        L.append("")
+        L.append("| 档位 | 样本 | " + " | ".join(
+            f"{d:g}σ 终值 / 路径" for d in distances) + " |")
+        L.append("|---|---:|" + "---:|" * len(distances))
+        for b in bands:
+            r = acc.get(b)
+            if not r or r["n"] < 50:
+                continue
+            cells = []
+            for d in distances:
+                e, p = r[end_key][d], r[path_key][d]
+                if neu and neu["n"] >= 50:
+                    de = e - neu[end_key][d]
+                    cells.append(f"{e:.1f}% / {p:.1f}%<br><small>({de:+.1f}pp)</small>")
+                else:
+                    cells.append(f"{e:.1f}% / {p:.1f}%")
+            L.append(f"| {b} | {r['n']} | " + " | ".join(cells) + " |")
+        if neu and neu["n"] >= 50:
+            cells = [f"{neu[end_key][d]:.1f}% / {neu[path_key][d]:.1f}%" for d in distances]
+            L.append(f"| *基准（中性桶）* | {neu['n']} | " + " | ".join(cells) + " |")
+        L.append("")
+
+    block("超买之后 · 向上不突破（对应卖 call / 熊市看涨价差）",
+          "up_end", "up_path", [b for b in order if "超买" in b])
+    block("超卖之后 · 向下不突破（对应卖 put / 牛市看跌价差）",
+          "dn_end", "dn_path", [b for b in order if "超卖" in b])
+    L.append("> 「终值」= 到期日收盘在行权价内（决定到期损益）；"
+             "「路径」= 期间一次都没碰到（决定被指派焦虑与止损出局）。")
+    L.append("> 括号内为相对中性桶的提升（终值口径）。**提升才是 edge，绝对值高只是因为虚值远。**")
     return "\n".join(L)
 
 

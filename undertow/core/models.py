@@ -109,6 +109,27 @@ class OptionContract:
     gamma: float  # 数据源给的每股 gamma（仅作交叉校验，分析用自算 BS gamma）
     delta: float
     iv: float  # 隐含波动率（小数，如 0.26）
+    # 盘口：定限价唯一能用的东西。CBOE 原始 payload 一直有这两个字段，早先版本没接进来，
+    # 导致算限价时只能回退 last/理论价——2026-08-26 定 TQQQ 价差时踩到（读实时链拿到全 0，
+    # 读落盘快照却有值，因为后者是直接读原始 JSON 绕过了本模型）。
+    # ⚠️ 长桥实时报价【不提供】 bid/ask，只有 last；故盘口宽度仍需从 CBOE（延迟）取。
+    bid: float = 0.0
+    ask: float = 0.0
+    bid_size: int = 0
+    ask_size: int = 0
+
+    @property
+    def mid(self) -> float | None:
+        """盘口中价。缺任一边返回 None——不要用 last 冒充中价。"""
+        if self.bid > 0 and self.ask > 0:
+            return (self.bid + self.ask) / 2.0
+        return None
+
+    @property
+    def spread_pct(self) -> float | None:
+        """点差占中价的百分比。小账户最容易被这块吃掉，必须能一眼看到。"""
+        m = self.mid
+        return (self.ask - self.bid) / m * 100 if m else None
 
     @property
     def is_call(self) -> bool:

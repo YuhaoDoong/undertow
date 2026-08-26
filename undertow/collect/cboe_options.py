@@ -76,6 +76,10 @@ def snapshot_from_payload(payload: dict, instrument_key: str, sym: str) -> Optio
             gamma=_to_float(o.get("gamma")),
             delta=_to_float(o.get("delta")),
             iv=_to_float(o.get("iv")),
+            bid=_to_float(o.get("bid")),
+            ask=_to_float(o.get("ask")),
+            bid_size=_to_int(o.get("bid_size")),
+            ask_size=_to_int(o.get("ask_size")),
         ))
 
     return OptionsSnapshot(

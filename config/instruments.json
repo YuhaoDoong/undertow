@@ -131,6 +131,35 @@
         "quality": "good",
         "note": "CME E-mini纳斯达克100期货=真实纳指。QQQ×≈41≈NQ，量级不同故位点不换算，仅显示真实纳指走势。COT持仓待补(E-mini Nasdaq-100 Legacy)。"
       }
+    },
+    "tqqq": {
+      "display_name": "纳指3倍做多 (TQQQ)",
+      "asset_class": "equity_index",
+      "vol_index": "VXN",
+      "cot": {
+        "report": "legacy_fut",
+        "contract_market_code": "209742",
+        "market_name": "NASDAQ-100 STOCK INDEX (MINI) - CHICAGO MERCANTILE EXCHANGE"
+      },
+      "options": {
+        "source": "cboe_etf",
+        "symbol": "TQQQ",
+        "approx_commodity_multiplier": null,
+        "proxy_quality": "weak",
+        "note": "⚠️3倍杠杆ETF：每日再平衡，震荡市有波动损耗(实测23天/IV18%约0.61%，IV30%约1.70%)。IV约为QQQ的3倍。行权价以TQQQ计，与纳指点位无固定比例——位点须换算回QQQ口径再与纳指结构对照。单位优势：1张TQQQ≈0.30张QQQ的等效敞口(小3.4倍)，小账户可参与。"
+      },
+      "price": {
+        "source": "cboe_history",
+        "symbol": "TQQQ",
+        "quality": "weak",
+        "note": "3倍日收益复合，多周收益≠3×QQQ；方向可用，幅度会偏离。"
+      },
+      "commodity": {
+        "source": "yahoo_futures",
+        "symbol": "NQ=F",
+        "quality": "weak",
+        "note": "用CME纳指期货作真实纳指基准显示；TQQQ与NQ非线性(3倍复合+损耗)，不做位点换算。"
+      }
     }
   },
   "defaults": {

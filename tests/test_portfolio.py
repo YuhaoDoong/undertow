@@ -256,6 +256,49 @@ def test_unmapped_underlying_listed_not_evaluated():
     print("PASS test_unmapped_underlying_listed_not_evaluated")
 
 
+def test_debit_spread_forward_risk_uses_market_value():
+    """分次建腿后：账面成本含沉没损失，前瞻风险应按【当前市值】算（复刻 70C+卖75C）。"""
+    # 70C 券商成本基准 1.89（含已实现亏损），现值 0.85；卖 75C 收 0.43，现值 0.43
+    def greeks(kind, strike, expiry):
+        return (0.21 if strike == 70 else 0.10, 0.49)
+    ctx = InstrumentContext(
+        etf_symbol="SLV", display_name="白银 Silver (COMEX)", spot=62.32,
+        call_wall=70.0, put_wall=55.0, zero_gamma=None,
+        bias="偏多", near_bias="中性", mid_bias="偏多", verdict_head="",
+        proxy_quality="good", greeks=greeks,
+        live_opt={"SLV260918C70000.US": (0.85, 0.49),
+                  "SLV260918C75000.US": (0.43, 0.54)})
+    pos = [_Pos("SLV260918C70000.US", "70C", 1, 1.89),
+           _Pos("SLV260918C75000.US", "75C", -1, 0.43)]
+    pr = review_portfolio(pos, {"SLV": ctx}, asof=date(2026, 8, 26))
+    c = pr.groups[0].combos[0]
+    assert "牛市看涨价差" in c.label, c.label
+    # 账面：(1.89-0.43)*100 = 146；前瞻：(0.85-0.43)*100 = 42
+    assert abs(c.max_loss - 146.0) < 1e-6, c.max_loss
+    assert abs(c.capital_at_risk - 42.0) < 1e-6, c.capital_at_risk
+    assert "前瞻风险" in c.note, c.note
+    print(f"PASS test_debit_spread_forward_risk_uses_market_value → 账面${c.max_loss:.0f} → 前瞻${c.capital_at_risk:.0f}")
+
+
+def test_debit_spread_same_day_no_discount():
+    """当天同时建腿（成本=市值）→ 前瞻风险与账面一致，不打折。"""
+    def greeks(kind, strike, expiry):
+        return (0.30, 0.50)
+    ctx = InstrumentContext(
+        etf_symbol="SLV", display_name="白银", spot=62.0,
+        call_wall=70.0, put_wall=55.0, zero_gamma=None,
+        bias="偏多", near_bias="中性", mid_bias="偏多", verdict_head="",
+        proxy_quality="good", greeks=greeks,
+        live_opt={"SLV260918C64000.US": (2.00, 0.50),
+                  "SLV260918C66000.US": (1.20, 0.50)})
+    pos = [_Pos("SLV260918C64000.US", "64C", 1, 2.00),
+           _Pos("SLV260918C66000.US", "66C", -1, 1.20)]
+    pr = review_portfolio(pos, {"SLV": ctx}, asof=date(2026, 8, 26))
+    c = pr.groups[0].combos[0]
+    assert abs(c.capital_at_risk - c.max_loss) < 1e-6, (c.capital_at_risk, c.max_loss)
+    print("PASS test_debit_spread_same_day_no_discount")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for fn in fns:

@@ -405,14 +405,34 @@ def _extract_verticals(shorts, longs, kind, rem) -> list[tuple[_Vert, int]]:
     return out
 
 
+def _spread_market_value(v: _Vert, qty: int) -> float | None:
+    """价差当前市值（长腿现值 − 短腿现值）× 100 × 张——【前瞻风险】口径。
+
+    与"成本基准"区分：分次建腿或部分平仓后，券商会把已实现盈亏滚进剩余腿的成本，
+    用成本算会高估前瞻风险（例：70C 成本显示1.89但现值仅0.85）。买方价差往前
+    还能亏的上限是**当前市值**，不是当初的账面成本。
+    """
+    if v.short.est_value is None or v.long.est_value is None:
+        return None
+    val = (v.long.est_value - v.short.est_value) * CONTRACT_MULT * qty
+    return val if val > 0 else None
+
+
 def _vertical_combo(exp, v: _Vert, qty: int) -> Combo:
     mp, ml = _vert_amounts(v, qty)
     note = (f"卖{v.short.strike:g}/买{v.long.strike:g}，宽{v.width:g}，"
             f"净{'收' if v.credit > 0 else '付'}权金 {abs(v.credit):.2f}")
+    cap = ml
+    if v.credit < 0:                      # 借方价差：前瞻风险 = 当前市值（≤账面成本）
+        mv = _spread_market_value(v, qty)
+        if mv is not None:
+            cap = min(ml, mv)
+            if cap < ml * 0.98:
+                note += f"（前瞻风险按当前市值 ${cap:,.0f}，账面成本口径 ${ml:,.0f}）"
     return Combo(underlying=v.short.underlying, expiry_label=exp.isoformat(),
                  label=v.label, stance=v.stance, legs=[v.short, v.long], qty=qty,
                  net_credit=v.credit, max_profit=mp, max_loss=ml,
-                 defined_risk=True, capital_at_risk=ml, note=note)
+                 defined_risk=True, capital_at_risk=cap, note=note)
 
 
 def _iron_combo(exp, pv: _Vert, cv: _Vert, qty: int) -> Combo:

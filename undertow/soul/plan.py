@@ -37,6 +37,11 @@ class Exits:
     stop: str = ""             # 止损条件
     time: str = ""             # 时间了结
     edge: str = ""             # 边际了结
+    # 持仓窗口内的【已知日程事件】——不是出场条件，是必须事先知道的跳空风险。
+    # 分开列而不是塞进 stop：止损是价格触发，事件是日历触发，两者的应对完全不同
+    # （事件可以选择减仓过、对冲过、或明确接受跳空；止损没得选）。
+    # 不计入 complete 判定——出场四问齐全与否，跟有没有事件无关。
+    event: str = ""            # 如「8/28 ET10:00 Fed主席讲话 + 非农基准修正」
 
     @property
     def complete(self) -> bool:
@@ -158,6 +163,8 @@ def render_orders(plan: TradePlan) -> str:
             L.append(f"- 时间：{plan.exits.time}")
         if plan.exits.edge:
             L.append(f"- 边际：{plan.exits.edge}")
+        if plan.exits.event:
+            L.append(f"- ⚠️ 窗口内事件：{plan.exits.event}")
         L.append("")
     if not plan.exits.complete:
         L.append("> ⚠️ 出场三要素（目标/止损/时间）未写全——按你的 `exit_first` 铁律，**不应进场**。")

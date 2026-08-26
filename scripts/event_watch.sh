@@ -69,7 +69,11 @@ for e in highs:
     open_t = now.replace(hour=OPEN_ET[0], minute=OPEN_ET[1], second=0, microsecond=0)
     for phase, off in PHASES:
         target = (open_t + dt.timedelta(minutes=30)) if off is None else (ev_t + dt.timedelta(minutes=off))
-        if abs((now - target).total_seconds()) / 60.0 > WINDOW:
+        # ⚠️ 必须【到点之后】才捕，不能提前。旧版用 |now-target|<=WINDOW，于是落进窗口的
+        # 第一个唤醒点就触发——2026-08-26 实测 after 目标 ET08:40 却在 ET08:31 触发，
+        # 数据落地才 1 分钟，等于什么反应都没捕到。改为只接受 [target, target+WINDOW]。
+        lag_min = (now - target).total_seconds() / 60.0
+        if lag_min < 0 or lag_min > WINDOW:
             continue
         key = (target.strftime("%H%M"), phase)
         buckets.setdefault(key, []).append(e.name)

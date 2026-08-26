@@ -18,8 +18,17 @@ from dataclasses import dataclass, field, asdict
 class InstrumentSnap:
     key: str
     display_name: str
-    spot: float | None = None          # 实时价（含盘前/盘后场次）
-    spot_kind: str = ""                # 夜盘/盘后/盘前/常规
+    # —— 主信号：期货实时价（≈23 小时交易，数据公布瞬间最真实、最连续）——
+    fut_symbol: str = ""
+    fut_price: float | None = None
+    fut_asof: str = ""
+    # —— ETF 各场次（分开记，事后才看得出是哪个场次在动；单一 freshest 会丢信息）——
+    spot: float | None = None          # freshest（按 夜盘>盘后>盘前>常规 选）
+    spot_kind: str = ""
+    etf_regular: float | None = None
+    etf_overnight: float | None = None
+    etf_pre: float | None = None
+    etf_post: float | None = None
     prev_close: float | None = None
     change_pct: float | None = None
     atm_iv: float | None = None        # ATM 隐含波动率
@@ -54,11 +63,16 @@ def compare(before: EventSnapshot, after: EventSnapshot) -> dict:
         b = bm.get(a.key)
         if b is None:
             continue
-        dpx = _d(a.spot, b.spot)
+        # 主口径用期货（连续、实时）；无期货再退回 ETF freshest
+        use_fut = a.fut_price is not None and b.fut_price is not None
+        pb, pa = (b.fut_price, a.fut_price) if use_fut else (b.spot, a.spot)
+        dpx = _d(pa, pb)
         rows.append({
             "key": a.key, "display_name": a.display_name,
-            "spot_before": b.spot, "spot_after": a.spot,
-            "move_pct": (dpx / b.spot * 100) if (dpx is not None and b.spot) else None,
+            "price_source": ("期货 " + (a.fut_symbol or "")) if use_fut else f"ETF({a.spot_kind or '-'})",
+            "spot_before": pb, "spot_after": pa,
+            "etf_before": b.spot, "etf_after": a.spot,
+            "move_pct": (dpx / pb * 100) if (dpx is not None and pb) else None,
             "iv_before": b.atm_iv, "iv_after": a.atm_iv,
             "d_iv_pp": (_d(a.atm_iv, b.atm_iv) * 100) if _d(a.atm_iv, b.atm_iv) is not None else None,
             "iv_stale": b.iv_stale or a.iv_stale,
@@ -75,8 +89,8 @@ def render_compare_md(cmp: dict) -> str:
     if not cmp["rows"]:
         L.append("- 无可对比的品种（两次快照标的不重合）")
         return "\n".join(L)
-    L.append("| 品种 | 价格前 | 价格后 | 变动 | ATM IV 前 | 后 | ΔIV | 过热分 |")
-    L.append("|---|---:|---:|---:|---:|---:|---:|---:|")
+    L.append("| 品种 | 口径 | 价格前 | 价格后 | 变动 | ATM IV 前 | 后 | ΔIV | 过热分 |")
+    L.append("|---|---|---:|---:|---:|---:|---:|---:|---:|")
     for r in cmp["rows"]:
         mv = f"{r['move_pct']:+.2f}%" if r["move_pct"] is not None else "—"
         ivb = f"{r['iv_before']*100:.1f}" if r["iv_before"] else "—"
@@ -86,23 +100,25 @@ def render_compare_md(cmp: dict) -> str:
             div += " ⚠陈旧"
         hb, ha = r["heat_before"], r["heat_after"]
         heat = f"{hb:+d}→{ha:+d}" if (hb is not None and ha is not None) else "—"
-        L.append(f"| {r['display_name']} | {r['spot_before'] or '—'} | {r['spot_after'] or '—'} | "
-                 f"**{mv}** | {ivb} | {iva} | {div} | {heat} |")
+        L.append(f"| {r['display_name']} | {r.get('price_source','—')} | {r['spot_before'] or '—'} | "
+                 f"{r['spot_after'] or '—'} | **{mv}** | {ivb} | {iva} | {div} | {heat} |")
     L.append("")
-    L.append("> ⚠️ 盘前时段期权 IV 通常不更新——标『陈旧』的 ΔIV 不可用于判断事件对波动率的影响。")
+    L.append("> ⚠️ **价格以期货为主口径**：期货≈23 小时交易，数据公布瞬间最真实；ETF 盘前/夜盘流动性差、")
+    L.append("> 且非盘前时段 `pre_market` 字段会返回上一次的陈旧值。期权 IV 在盘前不更新，标『陈旧』的 ΔIV 不可用。")
     L.append("> 事件影响数据不可再生：攒够若干次后，可用自己的数据统计各类事件对各品种的真实冲击。")
     return "\n".join(L)
 
 
 def render_snap_md(s: EventSnapshot) -> str:
     L = [f"## {s.label}　{s.at}" + (f"　（{s.event_name}）" if s.event_name else ""), ""]
-    L.append("| 品种 | 现价 | 场次 | 涨跌 | ATM IV | 过热分 | 综合 |")
-    L.append("|---|---:|---|---:|---:|---:|---|")
+    L.append("| 品种 | 期货(实时) | ETF常规 | ETF夜盘 | ETF盘前 | 场次 | ATM IV | 过热分 |")
+    L.append("|---|---:|---:|---:|---:|---|---:|---:|")
     for i in s.instruments:
-        iv = f"{i.atm_iv*100:.1f}" + (" ⚠陈旧" if i.iv_stale else "") if i.atm_iv else "—"
-        ch = f"{i.change_pct:+.2f}%" if i.change_pct is not None else "—"
+        iv = (f"{i.atm_iv*100:.1f}" + (" ⚠陈旧" if i.iv_stale else "")) if i.atm_iv else "—"
         hs = f"{i.heat_score:+d}" if i.heat_score is not None else "—"
-        L.append(f"| {i.display_name} | {i.spot or '—'} | {i.spot_kind or '—'} | {ch} | {iv} | {hs} | {i.bias} |")
+        fut = f"{i.fut_price:,.2f}" if i.fut_price is not None else "—"
+        L.append(f"| {i.display_name} | **{fut}** | {i.etf_regular or '—'} | {i.etf_overnight or '—'} | "
+                 f"{i.etf_pre or '—'} | {i.spot_kind or '—'} | {iv} | {hs} |")
     if s.headlines:
         L.append("")
         L.append("**当时新闻**：")

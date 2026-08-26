@@ -1414,11 +1414,25 @@ def cmd_event(args) -> int:
     today = market_today()
     snaps, heads = [], []
     # 实时价（含盘前/盘后场次）
-    live = {}
+    live, sessions = {}, {}
     try:
         from undertow.collect import longbridge_quote as lq
         syms = [f"{i.options.symbol}.US" for i in instruments if i.options]
         live = lq.fetch_stock_quotes(syms)
+        # 各场次原始值（freshest 会丢信息；且非盘前时段 pre_market 是陈旧值）
+        import subprocess as _sp, json as _j
+        raw = _sp.run(["longbridge", "quote", *syms, "--format", "json"],
+                      capture_output=True, text=True, timeout=20)
+        if raw.returncode == 0:
+            for r in _j.JSONDecoder().raw_decode(raw.stdout.lstrip())[0]:
+                def _p(d):
+                    try:
+                        return float((d or {}).get("last")) if (d or {}).get("last") else None
+                    except (TypeError, ValueError):
+                        return None
+                sessions[r["symbol"]] = {
+                    "regular": _p(r), "overnight": _p(r.get("overnight")),
+                    "pre": _p(r.get("pre_market")), "post": _p(r.get("post_market"))}
     except Exception as e:
         print(f"[提示] 实时价跳过：{str(e)[:70]}", file=sys.stderr)
 
@@ -1439,18 +1453,24 @@ def cmd_event(args) -> int:
             atm_iv = sum(ivs) / len(ivs) if ivs else None
         except Exception:
             pass
-        heat, trend = None, ""
+        # 期货实时价——主信号（≈23h 交易，数据公布瞬间最真实）
+        heat, trend, fut_px, fut_asof, fut_sym = None, "", None, "", ""
         try:
-            ser, _p, _a = fut_src.fetch_for(inst, use_cache=True)
+            ser, fut_px, fut_asof = fut_src.fetch_for(inst, use_cache=False)
+            fut_sym = inst.commodity.symbol if inst.commodity else ""
             tr = analyze_technicals(ser)
             if tr.ok:
                 heat, trend = tr.heat_score, tr.trend
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[提示] {inst.key} 期货价跳过：{str(e)[:60]}", file=sys.stderr)
         kind = q.freshest_kind if q else ""
+        ss = sessions.get(f"{inst.options.symbol}.US", {})
         snaps.append(InstrumentSnap(
             key=inst.key, display_name=inst.display_name,
+            fut_symbol=fut_sym, fut_price=fut_px, fut_asof=fut_asof,
             spot=(q.freshest if q else None), spot_kind=kind,
+            etf_regular=ss.get("regular"), etf_overnight=ss.get("overnight"),
+            etf_pre=ss.get("pre"), etf_post=ss.get("post"),
             prev_close=(q.prev_close if q else None),
             change_pct=(q.change_pct * 100 if q else None),
             atm_iv=atm_iv, iv_stale=(kind in ("盘前", "夜盘")),

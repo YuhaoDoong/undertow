@@ -185,6 +185,102 @@ def _vol_surface_html(v) -> str:
               '偏斜是否收敛比 ATM IV 单独一条更干净。</small>')
 
 
+def render_technicals_section(tr, sr) -> str:
+    """技术面卡片：超买超卖（拉伸度，回测校准）+ 趋势结构 + 传统指标读数。
+
+    刻意的展示顺序：**先给回测校准过的拉伸度，再给传统指标**。因为过热分那五个
+    分量彼此相关 0.79~0.93、"强超买"占 20.5% 的时间，读者很容易看到标签就脑补
+    "要回调了"——而回测里超买侧根本没过显著性。两者分歧时显式告警。
+    """
+    if (tr is None or not getattr(tr, "ok", False)) and \
+       (sr is None or not getattr(sr, "ok", False)):
+        return ""
+    C_OS, C_OB, C_NEU = "#0969da", "#cf222e", "#6e7781"   # 超卖蓝 / 超买红 / 中性灰
+
+    parts = []
+    # —— 主角：拉伸度 ——
+    if sr is not None and getattr(sr, "ok", False):
+        col = C_OS if "超卖" in sr.band else (C_OB if "超买" in sr.band else C_NEU)
+        badge = (f'<span style="display:inline-block;padding:3px 12px;border-radius:12px;'
+                 f'background:{col};color:#fff;font-weight:600">'
+                 f'{_esc(sr.band)} · {_esc(sr.regime)}市</span>')
+        cells = [f'拉伸度 <b>{sr.stretch:+.2f}</b> 个 ATR（离 MA20）',
+                 f'自身分位 <b>{sr.pctile*100:.0f}%</b>']
+        if sr.atr is not None:
+            cells.append(f"ATR14 <b>{sr.atr:.2f}</b>")
+        nums = '<div class="sub" style="margin-top:8px">' + " · ".join(cells) + "</div>"
+
+        calib = ""
+        if sr.edge_pp is not None and sr.band != "中性":
+            ecol = C_OS if sr.edge_pp > 0 else C_OB
+            if sr.reliable:
+                tag = f'<b style="color:#1a7f37">显著（t={sr.t_stat:+.2f}）</b>'
+            else:
+                tag = f'<span style="color:{C_NEU}">未达显著（t={sr.t_stat:+.2f}）→ 仅参考</span>'
+            calib = (f'<div style="margin-top:8px;padding:8px 10px;background:#f6f8fa;'
+                     f'border-left:3px solid {ecol};border-radius:4px">'
+                     f'<b>回测校准</b>：历史上处于此档位时，此后 5 日相对「什么都不做」'
+                     f'<b style="color:{ecol}">{sr.edge_pp:+.2f}pp</b>，'
+                     f'胜率 {sr.win_rate:.0f}%，n={sr.n_hist} · {tag}</div>')
+        elif sr.band == "中性":
+            calib = (f'<div class="sub" style="margin-top:8px">'
+                     f'中性档即基准桶，无方向性边缘。</div>')
+        parts.append(f'<div style="margin:4px 0 2px">{badge}</div>{nums}{calib}')
+
+    # —— 配角：传统指标 + 趋势结构，并在两者分歧时告警 ——
+    if tr is not None and getattr(tr, "ok", False):
+        conflict = ""
+        if sr is not None and getattr(sr, "ok", False):
+            heat_extreme = tr.heat in ("强超买", "强超卖", "偏超买", "偏超卖")
+            stretch_flat = sr.band == "中性"
+            if heat_extreme and stretch_flat:
+                # 分歧的机理几乎总是同一个：RSI/KDJ/CCI 测的是"最近几根走得多急"，
+                # 拉伸度测的是"离常态多远"。急但不远 → 过热分喊极端、拉伸度说中性。
+                fast = "跌得急" if "超卖" in tr.heat else "涨得急"
+                conflict = (f'<div style="margin-top:10px;padding:8px 10px;'
+                            f'background:#fff8c5;border-left:3px solid #9a6700;border-radius:4px">'
+                            f'⚠️ <b>两个指标分歧</b>：过热分说「{_esc(tr.heat)}」，'
+                            f'拉伸度说「中性、无边缘」（离 MA20 {abs(sr.stretch):.2f} 个 ATR，'
+                            f'在自身历史里只排 {sr.pctile*100:.0f}% 分位）。'
+                            f'<b>{fast}，但相对自身历史还不算极端</b>——'
+                            f'RSI/KDJ/CCI 测的是最近几根走得多急，拉伸度测的是离常态多远。'
+                            f'<b>以拉伸度为准</b>：过热分的五个分量彼此相关 0.79~0.93，'
+                            f'是同一信息数了四遍，其极端档占了两成时间。</div>')
+        ind = []
+        if tr.rsi6 is not None:
+            ind.append(f"RSI6 <b>{tr.rsi6:.0f}</b>")
+        if tr.rsi14 is not None:
+            ind.append(f"RSI14 <b>{tr.rsi14:.0f}</b>")
+        if tr.kdj is not None:
+            ind.append(f"KDJ-J <b>{tr.kdj[2]:.0f}</b>")
+        if tr.cci is not None:
+            ind.append(f"CCI <b>{tr.cci:.0f}</b>")
+        if tr.boll is not None:
+            ind.append(f"布林%b <b>{tr.boll[3]:.2f}</b>")
+        if tr.macd is not None:
+            ind.append(f"MACD柱 <b>{tr.macd[2]:+.2f}</b>")
+        parts.append(
+            f'{conflict}'
+            f'<div class="sub" style="margin-top:10px">'
+            f'趋势结构：<b>{_esc(tr.trend)}</b> · '
+            f'过热分 <b>{tr.heat_score:+d}</b>（{_esc(tr.heat)}）'
+            f'<span style="color:{C_NEU}">— 已降级为参考，见下</span></div>'
+            f'<div class="sub" style="margin-top:4px">' + " · ".join(ind) + "</div>")
+
+    edu = ('<small><b>拉伸度</b> =（现价−MA20）÷ ATR14，即"偏离均线几个 ATR"，再对自身历史取'
+           '滚动分位，所以"极端"按定义就是罕见的。用 ATR 归一让读数跨品种可比，'
+           '且 ATR 正是期权盈亏平衡距离的天然单位。<br>'
+           '<b>口径</b>：边缘 = +5日收益 − 过去60日局部漂移 − 同 regime 中性桶，'
+           '即"比什么都不做多赚多少"；t 为 Welch 双样本、不重叠子样本。<br>'
+           '<b>已知边界</b>：29,672 样本（GLD/SLV/USO/QQQ/SPY，1993→2026）下'
+           '<b>只有超卖侧过得了 |t|≥2</b>（极超卖 +1.06pp/5日）；超买侧方向对且大体单调，'
+           '但最强也只有 t=−1.66，只能读作"追高性价比差"，<b>不可读作"要反转"</b>。'
+           '<b>本指标仅日线成立</b>——1H/4H 回测分离度全在 ±0.2pp 且符号不稳定，是噪音。'
+           '重跑校准：<code>undertow backtest-stretch --emit</code>。</small>')
+    return (f'<div class="card"><h2>技术面 · 超买超卖（回测校准）</h2>'
+            + "".join(parts) + f'<div style="margin-top:10px">{edu}</div></div>')
+
+
 def render_vol_regime_section(vr) -> str:
     """波动率环境卡片：期权偏贵/偏便宜 → 波段级"买方 vs 卖方"倾向。"""
     if vr is None or not getattr(vr, "has_content", False):
@@ -969,7 +1065,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        conc_html: str = "", volregime_html: str = "",
                        vol_analysis_html: str = "", expiry_html: str = "",
                        fib_html: str = "", strong_html: str = "",
-                       verdict_html: str = "") -> str:
+                       verdict_html: str = "", tech_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -994,6 +1090,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="card"><h2>关键位点（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
         f'<div class="chart">{price_svg}</div>'
         f'<div class="chart">{oi_svg}</div></div>'
+        # 紧跟价格图：先看价在哪，再看它离自己的常态有多远
+        f'{tech_html}'
         f'{flow_html}'
         f'{expiry_html}'
         f'{vol_analysis_html}'

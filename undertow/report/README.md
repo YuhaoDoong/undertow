@@ -9,7 +9,7 @@
 | 文件 | 作用 |
 |---|---|
 | `markdown.py` | 终端 Markdown 报告：COT / Gamma / 资金流 / 回测 / 近周到期阶梯。<br>Terminal Markdown for each CLI command. |
-| `html.py` | **自包含 HTML 研判报告**（内嵌 SVG，浏览器直接看）：综合研判 + 速读 + 关键位 + 资金流 + 到期阶梯 + 策略票 + 情景。<br>Self-contained HTML report with inline SVG. |
+| `html.py` | **自包含 HTML 研判报告**（内嵌 SVG，浏览器直接看）：综合研判 + 速读 + 关键位 + **技术面超买超卖** + 资金流 + 到期阶梯 + 策略票 + 情景。<br>技术面卡片以 `analyze/stretch.py` 的拉伸度为主、传统过热分为辅，每个非中性档强制带上回测边缘/胜率/n/Welch t 与显著性判定——**不输出未校准的裸标签**；两者分歧时显式告警并说明机理（RSI/KDJ/CCI 测"走得多急"、拉伸度测"离常态多远"）。<br>Self-contained HTML report with inline SVG. |
 | `viz.py` | 手绘 SVG 图表（**纯标准库零依赖**）：价格+关键位 / OI 墙发散条形 / 持仓净额历史 / 结构时间轴 / 价格轨道 / 波动率曲线。<br>Hand-rolled SVG charts, stdlib only. |
 
 ## Design notes / 要点

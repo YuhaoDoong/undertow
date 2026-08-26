@@ -55,7 +55,7 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_strategy_hub, render_condor_section,
                           render_credit_spread_section, render_expiry_ladder_section,
                           render_fib_rr_section, render_strong_signal_banner,
-                          render_verdict_section)
+                          render_verdict_section, render_technicals_section)
 from undertow.analyze.volregime import assess_vol_regime
 from undertow.analyze.condor import assess_condor
 from undertow.analyze.credit_spread import assess_credit_spread
@@ -532,6 +532,26 @@ def _prev_weekday(d: date) -> date:
     return d
 
 
+def _drop_incomplete_bar(series, today: date):
+    """剔掉尾部那根【当日未完成】的盘中 bar，再喂给任何窗口型指标。
+
+    Yahoo 日线的最后一根在盘中是"进行时"——高低价还没走完、收盘价随时在变。
+    直接喂给 MA/ATR/RSI/滚动分位，会让同一天里读数随盘面来回跳，而且不同命令
+    在不同时刻跑会得出互相矛盾的结论（实测 `tech` 报过热分 +5、`report` 报 +2）。
+    统一由本函数处理，保证各命令口径一致。
+    """
+    if series is None or not getattr(series, "dates", None):
+        return series
+    if series.dates[-1] < today:
+        return series
+    from undertow.core.models import PriceSeries as _PS
+    return _PS(symbol=series.symbol,
+               dates=series.dates[:-1],
+               closes=series.closes[:-1],
+               highs=series.highs[:-1] if series.highs else [],
+               lows=series.lows[:-1] if series.lows else [])
+
+
 def _score_trend(inst_key: str, date_s: str, score: float) -> str:
     """记录每日综合分并给出对昨趋势短句（同向比强弱、异向报翻转）。入 git 留痕。"""
     hist_path = DATA_DIR / "history" / "outlook_scores.json"
@@ -820,15 +840,7 @@ def cmd_report(args) -> int:
             timeline_svg = viz.strategy_timeline_svg(timeline_rows, real_price) \
                 if len(timeline_rows) >= 3 else ""
             # —— 策略情景参数化（期货）先算：其否决票 = 现成的对手盘证据 ——
-            # Yahoo 序列尾根若是今日盘中 bar（未完成），剔除后再喂给 ATR/窗口状态机
-            series_done = real_series
-            if real_series is not None and real_series.dates and real_series.dates[-1] >= today:
-                from undertow.core.models import PriceSeries as _PS
-                series_done = _PS(symbol=real_series.symbol,
-                                  dates=real_series.dates[:-1],
-                                  closes=real_series.closes[:-1],
-                                  highs=real_series.highs[:-1] if real_series.highs else [],
-                                  lows=real_series.lows[:-1] if real_series.lows else [])
+            series_done = _drop_incomplete_bar(real_series, today)
             plan = build_strategy(outlook, vol=fa.vol, series=series_done,
                                   struct_history=struct_hist or None)
             strategy_html = render_strategy_section(plan, timeline_svg=timeline_svg)
@@ -928,6 +940,19 @@ def cmd_report(args) -> int:
                         fib_an, rr_plan, etf_symbol=(inst.options.symbol if inst.options else ""))
             except Exception as e:
                 print(f"[提示] {inst.key} 斐波/盈亏比跳过: {e}", file=sys.stderr)
+            # —— 技术面 · 超买超卖（拉伸度，带回测校准）——
+            #    用 series_done（剔掉未完成的当日盘中 bar），否则 MA/ATR/分位会被半根 K 污染。
+            tech_html = ""
+            tech_read = stretch_read = None
+            try:
+                from undertow.analyze.technicals import analyze_technicals
+                from undertow.analyze.stretch import analyze_stretch
+                if series_done is not None:
+                    tech_read = analyze_technicals(series_done)
+                    stretch_read = analyze_stretch(series_done)
+                    tech_html = render_technicals_section(tech_read, stretch_read)
+            except Exception as e:
+                print(f"[提示] {inst.key} 技术面跳过: {e}", file=sys.stderr)
             # —— 当日决策研判：规则化合成 近中分层＋资金流＋强信号＋盈亏比闸门（无 LLM）——
             verdict = None
             verdict_html = ""
@@ -943,7 +968,8 @@ def cmd_report(args) -> int:
                                       volregime_html=volregime_html,
                                       vol_analysis_html=vol_analysis_html,
                                       expiry_html=expiry_html, fib_html=fib_html,
-                                      strong_html=strong_html, verdict_html=verdict_html)
+                                      strong_html=strong_html, verdict_html=verdict_html,
+                                      tech_html=tech_html)
             fn = f"{inst.key}_{today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
@@ -1036,8 +1062,10 @@ def _account_context(inst, store, sources, today, *, no_cache, live_quotes=None)
             pass
     from undertow.analyze.technicals import analyze_technicals
     from undertow.analyze.stretch import analyze_stretch
-    technicals = analyze_technicals(real_series) if real_series is not None else None
-    stretch = analyze_stretch(real_series) if real_series is not None else None
+    # 与 report/tech 同口径：剔掉当日未完成的盘中 bar，否则同一天不同命令读数会打架
+    tech_series = _drop_incomplete_bar(real_series, today)
+    technicals = analyze_technicals(tech_series) if tech_series is not None else None
+    stretch = analyze_stretch(tech_series) if tech_series is not None else None
     mult = ratio if ratio is not None else inst.options.approx_commodity_multiplier
     obs_day = _prev_weekday(date.fromisoformat(curr_date_s)) if curr_date_s else _prev_weekday(today)
 
@@ -1565,6 +1593,7 @@ def cmd_tech(args) -> int:
                 ser = px_src.fetch_series(inst, use_cache=not args.no_cache)
             except Exception:
                 pass
+        ser = _drop_incomplete_bar(ser, market_today())   # 与 report 同口径
         block = render_md(analyze_technicals(ser), inst.display_name)
         # 拉伸度：过热分的回测校准替代品（超卖侧强 67%）。两者并列展示，
         # 分歧时以拉伸度为准——过热分五个分量彼此相关 0.79~0.93，是同一信息数了四遍。

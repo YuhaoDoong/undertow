@@ -1,0 +1,19 @@
+[
+ {
+  "instrument": "gold",
+  "date": "2026-08-26",
+  "spot": 4701.1,
+  "state": "仅结构",
+  "struct_bias": "偏空(弱)",
+  "band": "偏超买",
+  "regime": "牛",
+  "stretch": 3.8776516033305026,
+  "stretch_pctile": 0.88,
+  "drawdown": -0.4218236491193131,
+  "dd_pctile": 0.852,
+  "combo_pctile": 0.866,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
+ }
+]

@@ -1,0 +1,19 @@
+[
+ {
+  "instrument": "wti",
+  "date": "2026-08-26",
+  "spot": 80.59,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "中性",
+  "regime": "牛",
+  "stretch": -0.034074708645197994,
+  "stretch_pctile": 0.468,
+  "drawdown": -4.751042984582398,
+  "dd_pctile": 0.424,
+  "combo_pctile": 0.446,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
+ }
+]

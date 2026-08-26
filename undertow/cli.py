@@ -1333,8 +1333,12 @@ def cmd_soul(args) -> int:
 def cmd_journal(args) -> int:
     """交易日记：记录成交明细/复盘/盖棺定论/心情。--capture 从券商自动抓当日成交。**只读。**"""
     from undertow.soul.journal import (load_journal, save_journal, capture_trades,
-                                       JournalEntry, render_journal_md, render_entry_md)
+                                       JournalEntry, render_journal_md, render_entry_md,
+                                       load_theses, render_theses_md)
     entries = load_journal()
+    if getattr(args, "theses", False):
+        print(render_theses_md(load_theses()))
+        return 0
     if getattr(args, "capture", False):
         from undertow.collect import longbridge_account as lb
         day = market_today().isoformat()
@@ -1754,6 +1758,7 @@ def build_parser() -> argparse.ArgumentParser:
     pjr.add_argument("--capture", action="store_true", help="从券商抓当日成交与费用，落盘成一条日记")
     pjr.add_argument("--date", metavar="YYYY-MM-DD", help="只看某天")
     pjr.add_argument("--limit", type=int, default=0, help="最多显示几条")
+    pjr.add_argument("--theses", action="store_true", help="看【事前判断】记录与命中率（判断对错 vs 交易盈亏分开统计）")
     pjr.set_defaults(func=cmd_journal)
 
     ppl = sub.add_parser("plan", help="计划交易：记录/监控触发与出场条件，输出可照抄的下单参数（只读，绝不下单）")

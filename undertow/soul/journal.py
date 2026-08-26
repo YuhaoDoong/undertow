@@ -36,6 +36,30 @@ class Trade:
 
 
 @dataclass(frozen=True)
+class Thesis:
+    """**事前判断**——开仓前写下，事后如实标记对错。
+
+    这是回答"我到底有没有 edge"的唯一诚实方式：不靠回忆（记忆会挑出看对的），
+    靠开仓前就落盘的白纸黑字。**关键设计：判断对错与交易盈亏【分开记】**——
+    两者可以背离（判断对但仓位错→亏钱），而这个背离本身就是最重要的诊断信息。
+    """
+    id: str
+    date: str                  # 写下判断的日期（必须早于或等于开仓日）
+    instrument: str
+    direction: str             # 看涨 / 看跌 / 中性震荡
+    rationale: str = ""        # 依据（越具体越好，事后才能检验是哪条依据错了）
+    time_frame: str = ""       # 时间预期
+    invalidation: str = ""     # 失效条件（最重要——没有它就无法证伪）
+    target: str = ""           # 目标位
+    confidence: str = ""       # 信心（高/中/低）
+    # —— 以下事后填 ——
+    outcome: str = "未验证"     # 对 / 错 / 部分对 / 未验证
+    scored_at: str = ""
+    review: str = ""           # 事后评述：哪条依据成立/不成立
+    trade_pnl: float | None = None   # 对应交易的盈亏（可与 outcome 背离）
+
+
+@dataclass(frozen=True)
 class JournalEntry:
     date: str
     title: str = ""
@@ -78,12 +102,77 @@ def load_journal(path: Path | None = None) -> list[JournalEntry]:
     return sorted(out, key=lambda e: e.date, reverse=True)
 
 
-def save_journal(entries: list[JournalEntry], path: Path | None = None) -> Path:
+def save_journal(entries: list[JournalEntry], path: Path | None = None,
+                 theses: list | None = None) -> Path:
     p = Path(path) if path else DEFAULT_PATH
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"entries": [asdict(e) for e in entries]},
-                            ensure_ascii=False, indent=2), encoding="utf-8")
+    payload = {"entries": [asdict(e) for e in entries]}
+    if theses is not None:
+        payload["theses"] = [asdict(t) for t in theses]
+    else:
+        payload["theses"] = [asdict(t) for t in load_theses(p)]
+    p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return p
+
+
+def load_theses(path: Path | None = None) -> list[Thesis]:
+    p = Path(path) if path else DEFAULT_PATH
+    if not p.exists():
+        return []
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return []
+    return [Thesis(**t) for t in raw.get("theses", [])]
+
+
+def thesis_stats(theses: list) -> dict:
+    """判断命中率 vs 交易盈亏——**两者背离才是关键诊断**。样本不足时明说。"""
+    scored = [t for t in theses if t.outcome in ("对", "错", "部分对")]
+    n = len(scored)
+    right = sum(1 for t in scored if t.outcome == "对")
+    part = sum(1 for t in scored if t.outcome == "部分对")
+    with_pnl = [t for t in scored if t.trade_pnl is not None]
+    diverge = [t for t in with_pnl if (t.outcome == "对" and t.trade_pnl < 0)
+               or (t.outcome == "错" and t.trade_pnl > 0)]
+    return {
+        "total": len(theses), "scored": n,
+        "hit_rate": (right + 0.5 * part) / n if n else None,
+        "diverge_count": len(diverge),
+        "diverge_pnl": sum(t.trade_pnl for t in diverge) if diverge else 0.0,
+        "enough_sample": n >= 30,
+        "note": ("样本 ≥30，可初步谈命中率" if n >= 30 else
+                 f"样本仅 {n} 笔，**远不足以区分运气与能力**——按『没有 edge』管理风险"),
+    }
+
+
+def render_theses_md(theses: list) -> str:
+    st = thesis_stats(theses)
+    L = ["## 🎯 事前判断记录", ""]
+    L.append(f"*共 {st['total']} 条，已验证 {st['scored']} 条　·　{st['note']}*")
+    if st["hit_rate"] is not None:
+        L.append(f"*命中率 {st['hit_rate']*100:.0f}%（仅供参考，样本不足时无统计意义）*")
+    if st["diverge_count"]:
+        L.append(f"*⚠️ **判断对但亏钱/判断错但赚钱** {st['diverge_count']} 笔，"
+                 f"合计 {st['diverge_pnl']:+,.0f} —— 这个背离说明问题不在判断力*")
+    L.append("")
+    for t in theses:
+        icon = {"对": "✅", "错": "❌", "部分对": "🟡"}.get(t.outcome, "⏳")
+        L.append(f"### {icon} {t.date}　{t.instrument}　**{t.direction}**　`{t.outcome}`")
+        if t.rationale:
+            L.append(f"- **依据**：{t.rationale}")
+        if t.time_frame:
+            L.append(f"- **时间预期**：{t.time_frame}")
+        if t.invalidation:
+            L.append(f"- **失效条件**：{t.invalidation}")
+        if t.target:
+            L.append(f"- **目标**：{t.target}")
+        if t.trade_pnl is not None:
+            L.append(f"- **对应交易盈亏**：{t.trade_pnl:+,.2f}")
+        if t.review:
+            L.append(f"- **事后评述**：{t.review}")
+        L.append("")
+    return "\n".join(L)
 
 
 def capture_trades(executions, cash_flows=None, day: str = "") -> list[Trade]:

@@ -1016,11 +1016,11 @@ def cmd_report(args) -> int:
                                       vol_analysis_html=vol_analysis_html,
                                       expiry_html=expiry_html, fib_html=fib_html,
                                       strong_html=strong_html, verdict_html=verdict_html,
-                                      tech_html=tech_html)
+                                      tech_html=tech_html, stretch_read=stretch_read)
             fn = f"{inst.key}_{today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
-            written.append((inst, outlook, fn, strong_sig, verdict))
+            written.append((inst, outlook, fn, strong_sig, verdict, stretch_read))
         except Exception as e:
             failed.append(inst.key)
             print(f"[警告] {inst.key} 研判报告失败: {e}", file=sys.stderr)
@@ -1030,7 +1030,7 @@ def cmd_report(args) -> int:
         return 1
 
     if args.json:
-        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _, _, _ in written],
+        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _, _, _, _ in written],
                          ensure_ascii=False, indent=2, default=str))
         return 0
 
@@ -1038,15 +1038,16 @@ def cmd_report(args) -> int:
     if len(written) > 1:
         idx_items = [{"name": o.display_name, "fn": fn, "bias": o.bias,
                       "conf": o.confidence, "summary": _index_summary(o), "signal": ss,
-                      "verdict_head": (v.headline if v and getattr(v, "ok", False) else "")}
-                     for _, o, fn, ss, v in written]
+                      "verdict_head": (v.headline if v and getattr(v, "ok", False) else ""),
+                      "stretch": sr}
+                     for _, o, fn, ss, v, sr in written]
         index_html = render_index_html(idx_items, today.isoformat())
         index_path = reports_dir / f"index_{today.isoformat()}.html"
         _archive_existing(index_path)
         index_path.write_text(index_html, encoding="utf-8")
 
     print(f"已生成综合研判报告（{today}）:")
-    for inst, o, fn, ss, v in written:
+    for inst, o, fn, ss, v, _sr in written:
         flag = f"  ⚡{ss.level}{ss.direction}" if ss else ""
         vh = f"  · {v.headline}" if v and getattr(v, "ok", False) else ""
         print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence}){flag}{vh}  → {reports_dir / fn}")

@@ -124,6 +124,68 @@ class FlowChange:
     weight: float = 0.0    # 该腿的方向权重（用于压力聚合 / 价差扣减）
     spread_note: str = ""  # 若属某价差结构的腿，标注（如"熊市看涨价差·保护腿"）
 
+    @property
+    def oi_conversion(self) -> float | None:
+        """**新仓纯净度** = |ΔOI| / 当日成交量。
+
+        同样是 "+200 手"，含义可以天差地别：
+          * 成交 203、OI +202 → 转化率 ~1.0：当天几乎每一笔都变成了新仓，
+            是干净的新建仓，这个 ΔOI 代表真实的新增意愿
+          * 成交 3029、OI -247 → 转化率 0.08：绝大部分是日内换手/对敲平进平出，
+            ΔOI 这个数字几乎不携带方向信息
+
+        ΔOI 取绝对值，所以减仓侧同样适用：转化率高 = 当天成交主要在了结旧仓。
+
+        ⚠️ 与机构口径的差异：CME 会单列 PNT（场外协商成交）并从量里剔除，
+        因为那部分是预先谈好的、不反映盘中意愿。CBOE 延迟数据没有 PNT 字段，
+        所以我们的转化率里仍混着这类成交——**读数只可用于降权，不可用于加权**。
+        """
+        if not self.curr_volume:
+            return None
+        return abs(self.d_oi) / self.curr_volume
+
+
+# 新仓纯净度分档。阈值取自"成交全部转化为 OI"这个理想端的相对距离，
+# 不是拟合出来的——目前没有样本可以校准它，故只用于**降权与标注**，不参与打分。
+PURITY_CLEAN = 0.70     # ≥ 此值：当天成交绝大部分沉淀为持仓，新仓/了结都算干净
+PURITY_MIXED = 0.30     # ≥ 此值：部分沉淀，掺杂日内换手
+# < PURITY_MIXED：绝大部分是日内进出，ΔOI 不代表真实意愿
+
+# 转化率理论上不可能 > 1：每一张成交最多只能产生一张新 OI。超过说明
+# **ΔOI 与成交量不同源**——CBOE 延迟数据里 OI 来自 OCC 隔夜结算（完整上一交易日），
+# 而 volume 可能是快照当刻的当日部分量，两者时点错配。这种行必须显式标出，
+# 绝不能因为"比值大"就当成最干净的新仓（那正好是反的：该行的量根本没统计全）。
+PURITY_IMPLAUSIBLE = 1.10   # 留 10% 余量给舍入/结算微差
+
+
+def purity_label(ratio: float | None) -> str:
+    """把转化率翻成一句可读判定。None（无成交数据）返回空串而不是猜。"""
+    if ratio is None:
+        return ""
+    if ratio > PURITY_IMPLAUSIBLE:
+        return "⚠OI变动>成交·口径错配"
+    if ratio >= PURITY_CLEAN:
+        return "干净新仓"
+    if ratio >= PURITY_MIXED:
+        return "掺换手"
+    return "多为日内换手"
+
+
+def purity_reliability(ratio: float | None) -> str:
+    """可靠度标签，对齐机构口径里的「可靠度 高/中/低」。
+
+    口径错配的行判「存疑」而非「高」——比值大恰恰说明成交量没统计全。
+    """
+    if ratio is None:
+        return "未知"
+    if ratio > PURITY_IMPLAUSIBLE:
+        return "存疑"
+    if ratio >= PURITY_CLEAN:
+        return "高"
+    if ratio >= PURITY_MIXED:
+        return "中"
+    return "低"
+
 
 @dataclass(frozen=True)
 class Spread:

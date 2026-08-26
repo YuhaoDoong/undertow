@@ -285,15 +285,19 @@ def _flow_kind_table(changes, kind: str) -> list[str]:
     if not items:
         return []
     side = "Put（下方保护/支撑）" if kind == "P" else "Call（上方压制/突破）"
+    from undertow.analyze.flow import purity_label, purity_reliability
     L = [f"**{side}**",
-         "| 行权价 | ΔOI | 当前OI | 精确Delta | Delta修正ΔIV | 判断 |",
-         "|---:|---:|---:|---:|---:|---|"]
+         "| 行权价 | ΔOI | 当前OI | 今成交 | 转化率 | 精确Delta | Delta修正ΔIV | 判断 | 可靠度 |",
+         "|---:|---:|---:|---:|---:|---:|---:|---|:--:|"]
     for c in sorted(items, key=lambda x: x.strike):
         wall = f" 🧱{c.on_wall}" if c.on_wall else ""
         adj = f"{c.adj_iv_pp:+.2f}pp" if c.prev_iv > 0 else "—（昨无IV）"
         judg = c.judgment + (f" ⟂{c.spread_note}" if c.spread_note else "")
+        pr = c.oi_conversion
+        pcell = "—" if pr is None else f"{min(pr, 9.99):.2f} {purity_label(pr)}"
         L.append(f"| {c.strike:.1f}{wall} | {_flow_icon(c.bias)}{c.d_oi:+,} | {c.curr_oi:,} | "
-                 f"{c.delta:+.3f} | {adj} | {judg} |")
+                 f"{c.curr_volume:,} | {pcell} | "
+                 f"{c.delta:+.3f} | {adj} | {judg} | {purity_reliability(pr)} |")
     L.append("")
     return L
 

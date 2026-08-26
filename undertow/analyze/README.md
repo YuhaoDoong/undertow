@@ -17,7 +17,7 @@
 |---|---|
 | `gamma.py` | OI 墙（阻力/支撑/pin）· Put-Call 比 · 做市商 GEX 正负 · 零伽马翻转位。<br>OI walls, P/C ratio, dealer GEX, zero-gamma flip. |
 | `blackscholes.py` | 最小 BS 工具：gamma 重定价（求零伽马位）+ 理论定价。<br>Minimal Black-Scholes helpers. |
-| `flow.py` | 资金流：单快照异动 + 两日 ΔOI/ΔIV 买卖方判定（Delta 修正相对 IV + 绝对 IV 闸门）+ 多腿价差识别 + 波动率面。<br>Buyer/seller flow from ΔOI×IV-direction, spread detection, vol surface. |
+| `flow.py` | 资金流：单快照异动 + 两日 ΔOI/ΔIV 买卖方判定（Delta 修正相对 IV + 绝对 IV 闸门）+ 多腿价差识别 + 波动率面 + **新仓纯净度**。<br>**转化率 = \|ΔOI\| ÷ 当日成交量**——同样「+200 手」，成交 205 与成交 4000 含义天差地别：≈1.0 是干净新建仓（ΔOI 代表真实意愿），≪1.0 说明多为日内换手/对敲，ΔOI 几乎不携带信息。分档 ≥0.70 高 / ≥0.30 中 / 其余低。<br>⚠️ **>1.10 判「存疑」而非「高」**：每张成交最多产生一张 OI，比值超 1 说明 ΔOI 与成交量不同源（CBOE 的 OI 来自 OCC 隔夜结算、volume 是快照当刻），恰恰是成交量没统计全。<br>⚠️ CME 会单列 PNT（场外协商成交）并从量里剔除，CBOE 延迟数据无此字段，故本指标**只用于降权、不用于加权**。<br>Buyer/seller flow + OI-conversion purity (ΔOI/volume) with an implausibility guard. |
 | `expiry_ladder.py` | **近周到期阶梯**：把 60 天混合的墙/资金流拆回单个到期日（未来 3 周五 + 最近月度 OPEX），逐到期复用 gamma+flow，定到期做价差用。<br>Per-expiry slices (next 3 Fridays + nearest monthly) for expiry-specific spreads. |
 
 ## Macro & volatility / 宏观与波动率

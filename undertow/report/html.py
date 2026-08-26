@@ -127,15 +127,33 @@ def _flow_kind_table_html(changes, kind: str) -> str:
         wall = f' <span style="color:#9467bd">🧱{_esc(c.on_wall)}</span>' if c.on_wall else ""
         adj = f"{c.adj_iv_pp:+.2f}pp" if c.prev_iv > 0 else "—"
         sp = f' <span style="color:#9467bd;font-weight:400">⟂{_esc(c.spread_note)}</span>' if c.spread_note else ""
+        # 新仓纯净度：同样 +200 手，"成交203/OI+202"和"成交3029/OI-247"含义天差地别
+        from undertow.analyze.flow import (PURITY_CLEAN, PURITY_IMPLAUSIBLE, PURITY_MIXED,
+                                           purity_label, purity_reliability)
+        pr = c.oi_conversion
+        if pr is None:
+            pcell = '<span style="color:#8c959f">—</span>'
+        else:
+            pcol = ("#cf222e" if pr > PURITY_IMPLAUSIBLE
+                    else ("#1a7f37" if pr >= PURITY_CLEAN
+                          else ("#9a6700" if pr >= PURITY_MIXED else "#8c959f")))
+            pcell = (f'<span style="color:{pcol}">{min(pr,9.99):.2f}</span>'
+                     f'<br><small style="color:{pcol}">{_esc(purity_label(pr))}</small>')
         rows.append(
             f'<tr><td class="r lvl">{c.strike:.1f}{wall}</td>'
             f'<td class="r" style="color:{col}">{c.d_oi:+,}</td>'
-            f'<td class="r">{c.curr_oi:,}</td><td class="r">{c.delta:+.3f}</td>'
+            f'<td class="r">{c.curr_oi:,}</td>'
+            f'<td class="r">{c.curr_volume:,}</td>'
+            f'<td class="r">{pcell}</td>'
+            f'<td class="r">{c.delta:+.3f}</td>'
             f'<td class="r">{_esc(adj)}</td>'
-            f'<td style="color:{col};font-weight:600">{_esc(c.judgment)}{sp}</td></tr>'
+            f'<td style="color:{col};font-weight:600">{_esc(c.judgment)}{sp}'
+            f'<br><small style="color:#6e7781">可靠度 {_esc(purity_reliability(pr))}</small>'
+            f'</td></tr>'
         )
     return (f'<div style="font-weight:600;margin:10px 0 2px">{side}</div>'
             "<table><tr><th class='r'>行权价</th><th class='r'>ΔOI</th><th class='r'>当前OI</th>"
+            "<th class='r'>今成交</th><th class='r'>转化率</th>"
             "<th class='r'>精确Delta</th><th class='r'>Delta修正ΔIV</th><th>判断</th></tr>"
             + "".join(rows) + "</table>")
 
@@ -183,6 +201,36 @@ def _vol_surface_html(v) -> str:
             + f'<div class="sub" style="margin-top:4px"><b>判读：{_esc(v.verdict)}</b></div>'
             + '<small>事件日（非农/CPI/FOMC 兑现后）IV 回落含事件溢价释放的机械成分，判读要打折；'
               '偏斜是否收敛比 ATM IV 单独一条更干净。</small>')
+
+
+_OS_COLOR = {"极超卖": "#0550ae", "强超卖": "#0969da", "偏超卖": "#54aeff",
+             "中性": "#6e7781",
+             "偏超买": "#ff8182", "强超买": "#cf222e", "极超买": "#a40e26"}
+
+
+def stretch_pill(sr, *, compact: bool = False) -> str:
+    """超买超卖的一枚小标签，供报告头部与索引页使用。
+
+    刻意把【是否显著】压进标签本身：14 格里只有 5 格 |t|≥2，绝大多数读数只是参考。
+    显著的加 ✅，不显著的加 ~，中性不加——这样扫一眼就知道该不该当真，
+    而不是看到「强超买」三个字就脑补方向。
+    """
+    if sr is None or not getattr(sr, "ok", False):
+        return ""
+    col = _OS_COLOR.get(sr.band, "#6e7781")
+    mark = ""
+    if sr.band != "中性":
+        mark = " ✅" if sr.reliable else " ~"
+    pct = f"{sr.pctile*100:.0f}%"
+    if compact:
+        return (f'<span class="pill" style="background:{col};color:#fff">'
+                f'{_esc(sr.band)}{mark} {pct}</span>')
+    div = "　⚠️两维分歧" if getattr(sr, "diverge", "") else ""
+    return (f'<span class="pill" style="background:{col};color:#fff">'
+            f'超买超卖 {_esc(sr.band)}{mark}</span>'
+            f'<span class="sub" style="margin-left:8px">合并分位 {pct}'
+            f'（偏离 {sr.stretch_pctile*100:.0f}% / 回撤 {sr.dd_pctile*100:.0f}%）'
+            f'{_esc(div)}</span>')
 
 
 def render_resonance_banner(rr) -> str:
@@ -433,7 +481,12 @@ def render_flow_section(fa) -> str:
                            '（已从方向压力中扣除"封顶/保护腿"，避免误读为方向）</b>'
                            f'<ul>{items}</ul></div>')
         body = (f'<div class="sub">对比 {_esc(fa.prev_date)} → {_esc(fa.curr_date)} · '
-                'OI增+IV升=买方抬价 / OI增+IV降=卖方写权</div>'
+                'OI增+IV升=买方抬价 / OI增+IV降=卖方写权'
+                '<br><b>转化率</b> = |ΔOI| ÷ 今日成交量 —— 当天成交有多少真的沉淀成了持仓。'
+                '≈1.0 是干净的新建仓（或干净的了结），这个 ΔOI 代表真实意愿；'
+                '≪1.0 说明绝大部分是日内换手/对敲进出，同样一个 ΔOI 几乎不携带信息。'
+                '⚠️ CME 会单列 PNT（场外协商成交）并从量里剔除，CBOE 延迟数据没有该字段，'
+                '我们的转化率里仍混着这类成交，故<b>只用于降权、不用于加权</b>。</div>'
                 + _vol_surface_html(fa.vol)
                 + spread_html
                 + _flow_kind_table_html(fa.changes, "P")
@@ -1110,7 +1163,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        conc_html: str = "", volregime_html: str = "",
                        vol_analysis_html: str = "", expiry_html: str = "",
                        fib_html: str = "", strong_html: str = "",
-                       verdict_html: str = "", tech_html: str = "") -> str:
+                       verdict_html: str = "", tech_html: str = "",
+                       stretch_read=None) -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -1125,7 +1179,9 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="sub">{price_line} · 数据 {_esc(o.asof)}</div>'
         f'{basis_line}'
         f'<div style="margin:10px 0">{_bias_badge(o)}</div>'
-        f'<div class="sub">环境：{_esc(o.regime)}</div></div>'
+        + (f'<div style="margin:8px 0 2px">{stretch_pill(stretch_read)}</div>'
+           if stretch_read is not None else "")
+        + f'<div class="sub">环境：{_esc(o.regime)}</div></div>'
     )
     body = (
         f'{strong_html}'
@@ -1197,6 +1253,7 @@ def render_index_html(items: list[dict], asof: str) -> str:
             up = ss.direction == "看涨"
             sig_pill = (f'<span class="pill" style="background:{"#1a7f37" if up else "#cf222e"};'
                         f'color:#fff">⚡{_esc(ss.level)}{_esc(ss.direction)}</span>')
+        os_pill = stretch_pill(it.get("stretch"), compact=True)
         verdict_head = it.get("verdict_head", "")
         verdict_div = (f'<div style="margin-top:7px;font-weight:700;color:#0969da;'
                        f'line-height:1.5">🧭 {_esc(verdict_head)}</div>' if verdict_head else "")
@@ -1206,7 +1263,7 @@ def render_index_html(items: list[dict], asof: str) -> str:
             f'<a class="card" style="display:block;text-decoration:none;color:inherit" href="{_esc(fn)}">'
             f'<h1 style="font-size:17px">{_esc(name)}</h1>'
             f'<span class="badge" style="background:{color}">{_esc(bias)}</span>'
-            f'<span class="pill">可信度 {_esc(conf)}</span>{sig_pill}'
+            f'<span class="pill">可信度 {_esc(conf)}</span>{sig_pill}{os_pill}'
             f'{verdict_div}'
             f'{summary_div}'
             f'</a>'

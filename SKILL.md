@@ -42,7 +42,7 @@ description: >-
 | `python -m undertow expiry [品种...]` | **近周到期阶梯**：把 60 天混合的墙/资金流拆回【单个到期日】——未来 3 个周五 + 最近月度 OPEX 各自独立的 call/put 墙 + 逐 ΔOI 买卖方（定到期做价差用） | 终端 Markdown；也自动嵌入 `report` |
 | `python -m undertow fib [品种...]` | **斐波那契回撤 + 盈亏比闸门**：确定性定位当前摆动腿 → 0.382/0.5/0.618 黄金回撤区 + 扩展目标，再算「现价追」vs「等回调」两情景的盈亏比并评级（差/中/优），把「先看盈亏比、别追、等回调」这套交易纪律落成数字（含 ETF 行权价锚，实盘定腿用） | 终端 Markdown；也自动嵌入 `report` |
 | `python -m undertow account` | **实盘持仓理论评价（只读）**：读长桥账户当前持仓，逐笔放进 undertow 研判语境复盘——组合期权识别(垂直/铁鹰/日历)、整品种策略姿态、资金约束、**🩺持仓体检**(近到期/盈亏比/gamma/集中度分级预警)。**绝不下单**；持仓属敏感数据，HTML 落 gitignore 的 `data/account/` | 终端 Markdown + 本地私有 HTML。`--no-html` 仅终端 |
-| `python -m undertow consult ["问题"]` | **咨询/开仓前问诊（只读）**：把研判＋持仓评价＋体检＋你的问题装成"咨询上下文包"（数字全由确定性引擎算好），供 AI 给意见。`--pre-trade SPEC` 对拟开仓做开仓前问诊；`--json` 出机器可读完整包（供其它 AI 接入） | 默认打印可投喂任意 LLM 的 prompt；`--json` 出 JSON 包 |
+| `python -m undertow consult ["问题"]` | **咨询/开仓前问诊（只读）**：把研判＋持仓评价＋体检＋你的问题装成"咨询上下文包"（数字全由确定性引擎算好），供 AI 给意见。`--thesis ID` 带上你的**事前判断**（AI 须先独立判读再逐条对照，并给出 实盘/模拟/否决 三选一结论）；`--pre-trade SPEC` 对拟开仓做开仓前问诊；`--json` 出机器可读完整包（供其它 AI 接入） | 默认打印可投喂任意 LLM 的 prompt；`--json` 出 JSON 包 |
 | `python -m undertow serve` | **本地只读 HTTP API**：把咨询上下文包暴露成 localhost 端点（标准库 http.server），方便接入其它 AI。`GET /consult?q=...`、`/prompt`、`/positions`、`/health`；**无任何下单端点** | 本地 HTTP 服务（默认 127.0.0.1:8787） |
 | `python -m undertow backtest [品种...]` | COT 信号事件研究回测 | 终端 Markdown |
 | `python -m undertow snapshot [品种...]` | 落盘当日期权链原始全字段 | gzip 存 `data/snapshots/`（纳入 git） |

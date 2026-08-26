@@ -24,6 +24,10 @@ GUIDANCE = [
     "输出是**波段级风险情景与权衡参考，不是投资建议、不是交易指令**；是否下单、下什么，由用户自己决定。",
     "你（及任何接入的 AI）**只读**：绝不代替用户下单/撤单/改单；执行永远由用户在券商端完成。",
     "如信息不足以回答（如缺某标的的期权代理、快照过期），如实说明，不要编造。",
+    "若本包含 thesis（用户的事前判断）：**必须先基于确定性数据形成你自己的独立判读，再逐条对照**——"
+    "指出①哪些依据与数据一致、②哪些分歧（数据说了什么相反的）、③用户遗漏了什么、"
+    "④用户看到但数据未反映的（这可能是真 edge，也可能是错觉）。**绝不因为用户已有判断就顺着找证据**；"
+    "结论要能是『不做』——不做是完全正常的结局，且比勉强找理由做更有价值。",
     "若本包含 soul（用户专属交易体系）：**它优先于一切**——不得建议任何违反其铁律的做法；"
     "当用户的提问本身流露出档案里记录的已知弱点（如回本心态、追损、想一击翻倍），**要直接点出来**，"
     "而不是顺着回答。诚实优先于顺从。",
@@ -128,9 +132,18 @@ def _soul_brief(profile, violations) -> dict | None:
     }
 
 
+def _thesis_brief(th) -> dict | None:
+    """用户的事前判断（开仓前落盘，供 AI 逐条检验；AI 须先独立判读再对照）。"""
+    if not th:
+        return None
+    return {k: getattr(th, k, "") for k in
+            ("id", "date", "instrument", "direction", "rationale",
+             "time_frame", "invalidation", "target", "confidence")}
+
+
 def build_consult_packet(*, review, health, contexts, capital=None,
                          question: str = "", mode: str = "review",
-                         pre_trade=None, news=None, soul=None, asof: date) -> dict:
+                         pre_trade=None, news=None, soul=None, thesis=None, asof: date) -> dict:
     """组装咨询包。
 
     review：当前持仓 PortfolioReview；health：list[HealthFinding]；
@@ -153,6 +166,7 @@ def build_consult_packet(*, review, health, contexts, capital=None,
         "healthcheck": [_jsonable(f) for f in (health or [])],
         "news": _news_brief(news),
         "soul": _soul_brief(*(soul if soul else (None, None))),
+        "thesis": _thesis_brief(thesis),
     }
     if pre_trade is not None:
         packet["pre_trade"] = {
@@ -251,6 +265,22 @@ def render_prompt(packet: dict) -> str:
                     L.append(f"  - {c['label']}〔{c['stance']}〕{c['note']} → {mp} / {ml}")
         for f in pt.get("healthcheck", []):
             L.append(f"  体检[{f['severity']}] {f['title']}：{f['detail']}")
+    L.append("")
+    th = packet.get("thesis")
+    if th:
+        L.append("")
+        L.append("【用户的事前判断（开仓前落盘）—— 请先用上面的确定性数据形成你自己的独立判读，再逐条对照】")
+        L.append(f"  方向：{th.get('direction','')}")
+        if th.get("rationale"):
+            L.append(f"  依据：{th['rationale']}")
+        if th.get("time_frame"):
+            L.append(f"  时间预期：{th['time_frame']}")
+        if th.get("invalidation"):
+            L.append(f"  失效条件：{th['invalidation']}")
+        if th.get("target"):
+            L.append(f"  目标：{th['target']}")
+        L.append("  → 请给出：①你的独立判读　②逐条对照（一致/分歧/遗漏/用户独有）　"
+                 "③前置检查是否通过（soul 限额）　④结论：实盘 / 模拟(判断可行但前置未过) / 否决(判断本身不成立)，并给理由")
     L.append("")
     L.append(f"【用户的问题】{packet['question'] or '（未指定，请给出该持仓的整体风控复盘与权衡）'}")
     L.append("")

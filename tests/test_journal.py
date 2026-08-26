@@ -52,8 +52,8 @@ def test_empty_journal():
 def test_thesis_stats_small_sample_warns():
     """样本不足时明确警告『不足以区分运气与能力』。"""
     from undertow.soul.journal import Thesis, thesis_stats
-    ts=[Thesis(id="a",date="2026-08-01",instrument="SLV",direction="看涨",outcome="对",trade_pnl=-80.0),
-        Thesis(id="b",date="2026-08-02",instrument="GLD",direction="看跌",outcome="错",trade_pnl=+20.0)]
+    ts=[Thesis(id="a",date="2026-08-01",instrument="SLV",direction="看涨",execution="实盘",outcome="对",trade_pnl=-80.0),
+        Thesis(id="b",date="2026-08-02",instrument="GLD",direction="看跌",execution="实盘",outcome="错",trade_pnl=+20.0)]
     st=thesis_stats(ts)
     assert st["scored"]==2 and st["enough_sample"] is False
     assert "不足以区分运气与能力" in st["note"], st["note"]
@@ -64,9 +64,9 @@ def test_thesis_stats_small_sample_warns():
 def test_thesis_divergence_flagged():
     """判断对但亏钱 / 判断错但赚钱 → 计入背离（这是关键诊断）。"""
     from undertow.soul.journal import Thesis, thesis_stats, render_theses_md
-    ts=[Thesis(id="a",date="2026-08-01",instrument="SLV",direction="看涨",outcome="对",trade_pnl=-80.0),
-        Thesis(id="b",date="2026-08-02",instrument="GLD",direction="看跌",outcome="错",trade_pnl=+20.0),
-        Thesis(id="c",date="2026-08-03",instrument="SLV",direction="看涨",outcome="对",trade_pnl=+50.0)]
+    ts=[Thesis(id="a",date="2026-08-01",instrument="SLV",direction="看涨",execution="实盘",outcome="对",trade_pnl=-80.0),
+        Thesis(id="b",date="2026-08-02",instrument="GLD",direction="看跌",execution="实盘",outcome="错",trade_pnl=+20.0),
+        Thesis(id="c",date="2026-08-03",instrument="SLV",direction="看涨",execution="实盘",outcome="对",trade_pnl=+50.0)]
     st=thesis_stats(ts)
     assert st["diverge_count"]==2, st          # a(对但亏) 与 b(错但赚)
     assert abs(st["diverge_pnl"]-(-60.0))<1e-9, st
@@ -81,6 +81,25 @@ def test_unscored_thesis_not_counted():
     st=thesis_stats([Thesis(id="x",date="2026-08-24",instrument="SLV",direction="看涨")])
     assert st["total"]==1 and st["scored"]==0 and st["hit_rate"] is None
     print("PASS test_unscored_thesis_not_counted")
+
+
+def test_paper_thesis_counts_toward_hitrate():
+    """模拟盘（判断可行但前置未过）同样计入命中率——这是样本积累的关键。"""
+    from undertow.soul.journal import Thesis, thesis_stats, render_theses_md
+    ts=[Thesis(id="p1",date="2026-08-01",instrument="SLV",direction="看涨",
+               execution="模拟",veto_reason="单笔风险超10%上限",outcome="对"),
+        Thesis(id="p2",date="2026-08-02",instrument="SLV",direction="看跌",
+               execution="模拟",veto_reason="冷静期内",outcome="错"),
+        Thesis(id="l1",date="2026-08-03",instrument="GLD",direction="看涨",
+               execution="实盘",outcome="对",trade_pnl=-30.0)]
+    st=thesis_stats(ts)
+    assert st["scored"]==3 and st["n_paper"]==2 and st["n_live"]==1
+    assert st["hit_paper"]==0.5 and st["hit_live"]==1.0
+    assert st["missed_count"]==1, st          # p1 判断对但没做
+    assert st["diverge_count"]==1, st         # l1 判断对但亏钱
+    md=render_theses_md(ts)
+    assert "模拟" in md and "判断对但没做" in md, md
+    print(f"PASS test_paper_thesis_counts_toward_hitrate → 实盘{st['n_live']}/模拟{st['n_paper']}，错过{st['missed_count']}")
 
 
 if __name__ == "__main__":

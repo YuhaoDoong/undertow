@@ -53,6 +53,8 @@ class Thesis:
     target: str = ""           # 目标位
     confidence: str = ""       # 信心（高/中/低）
     # —— 以下事后填 ——
+    execution: str = "待定"     # 实盘 / 模拟(判断可行但前置未过) / 否决(判断本身不成立)
+    veto_reason: str = ""      # 未实盘的原因（前置哪条没过 / 判断哪里不成立）
     outcome: str = "未验证"     # 对 / 错 / 部分对 / 未验证
     scored_at: str = ""
     review: str = ""           # 事后评述：哪条依据成立/不成立
@@ -126,23 +128,41 @@ def load_theses(path: Path | None = None) -> list[Thesis]:
     return [Thesis(**t) for t in raw.get("theses", [])]
 
 
+def _hit(ts):
+    n = len(ts)
+    if not n:
+        return None
+    return (sum(1 for t in ts if t.outcome == "对")
+            + 0.5 * sum(1 for t in ts if t.outcome == "部分对")) / n
+
+
 def thesis_stats(theses: list) -> dict:
-    """判断命中率 vs 交易盈亏——**两者背离才是关键诊断**。样本不足时明说。"""
+    """判断命中率 vs 交易盈亏——**两者背离才是关键诊断**。
+
+    **模拟样本也计入命中率**：判断可行但被前置规则拦下的（仓位/冷静期/集中度），
+    判断质量与实盘同样有效，且更干净（无执行滑点与仓位干扰）。这样样本积累快得多，
+    "我到底有没有 edge" 才有可能被回答。
+    """
     scored = [t for t in theses if t.outcome in ("对", "错", "部分对")]
     n = len(scored)
-    right = sum(1 for t in scored if t.outcome == "对")
-    part = sum(1 for t in scored if t.outcome == "部分对")
-    with_pnl = [t for t in scored if t.trade_pnl is not None]
+    live = [t for t in scored if t.execution == "实盘"]
+    paper = [t for t in scored if t.execution == "模拟"]
+    with_pnl = [t for t in live if t.trade_pnl is not None]
     diverge = [t for t in with_pnl if (t.outcome == "对" and t.trade_pnl < 0)
                or (t.outcome == "错" and t.trade_pnl > 0)]
+    missed = [t for t in paper if t.outcome == "对"]          # 判断对但没做
+    should_veto = [t for t in live if t.outcome == "错"]       # 判断错却做了
     return {
         "total": len(theses), "scored": n,
-        "hit_rate": (right + 0.5 * part) / n if n else None,
+        "hit_rate": _hit(scored), "hit_live": _hit(live), "hit_paper": _hit(paper),
+        "n_live": len(live), "n_paper": len(paper),
         "diverge_count": len(diverge),
         "diverge_pnl": sum(t.trade_pnl for t in diverge) if diverge else 0.0,
+        "missed_count": len(missed), "should_veto_count": len(should_veto),
         "enough_sample": n >= 30,
         "note": ("样本 ≥30，可初步谈命中率" if n >= 30 else
-                 f"样本仅 {n} 笔，**远不足以区分运气与能力**——按『没有 edge』管理风险"),
+                 f"样本仅 {n} 笔（实盘{len(live)}/模拟{len(paper)}），"
+                 f"**远不足以区分运气与能力**——按『没有 edge』管理风险"),
     }
 
 
@@ -152,13 +172,24 @@ def render_theses_md(theses: list) -> str:
     L.append(f"*共 {st['total']} 条，已验证 {st['scored']} 条　·　{st['note']}*")
     if st["hit_rate"] is not None:
         L.append(f"*命中率 {st['hit_rate']*100:.0f}%（仅供参考，样本不足时无统计意义）*")
+    if st["hit_live"] is not None or st["hit_paper"] is not None:
+        hl = f"{st['hit_live']*100:.0f}%" if st["hit_live"] is not None else "—"
+        hp = f"{st['hit_paper']*100:.0f}%" if st["hit_paper"] is not None else "—"
+        L.append(f"*实盘命中 {hl}（{st['n_live']}笔）　·　模拟命中 {hp}（{st['n_paper']}笔）"
+                 f"—— 两者差异大说明【选择做哪笔】本身有问题*")
     if st["diverge_count"]:
         L.append(f"*⚠️ **判断对但亏钱/判断错但赚钱** {st['diverge_count']} 笔，"
                  f"合计 {st['diverge_pnl']:+,.0f} —— 这个背离说明问题不在判断力*")
+    if st["missed_count"] or st["should_veto_count"]:
+        L.append(f"*判断对但没做 {st['missed_count']} 笔（前置是否过严？）　·　"
+                 f"判断错却做了 {st['should_veto_count']} 笔（该拦没拦住）*")
     L.append("")
     for t in theses:
         icon = {"对": "✅", "错": "❌", "部分对": "🟡"}.get(t.outcome, "⏳")
-        L.append(f"### {icon} {t.date}　{t.instrument}　**{t.direction}**　`{t.outcome}`")
+        exe = {"实盘": "💵实盘", "模拟": "📝模拟", "否决": "🚫否决"}.get(t.execution, "⏳待定")
+        L.append(f"### {icon} {t.date}　{t.instrument}　**{t.direction}**　`{t.outcome}`　{exe}")
+        if t.veto_reason:
+            L.append(f"- **未实盘原因**：{t.veto_reason}")
         if t.rationale:
             L.append(f"- **依据**：{t.rationale}")
         if t.time_frame:

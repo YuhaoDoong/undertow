@@ -1541,10 +1541,24 @@ def cmd_consult(args) -> int:
     except Exception as e:
         print(f"[提示] 灵魂档案跳过：{str(e)[:80]}", file=sys.stderr)
 
+    # 事前判断：--thesis ID 从 journal 取，供 AI 逐条检验（先独立判读再对照）
+    thesis = None
+    tid = getattr(args, "thesis", None)
+    if tid:
+        try:
+            from undertow.soul.journal import load_theses
+            hit = [t for t in load_theses() if t.id == tid]
+            if hit:
+                thesis = hit[0]
+            else:
+                print(f"[提示] 未找到事前判断 id={tid}", file=sys.stderr)
+        except Exception as e:
+            print(f"[提示] 事前判断读取跳过：{str(e)[:80]}", file=sys.stderr)
+
     packet = build_consult_packet(
         review=review, health=health, contexts=contexts, capital=capital,
         question=(args.question or ""), mode=mode, pre_trade=pre_trade,
-        news=news, soul=soul, asof=today)
+        news=news, soul=soul, thesis=thesis, asof=today)
 
     if getattr(args, "json", False):
         print(json.dumps(packet, ensure_ascii=False, indent=2))
@@ -1739,6 +1753,7 @@ def build_parser() -> argparse.ArgumentParser:
     pcs.add_argument("question", nargs="?", default="", help="你的问题，如 '这个价差该平还是展期?'")
     pcs.add_argument("--pre-trade", dest="pre_trade", metavar="SPEC",
                      help="开仓前问诊：拟开仓 spec，如 'SLV260919P60000.US:-4:0.5,SLV260919P58000.US:4:0.25'")
+    pcs.add_argument("--thesis", metavar="ID", help="带上你的事前判断（journal 里的 thesis id），让 AI 先独立判读再逐条对照")
     pcs.add_argument("--json", action="store_true", help="打印机器可读的完整咨询包（供其它 AI 接入）")
     pcs.set_defaults(func=cmd_consult)
 

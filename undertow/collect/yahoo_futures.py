@@ -12,6 +12,7 @@ USO 更是与 WTI 价格量级都不一致。正解是用【当日实时比值�
 """
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 
 from undertow.core.config import Instrument
@@ -33,9 +34,15 @@ class YahooFuturesSource:
         cache_key = f"yahoo_{symbol}_{rng}"
         payload = self.cache.get(cache_key, self.CACHE_TTL if use_cache else 0) if use_cache else None
         if payload is None:
+            # ⚠️ range=max 会被 Yahoo 自动降频成【月线】（SPY 实测只回 404 根）。
+            # 要拿全历史日线，必须给显式 period1/period2 区间。
+            if rng == "max":
+                params = {"period1": 0, "period2": int(time.time()), "interval": "1d"}
+            else:
+                params = {"range": rng, "interval": "1d"}
             payload = http_get_json(
                 YAHOO_URL.format(symbol=symbol),
-                params={"range": rng, "interval": "1d"},
+                params=params,
                 headers={"User-Agent": "Mozilla/5.0"},
             )
             self.cache.set(cache_key, payload)

@@ -67,7 +67,9 @@
 |---|---|
 | `portfolio.py` | **实盘持仓理论评价**：解析长桥期权代码 → 按(品种,到期)识别**组合期权**（垂直/跨式/铁鹰/日历/对角/风险反转）→ 逐笔对研判语境复盘（顺逆、行权 vs Gamma 墙、被指派风险、净 Delta、浮盈亏）+ **整品种策略姿态** + **资金约束**（够不够接货）。有实时期权价则用真实市价估值，否则 BS。<br>Combo-aware review of live positions; deterministic, read-only. |
 | `healthcheck.py` | **持仓/拟开仓体检**：确定性规则分级预警（高/中/低）——近到期×资金不够接货、卖方盈亏比过低（折算所需胜率）、窄价差+近到期 gamma、裸卖未封顶、逆势、单品种集中度。<br>Rule-based position health checks. |
-| `technicals.py` | **技术指标层**：从价序确定性算 均线排列/RSI/KDJ/MACD/布林/CCI/BIAS + 多窗口涨幅 → 短线过热度综合分 + 趋势结构。与期权结构层正交，作短线过热度/趋势交叉印证。<br>Classic TA indicators; orthogonal cross-check. |
+| `technicals.py` | **技术指标层**：从价序确定性算 均线排列/RSI/KDJ/MACD/布林/CCI/BIAS + 多窗口涨幅 → 短线过热度综合分 + 趋势结构。与期权结构层正交，作短线过热度/趋势交叉印证。<br>⚠️ 过热分五个分量彼此相关 0.79~0.93（同一信息数了四遍），"强超买"占 20.5% 的时间，且 98% 落在 MA20 之上——它更接近趋势强度的写法。超买超卖请以 `stretch.py` 为准。<br>Classic TA indicators; overheat score is collinear — prefer `stretch.py`. |
+| `stretch.py` | **拉伸度（回测校准过的超买超卖）**：`(现价−MA20)/ATR14` → 对自身历史取滚动分位。每个读数都带上该 (档位 × regime) 的**回测边缘/胜率/样本数/Welch t**，不输出未校准的裸标签。实测：只有超卖侧 \|t\|≥2（极超卖 +1.06pp/5日）；超买侧方向对但不显著，只能读作"追高性价比差"，不可读作"要反转"；**1H/4H 是噪音，仅日线成立**。<br>Rank-normalised stretch with per-cell backtested edge attached. |
+| `stretch_backtest.py` | 重跑上表的校准（`undertow backtest-stretch --emit`）。方法学三要点：**局部去趋势**（减过去60日漂移，而非全样本均值，否则牛市把上涨白送给抄底信号）、**同 regime 内比较**（熊市中性桶 +0.46 / 牛市 −0.42，跨 regime 直接比会误判）、**不重叠子样本 + Welch 双样本 t**（边缘与 t 必须同源）。<br>Regenerates the calibration table; local detrend + within-regime + non-overlapping Welch t. |
 | `newsfeed.py` | **事件感知**：品种相关新闻 + 影响本品种的临近关键事件（复用 `core.calendar`），高影响事件≤3天置顶告警。只作背景/催化剂旁证，不改判方向。<br>News + upcoming-event awareness; background only. |
 
 ## Boundary / 边界

@@ -1035,7 +1035,9 @@ def _account_context(inst, store, sources, today, *, no_cache, live_quotes=None)
         except Exception:
             pass
     from undertow.analyze.technicals import analyze_technicals
+    from undertow.analyze.stretch import analyze_stretch
     technicals = analyze_technicals(real_series) if real_series is not None else None
+    stretch = analyze_stretch(real_series) if real_series is not None else None
     mult = ratio if ratio is not None else inst.options.approx_commodity_multiplier
     obs_day = _prev_weekday(date.fromisoformat(curr_date_s)) if curr_date_s else _prev_weekday(today)
 
@@ -1099,7 +1101,7 @@ def _account_context(inst, store, sources, today, *, no_cache, live_quotes=None)
         verdict_head=(verdict.headline if verdict else ""),
         proxy_quality=inst.options.proxy_quality, greeks=greeks,
         spot_source=spot_source, live_opt=live_opt, price_note=price_note,
-        technicals=technicals)
+        technicals=technicals, stretch=stretch)
 
 
 def _fetch_live_quotes(positions):
@@ -1563,9 +1565,67 @@ def cmd_tech(args) -> int:
                 ser = px_src.fetch_series(inst, use_cache=not args.no_cache)
             except Exception:
                 pass
-        blocks.append(render_md(analyze_technicals(ser), inst.display_name))
+        block = render_md(analyze_technicals(ser), inst.display_name)
+        # 拉伸度：过热分的回测校准替代品（超卖侧强 67%）。两者并列展示，
+        # 分歧时以拉伸度为准——过热分五个分量彼此相关 0.79~0.93，是同一信息数了四遍。
+        try:
+            from undertow.analyze.stretch import analyze_stretch, render_md as stretch_md
+            block += "\n\n" + stretch_md(analyze_stretch(ser))
+        except Exception as e:
+            block += f"\n\n- 拉伸度：计算失败 {str(e)[:60]}"
+        blocks.append(block)
     print("# 技术面（短线过热度 + 趋势结构 · 与期权结构层正交交叉印证）\n")
     print("\n\n---\n\n".join(blocks))
+    return 0
+
+
+# 校准面板：长历史、跨资产类别。用 ETF 而非期货，因为期货连续合约在 Yahoo 上
+# 只回溯到 2004 年前后且有展期跳空；ETF 日线干净且能覆盖 2000/2008/2022 三轮熊市。
+CALIB_PANEL = [("GLD", "黄金GLD"), ("SLV", "白银SLV"), ("USO", "原油USO"),
+               ("QQQ", "QQQ"), ("SPY", "SPY")]
+
+
+def cmd_backtest_stretch(args) -> int:
+    """重跑拉伸度校准表。改了指标参数就跑这个，别手改 stretch.py 里的数字。"""
+    from undertow.analyze import stretch_backtest as sb
+    from undertow.analyze.stretch import CALIB_ASOF
+    src = YahooFuturesSource()
+    syms = [(s, s) for s in args.symbols] if args.symbols else CALIB_PANEL
+    samples, spans = [], []
+    for sym, name in syms:
+        try:
+            ser = src.fetch_series(sym, rng="max", use_cache=not args.no_cache)
+        except Exception as e:
+            print(f"[跳过] {sym}: {str(e)[:70]}", file=sys.stderr)
+            continue
+        got = sb.build_samples(name, ser.highs, ser.lows, ser.closes,
+                               horizons=tuple(args.horizons))
+        if not got:
+            print(f"[跳过] {sym}: 历史不足（{len(ser.closes)} 根）", file=sys.stderr)
+            continue
+        samples += got
+        spans.append(f"{name} {ser.dates[0]}→{ser.dates[-1]} ({len(ser.closes)}根)")
+        print(f"  {name:<10} {len(ser.closes):>6} 根 → {len(got):>6} 样本", file=sys.stderr)
+    if not samples:
+        print("无可用样本", file=sys.stderr)
+        return 1
+
+    cal = sb.calibrate(samples, horizon=args.horizon)
+    print(f"# 拉伸度校准回测\n")
+    print("数据：" + "；".join(spans) + "\n")
+    print(sb.render_table_md(cal, horizon=args.horizon, total=len(samples)))
+    print()
+    prof = sb.horizon_profile(samples, horizons=tuple(args.horizons))
+    print("### 信号持续多久（全样本，相对中性桶）\n")
+    print("| 档位 | " + " | ".join(f"+{k}日" for k in args.horizons) + " |")
+    print("|---|" + "---:|" * len(args.horizons))
+    for band, row in prof.items():
+        print(f"| {band} | " + " | ".join(f"{row.get(k, 0):+.3f}pp" for k in args.horizons) + " |")
+    if args.emit:
+        print(f"\n### 粘回 undertow/analyze/stretch.py（当前表 asof {CALIB_ASOF}）\n")
+        print("```python")
+        print(sb.render_calib_literal(cal))
+        print("```")
     return 0
 
 
@@ -1913,6 +1973,17 @@ def build_parser() -> argparse.ArgumentParser:
     pt = sub.add_parser("tech", help="技术面：短线过热度 + 趋势结构（RSI/KDJ/MACD/布林/均线，确定性）")
     pt.add_argument("instruments", nargs="*", help="品种，留空=全部")
     pt.set_defaults(func=cmd_tech)
+
+    pbs = sub.add_parser("backtest-stretch",
+                         help="重跑拉伸度(超买超卖)校准表：长历史+regime分层+不重叠t检验")
+    pbs.add_argument("symbols", nargs="*",
+                     help="Yahoo 符号（留空=默认面板 GLD/SLV/USO/QQQ/SPY）")
+    pbs.add_argument("--horizon", type=int, default=5, help="校准表用的前瞻天数（默认 5）")
+    pbs.add_argument("--horizons", type=int, nargs="+", default=[2, 3, 5, 10],
+                     help="持续性剖面的前瞻天数（默认 2 3 5 10）")
+    pbs.add_argument("--emit", action="store_true",
+                     help="额外输出可粘回 stretch.py 的 CALIB 字面量")
+    pbs.set_defaults(func=cmd_backtest_stretch)
 
     pn = sub.add_parser("news", help="事件感知：品种相关新闻 + 临近关键事件（高影响临近置顶告警，只读）")
     pn.add_argument("instruments", nargs="*", help="品种，留空=全部")

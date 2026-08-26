@@ -59,6 +59,7 @@ def _instrument_brief(ctx) -> dict:
         "spot_source": getattr(ctx, "spot_source", "snapshot"),
         "price_note": getattr(ctx, "price_note", ""),
         "technicals": _tech_brief(getattr(ctx, "technicals", None)),
+        "stretch": _stretch_brief(getattr(ctx, "stretch", None)),
     }
 
 
@@ -74,6 +75,25 @@ def _tech_brief(tr) -> dict | None:
         "boll_pctb": tr.boll[3] if tr.boll else None,
         "macd_above_zero": (tr.macd[0] > 0) if tr.macd else None,
         "rets": tr.rets,
+    }
+
+
+def _stretch_brief(sr) -> dict | None:
+    """拉伸度：过热分的回测校准替代品。
+
+    必须带上 edge_pp / t / reliable 一起给出去，否则接入的 AI 只会看到一个「强超买」
+    标签，然后自行脑补「要回调了」——这正是回测证伪的那个推论。
+    """
+    if sr is None or not getattr(sr, "ok", False):
+        return None
+    return {
+        "headline": sr.headline, "stretch_atr": sr.stretch, "pctile": sr.pctile,
+        "band": sr.band, "regime": sr.regime,
+        "edge_pp_5d": sr.edge_pp, "win_rate": sr.win_rate,
+        "n_hist": sr.n_hist, "t_stat": sr.t_stat, "reliable": sr.reliable,
+        "caveat": ("回测口径：边缘 = +5日收益 − 过去60日局部漂移 − 同 regime 中性桶。"
+                   "只有超卖侧 |t|≥2；超买侧全部不显著，只能读作『追高性价比差』，"
+                   "不可读作『要反转』。1H/4H 上本指标是噪音，仅日线成立。"),
     }
 
 
@@ -224,6 +244,15 @@ def render_prompt(packet: dict) -> str:
                      + (f" · RSI6 {tc['rsi6']:.0f}" if tc.get("rsi6") is not None else "")
                      + (f"/KDJ-J {tc['kdj_j']:.0f}" if tc.get("kdj_j") is not None else "")
                      + (f"/CCI {tc['cci']:.0f}" if tc.get("cci") is not None else ""))
+        st = ins.get("stretch")
+        if st:
+            line = (f"      拉伸度：{st['stretch_atr']:+.2f}个ATR · 分位{st['pctile']*100:.0f}%"
+                    f" → {st['band']}·{st['regime']}市")
+            if st.get("edge_pp_5d") is not None and st["band"] != "中性":
+                line += (f"；回测5日边缘 {st['edge_pp_5d']:+.2f}pp"
+                         f"（t={st['t_stat']:+.2f}"
+                         f"{'，显著' if st['reliable'] else '，未达显著→仅参考'}）")
+            L.append(line)
     L.append("")
     L.append("【当前持仓】" + packet["portfolio"]["headline"])
     for g in packet["portfolio"]["groups"]:

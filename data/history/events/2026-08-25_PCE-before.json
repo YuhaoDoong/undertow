@@ -1,0 +1,61 @@
+{
+  "label": "PCE-before",
+  "at": "2026-08-26T03:52:24+00:00",
+  "phase": "before",
+  "event_name": "Core PCE",
+  "instruments": [
+    {
+      "key": "gold",
+      "display_name": "黄金 Gold (COMEX)",
+      "spot": 425.93,
+      "spot_kind": "夜盘",
+      "prev_close": 426.69,
+      "change_pct": -0.17811525932175387,
+      "atm_iv": 0.25759732246798606,
+      "iv_stale": true,
+      "call_wall": 430.0,
+      "put_wall": 420.0,
+      "heat_score": 5,
+      "trend": "多头排列",
+      "bias": ""
+    },
+    {
+      "key": "silver",
+      "display_name": "白银 Silver (COMEX)",
+      "spot": 62.62,
+      "spot_kind": "夜盘",
+      "prev_close": 62.2,
+      "change_pct": 0.6752411575562611,
+      "atm_iv": 0.47389010638297874,
+      "iv_stale": true,
+      "call_wall": 70.0,
+      "put_wall": 55.0,
+      "heat_score": 5,
+      "trend": "多头排列",
+      "bias": ""
+    },
+    {
+      "key": "qqq",
+      "display_name": "纳斯达克100 (QQQ)",
+      "spot": 710.77,
+      "spot_kind": "夜盘",
+      "prev_close": 706.32,
+      "change_pct": 0.6300260505153421,
+      "atm_iv": 0.2106810874704492,
+      "iv_stale": true,
+      "call_wall": 765.0,
+      "put_wall": 700.0,
+      "heat_score": -3,
+      "trend": "纠缠",
+      "bias": ""
+    }
+  ],
+  "headlines": [
+    "PRECIOUS-Gold holds steady as investors focus on US inflation data",
+    "Why is your gold waiting on a speech?",
+    "Thailand to discuss proposed taxes with gold association this week, Finance Minister says",
+    "BUZZ-US stocks weekly: Rate rattle",
+    "Hong Kong gold futures delivery reaches new record"
+  ],
+  "note": ""
+}

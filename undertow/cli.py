@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import pathlib
 import subprocess
 import json
 import sys
@@ -1378,6 +1379,105 @@ def cmd_journal(args) -> int:
     return 0
 
 
+def cmd_event(args) -> int:
+    """事件影响捕捉：数据/事件落地【前】与【后约10分钟】各捕一次横截面快照，再对比。
+
+    事件时点不可再生——错过就没了。攒够后可用自己的数据统计各类事件的真实冲击。**只读。**
+    """
+    import datetime as _dt
+    from undertow.analyze.event_impact import (EventSnapshot, InstrumentSnap, compare,
+                                               render_compare_md, render_snap_md)
+    from undertow.analyze.technicals import analyze_technicals
+    out_dir = DATA_DIR / "history" / "events"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if getattr(args, "compare", None):
+        import glob as _g
+        files = sorted(_g.glob(str(out_dir / f"*{args.compare}*.json")))
+        if len(files) < 2:
+            print(f"[需要两份快照] 匹配 '{args.compare}' 的只有 {len(files)} 份", file=sys.stderr)
+            return 2
+        def _load(fp):
+            raw = json.loads(pathlib.Path(fp).read_text(encoding="utf-8"))
+            raw["instruments"] = [InstrumentSnap(**i) for i in raw.get("instruments", [])]
+            return EventSnapshot(**raw)
+        print(render_compare_md(compare(_load(files[0]), _load(files[-1]))))
+        return 0
+
+    cfg = load_config()
+    try:
+        instruments = _resolve_instruments(cfg, args.instruments)
+    except KeyError as e:
+        print(e, file=sys.stderr)
+        return 2
+    fut_src, store, opt_src = YahooFuturesSource(), SnapshotStore(), CboeOptionsSource()
+    today = market_today()
+    snaps, heads = [], []
+    # 实时价（含盘前/盘后场次）
+    live = {}
+    try:
+        from undertow.collect import longbridge_quote as lq
+        syms = [f"{i.options.symbol}.US" for i in instruments if i.options]
+        live = lq.fetch_stock_quotes(syms)
+    except Exception as e:
+        print(f"[提示] 实时价跳过：{str(e)[:70]}", file=sys.stderr)
+
+    for inst in instruments:
+        if inst.options is None:
+            continue
+        q = live.get(f"{inst.options.symbol}.US")
+        atm_iv, cw, pw, bias = None, None, None, ""
+        try:
+            snap = store.load("options", inst.options.symbol, today)
+            snap = snapshot_from_payload(snap, inst.key, inst.options.symbol) if snap else \
+                   opt_src.fetch_snapshot(inst, use_cache=True)
+            ga = analyze_gamma(snap, multiplier=None,
+                               proxy_quality=inst.options.proxy_quality, horizon_days=45)
+            cw, pw = ga.call_wall, ga.put_wall
+            ivs = [c.iv for c in snap.with_oi()
+                   if c.iv > 0 and 0.35 <= abs(c.delta) <= 0.65]
+            atm_iv = sum(ivs) / len(ivs) if ivs else None
+        except Exception:
+            pass
+        heat, trend = None, ""
+        try:
+            ser, _p, _a = fut_src.fetch_for(inst, use_cache=True)
+            tr = analyze_technicals(ser)
+            if tr.ok:
+                heat, trend = tr.heat_score, tr.trend
+        except Exception:
+            pass
+        kind = q.freshest_kind if q else ""
+        snaps.append(InstrumentSnap(
+            key=inst.key, display_name=inst.display_name,
+            spot=(q.freshest if q else None), spot_kind=kind,
+            prev_close=(q.prev_close if q else None),
+            change_pct=(q.change_pct * 100 if q else None),
+            atm_iv=atm_iv, iv_stale=(kind in ("盘前", "夜盘")),
+            call_wall=cw, put_wall=pw, heat_score=heat, trend=trend, bias=bias))
+    try:
+        from undertow.collect import longbridge_news as ln
+        for inst in instruments[:1]:
+            if inst.options:
+                heads = [x.title for x in ln.fetch_news(f"{inst.options.symbol}.US", limit=5)]
+    except Exception:
+        pass
+
+    now = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+    es = EventSnapshot(label=args.label, at=now, phase=(args.phase or ""),
+                       event_name=(args.event or ""), instruments=snaps, headlines=heads)
+    fn = out_dir / f"{today.isoformat()}_{args.label}.json"
+    fn.write_text(json.dumps(asdict_es(es), ensure_ascii=False, indent=2), encoding="utf-8")
+    print(render_snap_md(es))
+    print(f"\n快照已存 → {fn}")
+    return 0
+
+
+def asdict_es(es):
+    import dataclasses as _dc
+    return _dc.asdict(es)
+
+
 def cmd_plan(args) -> int:
     """计划交易：记录/监控触发与出场条件，输出可照抄的下单参数。**只读，绝不下单。**"""
     from undertow.soul.plan import (load_plans, check_plans, render_plans_md, render_orders)
@@ -1775,6 +1875,14 @@ def build_parser() -> argparse.ArgumentParser:
     pjr.add_argument("--limit", type=int, default=0, help="最多显示几条")
     pjr.add_argument("--theses", action="store_true", help="看【事前判断】记录与命中率（判断对错 vs 交易盈亏分开统计）")
     pjr.set_defaults(func=cmd_journal)
+
+    pev = sub.add_parser("event", help="事件影响捕捉：数据落地前后各捕一次横截面快照并对比（只读）")
+    pev.add_argument("label", nargs="?", default="snap", help="标签，如 PCE-before / PCE-after")
+    pev.add_argument("instruments", nargs="*", help="品种，留空=全部")
+    pev.add_argument("--event", help="事件名，如 'Core PCE'")
+    pev.add_argument("--phase", help="before / after / open / close")
+    pev.add_argument("--compare", metavar="KEY", help="对比同名的两份快照（如 PCE）")
+    pev.set_defaults(func=cmd_event)
 
     ppl = sub.add_parser("plan", help="计划交易：记录/监控触发与出场条件，输出可照抄的下单参数（只读，绝不下单）")
     ppl.add_argument("--check", action="store_true", help="抓实时价核查触发/接近")

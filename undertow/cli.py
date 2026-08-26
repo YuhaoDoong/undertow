@@ -659,10 +659,22 @@ def cmd_live(args) -> int:
         print("当前无持仓。")
         return 0
     syms = list(held)
-    depth = lq.fetch_depth(syms)
+    # ⚠️ fetch_depth 在【全部代码都取不到】时会抛 LiveQuotesUnavailable（这是刻意的：
+    # 返回空字典会让自动化把「行情全挂」当成「一切正常」）。但调用方必须接住并给出
+    # 清晰结论 + 非零退出码，而不是抛一脸 traceback。
+    # （第一轮修复引入抛异常、却漏了这里的接应——本身就是一次回归。）
+    try:
+        depth = lq.fetch_depth(syms)
+    except lq.LiveQuotesUnavailable as e:
+        print(f"⚠️ 实时盘口全部取不到（{e}）——无法计算真实可平仓价，本次体检中止。\n"
+              f"   这不是「持仓没问题」，是「拿不到行情」。请先确认长桥连通性再重跑。",
+              file=sys.stderr)
+        return 1
     try:
         quotes = lq.fetch_option_quotes([s for s in syms if "C" in s or "P" in s])
-    except Exception:
+    except Exception as e:
+        print(f"[提示] 期权 last 价取失败（{type(e).__name__}），App 口径列将缺失；"
+              f"可平仓价不受影响", file=sys.stderr)
         quotes = {}
 
     def mk(sym):
@@ -677,7 +689,7 @@ def cmd_live(args) -> int:
         plans = [p for p in load_plans() if p.status == "active"]
     except Exception:
         plans = []
-    grouped, seen = [], set()
+    grouped, seen, cost_note = [], set(), []
     for pl in plans:
         legs = [mk(l.symbol) for l in pl.legs if l.symbol in held]
         if not legs:
@@ -694,7 +706,10 @@ def cmd_live(args) -> int:
             cost = sum((l.filled or 0) * l.qty * (1 if l.action == "buy" else -1) * 100
                        for l in pl.legs)
         elif legs and held_match:
+            # ⚠️ 回退到券商成本价 = 回到被摊销改写过的那个数（部分减仓后它是该轮打平价，
+            # 不是实付价）。能算但要标出来，别让人当成真实成本。
             cost = sum(cost_px.get(l.symbol, 0.0) * l.qty * 100 for l in legs)
+            cost_note.append(pl.structure[:20])
         grouped.append((pl.structure[:34], legs, cost, pl))
     for sym, qty in held.items():
         if sym not in seen:
@@ -708,6 +723,10 @@ def cmd_live(args) -> int:
         checks.append(check_position(name, legs, cost=cost, stop=stop, target=target))
     net = assets.net_assets or None
     print(render_md(checks, net_assets=net))
+    if cost_note:
+        print(f"\n> ⚠️ 以下持仓的成本用了**券商成本价**（计划里缺实际成交价）："
+              f"{'、'.join(cost_note)}。券商成本价在部分减仓后会被改写成该轮打平价，"
+              f"非实付价——盈亏列仅供参考，以生命周期台账为准。")
 
     # 品种累计台账：只有现金流水不会骗人（券商成本价在部分减仓后会被改写）
     try:

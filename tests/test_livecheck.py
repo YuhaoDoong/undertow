@@ -81,6 +81,32 @@ def test_short_only_position():
     print("PASS test_short_only_position")
 
 
+def test_total_exposure_flags_incomplete():
+    """任一持仓算不出可平仓价时，总敞口必须显式标为【不完整的下界】。
+
+    这是第一轮修复（None 传播）引入的新风险：TQQQ 缺价时总敞口只算了 SLV 的 $19，
+    显示「净资产 4.5%」，看着还有大量加仓空间——而真实敞口还要加上那笔约 $70。
+    **低估敞口比高估危险**。
+    """
+    good = check_position("有价", _tqqq(), cost=90.0)
+    bad = check_position("缺价", [LegQuote("A", 1, bid=None, ask=1.0, last=1.0)], cost=50.0)
+    md = render_md([good, bad], net_assets=436.77)
+    assert "总敞口不完整" in md and "缺价" in md
+    assert "这是下界，不是实际敞口" in md
+    # 全部有价时不应出现该告警
+    md2 = render_md([good], net_assets=436.77)
+    assert "总敞口不完整" not in md2 and "总敞口（可平仓口径）" in md2
+    print("PASS test_total_exposure_flags_incomplete")
+
+
+def test_zero_value_position_counted_in_total():
+    """价值恰好为 0 的持仓要计入总敞口，不能被真值判断跳过。"""
+    z = check_position("零值", [LegQuote("A", 1, bid=0.0, ask=0.0, last=0.0)], cost=10.0)
+    md = render_md([z], net_assets=100.0)
+    assert "总敞口不完整" not in md, "0 值不是缺价，不该报不完整"
+    print("PASS test_zero_value_position_counted_in_total")
+
+
 def test_render_contains_exit_basis_warning():
     md = render_md([check_position("spread", _tqqq(), cost=90.0, stop=45.0)], net_assets=436.77)
     assert "真实可平仓" in md and "止损判定用本表" in md

@@ -233,7 +233,8 @@ def capture_trades(executions, cash_flows=None, day: str = "") -> list[Trade]:
     # 资金流水里却有完整腿级明细：真实 OCC 代码、Option Buy/Sell Transaction、现金变动。
     # 故：凡方向不是 buy/sell 的成交行，一律丢弃，改由流水重建该时刻的腿。
     combo_times = set()
-    combo_qty: dict = {}      # 分钟 → 该组合单的张数（取自 execution 行）
+    combo_qty: dict = {}      # 分钟 → 该组合单的张数（取自 execution 行；歧义时为 0=未知）
+    combo_ids: dict = {}      # 分钟 → 该分钟出现过的 order_id 集合（>1 即有歧义）
     out = []
     for e in executions:
         t = str(e.get("time", ""))
@@ -242,11 +243,18 @@ def capture_trades(executions, cash_flows=None, day: str = "") -> list[Trade]:
         side = str(e.get("side", "")).strip().lower()
         if side not in ("buy", "sell"):
             combo_times.add(t[:16])       # 精确到分钟，用于匹配流水
+            # ⚠️ 流水行不带 order_id，只能按【分钟】与成交行对齐。
+            # 若同一分钟内有多张【不同】组合单，谁的张数属于哪条流水就无从判断——
+            # 此时宁可标记为未知(0)，也不要用 max() 把某一张的张数张冠李戴到另一张上。
+            key = t[:16]
+            oid = str(e.get("order_id", ""))
+            seen_ids = combo_ids.setdefault(key, set())
+            seen_ids.add(oid)
             try:
-                combo_qty[t[:16]] = max(combo_qty.get(t[:16], 0),
-                                        float(e.get("quantity", 0) or 0))
+                q = float(e.get("quantity", 0) or 0)
             except (TypeError, ValueError):
-                pass
+                q = 0.0
+            combo_qty[key] = 0.0 if len(seen_ids) > 1 else max(combo_qty.get(key, 0.0), q)
             continue
         sym = e.get("symbol", "")
         try:

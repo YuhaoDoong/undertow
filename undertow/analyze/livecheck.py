@@ -109,20 +109,33 @@ def render_md(checks: list, net_assets: float | None = None) -> str:
     L.append("| 持仓 | 成本 | 真实可平仓 | 中价 | App(last) | 盈亏(可平仓) | 盈亏(App) | 距止损 |")
     L.append("|---|---:|---:|---:|---:|---:|---:|---:|")
     tot = 0.0
+    missing = []          # 算不出可平仓价的持仓——总敞口必须显式标为不完整
     for c in checks:
         if not c.ok:
             continue
+        if c.exit_value is None:
+            missing.append(c.name)
         f = lambda v: f"${v:,.0f}" if v is not None else "—"
         pl = f"{c.pnl_exit:+,.0f}" if c.pnl_exit is not None else "—"
         pa = f"{c.pnl_last:+,.0f}" if c.pnl_last is not None else "—"
         ts = f"{c.to_stop_pct:.0f}%" if c.to_stop_pct is not None else "—"
         L.append(f"| {c.name} | {f(c.cost)} | **{f(c.exit_value)}** | {f(c.mid_value)} | "
                  f"{f(c.last_value)} | {pl} | {pa} | {ts} |")
-        if c.exit_value:
+        if c.exit_value is not None:       # 恰好为 0 也要计入，不能用真值判断
             tot += c.exit_value
     L.append("")
     if net_assets:
-        L.append(f"**总敞口（可平仓口径）：${tot:,.0f} = 净资产 {tot/net_assets*100:.1f}%**")
+        # ⚠️ 任一持仓算不出可平仓价时，总敞口是【不完整的下界】，必须说清楚。
+        # 低估敞口比高估危险——会让人以为还有空间加仓。
+        # （第一轮修复引入 None 传播后暴露：TQQQ 缺价时总敞口显示 4.5%，
+        #  而真实敞口还要加上那笔约 $70。）
+        if missing:
+            L.append(f"**⚠️ 总敞口不完整：已算部分 ${tot:,.0f}（净资产 {tot/net_assets*100:.1f}%），"
+                     f"但 {len(missing)} 笔持仓拿不到盘口、未计入** —— "
+                     f"{'、'.join(missing[:2])}")
+            L.append("> **这是下界，不是实际敞口**。限额判断前请先确认行情可用，别据此认为还有加仓空间。")
+        else:
+            L.append(f"**总敞口（可平仓口径）：${tot:,.0f} = 净资产 {tot/net_assets*100:.1f}%**")
         L.append("")
     for c in checks:
         for w in c.warnings:

@@ -92,45 +92,64 @@ def build_verdict(o: Outlook, fa: FlowAnalysis | None,
         short_answer = "无明确做空依据：近端无看跌信号、中期未转空——观望或顺中期，别逆势凑空单。"
 
     # ── 2) 现价能不能追？──────────────────────────────────────
+    # ⚠️ 详细结论与总纲标签必须在**同一个分支**里产出。早先版本用两套独立的 if 链，
+    # 结果漂移出三处自相矛盾（如详细写「无结构依据·观望为上」、标签却断言「追不划算」）。
     if counter and trend == 1:
         chase_answer = ("近端在回调（下跌微腿），顺中期偏多者别追空——"
                         "等回调到斐波关键区/企稳再做多（回调买、不追）。")
+        chase_tag = "回调买·不追"
     elif counter and trend == -1:
         chase_answer = ("近端在反抽（上涨微腿），顺中期偏空者别追多——"
                         "等反抽到斐波关键区再做空（反抽卖、不追）。")
+        chase_tag = "反抽卖·不追"
     elif chase is None:
         chase_answer = "无有效摆动腿/盈亏比闸门，追势与否无结构依据——观望为上。"
+        chase_tag = "追势无依据"          # 不能写「追不划算」——我们根本没算出盈亏比
     elif chase.grade == "差":
         tail = f"；想{dirw}，等回调到 {pull.entry_label}（R:R {pull.rr:.1f}·{pull.grade}）再看。" if pull else ""
         chase_answer = f"别追：现价{dirw}盈亏比仅 {chase.rr:.1f}（差，＜1:1）{tail}"
+        chase_tag = "别追·等回调"
     elif chase.grade == "中":
         tail = f"；更好的点在回调 {pull.entry_label}（R:R {pull.rr:.1f}）。" if pull else "。"
         chase_answer = f"现价{dirw}盈亏比 {chase.rr:.1f}（中，偏弱）——追不划算{tail}"
+        chase_tag = "追不划算"
     else:  # 优
         tail = (f"；回调到 {pull.entry_label} 更优（R:R {pull.rr:.1f}）,纪律上仍偏好等回调。"
                 if (pull and pull.rr > chase.rr) else "（仍须自定胜率与仓位）。")
         chase_answer = f"现价{dirw}盈亏比 {chase.rr:.1f}（优）——空间/风险结构占优{tail}"
+        chase_tag = "现价结构占优"
 
     # ── 3) 短线波段仓 ────────────────────────────────────────
+    # 同上：标签跟着分支走。旧版标签链只认「有没有 strong_sig」，导致
+    # 强信号方向与摆动腿不符时详细写「回调进行中·别顺短腿追空」、标签却写「短线跟势」。
     chase_poor = bool(chase and chase.grade == "差")
     if strong_sig and strong_sig.direction == "看涨" and up_leg:
         swing_action = f"短线可跟多：⚡{strong_sig.level}看涨信号在（主翼买盘一边倒），顺势波段。"
+        swing_tag = "短线跟多"
     elif strong_sig and strong_sig.direction == "看跌" and (down_leg or trend == -1):
         swing_action = f"短线可跟空：⚡{strong_sig.level}看跌信号在，顺势波段。"
+        swing_tag = "短线跟空"
     elif counter and trend == 1:
         swing_action = "回调进行中：等企稳/回踩斐波关键区做多，别顺短腿追空。"
+        swing_tag = "短线等回调"
     elif counter and trend == -1:
         swing_action = "反抽进行中：等反抽到位做空，别顺短腿追多。"
+        swing_tag = "短线等反抽"
     elif up_leg and leg_top and chase_poor:
         swing_action = "腿顶附近、追多 R:R 差、近端进攻结构已散——短线宜获利了结/收紧止损，别加。"
+        swing_tag = "短线止盈/收紧"
     elif down_leg and leg_top and chase_poor:
         swing_action = "腿底附近、追空 R:R 差——短线空单宜止盈/收紧，别追。"
+        swing_tag = "短线止盈/收紧"
     elif up_leg and not leg_top:
         swing_action = "短线持多：回调不破起涨点可续持，等回调关键区加而非现价追。"
+        swing_tag = "短线持多"
     elif down_leg and not leg_top:
         swing_action = "短线持空：反抽不破起跌点可续持，等反抽关键区加而非现价追。"
+        swing_tag = "短线持空"
     else:
         swing_action = "短线观望：等回调/反抽给出好盈亏比再动手（别在中性区追）。"
+        swing_tag = "短线观望"
 
     # ── 4) 长线底仓 ──────────────────────────────────────────
     if "偏多" in mid:
@@ -143,22 +162,8 @@ def build_verdict(o: Outlook, fa: FlowAnalysis | None,
     # ── 总纲一句话 ───────────────────────────────────────────
     short_tag = ("可空" if (strong_sig and strong_sig.direction == "看跌") or ("偏空" in near and "偏空" in mid)
                  else ("轻仓短空" if ("偏空" in near and trend != 1) else "不做空"))
-    if counter:
-        chase_tag = "回调买·不追" if trend == 1 else "反抽卖·不追"
-    elif chase_poor:
-        chase_tag = "别追·等回调"
-    elif chase and chase.grade == "优":
-        chase_tag = "现价结构占优"
-    else:
-        chase_tag = "追不划算"
-    if strong_sig:
-        swing_tag = "短线跟势"
-    elif counter:
-        swing_tag = "短线等回调" if trend == 1 else "短线等反抽"
-    elif leg_top and chase_poor:
-        swing_tag = "短线止盈/收紧"
-    else:
-        swing_tag = "短线观望"
+    # chase_tag / swing_tag 已在上面各自的分支里定出，此处不得重算——
+    # 重算就是把刚拆掉的那两套并行 if 链又装回来。
     core_tag = ("长线拿住" if "偏多" in mid else ("长线减" if "偏空" in mid else "长线维持"))
     headline = f"{short_tag} · {chase_tag} · {swing_tag} · {core_tag}"
 

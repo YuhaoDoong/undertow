@@ -19,7 +19,8 @@ LOG="data/history/events/watch.log"
 mkdir -p "$(dirname "$LOG")"
 
 # 交给 Python 判断窗口并输出待捕任务（label|事件名|阶段），无任务则无输出
-TASKS=$("$PY" - <<'PYEOF' 2>/dev/null
+# ⚠️ 不丢 stderr、检查退出码：导入/日历出错时旧写法表现为"无任务"，静默漏捕
+TASKS=$("$PY" - <<'PYEOF' 2>>"$LOG"
 import sys, json, pathlib, datetime as dt
 sys.path.insert(0, ".")
 from undertow.core.calendar import load_events, merge
@@ -95,9 +96,17 @@ PYEOF
 echo "$TASKS" | while IFS='|' read -r LABEL EVNAME PHASE; do
   [[ -z "$LABEL" ]] && continue
   echo "[$(date '+%F %T')] 捕捉 $LABEL （$EVNAME / $PHASE）" >> "$LOG"
-  "$PY" -m undertow.cli event "$LABEL" gold silver qqq \
-        --event "$EVNAME" --phase "$PHASE" >> "$LOG" 2>&1
-  /usr/bin/osascript -e "display notification \"$EVNAME · $PHASE 快照已捕\" with title \"📸 undertow 事件捕捉\" sound name \"Glass\"" 2>/dev/null || true
+  # ⚠️ 必须检查退出码 + 确认快照文件真的落盘，才通知成功。
+  # 旧写法无论 CLI 成功与否都弹"快照已捕"——导入错误/行情失败会被显示成捕捉成功。
+  # （codex review 2026-08-26）
+  if "$PY" -m undertow.cli event "$LABEL" gold silver qqq \
+        --event "$EVNAME" --phase "$PHASE" >> "$LOG" 2>&1 \
+     && [[ -s "data/history/events/$(TZ=America/New_York date +%F)_${LABEL}.json" ]]; then
+    /usr/bin/osascript -e "display notification \"$EVNAME · $PHASE 快照已捕\" with title \"📸 undertow 事件捕捉\" sound name \"Glass\"" 2>/dev/null || true
+  else
+    echo "[$(date '+%F %T')] ❌ $LABEL 捕捉失败（退出码或文件缺失）" >> "$LOG"
+    /usr/bin/osascript -e "display notification \"$EVNAME · $PHASE 捕捉失败，见 watch.log\" with title \"⚠️ undertow 事件捕捉\" sound name \"Basso\"" 2>/dev/null || true
+  fi
 done
 
 # 快照入 git（市场数据、非个人）

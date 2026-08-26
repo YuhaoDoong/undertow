@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from undertow.analyze.stretch import (
-    BANDS, CALIB, DD_LOOK, MA_N, REGIME_N, analyze_stretch, band_of,
+    BANDS, CALIB, CALIB_META, DD_LOOK, MA_N, REGIME_N, analyze_stretch, band_of,
     drawdown_series, pct_rank_last, stretch_series,
 )
 from undertow.analyze import stretch_backtest as sb
@@ -145,6 +145,47 @@ def test_calib_overall_direction():
     print("PASS test_calib_overall_direction")
 
 
+def test_calib_carries_test_sample_size():
+    """CALIB 必须带上【检验样本量】，且它必须显著小于触发次数。
+
+    触发次数是重叠计数，Welch t 实际只用不重叠子样本（约 1/horizon）。
+    只列触发会把证据规模夸大数倍——「强超买-熊」触发 202 次但检验 n 仅 36，
+    这个差距足以改变对显著性的判断。（codex review 2026-08-26）
+    """
+    for k, v in CALIB.items():
+        assert len(v) == 5, f"{k} 应为 5 元组（含检验样本量），实为 {len(v)}"
+        _edge, _wr, n_trig, _t, n_test = v
+        assert n_test > 0, k
+        assert n_test < n_trig, f"{k}: 检验样本 {n_test} 不应 ≥ 触发次数 {n_trig}"
+        assert n_test <= n_trig * 0.35, f"{k}: 检验/触发 比例异常 {n_test}/{n_trig}"
+    print("PASS test_calib_carries_test_sample_size")
+
+
+def test_calib_meta_is_single_source_of_numbers():
+    """样本量等数字只能有一处来源——散文里写死必然过期。
+
+    codex review 抓到源码里同时存在 29,522 / 29,422 两个样本数，而实际已是 29,477。
+    面板每天多几根，任何写进注释的绝对数都会漂。
+    """
+    for key in ("asof", "panel", "n_total", "mode", "horizon", "caveats"):
+        assert key in CALIB_META, key
+    assert len(CALIB_META["caveats"]) >= 2, "统计局限必须显式列出"
+    assert any("不独立" in c for c in CALIB_META["caveats"])
+    assert any("选择" in c for c in CALIB_META["caveats"])
+    # 源码的【断言性文案】里不得再写死样本数（形如「NN,NNN 样本」）。
+    # 注意：解释这个 bug 的注释本身必然要提到旧数字（29,522 / 29,422），那是历史记录，
+    # 不是断言——所以只查「数字 + 样本」这个断言句式，不做全文扫描。
+    import pathlib as _p
+    import re as _re
+    src = _p.Path(__file__).resolve().parents[1] / "undertow" / "analyze"
+    for f in ("stretch.py", "resonance.py"):
+        txt = (src / f).read_text()
+        hits = _re.findall(r"\d{2},?\d{3}\s*(?:个)?样本", txt)
+        hits = [h for h in hits if str(CALIB_META["n_total"]) not in h.replace(",", "")]
+        assert not hits, f"{f} 的断言文案里仍写死样本数: {hits}（应改为读 CALIB_META）"
+    print("PASS test_calib_meta_is_single_source_of_numbers")
+
+
 def test_calib_reliability_flags_match_docstring():
     """模块文档声称「14 格里 5 格 |t|≥2，其中 4 格在超卖侧」—— 用表本身守住这个说法。
 
@@ -156,6 +197,8 @@ def test_calib_reliability_flags_match_docstring():
                       ("极超卖", "熊"), ("强超卖", "熊"), ("强超买", "熊")}, \
         f"显著桶集合变了，文档需同步更新: {sorted(strong)}"
     assert sum(1 for b, _ in strong if "超卖" in b) == 4, "超卖侧显著格数变了"
+    # 唯一过线的超买格，其检验样本量必须小到足以让人警惕
+    assert CALIB[("强超买", "熊")][4] < 50, "该格检验样本量若变大，结论需重新评估"
     print("PASS test_calib_reliability_flags_match_docstring")
 
 

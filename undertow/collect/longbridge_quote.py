@@ -137,6 +137,7 @@ class Depth:
     bid_size: int
     ask: float | None
     ask_size: int
+    error: str = ""          # 非空=取数失败（区别于「该侧无挂单」）
 
     @property
     def mid(self) -> float | None:
@@ -152,14 +153,27 @@ class Depth:
 
 
 def fetch_depth(symbols: list[str]) -> dict:
-    """逐个取实时盘口（depth 接口一次只吃一个代码）。失败的代码直接跳过，不中断整批。"""
+    """逐个取实时盘口（depth 接口一次只吃一个代码）。
+
+    ⚠️ 失败的代码**不静默跳过**——返回值里会带一个 Depth(bid=None, ask=None, error=...)，
+    调用方据此区分「该侧无挂单」与「取数失败」。全部失败则抛 LiveQuotesUnavailable：
+    一次都拿不到却返回空字典，会让自动化把「行情全挂」当成「一切正常」。
+    （codex review 2026-08-26）
+    """
     out: dict[str, Depth] = {}
+    errs = 0
     for sym in symbols:
         try:
             r = _run(["depth", sym])
-        except LiveQuotesUnavailable:
+        except LiveQuotesUnavailable as e:
+            errs += 1
+            out[sym] = Depth(symbol=sym, bid=None, bid_size=0, ask=None, ask_size=0,
+                             error=str(e)[:60])
             continue
         if not isinstance(r, dict):
+            errs += 1
+            out[sym] = Depth(symbol=sym, bid=None, bid_size=0, ask=None, ask_size=0,
+                             error="返回格式非预期")
             continue
         bids = r.get("bids") or []
         asks = r.get("asks") or []
@@ -172,4 +186,6 @@ def fetch_depth(symbols: list[str]) -> dict:
             ask=float(a["price"]) if a.get("price") else None,
             ask_size=int(a.get("volume") or 0),
         )
+    if symbols and errs == len(symbols):
+        raise LiveQuotesUnavailable(f"全部 {errs} 个代码的盘口都取不到——不是「没挂单」，是取数失败")
     return out

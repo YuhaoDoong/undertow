@@ -233,6 +233,7 @@ def capture_trades(executions, cash_flows=None, day: str = "") -> list[Trade]:
     # 资金流水里却有完整腿级明细：真实 OCC 代码、Option Buy/Sell Transaction、现金变动。
     # 故：凡方向不是 buy/sell 的成交行，一律丢弃，改由流水重建该时刻的腿。
     combo_times = set()
+    combo_qty: dict = {}      # 分钟 → 该组合单的张数（取自 execution 行）
     out = []
     for e in executions:
         t = str(e.get("time", ""))
@@ -241,6 +242,11 @@ def capture_trades(executions, cash_flows=None, day: str = "") -> list[Trade]:
         side = str(e.get("side", "")).strip().lower()
         if side not in ("buy", "sell"):
             combo_times.add(t[:16])       # 精确到分钟，用于匹配流水
+            try:
+                combo_qty[t[:16]] = max(combo_qty.get(t[:16], 0),
+                                        float(e.get("quantity", 0) or 0))
+            except (TypeError, ValueError):
+                pass
             continue
         sym = e.get("symbol", "")
         try:
@@ -265,9 +271,13 @@ def capture_trades(executions, cash_flows=None, day: str = "") -> list[Trade]:
         if not sym or bal == 0:
             continue
         side = "buy" if bal < 0 else "sell"
-        # 期权合约乘数 100：现金变动 ÷ 100 = 每股成交价（张数由调用方核对持仓）
-        qty = 1.0
-        px = abs(bal) / 100.0 / qty
+        # ⚠️ 张数只能从同一 order_id 的 execution 行还原；流水本身不带数量。
+        # 早先版本硬编码 qty=1.0 并据此算 price=|bal|/100 —— 两张以上的组合单会
+        # 少报张数、同倍放大单价，注释说的「由调用方核对」实际没有任何调用方在核。
+        # 现改为：拿不到数量就如实标 0（未知），price 留 0，只保留可信的金额。
+        # （codex review 2026-08-26）
+        qty = float(combo_qty.get(t[:16], 0) or 0)
+        px = (abs(bal) / 100.0 / qty) if qty else 0.0
         out.append(Trade(time=t[11:16], symbol=sym, side=side, qty=qty,
                          price=px, amount=bal, fee=fee.get(sym, 0.0)))
     return sorted(out, key=lambda x: (x.time, x.symbol))

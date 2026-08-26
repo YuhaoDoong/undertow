@@ -57,17 +57,28 @@ print(" ｜ ".join(bits))
 PYEOF
 )
     if [[ -n "${REASON// /}" ]]; then
-      echo "# 盘前简报 $ET_DATE（ET $(TZ=America/New_York date +%H:%M)）" > "$F"
-      echo "" >> "$F"
-      echo "**触发原因**：$REASON" >> "$F"
-      echo "" >> "$F"
-      "$PY" -m undertow.cli plan >> "$F" 2>&1
-      echo "" >> "$F"
-      "$PY" -m undertow.cli calendar --within 3 >> "$F" 2>&1
-      echo "" >> "$F"
-      "$PY" -m undertow.cli live >> "$F" 2>&1
-      notify "📋 盘前简报" "$REASON"
-      echo "[盘前] $REASON → $F"
+      # ⚠️ 先写临时文件、逐条检查退出码，全部成功才原子改名。
+      # 旧写法一上来就创建目标文件，任何一步失败也会留下"成功"文件，
+      # 幂等检查随后永久阻止当日重试——一次短暂故障就让当天彻底没有简报。
+      # （codex review 2026-08-26）
+      TMP="${F}.partial"
+      { echo "# 盘前简报 $ET_DATE（ET $(TZ=America/New_York date +%H:%M)）"; echo
+        echo "**触发原因**：$REASON"; echo; } > "$TMP"
+      OK=1
+      for CMD in "plan" "calendar --within 3" "live"; do
+        if ! "$PY" -m undertow.cli ${=CMD} >> "$TMP" 2>&1; then
+          echo "[盘前] 子命令失败：$CMD —— 保留 $TMP，等下一次唤醒重试" >&2
+          OK=0; break
+        fi
+        echo "" >> "$TMP"
+      done
+      if (( OK )); then
+        mv "$TMP" "$F"
+        notify "📋 盘前简报" "$REASON"
+        echo "[盘前] $REASON → $F"
+      else
+        notify "⚠️ 盘前简报失败" "子命令出错，见 ${TMP}"
+      fi
     else
       echo "[盘前] 无待执行计划、无高影响事件 —— 跳过"
     fi
@@ -78,7 +89,12 @@ fi
 if (( ET_MIN >= 580 && ET_MIN <= 595 )); then
   F="$OUT/${ET_DATE}_live.md"
   if [[ ! -f "$F" ]]; then
-    RES=$("$PY" -m undertow.cli live 2>&1)
+    # 同上：live 失败不得写成"成功"文件，否则当日不再重试
+    if ! RES=$("$PY" -m undertow.cli live 2>&1); then
+      echo "[体检] live 执行失败 —— 不落盘，等下一次唤醒重试" >&2
+      notify "⚠️ 持仓体检失败" "$(printf '%s' "$RES" | tail -1)"
+      exit 0
+    fi
     if [[ "$RES" == *"当前无持仓"* ]]; then
       echo "[体检] 无持仓 —— 跳过"
     else

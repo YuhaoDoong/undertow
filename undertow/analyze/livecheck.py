@@ -80,13 +80,15 @@ def check_position(name: str, legs: list, *, cost: float | None = None,
         warns.append("盘口单边缺失，算不出真实可平仓价——此时任何浮盈都不可信")
     # App 口径与可平仓口径的差距：这是最容易让人误判的一项
     gap = (lv - ev) if (lv is not None and ev is not None) else None
-    if gap is not None and ev and abs(gap) / max(abs(ev), 1e-9) * 100 >= gap_warn_pct:
+    # ⚠️ 这里必须是 `ev is not None` 而不是 `ev`：可平仓价【恰好归零】是最需要告警的时刻，
+    # 用真值判断会把 0.0 当成缺失，在最该喊的时候闭嘴。（codex review 2026-08-26）
+    if gap is not None and ev is not None and abs(gap) / max(abs(ev), 1e-9) * 100 >= gap_warn_pct:
         warns.append(f"App(last)口径比真实可平仓高 ${gap:,.0f}"
                      f"（{abs(gap)/max(abs(ev),1e-9)*100:.0f}%）——止损判定别看 App")
     to_stop = None
-    if ev is not None and stop is not None and ev:
-        to_stop = (ev - stop) / abs(ev) * 100
-        if to_stop <= 0:
+    if ev is not None and stop is not None:
+        to_stop = (ev - stop) / max(abs(ev), 1e-9) * 100
+        if ev <= stop:
             warns.append(f"⚠️ 已触及止损线：可平仓 ${ev:,.0f} ≤ 止损 ${stop:,.0f}")
         elif to_stop < 15:
             warns.append(f"接近止损线：还剩 {to_stop:.0f}%")
@@ -143,41 +145,61 @@ def render_md(checks: list, net_assets: float | None = None) -> str:
 
 @dataclass(frozen=True)
 class Ledger:
+    """⚠️ `net_cash_flow` **不是「已实现盈亏」**（codex review 2026-08-26 指出的口径错误）。
+
+    它是这些合约至今全部进出账的净额，其中**包含仍未平仓头寸的建仓支出**。
+    钱确实已经离开账户、不会再变，但那部分对应的损益尚未实现——把它叫「已实现盈亏」
+    会让人以为剩余持仓的成本已经结清。真正的已实现盈亏需按成交批次配对已平数量计算，
+    本模块不做（数据源没有批次匹配信息）。
+    """
     underlying: str
-    realized: float          # 已实现净现金流（含手续费），负=已亏出去
-    closeable: float         # 当前持仓的真实可平仓价值
+    net_cash_flow: float     # 至今全部进出账净额（含手续费）。负=净投入
+    closeable: float | None  # 当前持仓真实可平仓价值；盘口缺失时为 None（不许用 0 代替）
     exit_fee: float = 0.0    # 平掉剩余持仓还要付的手续费
 
     @property
-    def total(self) -> float:
-        """若现在全平，这个品种从头到尾的最终损益。"""
-        return self.realized + self.closeable - self.exit_fee
+    def total(self) -> float | None:
+        """若现在全平，这些合约从头到尾的【生命周期损益】。
+
+        可平仓价算不出时返回 None —— 缺价就是缺价，用 0 会把「行情拿不到」
+        显示成「持仓已归零」，进而算出一个假的最终亏损。
+        """
+        if self.closeable is None:
+            return None
+        return self.net_cash_flow + self.closeable - self.exit_fee
 
 
-def build_ledger(underlying: str, cash_rows: list, closeable: float,
+def build_ledger(underlying: str, cash_rows: list, closeable: float | None,
                  exit_fee: float = 0.0) -> Ledger:
-    """从现金流水汇总某品种的已实现净额。cash_rows 需已按该品种过滤。"""
-    realized = 0.0
+    """从现金流水汇总这些合约的净进出账。cash_rows 需已按目标合约过滤。
+
+    closeable 传 None 表示盘口缺失、算不出——务必原样传入，不要先折成 0。
+    """
+    flow = 0.0
     for r in cash_rows:
         try:
-            realized += float(r.get("balance", 0) or 0)
+            flow += float(r.get("balance", 0) or 0)
         except (TypeError, ValueError):
             continue
-    return Ledger(underlying=underlying, realized=realized,
+    return Ledger(underlying=underlying, net_cash_flow=flow,
                   closeable=closeable, exit_fee=exit_fee)
 
 
 def render_ledger_md(ledgers: list) -> str:
     if not ledgers:
         return ""
-    L = ["", "### 品种累计台账（按真实现金流水，与券商成本价无关）", "",
-         "| 品种 | 已实现净现金 | 当前可平仓 | 平仓费 | **若现在全平的最终损益** |",
+    L = ["", "### 生命周期台账（按真实现金流水，与券商成本价无关）", "",
+         "| 合约组 | 至今净现金流 | 当前可平仓 | 平仓费 | **若现在全平的生命周期损益** |",
          "|---|---:|---:|---:|---:|"]
     for g in ledgers:
-        L.append(f"| {g.underlying} | {g.realized:+,.2f} | {g.closeable:+,.2f} | "
-                 f"{-g.exit_fee:,.2f} | **{g.total:+,.2f}** |")
+        cl = f"{g.closeable:+,.2f}" if g.closeable is not None else "**盘口缺失·不可计算**"
+        tot = f"**{g.total:+,.2f}**" if g.total is not None else "**不可计算**"
+        L.append(f"| {g.underlying} | {g.net_cash_flow:+,.2f} | {cl} | "
+                 f"{-g.exit_fee:,.2f} | {tot} |")
     L.append("")
-    L.append("> 「已实现」含所有历史进出与手续费，**已发生、不可再变**——决策时应无视（沉没成本）。")
+    L.append("> 「至今净现金流」= 这些合约全部进出账净额（含手续费）。钱已离开账户、不会再变，"
+             "**但它不等于「已实现盈亏」**——其中含仍未平仓头寸的建仓支出，那部分损益尚未实现。")
+    L.append("> 决策只看「当前可平仓」；净现金流属沉没，评价这笔交易好坏时才用生命周期损益。")
     L.append("> 券商的「成本价」在部分减仓后会被改写成该轮打平价，既非实付价、也不含更早轮次，"
              "**不可用来判断亏了多少**。")
     return "\n".join(L)

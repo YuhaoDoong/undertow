@@ -49,6 +49,20 @@ def test_missing_side_returns_none_not_guess():
     print("PASS test_missing_side_returns_none_not_guess")
 
 
+def test_zero_value_still_triggers_stop():
+    """可平仓价恰好归零时必须报「已触及止损」——这正是最该告警的时刻。
+
+    旧写法用 `and ev` 做真值判断，会把 0.0 当成缺失，在最该喊的时候闭嘴。
+    （codex review 2026-08-26）
+    """
+    legs = [LegQuote("A", 1, bid=0.0, ask=0.01, last=0.01),
+            LegQuote("B", -1, bid=0.0, ask=0.0, last=0.0)]
+    c = check_position("dead", legs, cost=90.0, stop=45.0)
+    assert c.exit_value == 0.0
+    assert any("已触及止损" in w for w in c.warnings), c.warnings
+    print("PASS test_zero_value_still_triggers_stop")
+
+
 def test_stop_and_target_flags():
     c = check_position("spread", _tqqq(), cost=90.0, stop=80.0)
     assert any("已触及止损" in w for w in c.warnings), c.warnings
@@ -102,9 +116,22 @@ def _slv_flows():
 def test_ledger_matches_hand_computed_total():
     """台账必须复现手工核对的 -97.47 —— 这是当日的锚定值。"""
     g = build_ledger("SLV", _slv_flows(), closeable=18.0, exit_fee=1.60)
-    assert abs(g.realized - (-113.87)) < 1e-9, g.realized
+    assert abs(g.net_cash_flow - (-113.87)) < 1e-9, g.net_cash_flow
     assert abs(g.total - (-97.47)) < 1e-9, g.total
     print("PASS test_ledger_matches_hand_computed_total")
+
+
+def test_ledger_missing_quote_is_not_zero():
+    """盘口缺失时 total 必须是 None，不能用 0 冒充可平仓价。
+
+    折零会把「行情拿不到」显示成「持仓已归零」，并据此算出一个假的最终亏损——
+    对小账户，这个数字足以直接改变平仓判断。（codex review 2026-08-26）
+    """
+    g = build_ledger("X", _slv_flows(), closeable=None, exit_fee=1.60)
+    assert g.closeable is None and g.total is None
+    md = render_ledger_md([g])
+    assert "不可计算" in md and "盘口缺失" in md
+    print("PASS test_ledger_missing_quote_is_not_zero")
 
 
 def test_ledger_ignores_broker_cost_basis():
@@ -123,14 +150,16 @@ def test_ledger_bad_rows_are_skipped_not_crashed():
     rows = [{"symbol": "X", "balance": "10.0"}, {"symbol": "X", "balance": None},
             {"symbol": "X"}, {"symbol": "X", "balance": "abc"}]
     g = build_ledger("X", rows, closeable=0.0)
-    assert abs(g.realized - 10.0) < 1e-9
+    assert abs(g.net_cash_flow - 10.0) < 1e-9
     print("PASS test_ledger_bad_rows_are_skipped_not_crashed")
 
 
 def test_ledger_render_warns_about_cost_basis():
     md = render_ledger_md([build_ledger("SLV", _slv_flows(), 18.0, 1.60)])
     assert "不可用来判断亏了多少" in md
-    assert "沉没成本" in md
+    assert "沉没" in md
+    # 必须明说「净现金流 ≠ 已实现盈亏」——前者含未平仓头寸的建仓支出
+    assert "不等于「已实现盈亏」" in md
     assert render_ledger_md([]) == ""
     print("PASS test_ledger_render_warns_about_cost_basis")
 

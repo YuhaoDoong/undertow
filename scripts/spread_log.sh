@@ -19,7 +19,13 @@ import sys, json, pathlib, datetime as dt
 sys.path.insert(0, ".")
 from undertow.collect.cboe_options import CboeOptionsSource
 from undertow.core.config import load_config
-ET = dt.timezone(dt.timedelta(hours=-4))
+# ⚠️ 不能硬编码 UTC-4：纽约冬令时是 UTC-5，否则落盘的日期/et/mins_after_open
+# 在冬季会整体快一小时，把点差收窄曲线的横轴整个搞错。（codex review 2026-08-26）
+try:
+    from zoneinfo import ZoneInfo
+    ET = ZoneInfo("America/New_York")
+except Exception:                      # 极老环境兜底：至少别崩
+    ET = dt.timezone(dt.timedelta(hours=-4))
 now = dt.datetime.now(ET)
 out = pathlib.Path("data/history/spreads"); out.mkdir(parents=True, exist_ok=True)
 cfg = load_config()
@@ -51,7 +57,7 @@ for key in ("qqq", "tqqq", "silver", "gold"):
 f = out / f"{now.date().isoformat()}.jsonl"
 with f.open("a") as fh:
     fh.write(json.dumps({"et": now.strftime("%H:%M"),
-                         "mins_after_open": (now.hour*60+now.minute) - 570,
+                         "mins_after_open": (now.hour * 60 + now.minute) - 570,   # 570 = ET 09:30
                          "rows": rows}, ensure_ascii=False) + "\n")
 print(f"[{now:%H:%M} ET] 点差记录 {len(rows)} 条 → {f}")
 PY

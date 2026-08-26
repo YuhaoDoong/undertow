@@ -28,14 +28,17 @@
   * `ResonanceRead` —— 当日状态，可以展示，标注"未校准"
   * `snapshot_row()` —— 落盘用的一行记录，攒够 200+ 个观测后才做校准
 
-**超买超卖那一侧本身的可用边界**（见 `stretch.py`）：29,422 样本上只有【极超卖】
-有真方向准确率（5 日涨率 61.8% vs 基准 55.5%）；强超卖/偏超卖没有方向价值；
-**超买档作为看跌信号无效**——超买后 5 日下跌率 42.2%，比基准 44.2% 还低。
+**超买超卖那一侧本身的可用边界**（见 `stretch.py`）：只有【极超卖】有真方向准确率
+（5 日涨率 vs 基准，具体数字读 `stretch.CALIB_META["dir_acc"]`，**不在本文件重复写**——
+codex review 2026-08-26 抓到源码里同一个样本量存在三种写法，硬编码必然漂移）；
+强超卖/偏超卖没有方向价值；**超买档作为看跌信号无效**（超买后 5 日下跌率低于基准）。
 故下方判定里，超买侧一律降权表述。
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
+
+from .stretch import CALIB_META
 
 # 只有这些档位才算"超买超卖侧有信号"。偏超卖/偏超买触发率各 15%，
 # 且实测无方向价值（偏超卖 5 日涨率 54.3% < 基准 55.5%），不参与共振判定。
@@ -83,13 +86,17 @@ def assess_resonance(struct_bias: str, sr) -> ResonanceRead:
 
     if band in OS_BANDS and s > 0:
         state = "共振看多"
+        da = CALIB_META.get("dir_acc", {})
         head = (f"期权结构偏多，超买超卖也在【{band}】"
-                + ("（唯一通过方向准确率检验的档位：5 日涨率 61.8% vs 基准 55.5%）"
+                + (f"（唯一通过方向准确率检验的档位：5 日涨率 {da.get('极超卖_5d','?')}% "
+                   f"vs 基准 {da.get('基准_5d','?')}%）"
                    if strong else "（该档无独立方向价值，仅作同向佐证）"))
     elif band in OB_BANDS and s < 0:
         state = "共振看空"
+        da = CALIB_META.get("dir_acc", {})
         head = (f"期权结构偏空，超买超卖在【{band}】——"
-                f"但超买档作为看跌信号实测无效（超买后 5 日下跌率 42.2% < 基准 44.2%），"
+                f"但超买档作为看跌信号实测无效（超买后 5 日下跌率 "
+                f"{da.get('极超买_5d_跌','?')}% < 基准 {da.get('基准_5d_跌','?')}%），"
                 f"这里只算「追高性价比差」的旁证，不构成看空依据")
     elif (band in OS_BANDS and s < 0) or (band in OB_BANDS and s > 0):
         state = "背离"

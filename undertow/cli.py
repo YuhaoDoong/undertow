@@ -683,11 +683,17 @@ def cmd_live(args) -> int:
         if not legs:
             continue
         seen.update(l.symbol for l in legs)
-        # 成本优先用计划里记录的【实际成交价】；缺失则回退券商成本价
+        # 成本优先用计划里记录的【实际成交价】；缺失则回退券商成本价。
+        # ⚠️ 必须乘 l.qty，且计划腿与当前实际持仓数量必须完全一致才显示成本——
+        # 部分平仓后价值按当前数量算、成本却按原计划算，会得出错误浮盈亏。
+        # （codex review 2026-08-26）
         cost = None
-        if pl.legs and all(l.filled is not None for l in pl.legs):
-            cost = sum((l.filled or 0) * (1 if l.action == "buy" else -1) * 100 for l in pl.legs)
-        elif legs:
+        held_match = all(held.get(l.symbol, 0) == (l.qty if l.action == "buy" else -l.qty)
+                         for l in pl.legs)
+        if pl.legs and held_match and all(l.filled is not None for l in pl.legs):
+            cost = sum((l.filled or 0) * l.qty * (1 if l.action == "buy" else -1) * 100
+                       for l in pl.legs)
+        elif legs and held_match:
             cost = sum(cost_px.get(l.symbol, 0.0) * l.qty * 100 for l in legs)
         grouped.append((pl.structure[:34], legs, cost, pl))
     for sym, qty in held.items():
@@ -1774,6 +1780,15 @@ def cmd_backtest_stretch(args) -> int:
     """重跑拉伸度校准表。改了指标参数就跑这个，别手改 stretch.py 里的数字。"""
     from undertow.analyze import stretch_backtest as sb
     from undertow.analyze.stretch import CALIB_ASOF
+    # ⚠️ --horizon 必须落在 --horizons 里，否则 calibrate 会 KeyError 崩溃
+    # （样本只算 horizons 中的收益）。同时校验为正整数。（codex review 2026-08-26）
+    if any(h <= 0 for h in args.horizons) or args.horizon <= 0:
+        print("前瞻天数必须为正整数", file=sys.stderr)
+        return 2
+    if args.horizon not in args.horizons:
+        args.horizons = sorted(set(args.horizons) | {args.horizon})
+        print(f"[提示] --horizon {args.horizon} 不在 --horizons 中，已自动并入："
+              f"{args.horizons}", file=sys.stderr)
     src = YahooFuturesSource()
     syms = [(s, s) for s in args.symbols] if args.symbols else CALIB_PANEL
     samples, spans, contain = [], [], []
@@ -1821,11 +1836,11 @@ def cmd_backtest_stretch(args) -> int:
     dv = sb.diverge_stats(samples, horizon=args.horizon)
     if dv["rows"]:
         print(f"\n### 两维一致 vs 分歧（+{args.horizon} 日）\n")
-        print("| 组合 | 触发 | 边缘 | 跑赢率 | t |")
+        print("| 组合 | 触发 | 边缘 | 跑赢漂移 | t |")
         print("|---|---:|---:|---:|---:|")
         for r in dv["rows"]:
             print(f"| {r['label']} | {r['n']} | **{r['edge_pp']:+.3f}pp** | "
-                  f"{r['win_rate']:.0f}% | {r['t']:+.2f} |")
+                  f"{r.get('beat_drift', 0):.0f}% | {r['t']:+.2f} |")
 
     if args.compare:
         print(f"\n### 三种口径对照（最低/最高 10%，+{args.horizon} 日）\n")

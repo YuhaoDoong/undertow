@@ -134,7 +134,8 @@ def diverge_stats(samples: list, *, horizon: int = 5,
         base = [s.excess[horizon] - neu[s.regime] for s in samples
                 if 0.4 <= s.pctile <= 0.6 and s.i % horizon == 0]
         return {"label": label, "n": len(t), "edge_pp": statistics.fmean(ex),
-                "win_rate": sum(1 for x in ex if x > 0) / len(ex) * 100,
+                # 同 calibrate：这是「跑赢局部漂移」，不是「跑赢中性桶」
+                "beat_drift": sum(1 for x in ex if x > 0) / len(ex) * 100,
                 "t": welch_t(nov, base)}
 
     rows = [
@@ -149,7 +150,10 @@ def diverge_stats(samples: list, *, horizon: int = 5,
 def calibrate(samples: list, *, horizon: int = 5, min_n: int = 50) -> dict:
     """按 (档位, regime) 算相对同 regime 中性桶的边缘 + Welch t。
 
-    返回 {(band, regime): {"n","edge_pp","win_rate","t","mean_excess"}}。
+    返回 {(band, regime): {"n","n_nov","edge_pp","beat_neutral","beat_drift","t",...}}。
+
+    ⚠️ 两个胜率口径不可混用：beat_neutral 与 edge_pp 同源（跑赢同 regime 中性桶），
+    beat_drift 只是超额>0（跑赢局部漂移）。熊市中性桶均值为正，拿后者当基准会高估。
     """
     out = {}
     for regime in ("牛", "熊"):
@@ -171,7 +175,12 @@ def calibrate(samples: list, *, horizon: int = 5, min_n: int = 50) -> dict:
                 "mean_excess": statistics.fmean(ex),
                 # 边缘与 t 同源：都是"本桶 vs 同 regime 中性桶"的均值差
                 "edge_pp": statistics.fmean(ex) - neu_mean,
-                "win_rate": sum(1 for x in ex if x > 0) / len(ex) * 100,
+                # ⚠️ 两个胜率口径必须分开列，它们回答不同问题（codex review 2026-08-26）：
+                #   beat_drift —— 超额 > 0，即跑赢【局部漂移】（原「跑赢率」就是这个）
+                #   beat_neutral —— 超额 > 同 regime 中性桶均值，与 edge_pp 同源
+                # 熊市中性桶均值为正，用 beat_drift 冒充「跑赢基准」会系统性高估。
+                "beat_drift": sum(1 for x in ex if x > 0) / len(ex) * 100,
+                "beat_neutral": sum(1 for x in ex if x > neu_mean) / len(ex) * 100,
                 "t": 0.0 if band == NEUTRAL else welch_t(tgt_nov, neu_nov),
                 "n_nov": len(tgt_nov),
             }
@@ -184,8 +193,10 @@ def render_table_md(cal: dict, *, horizon: int = 5, total: int = 0, span: str = 
         L.append(f"*样本 {total:,}{('，' + span) if span else ''}；"
                  f"边缘 = 本桶 − 同 regime 中性桶（局部去趋势后）；t = Welch 双样本、不重叠子样本*")
         L.append("")
-    L.append("| 档位 | regime | 触发 | 边缘 | 胜率 | t | 判定 |")
-    L.append("|---|---|---:|---:|---:|---:|---|")
+    # 触发 = 重叠计数；检验 = 不重叠子样本（约为触发的 1/horizon）。两者相差数倍，
+    # 只列前者会把证据规模夸大——必须并列。（codex review 2026-08-26）
+    L.append("| 档位 | regime | 触发 | 检验n | 边缘 | 跑赢中性 | 跑赢漂移 | t | 判定 |")
+    L.append("|---|---|---:|---:|---:|---:|---:|---:|---|")
     order = [b for _, b in BANDS]
     for regime in ("牛", "熊"):
         for band in order:
@@ -200,8 +211,20 @@ def render_table_md(cal: dict, *, horizon: int = 5, total: int = 0, span: str = 
                 verdict = "~ 边缘"
             else:
                 verdict = "❌ 不显著"
-            L.append(f"| {band} | {regime}市 | {r['n']} | **{r['edge_pp']:+.3f}pp** | "
-                     f"{r['win_rate']:.0f}% | {r['t']:+.2f} | {verdict} |")
+            L.append(f"| {band} | {regime}市 | {r['n']} | {r.get('n_nov', 0)} | "
+                     f"**{r['edge_pp']:+.3f}pp** | {r.get('beat_neutral', 0):.0f}% | "
+                     f"{r.get('beat_drift', 0):.0f}% | {r['t']:+.2f} | {verdict} |")
+    L.append("")
+    L.append("> 「触发」是重叠计数，「检验n」才是 Welch t 实际用的不重叠子样本量——"
+             "两者相差约 horizon 倍，**别拿触发次数当证据规模**。")
+    L.append("> 「跑赢中性」与边缘同源（超额 > 同 regime 中性桶）；"
+             "「跑赢漂移」只是超额 > 0，熊市中性桶均值为正，用它冒充跑赢基准会高估。")
+    L.append("")
+    L.append("> ⚠️ **两条无法靠本表自证的统计局限**：")
+    L.append("> ① 跨资产不独立——GLD/SLV 与 QQQ/SPY 同日高度相关，池化为独立观测会高估显著性，"
+             "临界结果（|t| 2.0~2.5）尤其不稳；")
+    L.append("> ② 模型选择偏差——三种口径比较后选了 t 最高的那个，再把同一个 t 当显著性证据。")
+    L.append("> 故本表适合用来**排除没有边缘的做法**，不适合用来**证明某个做法有效**。")
     return "\n".join(L)
 
 
@@ -213,8 +236,10 @@ def render_calib_literal(cal: dict) -> str:
             r = cal.get((band, regime))
             if not r:
                 continue
+            # 存 beat_neutral 而非 beat_drift —— 必须与 edge_pp 同源，否则读数自相矛盾
             L.append(f'    ("{band}", "{regime}"): '
-                     f'({r["edge_pp"]:+.3f}, {r["win_rate"]:.0f}, {r["n"]}, {r["t"]:.2f}),')
+                     f'({r["edge_pp"]:+.3f}, {r.get("beat_neutral", 0):.0f}, '
+                     f'{r["n"]}, {r["t"]:.2f}, {r.get("n_nov", 0)}),')
     L.append("}")
     return "\n".join(L)
 

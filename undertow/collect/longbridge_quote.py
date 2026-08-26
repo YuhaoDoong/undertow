@@ -5,7 +5,11 @@
   2) 无订阅 / 非长桥 / 只有股票行情 → 只用【实时股价】，期权仍回退 BS 理论值。
 
 长桥期权报价字段：last / prev_close / implied_volatility / open_interest / volume /
-timestamp（无 bid/ask/greeks —— delta 由 BS + 真实 IV 自算）。
+timestamp（quote 接口无 bid/ask/greeks —— delta 由 BS + 真实 IV 自算）。
+**盘口另走 `depth` 接口**（Level-2 买卖档），见 fetch_depth()。这是唯一的实时盘口来源：
+CBOE 虽有 bid/ask 但延迟 15 分钟，且实测会把点差显示得比实际宽一倍以上
+（2026-08-26 TQQQ 80C：长桥实时 0.63/0.67 点差 0.04，CBOE 同时刻 0.70/0.79 点差 0.09）。
+定限价必须用 depth，用 CBOE 会系统性高估摩擦成本。
 股票报价含 overnight / pre_market / post_market → 取最新场次价（修掉"快照收盘价过期"）。
 
 **边界**：只读；不下单。缺订阅时抛 LiveQuotesUnavailable，调用方降级到仅股价。
@@ -122,4 +126,50 @@ def fetch_option_quotes(occ_symbols: list[str]) -> dict[str, OptionQuote]:
             symbol=r["symbol"], last=_f(r, "last"), prev_close=_f(r, "prev_close"),
             iv=_f(r, "implied_volatility"), open_interest=int(_f(r, "open_interest")),
             volume=int(_f(r, "volume")), timestamp=str(r.get("timestamp", "")))
+    return out
+
+
+@dataclass(frozen=True)
+class Depth:
+    """Level-2 盘口。买/卖档可能为空（该侧无挂单或无权限），调用方须处理 None。"""
+    symbol: str
+    bid: float | None
+    bid_size: int
+    ask: float | None
+    ask_size: int
+
+    @property
+    def mid(self) -> float | None:
+        """中价。缺任一边返回 None —— 不允许用 last 冒充中价。"""
+        if self.bid and self.ask:
+            return (self.bid + self.ask) / 2.0
+        return None
+
+    @property
+    def spread_pct(self) -> float | None:
+        m = self.mid
+        return (self.ask - self.bid) / m * 100 if m else None
+
+
+def fetch_depth(symbols: list[str]) -> dict:
+    """逐个取实时盘口（depth 接口一次只吃一个代码）。失败的代码直接跳过，不中断整批。"""
+    out: dict[str, Depth] = {}
+    for sym in symbols:
+        try:
+            r = _run(["depth", sym])
+        except LiveQuotesUnavailable:
+            continue
+        if not isinstance(r, dict):
+            continue
+        bids = r.get("bids") or []
+        asks = r.get("asks") or []
+        b = bids[0] if bids else {}
+        a = asks[0] if asks else {}
+        out[sym] = Depth(
+            symbol=r.get("symbol", sym),
+            bid=float(b["price"]) if b.get("price") else None,
+            bid_size=int(b.get("volume") or 0),
+            ask=float(a["price"]) if a.get("price") else None,
+            ask_size=int(a.get("volume") or 0),
+        )
     return out

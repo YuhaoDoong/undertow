@@ -82,33 +82,81 @@ Instrument definitions live in `config/instruments.json`; adding an instrument s
 ## Architecture
 
 ```text
-Public data sources
+Public data + brokerage (read-only)
         ↓
-undertow.collect      fetch, normalise, cache, and persist snapshots
+undertow.collect      fetch, normalise, cache, persist snapshots
         ↓
-undertow.core         shared models, configuration, clock, and calendar
+undertow.core         shared models, configuration, clock, calendar
         ↓
-undertow.analyze      deterministic indicators, signals, backtests, scenarios
+undertow.analyze      deterministic indicators, signals, scenarios, position review
         ↓
-undertow.report       terminal, JSON, and self-contained HTML presentation
+undertow.report       terminal, JSON, self-contained HTML
+        ↓
+undertow.consult      model-agnostic context packet + local read-only HTTP API
+undertow.soul         the trader's own rules, plans, and journal (private)
 ```
 
-Repository layout:
+### Module map
 
 ```text
 undertow/
-  core/               shared domain models and configuration
-  collect/            CFTC, CBOE, Yahoo, FRED, and calendar collectors
-  analyze/            positioning, options, macro, backtest, and strategy logic
-  report/             Markdown, HTML, and SVG reporting
-config/                instrument and event configuration
-tests/                 network-free unit tests
-data/snapshots/        locally accumulated option-chain history
-data/reports/          generated reports and archives
-SKILL.md               agent-integration instructions
+├── core/                    shared domain models, config, clock, event calendar
+│
+├── collect/                 ── data layer (one file per source) ──
+│   ├── cftc_cot             CFTC COT positioning (Disaggregated / Legacy)
+│   ├── cboe_options         option chains via ETF proxies (GLD/SLV/USO/QQQ)
+│   ├── cboe_history         daily bars · cboe_vol  GVZ/OVX/VXSLV
+│   ├── yahoo_futures        real futures prices (GC=F/SI=F/CL=F/NQ=F)
+│   ├── fred_macro           real rates, dollar, breakeven inflation
+│   ├── faireconomy_cal      economic calendar feed (forecast/previous/impact)
+│   ├── longbridge_account   live positions, assets, cash-flow, executions  [read-only]
+│   ├── longbridge_quote     real-time ETF sessions + option last/IV        [read-only]
+│   ├── longbridge_news      instrument-specific news headlines             [read-only]
+│   └── store · cache        snapshot archive (committed) · TTL cache
+│
+├── analyze/                 ── deterministic analytics (no I/O) ──
+│   ├── positioning・signals    net positions, crowding, smart-money divergence,
+│   │                           short-squeeze setup (concentration × directional shorts)
+│   ├── gamma・flow・expiry_ladder   OI walls, GEX, zero-gamma; buyer/seller flow via
+│   │                           ΔOI × delta-adjusted ΔIV; per-expiry slices
+│   ├── macro・volregime・vrp_history   macro backdrop, vol regime, variance risk premium
+│   ├── outlook・verdict        weighted multi-factor vote with near/mid horizon split;
+│   │                           daily decision synthesis (short? chase? swing? core?)
+│   ├── fibonacci・risk_reward  swing legs, retracements, risk-reward gate
+│   ├── technicals              MA structure, RSI/KDJ/MACD/Bollinger → overheat score
+│   ├── strategy_hub・strategy・condor・credit_spread   scenario parameterisation
+│   ├── portfolio               live-position review: combo recognition (verticals,
+│   │                           straddles, iron condors, calendars), book stance,
+│   │                           capital constraints, live/BS valuation
+│   ├── healthcheck             graded risk checks + three entry gates
+│   │                           (seller edge / buyer edge / single-long sigma & delta),
+│   │                           after-fee expected value
+│   ├── newsfeed                news + upcoming high-impact events
+│   ├── event_impact            cross-instrument snapshots before/after data releases
+│   └── backtest・blackscholes  look-ahead-free event study · minimal BS helpers
+│
+├── report/                  markdown · html · viz (SVG, no JS)
+│
+├── consult/                 ── AI interface layer ──
+│   ├── packet               deterministic context packet + ready-to-feed prompt
+│   └── server               localhost read-only HTTP API (no write endpoints)
+│
+└── soul/                    ── the trader, not the market (private data) ──
+    ├── profile              rules, limits, known weaknesses, lessons, triggers,
+    │                        open questions; deterministic discipline checks
+    ├── plan                 planned trades: triggers, exits, order parameters
+    └── journal              trade log with fees + ex-ante thesis scoring
+
+config/                      instruments, calendar, soul template
+scripts/                     daily_update.sh · event_watch.sh (launchd)
+tests/                       28 network-free test files
+data/snapshots/              option-chain history (committed — not re-fetchable)
+data/history/events/         event-impact snapshots (committed)
+data/account/ · data/soul/   private: never committed (gitignored)
 ```
 
-Each package contains a short README describing its responsibilities and files.
+Each package contains a README describing its responsibilities. Dependencies flow one way:
+`collect → core → analyze → report/consult/soul`. Analysis never imports collectors.
 
 ## Data sources
 

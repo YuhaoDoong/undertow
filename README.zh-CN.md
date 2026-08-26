@@ -82,33 +82,79 @@ python3 -m undertow report gold --json
 ## 系统架构
 
 ```text
-公开数据源
-    ↓
-undertow.collect      拉取、标准化、缓存并保存快照
-    ↓
-undertow.core         共享模型、配置、时钟与日历
-    ↓
-undertow.analyze      确定性指标、信号、回测与情景
-    ↓
-undertow.report       终端、JSON 和自包含 HTML 展示
+公开数据 + 券商（只读）
+        ↓
+undertow.collect      抓取、规整、缓存、落盘快照
+        ↓
+undertow.core         公共模型、配置、交易日历、时钟
+        ↓
+undertow.analyze      确定性指标、信号、情景、实盘持仓评价
+        ↓
+undertow.report       终端 / JSON / 自包含 HTML
+        ↓
+undertow.consult      模型无关的上下文包 + 本地只读 HTTP API
+undertow.soul         交易者自己的规则、计划与日记（私有）
 ```
 
-仓库结构：
+### 模块地图
 
 ```text
 undertow/
-  core/               领域模型与共享配置
-  collect/            CFTC、CBOE、Yahoo、FRED 和日历收集器
-  analyze/            持仓、期权、宏观、回测和策略逻辑
-  report/             Markdown、HTML 与 SVG 报告
-config/                品种和事件配置
-tests/                 无网络依赖的单元测试
-data/snapshots/        本地累积的期权链历史
-data/reports/          生成的报告和归档
-SKILL.md               Agent 集成说明
+├── core/                    公共模型、配置、时钟、事件日历
+│
+├── collect/                 ── 数据层（一源一文件）──
+│   ├── cftc_cot             CFTC COT 持仓（Disaggregated / Legacy）
+│   ├── cboe_options         期权链（ETF 代理 GLD/SLV/USO/QQQ）
+│   ├── cboe_history         历史日线 · cboe_vol  GVZ/OVX/VXSLV 波动率指数
+│   ├── yahoo_futures        真实期货价（GC=F/SI=F/CL=F/NQ=F）
+│   ├── fred_macro           实际利率、美元、通胀预期
+│   ├── faireconomy_cal      经济日历 feed（预测/前值/影响级别）
+│   ├── longbridge_account   实盘持仓、资产、资金流水、成交            【只读】
+│   ├── longbridge_quote     ETF 各场次实时价 + 期权 last/IV           【只读】
+│   ├── longbridge_news      品种相关新闻标题                          【只读】
+│   └── store · cache        快照仓库（入 git）· TTL 缓存
+│
+├── analyze/                 ── 确定性分析（无 I/O）──
+│   ├── positioning・signals    净头寸、拥挤度、聪明钱背离、
+│   │                           逼空蓄势（高集中度净空 × 投机押多）
+│   ├── gamma・flow・expiry_ladder   OI 墙、GEX、零伽马；ΔOI × Delta修正ΔIV 判买卖方；
+│   │                           逐到期切片
+│   ├── macro・volregime・vrp_history   宏观背景、波动率环境、波动率风险溢价
+│   ├── outlook・verdict        多因子加权投票 + 近端/中期双周期分层；
+│   │                           当日决策研判（做空? 现价追? 短线 长线）
+│   ├── fibonacci・risk_reward  摆动腿、黄金回撤、盈亏比闸门
+│   ├── technicals              均线结构、RSI/KDJ/MACD/布林 → 短线过热分
+│   ├── strategy_hub・strategy・condor・credit_spread   策略情景参数化
+│   ├── portfolio               实盘持仓评价：组合期权识别（垂直/跨式/铁鹰/日历）、
+│   │                           整品种策略姿态、资金约束、实时价或 BS 估值
+│   ├── healthcheck             分级风险体检 + 三套进场闸门
+│   │                           （卖方边际 / 买方边际 / 单腿σ与delta）+ 扣费后期望值
+│   ├── newsfeed                品种新闻 + 临近高影响事件告警
+│   ├── event_impact            数据落地前后的横截面快照与对比
+│   └── backtest・blackscholes  无前视事件研究 · 最小 BS 工具
+│
+├── report/                  markdown · html · viz（纯 SVG，无 JS）
+│
+├── consult/                 ── AI 接入层 ──
+│   ├── packet               确定性上下文包 + 可直接投喂的 prompt
+│   └── server               本地只读 HTTP API（无任何写/下单端点）
+│
+└── soul/                    ── 对象是交易者本人，不是市场（私有数据）──
+    ├── profile              铁律、限额、已知弱点、教训、触发计划、待研究问题；
+    │                        确定性纪律核查
+    ├── plan                 计划交易：触发条件、出场四要素、下单参数
+    └── journal              交易日记（含手续费）+ 事前判断打分
+
+config/                      品种、日历、灵魂档案模板
+scripts/                     daily_update.sh · event_watch.sh（launchd 定时）
+tests/                       28 个无网络单元测试文件
+data/snapshots/              期权链历史（入 git —— 不可再生）
+data/history/events/         事件影响快照（入 git）
+data/account/ · data/soul/   私有：永不入库（已 gitignore）
 ```
 
-各子包还包含简短 README，说明该层的职责和文件。
+每个包内含 README 说明职责。依赖单向流动：`collect → core → analyze → report/consult/soul`，
+分析层从不 import 数据收集层。
 
 ## 数据来源
 

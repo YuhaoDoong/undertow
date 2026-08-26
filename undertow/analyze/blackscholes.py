@@ -66,6 +66,27 @@ def delta(S: float, K: float, T: float, sigma: float, kind: str = "C",
     return disc * (_norm_cdf(d1) - 1.0)
 
 
+def theta(S: float, K: float, T: float, sigma: float, kind: str = "C",
+          r: float = 0.04, q: float = 0.0) -> float:
+    """每股 theta（**每日**，通常为负=每天损耗）。
+
+    买方结构的核心成本：标的不动时每天亏多少。与 delta 配合可得
+    「每天需要标的动多少才打平」= |theta| / delta。
+    """
+    if S <= 0 or K <= 0 or T <= 0 or sigma <= 0:
+        return 0.0
+    vol_sqrt_t = sigma * math.sqrt(T)
+    d1 = (math.log(S / K) + (r - q + 0.5 * sigma * sigma) * T) / vol_sqrt_t
+    d2 = d1 - vol_sqrt_t
+    disc_s, disc_k = S * math.exp(-q * T), K * math.exp(-r * T)
+    term1 = -disc_s * _norm_pdf(d1) * sigma / (2 * math.sqrt(T))
+    if kind == "C":
+        annual = term1 - r * disc_k * _norm_cdf(d2) + q * disc_s * _norm_cdf(d1)
+    else:
+        annual = term1 + r * disc_k * _norm_cdf(-d2) - q * disc_s * _norm_cdf(-d1)
+    return annual / 365.0
+
+
 def gamma(S: float, K: float, T: float, sigma: float, r: float = 0.04, q: float = 0.0) -> float:
     """期权每股 gamma（call 与 put 相同）。
 

@@ -23,6 +23,7 @@ CONC_HIGH_FRAC = 0.40        # 单品种风险资金 / 净资产 ≥ 此 = 集�
 SELLER_EDGE_MIN_PP = 10.0    # 收权金结构：隐含胜率 − 盈亏平衡胜率 至少要有的安全边际(pp)
 SINGLE_LONG_MAX_SIGMA = 1.0  # 单腿买方：回本幅度不应超过到期前 1σ（超过=彩票腿）
 SINGLE_LONG_MIN_DELTA = 0.30 # 单腿买方：delta 下限（低于此＝标的动了也赚不到）
+MIN_NET_DELTA_DEBIT = 0.10   # 借方结构净Δ下限：低于此＝对标的移动几乎无反应（提前平仓打法下无意义）
 CONTRACT_MULT = 100
 FEE_PER_CONTRACT = 0.80      # 实测长桥期权费率（$/张/笔），可按券商改
 FEE_MAX_FRAC_OF_EV = 0.30    # 手续费占毛期望值超过此比例 = 被费用吃掉太多
@@ -187,6 +188,51 @@ def stop_risk(combo):
     return min(risk, combo.max_loss)             # 不可能超过最大亏损
 
 
+def net_delta_per_contract(combo) -> float | None:
+    """组合的【每张净Δ】——标的每动 $1，组合市值动多少（×100=美元/张）。
+
+    **为什么重要**：在【提前平仓】的打法下（不持有到期、不追求越过行权价），
+    真正决定你能否捕捉上涨的是净Δ，不是"到期越过行权价的概率"。
+    窄价差两腿几乎抵消 → 到期概率很高、但净Δ 极低 → 标的涨了你也赚不到。
+    实例：TQQQ 买71卖72 到期打平概率 47%（看着不错），净Δ 仅 0.04——
+    标的涨 $1 只赚 $4，对"涨了就走"的策略毫无意义。
+    """
+    legs = getattr(combo, "legs", [])
+    qty = max(int(getattr(combo, "qty", 1) or 1), 1)
+    ds = [l.pos_delta for l in legs if getattr(l, "pos_delta", None) is not None]
+    if not ds or len(ds) != len(legs):
+        return None
+    return sum(ds) / (CONTRACT_MULT * qty)
+
+
+def buyer_carry(combo, spot: float | None = None):
+    """**买方结构的持有成本**：净Θ（每日损耗）与「每天需标的动多少才打平」。
+
+    买方与卖方的框架**根本不同**：
+      · 卖方收权金 → theta 是朋友，最优是**持有到接近到期**让权金归零 → 看【到期概率】
+      · 买方付权金 → theta 是敌人，必须**提前平仓** → 看【净Δ 与每日损耗】
+    到期概率对买方意义有限：你根本不打算持有到那天。
+    返回 (每张净Θ美元/日, 净Δ, 每日打平所需标的涨幅%)；数据不足返回 None。
+    """
+    legs = getattr(combo, "legs", [])
+    qty = max(int(getattr(combo, "qty", 1) or 1), 1)
+    if not spot or spot <= 0 or not legs:
+        return None
+    nd = net_delta_per_contract(combo)
+    if nd is None or nd <= 0:
+        return None
+    th = 0.0
+    for l in legs:
+        if l.strike is None or l.dte is None or l.dte <= 0:
+            return None
+        iv = getattr(l, "iv", None) or 0.35
+        sign = 1 if l.qty > 0 else -1
+        th += sign * _bs.theta(spot, l.strike, l.dte / 365.0, iv, kind=l.kind)
+    theta_usd = th * CONTRACT_MULT * qty
+    need_pct = (abs(theta_usd) / (nd * CONTRACT_MULT * qty)) / spot * 100 if nd else None
+    return theta_usd, nd, need_pct
+
+
 def _combo_min_dte(combo) -> int | None:
     dtes = [l.dte for l in combo.legs if getattr(l, "dte", None) is not None]
     return min(dtes) if dtes else None
@@ -246,15 +292,38 @@ def check_group(g, capital) -> list[HealthFinding]:
                         scope=f"{g.underlying} · {c.label}"))
         else:
             # 借方/方向性结构：先看胜率边际（同一原理、不同算法），再用盈亏比兜底
+            # 买方主闸门＝净Δ + 每日损耗（提前平仓框架）；到期概率仅作次要参考
+            carry = buyer_carry(c, getattr(g, "spot", None))
+            if carry is not None:
+                th_usd, nd, need = carry
+                if need is not None and need > 0.5:
+                    out.append(HealthFinding(
+                        severity="中", code="THETA_HEAVY", title="每日损耗过重（买方持有成本高）",
+                        detail=(f"{c.label}：每张净Θ ${th_usd:+.2f}/日、净Δ {nd:.2f} → "
+                                f"**标的每天要涨 {need:.2f}% 才打平**。买方 theta 是敌人，"
+                                f"必须提前平仓；这个消耗速度下拖不起。"),
+                        suggestion="拉远到期(theta 更慢)、或把长腿买得更价内(净Δ更大)，"
+                                   "让『每日打平所需涨幅』降到 0.5% 以内。",
+                        scope=f"{g.underlying} · {c.label}"))
             bedge = buyer_edge(c, getattr(g, "spot", None))
-            if bedge is not None and bedge[2] < SELLER_EDGE_MIN_PP:
+            if bedge is not None and bedge[2] < SELLER_EDGE_MIN_PP and carry is None:
                 be, implied, pp = bedge
                 out.append(HealthFinding(
-                    severity="中", code="BUYER_EDGE_THIN", title="买方胜率边际不足",
-                    detail=(f"{c.label}：盈亏平衡需胜率 {be*100:.0f}%，盈亏平衡价处 delta 隐含仅约 "
-                            f"{implied*100:.0f}%，边际 {pp:+.0f}pp（低于 {SELLER_EDGE_MIN_PP:.0f}pp 安全线）"),
-                    suggestion="买方要靠赔率：把长腿买得更价内(delta更大)、或降低付出的权金比例，"
-                               "让『盈亏平衡价的 delta』高过『付权金/宽度』至少 10pp。",
+                    severity="低", code="BUYER_EDGE_THIN", title="买方到期口径边际不足（次要参考）",
+                    detail=(f"{c.label}：若**持有到期**，盈亏平衡需胜率 {be*100:.0f}%、"
+                            f"隐含仅 {implied*100:.0f}%，边际 {pp:+.0f}pp。"
+                            f"注意：买方通常提前平仓，到期口径仅供参考，主看净Δ与每日损耗。"),
+                    suggestion="买方真正该看的是净Δ（对上涨的反应）与 theta（每日成本）。",
+                    scope=f"{g.underlying} · {c.label}"))
+            nd = net_delta_per_contract(c)
+            if nd is not None and 0 < nd < MIN_NET_DELTA_DEBIT and len(c.legs) >= 2:
+                out.append(HealthFinding(
+                    severity="中", code="LOW_NET_DELTA", title="净Δ过低：对上涨几乎无反应",
+                    detail=(f"{c.label}：每张净Δ 仅 {nd:.3f}——标的每涨 $1 组合只涨 "
+                            f"${nd*CONTRACT_MULT:.0f}。两腿相互抵消，**在『提前平仓』的打法下**"
+                            f"（不持有到期），涨了也赚不到多少。"),
+                    suggestion="拉开两腿间距或把长腿买得更价内，让净Δ ≥ 0.10；"
+                               "到期概率高的窄价差，在不打算持有到期的策略里意义不大。",
                     scope=f"{g.underlying} · {c.label}"))
             elif c.max_profit and c.max_loss and (c.max_profit / c.max_loss) < POOR_RR_SELLER:
                 out.append(HealthFinding(

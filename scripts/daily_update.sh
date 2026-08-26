@@ -36,7 +36,7 @@ if [[ -z $(git status --porcelain data/snapshots) ]]; then
     exit 0
 fi
 
-REPORT_OUT=$(python3 -m undertow report gold silver wti qqq --no-snapshot)
+REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq --no-snapshot)
 echo "$REPORT_OUT"
 
 # —— 强信号推送：报告若打出 ⚡（近端资金流一边倒），弹 macOS 通知 + 落一份告警文件兜底 ——

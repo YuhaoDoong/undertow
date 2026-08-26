@@ -632,6 +632,80 @@ def _persist_resonance(row: dict) -> None:
                  encoding="utf-8")
 
 
+def cmd_live(args) -> int:
+    """持仓实时体检：长桥实时盘口 → 真实可平仓价（只读，绝不下单）。
+
+    与 `account` 的分工：account 做【理论评价】（结构/顺逆/墙位/被指派风险），
+    本命令只回答一个问题——**现在就走，能拿回多少**。两者口径不同：
+    account 用 last/BS 估值（跟券商 App 一致），live 用 bid/ask 算真实出场价。
+    """
+    from undertow.collect import longbridge_quote as lq
+    from undertow.collect import longbridge_account as lb
+    from undertow.analyze.livecheck import LegQuote, check_position, render_md
+    from undertow.soul.plan import load_plans
+    if not lq.available():
+        print("未找到 longbridge CLI —— 实时体检需要它", file=sys.stderr)
+        return 1
+    try:
+        positions = lb.fetch_positions()
+        assets = lb.fetch_assets()
+    except Exception as e:
+        print(f"读取账户失败：{e}", file=sys.stderr)
+        return 1
+    # RawPosition 是 dataclass，不是 dict；成本价也一并留下，供组合成本兜底
+    held = {p.symbol: int(p.quantity) for p in positions if p.quantity}
+    cost_px = {p.symbol: p.cost_price for p in positions}
+    if not held:
+        print("当前无持仓。")
+        return 0
+    syms = list(held)
+    depth = lq.fetch_depth(syms)
+    try:
+        quotes = lq.fetch_option_quotes([s for s in syms if "C" in s or "P" in s])
+    except Exception:
+        quotes = {}
+
+    def mk(sym):
+        d = depth.get(sym)
+        q = quotes.get(sym)
+        return LegQuote(symbol=sym, qty=held[sym],
+                        bid=(d.bid if d else None), ask=(d.ask if d else None),
+                        last=(q.last if q else None))
+
+    # 按计划单里的腿分组：同一计划的腿算作一个组合；未被计划覆盖的腿单独成组
+    try:
+        plans = [p for p in load_plans() if p.status == "active"]
+    except Exception:
+        plans = []
+    grouped, seen = [], set()
+    for pl in plans:
+        legs = [mk(l.symbol) for l in pl.legs if l.symbol in held]
+        if not legs:
+            continue
+        seen.update(l.symbol for l in legs)
+        # 成本优先用计划里记录的【实际成交价】；缺失则回退券商成本价
+        cost = None
+        if pl.legs and all(l.filled is not None for l in pl.legs):
+            cost = sum((l.filled or 0) * (1 if l.action == "buy" else -1) * 100 for l in pl.legs)
+        elif legs:
+            cost = sum(cost_px.get(l.symbol, 0.0) * l.qty * 100 for l in legs)
+        grouped.append((pl.structure[:34], legs, cost, pl))
+    for sym, qty in held.items():
+        if sym not in seen:
+            grouped.append((sym, [mk(sym)], cost_px.get(sym, 0.0) * qty * 100, None))
+
+    checks = []
+    for name, legs, cost, pl in grouped:
+        stop = target = None
+        if pl is not None:
+            stop, target = pl.exits.stop_value, pl.exits.target_value
+        checks.append(check_position(name, legs, cost=cost, stop=stop, target=target))
+    net = assets.net_assets or None
+    print(render_md(checks, net_assets=net))
+    return 0
+
+
+
 def _persist_containment(acc: dict, *, horizon: int, mode: str, spans: list) -> None:
     """不突破率校准表落盘存档 —— 卖方选行权价距离时直接查这张表。
 
@@ -2095,6 +2169,9 @@ def build_parser() -> argparse.ArgumentParser:
     pt = sub.add_parser("tech", help="技术面：短线过热度 + 趋势结构（RSI/KDJ/MACD/布林/均线，确定性）")
     pt.add_argument("instruments", nargs="*", help="品种，留空=全部")
     pt.set_defaults(func=cmd_tech)
+
+    plv = sub.add_parser("live", help="持仓实时体检：长桥实时盘口 → 真实可平仓价（只读）")
+    plv.set_defaults(func=cmd_live)
 
     pbs = sub.add_parser("backtest-stretch",
                          help="重跑拉伸度(超买超卖)校准表：长历史+regime分层+不重叠t检验")

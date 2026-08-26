@@ -226,19 +226,51 @@ def capture_trades(executions, cash_flows=None, day: str = "") -> list[Trade]:
             fee[sym] = fee.get(sym, 0.0) + abs(bal)
         elif "Transaction" in name:
             amt[sym] = amt.get(sym, 0.0) + bal
+    # —— 组合单（价差/跨式）在成交接口里会退化 ——
+    # 长桥对多腿单返回：symbol=【标的】(如 TQQQ.US)、side="-"（方向丢失）、
+    # 每腿一行 + 一行净价，三行共用同一个 order_id。照抄这些行会写出
+    # 「方向全是卖出、金额全是 0」的垃圾记录（2026-08-26 TQQQ 76/80 实测）。
+    # 资金流水里却有完整腿级明细：真实 OCC 代码、Option Buy/Sell Transaction、现金变动。
+    # 故：凡方向不是 buy/sell 的成交行，一律丢弃，改由流水重建该时刻的腿。
+    combo_times = set()
     out = []
     for e in executions:
         t = str(e.get("time", ""))
         if day and not t.startswith(day):
+            continue
+        side = str(e.get("side", "")).strip().lower()
+        if side not in ("buy", "sell"):
+            combo_times.add(t[:16])       # 精确到分钟，用于匹配流水
             continue
         sym = e.get("symbol", "")
         try:
             qty, px = float(e.get("quantity", 0)), float(e.get("price", 0))
         except (TypeError, ValueError):
             continue
-        out.append(Trade(time=t[11:16], symbol=sym, side=str(e.get("side", "")).lower(),
+        out.append(Trade(time=t[11:16], symbol=sym, side=side,
                          qty=qty, price=px, amount=amt.get(sym, 0.0), fee=fee.get(sym, 0.0)))
-    return sorted(out, key=lambda x: x.time)
+
+    for c in (cash_flows or []):
+        t = str(c.get("time", ""))
+        if t[:16] not in combo_times:
+            continue
+        name = c.get("flow_name") or ""
+        if "Transaction" not in name:
+            continue                       # 费用行由 fee[] 汇总，不单独成行
+        sym = (c.get("symbol") or "").strip()
+        try:
+            bal = float(c.get("balance", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if not sym or bal == 0:
+            continue
+        side = "buy" if bal < 0 else "sell"
+        # 期权合约乘数 100：现金变动 ÷ 100 = 每股成交价（张数由调用方核对持仓）
+        qty = 1.0
+        px = abs(bal) / 100.0 / qty
+        out.append(Trade(time=t[11:16], symbol=sym, side=side, qty=qty,
+                         price=px, amount=bal, fee=fee.get(sym, 0.0)))
+    return sorted(out, key=lambda x: (x.time, x.symbol))
 
 
 def render_entry_md(e: JournalEntry) -> str:

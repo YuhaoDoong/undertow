@@ -28,6 +28,9 @@ class Leg:
     action: str                # buy / sell（开仓动作）
     qty: int
     limit: float | None = None # 计划限价（每股）
+    # 实际成交价。计划价(limit)是意图，filled 是事实——两者必须分开留存，
+    # 否则事后复盘会把"我打算付多少"当成"我实际付了多少"，滑点就永远看不见。
+    filled: float | None = None
 
 
 @dataclass(frozen=True)

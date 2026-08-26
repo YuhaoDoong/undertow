@@ -70,7 +70,8 @@ class OpenQuestion:
 @dataclass(frozen=True)
 class Limits:
     """可机器检查的限额。None = 该项不检查。"""
-    max_risk_per_trade_pct: float | None = None   # 单笔最大风险占净资产 %
+    max_risk_per_trade_pct: float | None = None   # 单笔【止损风险】占净资产 %（正常行情）
+    max_loss_per_trade_pct: float | None = None   # 单笔【最大亏损】占净资产 %（跳空硬上限）
     max_concentration_pct: float | None = None    # 单品种风险资金占净资产 %
     min_rr: float | None = None                   # 最低盈亏比（**仅方向性/借方结构**）
     min_seller_edge_pp: float | None = None       # 收权金结构：隐含胜率−盈亏平衡胜率 的最低边际(pp)
@@ -192,15 +193,28 @@ def check_against_profile(review, capital, profile: SoulProfile | None) -> list[
                     scope=g.underlying))
 
         for c in g.combos:
-            # 单笔风险
-            if lim.max_risk_per_trade_pct is not None and net and c.capital_at_risk:
-                pct = c.capital_at_risk / net * 100
+            # 双层：①止损风险(正常行情，决定仓位) ②最大亏损(跳空硬上限)
+            from undertow.analyze.healthcheck import stop_risk
+            sr = stop_risk(c)
+            if lim.max_risk_per_trade_pct is not None and net and sr:
+                pct = sr / net * 100
                 if pct > lim.max_risk_per_trade_pct:
                     out.append(SoulViolation(
                         severity="违反铁律", rule_id="max_risk_per_trade_pct",
-                        title="单笔风险超过自定上限",
-                        detail=f"{c.label} 风险 ${c.capital_at_risk:,.0f} ≈ 净资产 {pct:.0f}%，"
+                        title="单笔止损风险超过上限",
+                        detail=f"{c.label} 按预设止损了结约亏 ${sr:,.0f} ≈ 净资产 {pct:.0f}%，"
                                f"超过你设的 {lim.max_risk_per_trade_pct:.0f}%。",
+                        scope=f"{g.underlying} · {c.label}"))
+            cap = c.capital_at_risk
+            if lim.max_loss_per_trade_pct is not None and net and cap:
+                pct = cap / net * 100
+                if pct > lim.max_loss_per_trade_pct:
+                    out.append(SoulViolation(
+                        severity="违反铁律", rule_id="max_loss_per_trade_pct",
+                        title="单笔最大亏损超过硬上限（跳空口径）",
+                        detail=f"{c.label} 最大亏 ${cap:,.0f} ≈ 净资产 {pct:.0f}%，"
+                               f"超过你设的 {lim.max_loss_per_trade_pct:.0f}%。"
+                               f"止损可能因跳空失效，这条是最后防线。",
                         scope=f"{g.underlying} · {c.label}"))
             # 闸门分两套：收权金结构比【胜率边际】，方向性/借方结构才比【盈亏比】
             from undertow.analyze.healthcheck import seller_edge
@@ -266,7 +280,8 @@ def render_profile_md(p: SoulProfile | None) -> str:
         L.append("")
     lim = p.limits
     rows = [
-        ("单笔最大风险", f"{lim.max_risk_per_trade_pct:.0f}% 净资产" if lim.max_risk_per_trade_pct else None),
+        ("单笔止损风险上限（正常行情）", f"{lim.max_risk_per_trade_pct:.0f}% 净资产" if lim.max_risk_per_trade_pct else None),
+        ("单笔最大亏损上限（跳空口径）", f"{lim.max_loss_per_trade_pct:.0f}% 净资产" if lim.max_loss_per_trade_pct else None),
         ("单品种集中度上限", f"{lim.max_concentration_pct:.0f}%" if lim.max_concentration_pct else None),
         ("最低盈亏比（方向性/借方）", f"{lim.min_rr:.1f}" if lim.min_rr else None),
         ("卖方胜率边际下限", f"{lim.min_seller_edge_pp:.0f}pp" if lim.min_seller_edge_pp else None),

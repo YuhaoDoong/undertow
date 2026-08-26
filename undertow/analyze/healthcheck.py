@@ -167,6 +167,26 @@ def after_fee_ev(combo, implied_p: float | None = None, spot: float | None = Non
     return gross, fees, net, frac
 
 
+def stop_risk(combo):
+    """**按预设止损了结时的亏损**（软风险）——与 max_loss（跳空硬风险）区分。
+
+    口径对齐档案的出场规则：
+      · 收权金结构：亏到所收权金的 ~2 倍即平 → 损失 ≈ 净权金 × 100 × 张
+      · 借方/买方结构：亏到成本 ~50% 即平 → 损失 ≈ 0.5 × 已付权金
+    **注意**：软止损只在【正常行情】成立；跳空时直接吃 max_loss，所以两者都要设限。
+    返回美元金额；无法估算返回 None。
+    """
+    nc = getattr(combo, "net_credit", None)
+    qty = max(int(getattr(combo, "qty", 1) or 1), 1)
+    if nc is None or not combo.max_loss:
+        return None
+    if nc > 0:                                   # 收权金：价差翻倍了结
+        risk = nc * CONTRACT_MULT * qty
+    else:                                        # 付权金：亏一半了结
+        risk = 0.5 * (-nc) * CONTRACT_MULT * qty
+    return min(risk, combo.max_loss)             # 不可能超过最大亏损
+
+
 def _combo_min_dte(combo) -> int | None:
     dtes = [l.dte for l in combo.legs if getattr(l, "dte", None) is not None]
     return min(dtes) if dtes else None

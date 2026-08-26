@@ -35,6 +35,7 @@ def _ctx(spot=61.2):
 def _profile(**over):
     lim = Limits(**{"max_risk_per_trade_pct": 10.0, "max_concentration_pct": 40.0,
                     "min_rr": 1.0, "min_seller_edge_pp": 10.0, "min_dte_hold_short": 7,
+                    "max_loss_per_trade_pct": 20.0,
                     "forbid_liquidation_risk": True, **over})
     return SoulProfile(updated="2026-08-25", owner="t", phase="重建期",
                        north_star="守规则优先于赚倍数",
@@ -104,6 +105,35 @@ def test_no_profile_no_violations():
     rv = review_portfolio(_wheel(), {"SLV": _ctx()}, asof=date(2026, 8, 25), capital=cap)
     assert check_against_profile(rv, cap, None) == []
     print("PASS test_no_profile_no_violations")
+
+
+def test_two_tier_size_limits():
+    """双层限额：止损风险(软) 与 最大亏损(硬跳空口径) 分别检查。"""
+    from undertow.analyze.healthcheck import stop_risk
+    cap = AccountCapital(buy_power=400.0, net_assets=440.0, cash_usd=400.0)
+    # 1张 60/59 收权金0.38：止损亏≈$38(8.6%✅)、最大亏$62(14%✅) → 两条都过
+    pos = [_Pos("SLV260918P60000.US", "60P", -1, 1.76),
+           _Pos("SLV260918P59000.US", "59P", 1, 1.38)]
+    rv = review_portfolio(pos, {"SLV": _ctx()}, asof=date(2026, 8, 26), capital=cap)
+    c = rv.groups[0].combos[0]
+    sr = stop_risk(c)
+    assert abs(sr - 38.0) < 1e-6, sr                 # 收权金×100×张
+    assert abs(c.capital_at_risk - 62.0) < 1e-6, c.capital_at_risk
+    ids = {v.rule_id for v in check_against_profile(rv, cap, _profile())}
+    assert "max_risk_per_trade_pct" not in ids, ids   # 8.6% < 10%
+    assert "max_loss_per_trade_pct" not in ids, ids   # 14% < 20%
+    print(f"PASS test_two_tier_size_limits → 止损 ${sr:.0f}(8.6%) / 最大亏 ${c.capital_at_risk:.0f}(14%) 均通过")
+
+
+def test_max_loss_tier_catches_gap_risk():
+    """最大亏损超 20% 硬上限 → 即使软止损合规也拦下（跳空防线）。"""
+    cap = AccountCapital(buy_power=400.0, net_assets=440.0, cash_usd=400.0)
+    pos = [_Pos("SLV260918P60000.US", "60P", -3, 1.76),
+           _Pos("SLV260918P59000.US", "59P", 3, 1.38)]   # 3张：止损$114(26%)、最大亏$186(42%)
+    rv = review_portfolio(pos, {"SLV": _ctx()}, asof=date(2026, 8, 26), capital=cap)
+    ids = {v.rule_id for v in check_against_profile(rv, cap, _profile())}
+    assert "max_loss_per_trade_pct" in ids, ids
+    print("PASS test_max_loss_tier_catches_gap_risk")
 
 
 if __name__ == "__main__":

@@ -35,8 +35,8 @@
     },
     {
       "id": "size_cap",
-      "text": "示例：单笔风险不超过净资产 X%；换算成【具体张数】写在这里，免得规则和现实打架。",
-      "why": "规模应由净资产决定，不由『想赚多少』决定。",
+      "text": "示例：仓位双层限额——①止损风险 ≤ 净资产 X%（决定仓位）；②最大亏损 ≤ 净资产 Y%（跳空硬上限）。随账户长大应下调，不是上调。",
+      "why": "软止损管正常行情、硬最大亏损管跳空，两者都要设。账户越小、同一笔最大亏损占比越大，所以约束该随账户变紧。",
       "severity": "铁律"
     },
     {
@@ -84,7 +84,8 @@
     "min_dte_hold_short": 7,
     "max_trades_per_day": 3,
     "forbid_liquidation_risk": true,
-    "forbid_binary_event": true
+    "forbid_binary_event": true,
+    "max_loss_per_trade_pct": 20.0
   },
   "notes": "以上数值为示例默认，请按自己的账户规模、经验与风险承受力调整。本档案是你自己的纪律，不是投资建议。",
   "triggers": [

@@ -11,7 +11,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from undertow.analyze.livecheck import LegQuote, check_position, render_md
+from undertow.analyze.livecheck import (LegQuote, build_ledger, check_position,
+                                        render_ledger_md, render_md)
 
 
 def _tqqq():
@@ -77,6 +78,61 @@ def test_empty_legs():
     c = check_position("x", [])
     assert not c.ok
     print("PASS test_empty_legs")
+
+
+# ── 品种累计台账 ──────────────────────────────────────────────────
+
+def _slv_flows():
+    """2026-08-26 SLV 70C/73C 的真实流水（含 8/20-8/21 那轮盈利的往返）。"""
+    return [
+        {"symbol": "SLV260918C70000.US", "balance": "-336.00"},   # 8/20 买
+        {"symbol": "SLV260918C70000.US", "balance": "-2.41"},
+        {"symbol": "SLV260918C70000.US", "balance": "+384.00"},   # 8/21 卖 → 第一轮赚
+        {"symbol": "SLV260918C70000.US", "balance": "-2.43"},
+        {"symbol": "SLV260918C70000.US", "balance": "-105.00"},   # 8/24 买 3 张
+        {"symbol": "SLV260918C70000.US", "balance": "-105.00"},
+        {"symbol": "SLV260918C70000.US", "balance": "-105.00"},
+        {"symbol": "SLV260918C70000.US", "balance": "-2.42"},
+        {"symbol": "SLV260918C70000.US", "balance": "+126.00"},   # 8/25 卖 2 张 → 亏损已实现
+        {"symbol": "SLV260918C70000.US", "balance": "-1.61"},
+        {"symbol": "SLV260918C73000.US", "balance": "+36.00"},    # 8/26 卖保护腿
+    ]
+
+
+def test_ledger_matches_hand_computed_total():
+    """台账必须复现手工核对的 -97.47 —— 这是当日的锚定值。"""
+    g = build_ledger("SLV", _slv_flows(), closeable=18.0, exit_fee=1.60)
+    assert abs(g.realized - (-113.87)) < 1e-9, g.realized
+    assert abs(g.total - (-97.47)) < 1e-9, g.total
+    print("PASS test_ledger_matches_hand_computed_total")
+
+
+def test_ledger_ignores_broker_cost_basis():
+    """台账只吃现金流水，不接受任何「成本价」输入——券商的 1.89 是摊销产物。
+
+    实付每张 1.05，券商显示 1.89 = (3×1.05 − 2×0.63)/1，是把已实现亏损摊进了
+    剩余持仓。用它判断亏损会同时错两次：既非实付价，也不含更早那轮的 +43.16。
+    """
+    import inspect
+    src = inspect.getsource(build_ledger)
+    assert "cost" not in src.lower(), "build_ledger 不应接触成本价"
+    print("PASS test_ledger_ignores_broker_cost_basis")
+
+
+def test_ledger_bad_rows_are_skipped_not_crashed():
+    rows = [{"symbol": "X", "balance": "10.0"}, {"symbol": "X", "balance": None},
+            {"symbol": "X"}, {"symbol": "X", "balance": "abc"}]
+    g = build_ledger("X", rows, closeable=0.0)
+    assert abs(g.realized - 10.0) < 1e-9
+    print("PASS test_ledger_bad_rows_are_skipped_not_crashed")
+
+
+def test_ledger_render_warns_about_cost_basis():
+    md = render_ledger_md([build_ledger("SLV", _slv_flows(), 18.0, 1.60)])
+    assert "不可用来判断亏了多少" in md
+    assert "沉没成本" in md
+    assert render_ledger_md([]) == ""
+    print("PASS test_ledger_render_warns_about_cost_basis")
 
 
 if __name__ == "__main__":

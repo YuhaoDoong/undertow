@@ -126,3 +126,58 @@ def render_md(checks: list, net_assets: float | None = None) -> str:
         for w in c.warnings:
             L.append(f"- {c.name}：{w}")
     return "\n".join(L)
+
+
+# ── 品种累计台账 ────────────────────────────────────────────────────
+# 为什么单列：券商显示的「成本价」在部分减仓后会被改写——它把已实现盈亏摊进剩余
+# 持仓，得到的是【该轮的整体打平价】，不是你实际付出的价格。
+# 2026-08-26 实测：SLV 70C 实际每张付 1.05，券商显示 1.89 = (3×1.05 − 2×0.63)/1。
+# 拿 1.89 去判断「亏了多少」会同时错两次：既不是本仓成本，也不含更早那轮的盈利。
+#
+# 唯一不会骗人的是**现金流水**：进出账是事实，与任何摊销口径无关。
+# 三个数各回答一个问题，不可互相替代：
+#     已实现   —— 已经落袋/已经亏掉的，不可再变（沉没，决策时无视）
+#     可平仓   —— 现在就走能拿回多少（**唯一影响当下决策的数**）
+#     累计     —— 这个品种从头到尾赚没赚（复盘用）
+
+
+@dataclass(frozen=True)
+class Ledger:
+    underlying: str
+    realized: float          # 已实现净现金流（含手续费），负=已亏出去
+    closeable: float         # 当前持仓的真实可平仓价值
+    exit_fee: float = 0.0    # 平掉剩余持仓还要付的手续费
+
+    @property
+    def total(self) -> float:
+        """若现在全平，这个品种从头到尾的最终损益。"""
+        return self.realized + self.closeable - self.exit_fee
+
+
+def build_ledger(underlying: str, cash_rows: list, closeable: float,
+                 exit_fee: float = 0.0) -> Ledger:
+    """从现金流水汇总某品种的已实现净额。cash_rows 需已按该品种过滤。"""
+    realized = 0.0
+    for r in cash_rows:
+        try:
+            realized += float(r.get("balance", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+    return Ledger(underlying=underlying, realized=realized,
+                  closeable=closeable, exit_fee=exit_fee)
+
+
+def render_ledger_md(ledgers: list) -> str:
+    if not ledgers:
+        return ""
+    L = ["", "### 品种累计台账（按真实现金流水，与券商成本价无关）", "",
+         "| 品种 | 已实现净现金 | 当前可平仓 | 平仓费 | **若现在全平的最终损益** |",
+         "|---|---:|---:|---:|---:|"]
+    for g in ledgers:
+        L.append(f"| {g.underlying} | {g.realized:+,.2f} | {g.closeable:+,.2f} | "
+                 f"{-g.exit_fee:,.2f} | **{g.total:+,.2f}** |")
+    L.append("")
+    L.append("> 「已实现」含所有历史进出与手续费，**已发生、不可再变**——决策时应无视（沉没成本）。")
+    L.append("> 券商的「成本价」在部分减仓后会被改写成该轮打平价，既非实付价、也不含更早轮次，"
+             "**不可用来判断亏了多少**。")
+    return "\n".join(L)

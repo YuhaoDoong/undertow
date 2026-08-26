@@ -702,6 +702,40 @@ def cmd_live(args) -> int:
         checks.append(check_position(name, legs, cost=cost, stop=stop, target=target))
     net = assets.net_assets or None
     print(render_md(checks, net_assets=net))
+
+    # 品种累计台账：只有现金流水不会骗人（券商成本价在部分减仓后会被改写）
+    try:
+        from undertow.analyze.livecheck import build_ledger, render_ledger_md
+        import datetime as _dt
+        start = (_dt.date.today() - _dt.timedelta(days=90)).isoformat()
+        rows = lb.fetch_cash_flow(start=start) or []
+        # ⚠️ 按【当前持有的具体合约】聚合，不按品种。
+        # 按品种会把该标的 90 天内所有已了结的其它仓位也算进来——实测 SLV 会得到
+        # -1,871（整个 SLV 交易史），对「这个仓亏了多少」毫无意义。
+        # 按合约则得到这几张合约的完整生命周期（含同一合约的更早轮次），才是要的数。
+        by_group: dict = {}
+        for sym in held:
+            root = sym.split("2")[0] if len(sym) > 6 else sym       # SLV260918C70000.US → SLV
+            by_group.setdefault(root, []).append(sym)
+        ledgers = []
+        for u, syms_u in sorted(by_group.items()):
+            sub = [r for r in rows if (r.get("symbol") or "") in syms_u]
+            if not sub:
+                continue
+            legs_u = [mk(s) for s in syms_u]
+            cl = 0.0
+            for lg in legs_u:
+                px = lg.exit_price()
+                if px is None:
+                    cl = None; break
+                cl += px * lg.qty * 100
+            label = f"{u}（{len(syms_u)}张在场：{', '.join(x.split('.')[0][-7:] for x in syms_u)}）"
+            ledgers.append(build_ledger(label, sub, cl if cl is not None else 0.0,
+                                        exit_fee=0.80 * len(legs_u)))
+        if ledgers:
+            print(render_ledger_md(ledgers))
+    except Exception as e:
+        print(f"\n> 台账跳过：{type(e).__name__}: {str(e)[:60]}", file=sys.stderr)
     return 0
 
 

@@ -198,17 +198,37 @@ def render_technicals_section(tr, sr) -> str:
     C_OS, C_OB, C_NEU = "#0969da", "#cf222e", "#6e7781"   # 超卖蓝 / 超买红 / 中性灰
 
     parts = []
-    # —— 主角：拉伸度 ——
+    # —— 主角：两维超买超卖 ——
     if sr is not None and getattr(sr, "ok", False):
         col = C_OS if "超卖" in sr.band else (C_OB if "超买" in sr.band else C_NEU)
         badge = (f'<span style="display:inline-block;padding:3px 12px;border-radius:12px;'
                  f'background:{col};color:#fff;font-weight:600">'
-                 f'{_esc(sr.band)} · {_esc(sr.regime)}市</span>')
-        cells = [f'拉伸度 <b>{sr.stretch:+.2f}</b> 个 ATR（离 MA20）',
-                 f'自身分位 <b>{sr.pctile*100:.0f}%</b>']
-        if sr.atr is not None:
-            cells.append(f"ATR14 <b>{sr.atr:.2f}</b>")
-        nums = '<div class="sub" style="margin-top:8px">' + " · ".join(cells) + "</div>"
+                 f'{_esc(sr.band)} · {_esc(sr.regime)}市</span>'
+                 f'<span class="sub" style="margin-left:10px">合并分位 '
+                 f'<b>{sr.pctile*100:.0f}%</b></span>')
+        # 两个维度并排，各带自己的分位——分歧时读者能一眼看出是哪一维在说话
+        def _dim(title, val_html, pct, hint):
+            pc = C_OS if pct <= 0.25 else (C_OB if pct >= 0.75 else C_NEU)
+            return (f'<td style="padding:6px 14px 6px 0;vertical-align:top">'
+                    f'<div class="sub">{title}</div>'
+                    f'<div style="font-size:15px;margin:2px 0">{val_html}</div>'
+                    f'<div class="sub">分位 <b style="color:{pc}">{pct*100:.0f}%</b>'
+                    f' · {hint}</div></td>')
+        dims = (f'<table style="margin-top:10px;border:none"><tr>'
+                + _dim("偏离度 · 离常态多远",
+                       f'<b>{sr.stretch:+.2f}</b> 个 ATR（离 MA20 {sr.ma20:.2f}）',
+                       sr.stretch_pctile, f"ATR14 {sr.atr:.2f}")
+                + _dim("回撤度 · 从近期高点掉多少",
+                       f'<b>{sr.drawdown_pct:+.2f}%</b>（{sr.drawdown:+.2f} 个 ATR）',
+                       sr.dd_pctile, f"60日高 {sr.high_n:.2f}")
+                + '</tr></table>')
+        nums = dims
+
+        diverge = ""
+        if sr.diverge:
+            diverge = (f'<div style="margin-top:10px;padding:8px 10px;background:#fff8c5;'
+                       f'border-left:3px solid #9a6700;border-radius:4px">'
+                       f'⚠️ <b>两维分歧</b>：{_esc(sr.diverge)}</div>')
 
         calib = ""
         if sr.edge_pp is not None and sr.band != "中性":
@@ -221,11 +241,11 @@ def render_technicals_section(tr, sr) -> str:
                      f'border-left:3px solid {ecol};border-radius:4px">'
                      f'<b>回测校准</b>：历史上处于此档位时，此后 5 日相对「什么都不做」'
                      f'<b style="color:{ecol}">{sr.edge_pp:+.2f}pp</b>，'
-                     f'胜率 {sr.win_rate:.0f}%，n={sr.n_hist} · {tag}</div>')
+                     f'跑赢率 {sr.win_rate:.0f}%，n={sr.n_hist} · {tag}</div>')
         elif sr.band == "中性":
             calib = (f'<div class="sub" style="margin-top:8px">'
                      f'中性档即基准桶，无方向性边缘。</div>')
-        parts.append(f'<div style="margin:4px 0 2px">{badge}</div>{nums}{calib}')
+        parts.append(f'<div style="margin:4px 0 2px">{badge}</div>{nums}{diverge}{calib}')
 
     # —— 配角：传统指标 + 趋势结构，并在两者分歧时告警 ——
     if tr is not None and getattr(tr, "ok", False):
@@ -239,12 +259,13 @@ def render_technicals_section(tr, sr) -> str:
                 fast = "跌得急" if "超卖" in tr.heat else "涨得急"
                 conflict = (f'<div style="margin-top:10px;padding:8px 10px;'
                             f'background:#fff8c5;border-left:3px solid #9a6700;border-radius:4px">'
-                            f'⚠️ <b>两个指标分歧</b>：过热分说「{_esc(tr.heat)}」，'
-                            f'拉伸度说「中性、无边缘」（离 MA20 {abs(sr.stretch):.2f} 个 ATR，'
-                            f'在自身历史里只排 {sr.pctile*100:.0f}% 分位）。'
-                            f'<b>{fast}，但相对自身历史还不算极端</b>——'
-                            f'RSI/KDJ/CCI 测的是最近几根走得多急，拉伸度测的是离常态多远。'
-                            f'<b>以拉伸度为准</b>：过热分的五个分量彼此相关 0.79~0.93，'
+                            f'⚠️ <b>与过热分分歧</b>：过热分说「{_esc(tr.heat)}」，'
+                            f'但偏离度只在 {sr.stretch_pctile*100:.0f}% 分位、'
+                            f'回撤度在 {sr.dd_pctile*100:.0f}% 分位，'
+                            f'合并 {sr.pctile*100:.0f}% → 中性。'
+                            f'<b>{fast}，但两个维度都不算极端</b>——'
+                            f'RSI/KDJ/CCI 测的是最近几根走得多急。'
+                            f'<b>以校准读数为准</b>：过热分的五个分量彼此相关 0.79~0.93，'
                             f'是同一信息数了四遍，其极端档占了两成时间。</div>')
         ind = []
         if tr.rsi6 is not None:
@@ -267,16 +288,20 @@ def render_technicals_section(tr, sr) -> str:
             f'<span style="color:{C_NEU}">— 已降级为参考，见下</span></div>'
             f'<div class="sub" style="margin-top:4px">' + " · ".join(ind) + "</div>")
 
-    edu = ('<small><b>拉伸度</b> =（现价−MA20）÷ ATR14，即"偏离均线几个 ATR"，再对自身历史取'
-           '滚动分位，所以"极端"按定义就是罕见的。用 ATR 归一让读数跨品种可比，'
-           '且 ATR 正是期权盈亏平衡距离的天然单位。<br>'
+    edu = ('<small><b>两个维度，问的不是同一个问题</b>：偏离度 =（现价−MA20）÷ATR14，'
+           '问"离常态多远"；回撤度 =（现价−60日最高）÷ATR14，问"从近期高点掉多少"。'
+           '两者分位序列相关仅 0.73（而回撤20日/区间位置与偏离度相关 0.91/0.95，'
+           '是同一件事换个写法，故不采用）。档位由两维分位均值决定——合并后 '
+           't 从 3.99/4.67 升到 4.86，确有增益。<br>'
            '<b>口径</b>：边缘 = +5日收益 − 过去60日局部漂移 − 同 regime 中性桶，'
            '即"比什么都不做多赚多少"；t 为 Welch 双样本、不重叠子样本。<br>'
-           '<b>已知边界</b>：29,672 样本（GLD/SLV/USO/QQQ/SPY，1993→2026）下'
-           '<b>只有超卖侧过得了 |t|≥2</b>（极超卖 +1.06pp/5日）；超买侧方向对且大体单调，'
-           '但最强也只有 t=−1.66，只能读作"追高性价比差"，<b>不可读作"要反转"</b>。'
-           '<b>本指标仅日线成立</b>——1H/4H 回测分离度全在 ±0.2pp 且符号不稳定，是噪音。'
-           '重跑校准：<code>undertow backtest-stretch --emit</code>。</small>')
+           '<b>"跑赢率"不是"上涨概率"</b>：超卖档跑赢率 60~69%，但<b>绝对方向准确率'
+           '只有 56~60%（基准 55~56%）</b>——差别在于前者扣掉了局部漂移。<br>'
+           '<b>已知边界</b>：约 3 万样本（GLD/SLV/USO/QQQ/SPY，1993→2026）下 14 格里'
+           '仅 5 格 |t|≥2，其中 4 格在超卖侧；<b>超买侧只能读作"追高性价比差"，'
+           '不可读作"要反转"</b>。两维分歧时边缘只剩一致时的四成且不显著。'
+           '<b>仅日线成立</b>——1H/4H 回测分离度全在 ±0.2pp 且符号不稳定，是噪音。'
+           '重跑校准：<code>undertow backtest-stretch --emit --compare</code>。</small>')
     return (f'<div class="card"><h2>技术面 · 超买超卖（回测校准）</h2>'
             + "".join(parts) + f'<div style="margin-top:10px">{edu}</div></div>')
 

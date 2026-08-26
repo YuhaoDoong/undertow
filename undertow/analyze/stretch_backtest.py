@@ -24,7 +24,8 @@ import math
 import statistics
 from dataclasses import dataclass, field
 
-from .stretch import BANDS, MA_N, ATR_N, PCT_WINDOW, REGIME_N, band_of, stretch_series
+from .stretch import (BANDS, DD_LOOK, MA_N, PCT_WINDOW, REGIME_N,
+                      band_of, drawdown_series, stretch_series)
 
 DRIFT_N = 60        # 局部漂移窗口
 DEFAULT_HZ = (2, 3, 5, 10)
@@ -67,30 +68,79 @@ def welch_t(a: list, b: list) -> float:
 class Sample:
     name: str
     i: int
-    pctile: float
+    pctile: float                     # 合成分位（两维均值），档位由它决定
     regime: str                       # 牛 / 熊
+    p_stretch: float = 0.0            # 维度一：偏离度分位
+    p_dd: float = 0.0                 # 维度二：回撤度分位
     excess: dict = field(default_factory=dict)   # {horizon: 去趋势超额%}
 
 
+# 可选信号口径，供对照实验用；默认 combo（实测 t 最高）
+SIGNAL_MODES = ("combo", "stretch", "drawdown")
+
+
 def build_samples(name, highs, lows, closes, *, horizons=DEFAULT_HZ,
-                  warmup=None, drift_n=DRIFT_N) -> list:
-    """把一条价序转成回测样本。第 i 个样本只用 ≤i 的数据算信号，无前视。"""
+                  warmup=None, drift_n=DRIFT_N, mode="combo") -> list:
+    """把一条价序转成回测样本。第 i 个样本只用 ≤i 的数据算信号，无前视。
+
+    mode 决定用哪个口径定档：
+      combo    两维分位均值（默认）—— 实测 t=4.86，优于任一单维
+      stretch  只用偏离度 (c−MA20)/ATR    —— t=3.99
+      drawdown 只用回撤度 (c−60日高)/ATR  —— t=4.67
+    """
     n = len(closes)
-    warm = warmup if warmup is not None else max(PCT_WINDOW + MA_N, REGIME_N + 50)
+    warm = warmup if warmup is not None else max(PCT_WINDOW + DD_LOOK, REGIME_N + 50)
     if n < warm + max(horizons) + 10:
         return []
-    pr = _pct_rank_series(stretch_series(highs, lows, closes))
+    p_s = _pct_rank_series(stretch_series(highs, lows, closes))
+    p_d = _pct_rank_series(drawdown_series(highs, lows, closes))
     m200 = _sma_series(closes, REGIME_N)
     out = []
     for i in range(warm, n - max(horizons)):
-        if pr[i] is None or m200[i] is None or i < drift_n:
+        if p_s[i] is None or p_d[i] is None or m200[i] is None or i < drift_n:
             continue
+        pct = {"combo": (p_s[i] + p_d[i]) / 2.0,
+               "stretch": p_s[i], "drawdown": p_d[i]}[mode]
         d = (closes[i] / closes[i - drift_n] - 1) / drift_n      # 日均局部漂移
-        out.append(Sample(name=name, i=i, pctile=pr[i],
+        out.append(Sample(name=name, i=i, pctile=pct,
                           regime="牛" if closes[i] > m200[i] else "熊",
+                          p_stretch=p_s[i], p_dd=p_d[i],
                           excess={k: (closes[i + k] / closes[i] - 1) * 100 - d * k * 100
                                   for k in horizons}))
     return out
+
+
+def diverge_stats(samples: list, *, horizon: int = 5,
+                  extreme: float = 0.10, flat: float = 0.25) -> dict:
+    """两维分歧 vs 一致时的边缘对比 —— 用来回答"分歧了该信谁"。
+
+    结论应当是"都不太该信"：分歧组的边缘显著低于一致组。
+    """
+    neu = {}
+    for rg in ("牛", "熊"):
+        pool = [s.excess[horizon] for s in samples
+                if s.regime == rg and 0.4 <= s.pctile <= 0.6]
+        neu[rg] = statistics.fmean(pool) if len(pool) >= 50 else 0.0
+
+    def stat(sel, label):
+        t = [s for s in samples if sel(s)]
+        if len(t) < 50:
+            return None
+        ex = [s.excess[horizon] - neu[s.regime] for s in t]
+        nov = [s.excess[horizon] - neu[s.regime] for s in t if s.i % horizon == 0]
+        base = [s.excess[horizon] - neu[s.regime] for s in samples
+                if 0.4 <= s.pctile <= 0.6 and s.i % horizon == 0]
+        return {"label": label, "n": len(t), "edge_pp": statistics.fmean(ex),
+                "win_rate": sum(1 for x in ex if x > 0) / len(ex) * 100,
+                "t": welch_t(nov, base)}
+
+    rows = [
+        stat(lambda s: s.p_dd <= extreme and s.p_stretch <= extreme, "两维都超卖（一致）"),
+        stat(lambda s: s.p_dd <= extreme and s.p_stretch > flat, "回撤深但偏离不深（分歧）"),
+        stat(lambda s: s.p_stretch <= extreme and s.p_dd > flat, "偏离深但回撤不深（分歧）"),
+        stat(lambda s: s.p_dd >= 1 - extreme and s.p_stretch >= 1 - extreme, "两维都超买（一致）"),
+    ]
+    return {"rows": [r for r in rows if r]}
 
 
 def calibrate(samples: list, *, horizon: int = 5, min_n: int = 50) -> dict:

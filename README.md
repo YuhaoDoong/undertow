@@ -124,13 +124,17 @@ undertow/
 │   │                           daily decision synthesis (short? chase? swing? core?)
 │   ├── fibonacci・risk_reward  swing legs, retracements, risk-reward gate
 │   ├── technicals              MA structure, RSI/KDJ/MACD/Bollinger → overheat score
-│   ├── stretch                 overbought/oversold as (close−MA20)/ATR14, rank-normalised
-│   │                           against its own history; every reading carries the
-│   │                           backtested edge, win rate, n and Welch t for its
-│   │                           (band × regime) cell — no uncalibrated labels
+│   ├── stretch                 overbought/oversold on two orthogonal ATR-normalised
+│   │                           axes — distance from MA20 ("how far from normal") and
+│   │                           drawdown from the 60-day high ("how far off the top").
+│   │                           Their rank series correlate only 0.73, so combining
+│   │                           them helps; 20-day drawdown and range-position correlate
+│   │                           0.91/0.95 with the first axis and are deliberately left out.
+│   │                           Every reading carries the backtested edge, win rate, n and
+│   │                           Welch t for its (band × regime) cell — no uncalibrated labels
 │   ├── stretch_backtest        regenerates that calibration: local detrending,
-│   │                           within-regime comparison, non-overlapping subsamples
-│   │                           (`undertow backtest-stretch --emit`)
+│   │                           within-regime comparison, non-overlapping Welch t
+│   │                           (`undertow backtest-stretch --emit --compare`)
 │   ├── strategy_hub・strategy・condor・credit_spread   scenario parameterisation
 │   ├── portfolio               live-position review: combo recognition (verticals,
 │   │                           straddles, iron condors, calendars), book stance,

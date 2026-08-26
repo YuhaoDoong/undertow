@@ -1628,7 +1628,7 @@ def cmd_backtest_stretch(args) -> int:
             print(f"[跳过] {sym}: {str(e)[:70]}", file=sys.stderr)
             continue
         got = sb.build_samples(name, ser.highs, ser.lows, ser.closes,
-                               horizons=tuple(args.horizons))
+                               horizons=tuple(args.horizons), mode=args.mode)
         if not got:
             print(f"[跳过] {sym}: 历史不足（{len(ser.closes)} 根）", file=sys.stderr)
             continue
@@ -1640,7 +1640,7 @@ def cmd_backtest_stretch(args) -> int:
         return 1
 
     cal = sb.calibrate(samples, horizon=args.horizon)
-    print(f"# 拉伸度校准回测\n")
+    print(f"# 超买超卖校准回测（口径 {args.mode}）\n")
     print("数据：" + "；".join(spans) + "\n")
     print(sb.render_table_md(cal, horizon=args.horizon, total=len(samples)))
     print()
@@ -1650,6 +1650,41 @@ def cmd_backtest_stretch(args) -> int:
     print("|---|" + "---:|" * len(args.horizons))
     for band, row in prof.items():
         print(f"| {band} | " + " | ".join(f"{row.get(k, 0):+.3f}pp" for k in args.horizons) + " |")
+
+    # 两维分歧：分歧时该信谁？（答案应是"都别太信"）
+    dv = sb.diverge_stats(samples, horizon=args.horizon)
+    if dv["rows"]:
+        print(f"\n### 两维一致 vs 分歧（+{args.horizon} 日）\n")
+        print("| 组合 | 触发 | 边缘 | 跑赢率 | t |")
+        print("|---|---:|---:|---:|---:|")
+        for r in dv["rows"]:
+            print(f"| {r['label']} | {r['n']} | **{r['edge_pp']:+.3f}pp** | "
+                  f"{r['win_rate']:.0f}% | {r['t']:+.2f} |")
+
+    if args.compare:
+        print(f"\n### 三种口径对照（最低/最高 10%，+{args.horizon} 日）\n")
+        print("| 口径 | 超卖边缘 | t | 超买边缘 | t |")
+        print("|---|---:|---:|---:|---:|")
+        for m in sb.SIGNAL_MODES:
+            s2 = []
+            for sym, name in syms:
+                try:
+                    ser = src.fetch_series(sym, rng="max", use_cache=True)
+                except Exception:
+                    continue
+                s2 += sb.build_samples(name, ser.highs, ser.lows, ser.closes,
+                                       horizons=tuple(args.horizons), mode=m)
+            c2 = sb.calibrate(s2, horizon=args.horizon)
+            def pick(bands):
+                vals = [c2[(b, rg)] for b in bands for rg in ("牛", "熊") if (b, rg) in c2]
+                if not vals:
+                    return 0.0, 0.0
+                w = sum(v["n"] for v in vals)
+                return (sum(v["edge_pp"] * v["n"] for v in vals) / w,
+                        sum(v["t"] * v["n"] for v in vals) / w)
+            le, lt = pick(("极超卖", "强超卖"))
+            he, ht = pick(("极超买", "强超买"))
+            print(f"| {m} | {le:+.3f}pp | {lt:+.2f} | {he:+.3f}pp | {ht:+.2f} |")
     if args.emit:
         print(f"\n### 粘回 undertow/analyze/stretch.py（当前表 asof {CALIB_ASOF}）\n")
         print("```python")
@@ -2010,6 +2045,11 @@ def build_parser() -> argparse.ArgumentParser:
     pbs.add_argument("--horizon", type=int, default=5, help="校准表用的前瞻天数（默认 5）")
     pbs.add_argument("--horizons", type=int, nargs="+", default=[2, 3, 5, 10],
                      help="持续性剖面的前瞻天数（默认 2 3 5 10）")
+    pbs.add_argument("--mode", choices=["combo", "stretch", "drawdown"], default="combo",
+                     help="信号口径：combo=两维分位均值(默认) / stretch=只用偏离度 / "
+                          "drawdown=只用回撤度")
+    pbs.add_argument("--compare", action="store_true",
+                     help="额外跑三种口径的横向对照（慢一些）")
     pbs.add_argument("--emit", action="store_true",
                      help="额外输出可粘回 stretch.py 的 CALIB 字面量")
     pbs.set_defaults(func=cmd_backtest_stretch)

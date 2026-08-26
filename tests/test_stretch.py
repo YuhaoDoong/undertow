@@ -13,8 +13,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from undertow.analyze.stretch import (
-    BANDS, CALIB, MA_N, REGIME_N, analyze_stretch, band_of,
-    pct_rank_last, stretch_series,
+    BANDS, CALIB, DD_LOOK, MA_N, REGIME_N, analyze_stretch, band_of,
+    drawdown_series, pct_rank_last, stretch_series,
 )
 from undertow.analyze import stretch_backtest as sb
 
@@ -146,11 +146,125 @@ def test_calib_overall_direction():
 
 
 def test_calib_reliability_flags_match_docstring():
-    """模块文档声称「只有超卖侧过得了 t≥2」—— 用表本身守住这个说法，别让文档漂移。"""
+    """模块文档声称「14 格里 5 格 |t|≥2，其中 4 格在超卖侧」—— 用表本身守住这个说法。
+
+    这条测试的作用是防文档漂移：谁重跑校准改了 CALIB，这里会立刻挂，
+    提醒去同步 docstring 与研报文案里的数字。
+    """
     strong = {k for k, v in CALIB.items() if abs(v[3]) >= 2.0}
-    assert strong == {("极超卖", "牛"), ("强超卖", "牛"), ("极超卖", "熊")}, \
+    assert strong == {("极超卖", "牛"), ("强超卖", "牛"),
+                      ("极超卖", "熊"), ("强超卖", "熊"), ("强超买", "熊")}, \
         f"显著桶集合变了，文档需同步更新: {sorted(strong)}"
+    assert sum(1 for b, _ in strong if "超卖" in b) == 4, "超卖侧显著格数变了"
     print("PASS test_calib_reliability_flags_match_docstring")
+
+
+def test_two_dimensions_are_distinct():
+    """偏离度与回撤度必须给出不同读数——否则又回到"同一件事数两遍"。
+
+    构造一个"尖顶后跌回均线"的价形：从近期高点回撤明显，但价格贴着 MA20。
+    这正是 2026-08-26 QQQ 的形态。
+    """
+    # 先缓慢上行 → 尖顶 → 快速跌回原区间 → 横盘
+    c = [100.0 + i * 0.02 for i in range(500)]
+    c += [c[-1] + i * 1.2 for i in range(1, 16)]      # 尖顶：15 根急拉
+    c += [c[-1] - i * 1.15 for i in range(1, 16)]     # 快速跌回
+    c += [c[-1] + (0.1 if i % 2 else -0.1) for i in range(30)]   # 横盘
+    h = [x * 1.004 for x in c]
+    l = [x * 0.996 for x in c]
+    sr = analyze_stretch(_S(dates=list(range(len(c))), closes=c, highs=h, lows=l))
+    assert sr.ok, sr.note
+    # 回撤度应明显更极端（更低分位），偏离度则被 MA20 追上而回到中性附近
+    assert sr.dd_pctile < sr.stretch_pctile - 0.05, \
+        f"尖顶回落形态下回撤度应比偏离度更极端: dd={sr.dd_pctile:.2f} st={sr.stretch_pctile:.2f}"
+    assert sr.drawdown < -3.0, f"该形态回撤应有数个 ATR，实测 {sr.drawdown:.2f}"
+    assert abs(sr.stretch) < 1.0, f"跌回均线后偏离度应接近 0，实测 {sr.stretch:.2f}"
+    print("PASS test_two_dimensions_are_distinct")
+
+
+def test_diverge_rule():
+    """分歧规则本身（直接喂分位，不依赖合成价形）。
+
+    与价形构造分开测：价形能否造出某个分位组合是另一回事，
+    这里只钉死"给定两维分位 → 该不该报分歧、报哪一条"。
+    """
+    from undertow.analyze.stretch import _diverge_note
+    # 回撤深(6%)但偏离不深(34%) —— 2026-08-26 QQQ 的真实读数
+    n = _diverge_note(0.34, 0.06)
+    assert n and "回撤深但偏离度不深" in n and "四成" in n, n
+    # 反过来：偏离深但回撤不深
+    n2 = _diverge_note(0.05, 0.60)
+    assert n2 and "偏离度深但回撤不深" in n2, n2
+    # 两维一致（都超卖 / 都超买）→ 不报分歧
+    assert _diverge_note(0.05, 0.04) == ""
+    assert _diverge_note(0.96, 0.95) == ""
+    # 都在中性区 → 不报分歧
+    assert _diverge_note(0.50, 0.45) == ""
+    # 超买侧的两条分歧
+    assert "接近前高但涨势不陡" in _diverge_note(0.60, 0.95)
+    assert "反弹不是新高" in _diverge_note(0.95, 0.60)
+    print("PASS test_diverge_rule")
+
+
+def test_drawdown_is_non_positive_and_scale_invariant():
+    """回撤度按定义 ≤0（收盘不可能高于含自身的窗口最高价），且价格整体缩放后不变。"""
+    c = _wave(n=600)
+    h = [x * 1.01 for x in c]; l = [x * 0.99 for x in c]
+    a = drawdown_series(h, l, c)
+    vals = [x for x in a if x is not None]
+    assert vals and max(vals) <= 1e-9, f"回撤度出现正值: {max(vals)}"
+    b = drawdown_series([x * 7 for x in h], [x * 7 for x in l], [x * 7 for x in c])
+    for x, y in zip(a, b):
+        if x is not None:
+            assert abs(x - y) < 1e-9, f"回撤度尺度不变性被破坏: {x} vs {y}"
+    print("PASS test_drawdown_is_non_positive_and_scale_invariant")
+
+
+def test_drawdown_no_lookahead():
+    """回撤度同样不得被未来数据污染。"""
+    c = _wave(n=700)
+    h = [x * 1.01 for x in c]; l = [x * 0.99 for x in c]
+    a = drawdown_series(h, l, c)
+    c2 = list(c); c2[600:] = [x * 4 for x in c2[600:]]
+    h2 = [x * 1.01 for x in c2]; l2 = [x * 0.99 for x in c2]
+    b = drawdown_series(h2, l2, c2)
+    for i in range(599):
+        assert (a[i] is None) == (b[i] is None)
+        if a[i] is not None:
+            assert abs(a[i] - b[i]) < 1e-9, f"第 {i} 根被未来数据污染"
+    print("PASS test_drawdown_no_lookahead")
+
+
+def test_combo_pctile_is_mean_of_dimensions():
+    """合并分位必须就是两维分位的均值——档位判定依赖这一点。"""
+    sr = analyze_stretch(_series(_wave(n=900)))
+    assert sr.ok, sr.note
+    assert abs(sr.pctile - (sr.stretch_pctile + sr.dd_pctile) / 2) < 1e-9
+    assert sr.band == band_of(sr.pctile)
+    print("PASS test_combo_pctile_is_mean_of_dimensions")
+
+
+def test_backtest_modes_all_runnable():
+    """三种口径都必须能跑通并给出档位齐全的校准，否则 --compare 会静默塌掉。"""
+    c = _wave(n=2200, amp=10.0)
+    h = [x * 1.01 for x in c]; l = [x * 0.99 for x in c]
+    for mode in sb.SIGNAL_MODES:
+        samples = sb.build_samples("T", h, l, c, mode=mode)
+        assert samples, f"{mode} 无样本"
+        cal = sb.calibrate(samples, horizon=5, min_n=20)
+        assert cal, f"{mode} 校准为空"
+    print("PASS test_backtest_modes_all_runnable")
+
+
+def test_diverge_stats_shape():
+    """分歧统计必须返回带 n/edge/t 的行，供文档与研报引用。"""
+    c = _wave(n=2200, amp=10.0)
+    h = [x * 1.01 for x in c]; l = [x * 0.99 for x in c]
+    dv = sb.diverge_stats(sb.build_samples("T", h, l, c), horizon=5)
+    assert "rows" in dv
+    for r in dv["rows"]:
+        assert {"label", "n", "edge_pp", "win_rate", "t"} <= set(r)
+    print("PASS test_diverge_stats_shape")
 
 
 def test_welch_t_two_sample():

@@ -133,36 +133,49 @@ def analyze_gamma(
     today = today or date.today()
     spot = snap.spot
 
-    # 近月、未到期、有 OI 的合约（带年化到期时间），近月主导 gamma
+    # ⚠️ 两个集合必须分开（codex review 2026-08-27）：
+    #   oi_pool  —— 只要求「近月 + 未到期 + 有 OI」，**不看 IV**。
+    #               OI 墙是纯持仓量统计、不含任何模型假设，把 IV 缺失的合约剔掉
+    #               会让真实存在的墙凭空消失，与模块声称的「OI 墙最可靠」自相矛盾。
+    #   live     —— GEX 计算需要 IV（要算 BS gamma），才额外要求 iv > 0。
+    # 旧写法两者共用一个 iv>0 的集合，导致 OI 墙 / put-call 比 / 总 OI 全被 IV 过滤；
+    # 且近月 IV 全缺时会放宽到全部远月，所谓「45 日墙」实际来自远月。
+    win = horizon_days / 365.0
+    oi_pool: list[tuple[OptionContract, float]] = []
     live: list[tuple[OptionContract, float]] = []
     for c in snap.with_oi():
         T = _yearfrac(c.expiry, today)
-        if 0 < T <= horizon_days / 365.0 and c.iv > 0:
+        if not (0 < T <= win):
+            continue
+        oi_pool.append((c, T))
+        if c.iv > 0:
             live.append((c, T))
 
-    # 退化情形：近月没数据则放宽到全部未到期
+    # 退化情形分别处理：OI 池放宽到全部未到期；GEX 池另行放宽（并保留 iv 要求）
+    if not oi_pool:
+        oi_pool = [(c, _yearfrac(c.expiry, today)) for c in snap.with_oi()
+                   if _yearfrac(c.expiry, today) > 0]
     if not live:
-        for c in snap.with_oi():
-            T = _yearfrac(c.expiry, today)
-            if T > 0 and c.iv > 0:
-                live.append((c, T))
+        live = [(c, T) for c, T in oi_pool if c.iv > 0]
 
-    # 按行权价聚合 OI 与净 GEX（当前现价下）
+    # ── OI 聚合：走 oi_pool，纯持仓量，不含任何模型假设 ──
     by_strike: dict[float, list[int]] = {}  # strike -> [call_oi, put_oi]
-    gex_by_strike: dict[float, float] = {}
     total_call_oi = total_put_oi = 0
-    for c, T in live:
+    for c, _T in oi_pool:
         slot = by_strike.setdefault(c.strike, [0, 0])
-        g = bs.gamma(spot, c.strike, T, c.iv)
-        gex = g * c.open_interest * CONTRACT_MULTIPLIER * spot * spot * 0.01
         if c.is_call:
             slot[0] += c.open_interest
             total_call_oi += c.open_interest
-            gex_by_strike[c.strike] = gex_by_strike.get(c.strike, 0.0) + gex
         else:
             slot[1] += c.open_interest
             total_put_oi += c.open_interest
-            gex_by_strike[c.strike] = gex_by_strike.get(c.strike, 0.0) - gex
+
+    # ── GEX 聚合：走 live（需 IV 算 BS gamma），与 OI 池分开 ──
+    gex_by_strike: dict[float, float] = {}
+    for c, T in live:
+        g = bs.gamma(spot, c.strike, T, c.iv)
+        gex = g * c.open_interest * CONTRACT_MULTIPLIER * spot * spot * 0.01
+        gex_by_strike[c.strike] = gex_by_strike.get(c.strike, 0.0) + (gex if c.is_call else -gex)
 
     # OI 墙：看涨墙取现价上方最大 call OI；看跌墙取现价下方最大 put OI
     # 仅在现价 ±WALL_BAND 内找——远 OTM 的累积 OI 不构成有意义的吸附/pin 位

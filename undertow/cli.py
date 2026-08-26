@@ -641,6 +641,7 @@ def cmd_live(args) -> int:
     """
     from undertow.collect import longbridge_quote as lq
     from undertow.collect import longbridge_account as lb
+    from dataclasses import replace
     from undertow.analyze.livecheck import LegQuote, check_position, render_md
     from undertow.soul.plan import load_plans
     if not lq.available():
@@ -694,12 +695,21 @@ def cmd_live(args) -> int:
         legs = [mk(l.symbol) for l in pl.legs if l.symbol in held]
         if not legs:
             continue
+        # ⚠️ 多个 active 计划若覆盖同一合约，每个都会建一组 → 敞口被重复计算。
+        # 先到先得：已被前一个计划认领的合约不再参与。（codex review 2026-08-27）
+        if any(l.symbol in seen for l in legs):
+            print(f"[提示] 计划 {pl.id} 的腿已被其它计划认领，跳过以免重复计敞口",
+                  file=sys.stderr)
+            continue
         seen.update(l.symbol for l in legs)
         # 成本优先用计划里记录的【实际成交价】；缺失则回退券商成本价。
         # ⚠️ 必须乘 l.qty，且计划腿与当前实际持仓数量必须完全一致才显示成本——
         # 部分平仓后价值按当前数量算、成本却按原计划算，会得出错误浮盈亏。
         # （codex review 2026-08-26）
         cost = None
+        # 计划腿与实际持仓数量/方向是否完全一致。不一致 = 已部分平仓/改过腿，
+        # 此时【成本与出场阈值都不能沿用】——市值按残余腿算、阈值却按完整组合算，
+        # 会产生假的止损/止盈告警。（codex review 2026-08-27）
         held_match = all(held.get(l.symbol, 0) == (l.qty if l.action == "buy" else -l.qty)
                          for l in pl.legs)
         if pl.legs and held_match and all(l.filled is not None for l in pl.legs):
@@ -710,17 +720,21 @@ def cmd_live(args) -> int:
             # 不是实付价）。能算但要标出来，别让人当成真实成本。
             cost = sum(cost_px.get(l.symbol, 0.0) * l.qty * 100 for l in legs)
             cost_note.append(pl.structure[:20])
-        grouped.append((pl.structure[:34], legs, cost, pl))
+        grouped.append((pl.structure[:34], legs, cost, pl if held_match else None,
+                        "" if held_match else "持仓与计划不符（已部分平仓或改腿）：成本与出场阈值均不适用"))
     for sym, qty in held.items():
         if sym not in seen:
-            grouped.append((sym, [mk(sym)], cost_px.get(sym, 0.0) * qty * 100, None))
+            grouped.append((sym, [mk(sym)], cost_px.get(sym, 0.0) * qty * 100, None, ""))
 
     checks = []
-    for name, legs, cost, pl in grouped:
+    for name, legs, cost, pl, mismatch in grouped:
         stop = target = None
-        if pl is not None:
+        if pl is not None:                      # pl 为 None 即已判定不匹配
             stop, target = pl.exits.stop_value, pl.exits.target_value
-        checks.append(check_position(name, legs, cost=cost, stop=stop, target=target))
+        c = check_position(name, legs, cost=cost, stop=stop, target=target)
+        if mismatch:
+            c = replace(c, warnings=list(c.warnings) + [f"⚠️ {mismatch}"])
+        checks.append(c)
     net = assets.net_assets or None
     print(render_md(checks, net_assets=net))
     if cost_note:
@@ -754,9 +768,14 @@ def cmd_live(args) -> int:
                 if px is None:
                     cl = None; break
                 cl += px * lg.qty * 100
-            label = f"{u}（{len(syms_u)}张在场：{', '.join(x.split('.')[0][-7:] for x in syms_u)}）"
-            ledgers.append(build_ledger(label, sub, cl if cl is not None else 0.0,
-                                        exit_fee=0.80 * len(legs_u)))
+            # 手续费按【张数】计，不是按合约代码数——两腿各 4 张要收 8 笔
+            n_contracts = sum(abs(lg.qty) for lg in legs_u)
+            label = (f"{u}（{n_contracts}张在场："
+                     f"{', '.join(x.split('.')[0][-7:] for x in syms_u)}）")
+            # ⚠️ 原样传 cl（可能是 None），绝不折成 0.0 —— 折零会把「某条腿拿不到盘口」
+            # 显示成「持仓已归零」，并据此算出一个假的生命周期亏损。
+            # （codex review 二轮高危#1：模型层已传播 None，真实 CLI 路径却又折回 0.0）
+            ledgers.append(build_ledger(label, sub, cl, exit_fee=0.80 * n_contracts))
         if ledgers:
             print(render_ledger_md(ledgers))
     except Exception as e:

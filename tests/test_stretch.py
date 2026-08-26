@@ -187,18 +187,27 @@ def test_calib_meta_is_single_source_of_numbers():
 
 
 def test_calib_reliability_flags_match_docstring():
-    """模块文档声称「14 格里 5 格 |t|≥2，其中 4 格在超卖侧」—— 用表本身守住这个说法。
+    """模块文档声称「只有超卖侧可用，超买侧一格都不可用」—— 用表本身守住这个说法。
+
+    可用 = |t|≥2 **且** 检验样本量≥MIN_TEST_N。只看 t 会把「强超买-熊」(t=-2.10,
+    检验 n=36) 算成可用——小样本下 t 极不稳，那是假信号。
 
     这条测试的作用是防文档漂移：谁重跑校准改了 CALIB，这里会立刻挂，
     提醒去同步 docstring 与研报文案里的数字。
     """
-    strong = {k for k, v in CALIB.items() if abs(v[3]) >= 2.0}
-    assert strong == {("极超卖", "牛"), ("强超卖", "牛"),
-                      ("极超卖", "熊"), ("强超卖", "熊"), ("强超买", "熊")}, \
-        f"显著桶集合变了，文档需同步更新: {sorted(strong)}"
-    assert sum(1 for b, _ in strong if "超卖" in b) == 4, "超卖侧显著格数变了"
-    # 唯一过线的超买格，其检验样本量必须小到足以让人警惕
-    assert CALIB[("强超买", "熊")][4] < 50, "该格检验样本量若变大，结论需重新评估"
+    from undertow.analyze.stretch import MIN_TEST_N, T_SIGNIFICANT
+    # 只看 t 的「表面显著」集合
+    surface = {k for k, v in CALIB.items() if abs(v[3]) >= T_SIGNIFICANT}
+    assert surface == {("极超卖", "牛"), ("强超卖", "牛"),
+                       ("极超卖", "熊"), ("强超卖", "熊"), ("强超买", "熊")}, \
+        f"表面显著集合变了，文档需同步更新: {sorted(surface)}"
+    # 真正可用的还要过检验样本量门槛——「强超买-熊」检验 n 仅 36，不认
+    usable = {k for k in surface if CALIB[k][4] >= MIN_TEST_N}
+    assert usable == {("极超卖", "牛"), ("强超卖", "牛"),
+                      ("极超卖", "熊"), ("强超卖", "熊")}, \
+        f"可用集合变了: {sorted(usable)}"
+    assert all("超卖" in b for b, _ in usable), "可用格必须全在超卖侧"
+    assert CALIB[("强超买", "熊")][4] < MIN_TEST_N, "该格若样本量变大，结论需重新评估"
     print("PASS test_calib_reliability_flags_match_docstring")
 
 

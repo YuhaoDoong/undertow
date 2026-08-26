@@ -82,17 +82,39 @@ def test_seller_edge_sufficient_no_flag():
     print("PASS test_seller_edge_sufficient_no_flag")
 
 
-def test_buyer_edge_thin_flagged():
-    """借方结构走【买方边际】：现价 63 却买 61/60 看跌价差 → 盈亏平衡价远在下方，边际深负。"""
+def test_bearish_debit_spread_uses_primary_buyer_gates():
+    """看跌借方价差必须走【主闸门】（净Δ + 每日损耗），不是到期概率兜底。
+
+    2026-08-27 codex review 指出：buyer_carry 旧写法 `nd <= 0 → return None`，
+    使看跌借方价差与多头 put 的净Δ本就为负、直接被排除在买方框架之外——
+    整套买方闸门只覆盖了看涨结构。改用 |净Δ| 后，看跌侧同样受闸门约束。
+    BUYER_EDGE_THIN 是 `carry is None` 时的兜底，主闸门可算时不应再出现。
+    """
     pos = [_Pos("SLV260918P61000.US", "买 61P", 1, 1.00),
            _Pos("SLV260918P60000.US", "卖 60P", -1, 0.40)]   # 净付 0.60 的熊市看跌价差
     pr = review_portfolio(pos, {"SLV": _ctx(63.0)}, asof=date(2026, 8, 24))
     hf = run_healthcheck(pr, None)
-    thin = [f for f in hf if f.code == "BUYER_EDGE_THIN"]
-    assert thin, _codes(hf)
-    assert "盈亏平衡" in thin[0].detail and "边际" in thin[0].detail, thin[0].detail
-    assert "SELLER_EDGE_THIN" not in _codes(hf), "借方结构不该走卖方边际闸门"
-    print(f"PASS test_buyer_edge_thin_flagged → {thin[0].detail}")
+    codes = _codes(hf)
+    assert "LOW_NET_DELTA" in codes, f"看跌侧应受净Δ闸门约束: {codes}"
+    low = [f for f in hf if f.code == "LOW_NET_DELTA"][0]
+    assert "跌" in low.title, f"方向措辞应随净Δ符号变化: {low.title}"
+    assert "SELLER_EDGE_THIN" not in codes, "借方结构不该走卖方边际闸门"
+    print(f"PASS test_bearish_debit_spread_uses_primary_buyer_gates → {low.title}")
+
+
+def test_buyer_carry_handles_both_directions():
+    """buyer_carry 对看涨/看跌结构都要能算出「每日打平所需波动」。"""
+    from undertow.analyze.healthcheck import buyer_carry
+    bear = [_Pos("SLV260918P61000.US", "买 61P", 1, 1.00),
+            _Pos("SLV260918P60000.US", "卖 60P", -1, 0.40)]
+    pr = review_portfolio(bear, {"SLV": _ctx(63.0)}, asof=date(2026, 8, 24))
+    combo = pr.groups[0].combos[0]
+    carry = buyer_carry(combo, 63.0)
+    assert carry is not None, "看跌结构不该返回 None"
+    _th, nd, need = carry
+    assert nd < 0, "看跌结构净Δ应为负（符号保留用于展示方向）"
+    assert need is not None and need > 0, "打平所需波动应为正（幅度问题，与方向无关）"
+    print(f"PASS test_buyer_carry_handles_both_directions → 净Δ{nd:+.3f} 打平{need:.2f}%/日")
 
 
 def test_buyer_edge_sufficient_no_flag():
@@ -147,14 +169,22 @@ def test_single_long_efficient_no_flag():
 
 
 def test_negative_ev_after_fees():
-    """毛期望 +$3.0 但手续费 $3.20 → 净期望为负，判高危（复刻 60/59 实例）。"""
+    """二值估算 +$3.0 但手续费 $3.20 → 扣费后为负，判【中】危（复刻 60/59 实例）。
+
+    ⚠️ 严重性从「高」降为「中」：这个数不是期望值，是最坏情形的二值近似——
+    把价差当成「要么最大盈、要么最大亏」，忽略两个行权价之间的连续 payoff，
+    且用短腿 delta 近似胜率。两处近似都偏保守，系统性低估真实期望，
+    用它做高危否决会错杀本可接受的结构。（codex review 2026-08-27）
+    """
     pos = [_Pos("SLV260918P60000.US", "60P", -1, 1.76),
            _Pos("SLV260918P59000.US", "59P", 1, 1.38)]
     pr = review_portfolio(pos, {"SLV": _ctx_delta(61.2, 0.35)}, asof=date(2026, 8, 25))
     hf = run_healthcheck(pr, None)
     neg = [f for f in hf if f.code == "NEGATIVE_EV_AFTER_FEES"]
-    assert neg and neg[0].severity == "高", _codes(hf)
-    assert "净期望" in neg[0].detail and "手续费" in neg[0].detail, neg[0].detail
+    assert neg and neg[0].severity == "中", _codes(hf)
+    assert "手续费" in neg[0].detail, neg[0].detail
+    # 文案必须自带「这不是期望值」的警示，否则读者会当成真 EV
+    assert "不可当期望值" in neg[0].detail or "非真期望值" in neg[0].title, neg[0].detail
     print(f"PASS test_negative_ev_after_fees → {neg[0].detail[:70]}")
 
 

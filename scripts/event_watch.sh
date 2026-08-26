@@ -19,7 +19,8 @@ LOG="data/history/events/watch.log"
 mkdir -p "$(dirname "$LOG")"
 
 # 交给 Python 判断窗口并输出待捕任务（label|事件名|阶段），无任务则无输出
-# ⚠️ 不丢 stderr、检查退出码：导入/日历出错时旧写法表现为"无任务"，静默漏捕
+# ⚠️ 发现阶段也必须检查退出码：导入错误/日历异常时脚本会得到空 TASKS，
+# 随后按"没有任务"成功退出——静默漏捕，且看起来一切正常。（codex review 2026-08-27）
 TASKS=$("$PY" - <<'PYEOF' 2>>"$LOG"
 import sys, json, pathlib, datetime as dt
 sys.path.insert(0, ".")
@@ -90,6 +91,13 @@ for (hhmm, phase), names in sorted(buckets.items()):
 print("\n".join(out))
 PYEOF
 )
+
+DISCOVER_RC=$?
+if (( DISCOVER_RC != 0 )); then
+  echo "[$(date '+%F %T')] ❌ 任务发现阶段失败（退出码 $DISCOVER_RC）—— 这不是「没有事件」" >> "$LOG"
+  /usr/bin/osascript -e "display notification \"事件发现失败，见 watch.log\" with title \"⚠️ undertow 事件捕捉\" sound name \"Basso\"" 2>/dev/null || true
+  exit 1
+fi
 
 [[ -z "${TASKS// /}" ]] && exit 0
 

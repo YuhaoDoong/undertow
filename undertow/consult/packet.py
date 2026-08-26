@@ -63,6 +63,12 @@ def _instrument_brief(ctx) -> dict:
     }
 
 
+try:
+    from undertow.analyze.stretch import CALIB_META as _CALIB_META
+except Exception:
+    _CALIB_META = {}
+
+
 def _tech_brief(tr) -> dict | None:
     if tr is None or not getattr(tr, "ok", False):
         return None
@@ -78,6 +84,16 @@ def _tech_brief(tr) -> dict | None:
     }
 
 
+def _n_test(sr):
+    """从 CALIB 取该 (档位, regime) 的检验样本量。取不到返回 None，不猜。"""
+    try:
+        from undertow.analyze.stretch import CALIB
+        row = CALIB.get((getattr(sr, "band", ""), getattr(sr, "regime", "")))
+        return row[4] if row and len(row) > 4 else None
+    except Exception:
+        return None
+
+
 def _stretch_brief(sr) -> dict | None:
     """拉伸度：过热分的回测校准替代品。
 
@@ -89,11 +105,20 @@ def _stretch_brief(sr) -> dict | None:
     return {
         "headline": sr.headline, "stretch_atr": sr.stretch, "pctile": sr.pctile,
         "band": sr.band, "regime": sr.regime,
-        "edge_pp_5d": sr.edge_pp, "win_rate": sr.win_rate,
-        "n_hist": sr.n_hist, "t_stat": sr.t_stat, "reliable": sr.reliable,
-        "caveat": ("回测口径：边缘 = +5日收益 − 过去60日局部漂移 − 同 regime 中性桶。"
-                   "只有超卖侧 |t|≥2；超买侧全部不显著，只能读作『追高性价比差』，"
-                   "不可读作『要反转』。1H/4H 上本指标是噪音，仅日线成立。"),
+        "edge_pp_5d": sr.edge_pp, "beat_neutral_pct": sr.win_rate,
+        # ⚠️ 两个样本量必须都给：n_trigger 是重叠计数，n_test 才是 t 实际用的
+        # 不重叠子样本，两者差约 5 倍。只给前者会让接入 AI 高估证据规模。
+        "n_trigger": sr.n_hist, "n_test": _n_test(sr),
+        "t_stat": sr.t_stat, "reliable": sr.reliable,
+        "caveat": ("回测口径：边缘 = +5日收益 − 过去60日局部漂移 − 同 regime 中性桶；"
+                   "『跑赢比例』是跑赢中性桶（与边缘同源），不是上涨概率。"
+                   "可用判定 = |t|≥2 **且** 检验样本量≥50。按此，"
+                   "**只有超卖侧四格可用，超买侧一格都不可用**"
+                   "（唯一 |t|≥2 的『强超买-熊』检验样本量仅 36，小样本下 t 不稳，不认）。"
+                   "超买只能读作『追高性价比差』，不可读作『要反转』。"
+                   "1H/4H 上本指标是噪音，仅日线成立。"),
+        # 统计局限一并传出——接入的 AI 必须知道这些 t 值本身偏乐观
+        "stat_caveats": list(_CALIB_META.get("caveats", [])),
     }
 
 

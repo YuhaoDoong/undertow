@@ -140,6 +140,16 @@ def single_long_edge(combo, spot: float | None = None):
 
 
 def after_fee_ev(combo, implied_p: float | None = None, spot: float | None = None):
+    """⚠️ **这不是期望值，是最坏情形的二值近似**（codex review 2026-08-27 指出的命名错误）。
+
+    公式 `p*最大盈利 − (1−p)*最大亏损` 把价差当成只有两种结局的赌局，
+    但价差在两个行权价之间是**连续 payoff**——落在中间时既不是最大盈利也不是最大亏损。
+    且 p 用短腿 delta 近似，delta 至多近似「到期价内概率」，不是「拿到最大盈利的概率」。
+    两处近似都偏保守，所以本函数系统性**低估**真实期望。
+
+    因此：可用作「连最坏情形都算不过账吗」的压力测试，**不可当作期望值使用**，
+    更不该单凭它否决交易。风险中性下价差的真实 EV 本就≈0，靠它选结构没有意义。
+    """
     """**扣费后期望值**——比"获利 > 手续费"严格得多的检验。
 
     关键修正：手续费该跟【期望盈利】比，不是跟【最大盈利】比。最大盈利你拿不到，
@@ -219,8 +229,13 @@ def buyer_carry(combo, spot: float | None = None):
     if not spot or spot <= 0 or not legs:
         return None
     nd = net_delta_per_contract(combo)
-    if nd is None or nd <= 0:
+    # ⚠️ 用 |Δ| 衡量方向暴露效率，符号只用于展示方向。
+    # 旧写法 `nd <= 0` 直接返回 → 看跌借方价差与多头 put 的净Δ本就为负，
+    # 整个买方框架（每日 theta 打平、净Δ 闸门）只覆盖了看涨结构。
+    # （codex review 2026-08-27）
+    if nd is None or abs(nd) < 1e-9:
         return None
+    nd_abs = abs(nd)
     th = 0.0
     for l in legs:
         if l.strike is None or l.dte is None or l.dte <= 0:
@@ -229,7 +244,9 @@ def buyer_carry(combo, spot: float | None = None):
         sign = 1 if l.qty > 0 else -1
         th += sign * _bs.theta(spot, l.strike, l.dte / 365.0, iv, kind=l.kind)
     theta_usd = th * CONTRACT_MULT * qty
-    need_pct = (abs(theta_usd) / (nd * CONTRACT_MULT * qty)) / spot * 100 if nd else None
+    # 用 |Δ| 做分母：打平所需波动是【幅度】问题，与方向无关。
+    # 返回带符号的 nd 供展示方向，调用方比较闸门时须用 abs()。
+    need_pct = (abs(theta_usd) / (nd_abs * CONTRACT_MULT * qty)) / spot * 100
     return theta_usd, nd, need_pct
 
 
@@ -316,13 +333,17 @@ def check_group(g, capital) -> list[HealthFinding]:
                     suggestion="买方真正该看的是净Δ（对上涨的反应）与 theta（每日成本）。",
                     scope=f"{g.underlying} · {c.label}"))
             nd = net_delta_per_contract(c)
-            if nd is not None and 0 < nd < MIN_NET_DELTA_DEBIT and len(c.legs) >= 2:
+            # ⚠️ 用 |净Δ| 判闸门：看跌借方价差/多头 put 的净Δ本就为负，
+            # 旧写法 `0 < nd` 会把整个看跌侧排除在闸门之外。（codex review 2026-08-27）
+            if nd is not None and 0 < abs(nd) < MIN_NET_DELTA_DEBIT and len(c.legs) >= 2:
+                _dir = "涨" if nd > 0 else "跌"
                 out.append(HealthFinding(
-                    severity="中", code="LOW_NET_DELTA", title="净Δ过低：对上涨几乎无反应",
-                    detail=(f"{c.label}：每张净Δ 仅 {nd:.3f}——标的每涨 $1 组合只涨 "
-                            f"${nd*CONTRACT_MULT:.0f}。两腿相互抵消，**在『提前平仓』的打法下**"
-                            f"（不持有到期），涨了也赚不到多少。"),
-                    suggestion="拉开两腿间距或把长腿买得更价内，让净Δ ≥ 0.10；"
+                    severity="中", code="LOW_NET_DELTA",
+                    title=f"净Δ过低：对{_dir}几乎无反应",
+                    detail=(f"{c.label}：每张净Δ {nd:+.3f}——标的每{_dir} $1 组合只变动 "
+                            f"${abs(nd)*CONTRACT_MULT:.0f}。两腿相互抵消，**在『提前平仓』的打法下**"
+                            f"（不持有到期），走对方向也赚不到多少。"),
+                    suggestion="拉开两腿间距或把长腿买得更价内，让 |净Δ| ≥ 0.10；"
                                "到期概率高的窄价差，在不打算持有到期的策略里意义不大。",
                     scope=f"{g.underlying} · {c.label}"))
             elif c.max_profit and c.max_loss and (c.max_profit / c.max_loss) < POOR_RR_SELLER:
@@ -338,12 +359,18 @@ def check_group(g, capital) -> list[HealthFinding]:
             gross, fees, net, frac = fe
             if net <= 0:
                 out.append(HealthFinding(
-                    severity="高", code="NEGATIVE_EV_AFTER_FEES", title="扣除手续费后期望值为负",
-                    detail=(f"{c.label}：毛期望 ${gross:+,.1f}、手续费 ${fees:.2f}"
+                    # ⚠️ 降为「中」：这个数不是期望值，是最坏情形的二值近似（见 after_fee_ev 文档），
+                    # 系统性低估真实期望。用它做高危否决会错杀本可接受的结构。
+                    severity="中", code="NEGATIVE_EV_AFTER_FEES",
+                    title="最坏情形二值估算为负（非真期望值）",
+                    detail=(f"{c.label}：二值估算 ${gross:+,.1f}、手续费 ${fees:.2f}"
                             f"（{len(c.legs)}腿×{c.qty}张×${FEE_PER_CONTRACT:.2f}×开平2次）"
-                            f"→ **净期望 ${net:+,.1f}**。最大盈看着够大，但你拿到的是期望值。"),
-                    suggestion="把边际拉开（短腿卖更远/放宽间距）、或减少腿数与张数；"
-                               "费用按张计，近月便宜合约张数多＝费用膨胀。",
+                            f"→ **扣费后 ${net:+,.1f}**。"
+                            f"⚠️ 该数把价差当成「要么最大盈、要么最大亏」的二值赌局，"
+                            f"忽略两个行权价之间的连续 payoff，且用短腿 delta 近似胜率——"
+                            f"**系统性低估，只能当压力测试，不可当期望值**。"),
+                    suggestion="仅作「连最坏情形都算不过账吗」的参考。真要改善，"
+                               "拉开边际或减少腿数张数；费用按张计，近月便宜合约张数多＝费用膨胀。",
                     scope=f"{g.underlying} · {c.label}"))
             elif frac is not None and frac > FEE_MAX_FRAC_OF_EV:
                 out.append(HealthFinding(

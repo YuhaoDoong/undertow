@@ -38,7 +38,11 @@ import sys; sys.path.insert(0, ".")
 bits = []
 try:
     from undertow.soul.plan import load_plans
-    pend = [p for p in load_plans() if p.status in ("draft", "ready")]
+    # ⚠️ TradePlan 的标准状态是 waiting/active/done/cancelled（见 soul/plan.py）。
+    # 早先这里写的是 draft/ready —— 那两个值根本不在标准集合里，导致「有待执行计划」
+    # 这个触发条件永远不成立。draft/ready 保留只为兼容我手工写过的非标准值。
+    # （codex review 2026-08-27）
+    pend = [p for p in load_plans() if p.status in ("waiting", "draft", "ready")]
     if pend:
         bits.append(f"{len(pend)} 个待执行计划（{', '.join(p.id for p in pend[:3])}）")
 except Exception as e:
@@ -61,7 +65,13 @@ PYEOF
       # 旧写法一上来就创建目标文件，任何一步失败也会留下"成功"文件，
       # 幂等检查随后永久阻止当日重试——一次短暂故障就让当天彻底没有简报。
       # （codex review 2026-08-26）
-      TMP="${F}.partial"
+      # 并发互斥：同一时点多次唤醒可能重叠。用 mkdir 做原子锁，临时文件带 PID。
+      LOCK="${OUT}/.lock_premarket_${ET_DATE}"
+      if ! mkdir "$LOCK" 2>/dev/null; then
+        echo "[盘前] 另一实例正在运行 —— 跳过"; exit 0
+      fi
+      trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+      TMP="${F}.partial.$$"
       { echo "# 盘前简报 $ET_DATE（ET $(TZ=America/New_York date +%H:%M)）"; echo
         echo "**触发原因**：$REASON"; echo; } > "$TMP"
       OK=1
@@ -90,6 +100,11 @@ if (( ET_MIN >= 580 && ET_MIN <= 595 )); then
   F="$OUT/${ET_DATE}_live.md"
   if [[ ! -f "$F" ]]; then
     # 同上：live 失败不得写成"成功"文件，否则当日不再重试
+    LOCK2="${OUT}/.lock_live_${ET_DATE}"
+    if ! mkdir "$LOCK2" 2>/dev/null; then
+      echo "[体检] 另一实例正在运行 —— 跳过"; exit 0
+    fi
+    trap 'rmdir "$LOCK2" 2>/dev/null' EXIT
     if ! RES=$("$PY" -m undertow.cli live 2>&1); then
       echo "[体检] live 执行失败 —— 不落盘，等下一次唤醒重试" >&2
       notify "⚠️ 持仓体检失败" "$(printf '%s' "$RES" | tail -1)"

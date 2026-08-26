@@ -34,10 +34,12 @@ ATR"可以直接换算成"买方需要标的走多远"。两个维度都是价�
   * **日线有效，1H / 4H 是噪音**。1H(61k 样本)/4H(12.7k 样本)上各候选信号的高低位
     分离度全在 ±0.2pp 以内且符号不稳定。别在更短周期用。
 
-  * **只有超卖侧稳定过得了显著性**。14 格里 5 格 |t|≥2，其中 4 格在超卖侧
-    （极超卖-牛 t=3.16、强超卖-牛 t=3.25、极超卖-熊 t=2.30、强超卖-熊 t=2.07）。
-    超买侧只有"强超买-熊"过线，而它的**检验样本量只有 36**（触发 202 次是重叠计数，
-    别当证据规模）；其余方向对、大体单调，但 t 在
+  * **只有超卖侧可用，超买侧一格都不可用**。判定同时看 |t|≥2 **与** 检验样本量≥50：
+        极超卖-牛 t=3.16 (n=102)　强超卖-牛 t=3.25 (n=109)
+        极超卖-熊 t=2.30 (n=155)　强超卖-熊 t=2.07 (n=146)   ← 四格全在超卖侧
+    超买侧唯一 |t|≥2 的是"强超买-熊"（t=-2.10），但它**检验样本量只有 36**，
+    小样本下 t 极不稳，故不认（触发 202 次是重叠计数，别当证据规模）。
+    其余超买格方向对、大体单调，但 t 在
     -0.7 ~ -1.8 之间晃，**这种不稳定本身就是"边缘很薄"的证据**。超买只能读作
     「追高性价比差」，不能读作「要反转」。
 
@@ -134,14 +136,24 @@ _CALIB_RAW = """
 强超买 熊 -0.519 42 202 -2.10 36
 极超买 熊 -1.062 37 148 -1.71 30
 """
+# 严格解析：这是仓内静态产物，没有兼容旧协议的必要。
+# 容错会掩盖真正的格式错误——6 列旧格式会被静默接受并把检验样本量设为 0，
+# 于是可能出现「显著、检验 n=0」这种自相矛盾的读数。（codex review 2026-08-27）
 for _ln in _CALIB_RAW.strip().splitlines():
-    # 容忍 6 列（旧格式，无检验样本量）与 7 列（新格式）——升级期间不至于整个模块导入失败
     _p = _ln.split()
-    _b, _r, _e, _w, _n, _t = _p[:6]
-    _nt = _p[6] if len(_p) > 6 else 0
+    if len(_p) != 7:
+        raise ValueError(f"CALIB 行必须恰好 7 列（档位 regime 边缘 跑赢率 触发 t 检验n），"
+                         f"实为 {len(_p)} 列：{_ln!r}。请用 backtest-stretch --emit 重新生成。")
+    _b, _r, _e, _w, _n, _t, _nt = _p
+    if (_b, _r) in CALIB:
+        raise ValueError(f"CALIB 出现重复键 {(_b, _r)}")
     CALIB[(_b, _r)] = (float(_e), float(_w), int(_n), float(_t), int(_nt))
+_missing = [(b, r) for _, b in BANDS for r in ("牛", "熊") if (b, r) not in CALIB]
+if _missing:
+    raise ValueError(f"CALIB 缺少档位×regime 组合：{_missing}")
 
 T_SIGNIFICANT = 2.0    # |t| ≥ 此值才当作可用信号；否则标"不显著"
+MIN_TEST_N = 50        # 检验样本量下限：低于此值即便 |t|≥2 也不认（t 在小样本下极不稳）
 
 
 @dataclass(frozen=True)
@@ -284,7 +296,10 @@ def analyze_stretch(series) -> StretchRead:
     band = band_of(pct)
     cal = CALIB.get((band, regime))
     edge, wr, nh, t, n_test = cal if cal else (None, None, None, None, None)
-    reliable = bool(t is not None and abs(t) >= T_SIGNIFICANT)
+    # 显著性不只看 t：检验样本量太小时 t 本身不可信
+    # （「强超买-熊」触发 202 次但检验 n 仅 36 —— 这种格不该标成可用信号）
+    reliable = bool(t is not None and abs(t) >= T_SIGNIFICANT
+                    and (n_test or 0) >= MIN_TEST_N)
     diverge = _diverge_note(p_s, p_d)
 
     if band == "中性":

@@ -1,27 +1,145 @@
 # AGENTS.md — undertow
 
-机构持仓暗流情报工具。纯标准库 Python，确定性计算；本文件给在本仓库工作的 AI 代理
-（Codex / Claude Code 等）一份一致的上手说明。技能化用法另见 `SKILL.md`。
+期权/持仓情报工具，服务于一个**真实的小额实盘账户**（净资产约 $440）。
+纯标准库 Python、零依赖、确定性计算。本文件是给在本仓库工作的 AI 代理
+（Codex / Claude Code / 其它）的统一上手说明。
 
-## 跑起来
-- Python 3.9+，**无第三方依赖**。在仓库根目录运行：`python -m undertow <command> [品种...]`。
-- 品种：`gold` `silver` `wti` `dxy`。命令：`report / analyze / gamma / flow / backtest / snapshot / calendar / list`。
-- 测试：`python -m pytest -q`（应全绿）。
+> 面向终端用户的技能说明（何时用哪个命令、如何解读输出）在 **`SKILL.md`**；
+> 本文件只讲**在这个仓库里写代码时必须知道的事**，不重复 SKILL.md 的内容。
 
-## 代码地图（四层 + core，严格单向依赖）
-- `undertow/core/` — models / config / clock / calendar（事件日历），不依赖其它层。
-- `undertow/collect/` — 数据源适配器 + 快照仓库 + 缓存（取数都在这）。
-- `undertow/analyze/` — 纯计算分析（只吃 `core.models`，不取数）。
-- `undertow/report/` — markdown / html / viz 渲染（只吃 analyze 结果）。
-- `undertow/cli.py` — 命令编排。`config/instruments.json` — 品种注册表；`config/calendar.json` — 关键事件表（FOMC/数据/COT/到期，美东日历，手维护，日期须核源）。
+---
 
-## 约定
-- **不引入第三方依赖**（零依赖是这个项目的身份；可视化用手写 SVG，不用 matplotlib）。
-- 数值一律走确定性代码，LLM 不负责算数；新增计算配单元测试。
-- **不绕过任何数据源的反爬/ToS**（尤其 CME 403、ForexFactory/Investing 网页 Cloudflare）；只用可合法访问的 CFTC/CBOE/Yahoo/FRED + FairEconomy 公开 JSON feed（事件日历，消费公开 feed 非爬网页）。
-- 新增品种改 JSON 即可；新增数据源在 `collect/` 加文件，分析层不动。
-- 提交信息讲清「为什么」；快照（`data/snapshots/`）纳入 git 作为不可再生历史的备份。
+## 一、不可协商的四条边界
 
-## 诚实边界（改动/汇报时保持）
-- 期权层是 **ETF 代理**（USO≈WTI 弱）；真·CME 期货期权需券商/付费源（如 IBKR），尚未接入。
-- COT 周频滞后约 3 天；结论只作波段级风险情境，不构成交易指令。
+违反其中任何一条的改动都不该提交，即使用户明确要求。
+
+1. **只读，绝不交易。** 任何代码路径都不得下单、撤单、改单，包括条件单/止损单。
+   长桥 CLI 只用 `quote / depth / positions / assets / cash-flow / order`（只读子命令）
+   与 `order detail|executions`。**`order buy|sell|cancel|replace` 永远不出现在本仓库。**
+   执行永远是用户在券商端的动作。
+2. **零第三方依赖。** 可视化是手写 SVG，不用 matplotlib；HTTP 用 `urllib`；
+   统计用 `statistics`/`math`。这是项目身份，不是偏好。
+3. **不绕过任何数据源的反爬/ToS。** CME 403、ForexFactory 网页 Cloudflare 一律不碰；
+   只用可合法访问的 CFTC / CBOE / Yahoo / FRED / FairEconomy 公开 JSON feed。
+4. **敏感数据永不入库。** 已 gitignore：`data/account/`（实盘持仓资金）、
+   `data/soul/`（个人交易体系、亏损史、心理弱点）、`article`、`docs/screenshot/`、
+   `docs/author_*.md`（付费订阅内容，含水印，涉版权）。
+   **每次提交前跑一遍**：
+   `git status --short | grep -iE "article|screenshot|author|playbook|private|account/|soul/"`
+
+---
+
+## 二、跑起来
+
+```bash
+python3 -m pytest -q                 # 应全绿（当前 272 项）
+python3 -m undertow list             # 品种清单
+python3 -m undertow report gold      # 综合研判 → data/reports/*.html
+python3 -m undertow live             # 持仓实时体检（需长桥 CLI）
+```
+
+品种：`gold silver wti dxy qqq tqqq`
+命令：`analyze gamma vol snapshot flow expiry fib backtest report list account
+consult serve soul journal event plan tech live backtest-stretch news calendar`
+
+---
+
+## 三、代码地图（严格单向依赖，改一层不动其它）
+
+```
+core/      models / config / clock / calendar        —— 不依赖任何其它层
+collect/   数据源适配器 + 快照仓库 + 缓存             —— 取数只在这层
+analyze/   纯计算（只吃 core.models，无 I/O、无网络） —— 数值全出自这层
+report/    markdown / html / viz（只吃 analyze 结果）
+consult/   AI 接入层：上下文包 + 本地只读 HTTP
+soul/      用户的交易体系 / 计划 / 日记（数据私有，代码公开）
+cli.py     命令编排（唯一允许把 collect 与 analyze 接起来的地方）
+```
+
+各层另有 `README.md` 讲清每个文件的职责与已知边界，**改动请同步更新**。
+`config/instruments.json` 是品种注册表——加品种改 JSON，分析层不动。
+
+---
+
+## 四、这个项目特有的工程约定
+
+这些不是通用最佳实践，是在这个仓库里踩出来的。
+
+### 数值与统计
+
+- **LLM 不碰算术。** 所有数字由 `analyze/` 的确定性代码算出；新增计算必配单测。
+- **任何阈值都要能被证伪。** 拍脑袋的阈值不许进代码。若一定要拍，
+  必须在注释里标明「未校准」，并提供重跑校准的命令
+  （参考 `stretch.py` 的 `CALIB` + `backtest-stretch --emit`）。
+- **校准数字只能有一处来源。** 散文注释里写死样本量必然过期
+  （面板每天增长）。用 `CALIB_META` 这类结构集中存放，文案去读它。
+- **回测三条硬要求**（见 `stretch_backtest.py` 文档）：
+  局部去趋势（不减全样本均值）、同 regime 内比较、不重叠子样本 + 双样本 t
+  （边缘与 t 必须同源）。
+- **显著性要同时看 t 与检验样本量。** 只看 t 会把 n=36 的格子当成证据。
+- **已知的统计局限必须与结论同时呈现**，不能只在文档角落提一句。
+
+### 数据口径
+
+- **ETF 代理 vs 商品价**：行权价以 ETF 计，换算商品价用**当日实时比值**
+  （`期货价 / ETF价`），不用静态乘数——乘数随基金费率漂移。
+  位点必须换算；而 `(价差)/(ATR)` 这类**比值**量纲自动抵消，不用换算。
+- **盘中数据源分工**：长桥实时（`quote` 给价与 IV、`depth` 给 Level-2 盘口），
+  CBOE 延迟 15 分钟只用于隔夜结构分析（OI 墙来自 OCC 隔夜结算，盘中恒定不变）。
+- **券商「成本价」在部分减仓后会被改写**成该轮打平价，既非实付价也不含更早轮次。
+  判断盈亏一律用现金流水（见 `livecheck.Ledger`）。
+- **出场计价**：多头腿按 bid、空头腿按 ask。券商 App 的持仓盈亏用 last，
+  对流动性差的腿会系统性高估。
+
+### 失败与缺失
+
+- **静默失败是最严重的 bug 类别。** 「检查失败」与「没事发生」必须可区分。
+  无人值守脚本尤其：先写临时文件、逐条检查退出码、全部成功才原子改名；
+  失败要能被下一次唤醒重试，不能留下一个「成功」文件把当天堵死。
+- **缺数据就返回 `None`，不要折成 0。** 折零会把「拿不到行情」显示成
+  「持仓已归零」。聚合时若有成员缺失，总额必须显式标为「不完整」——
+  **低估敞口比高估危险**。
+- **不要用 `if x:` 判断数值缺失。** `0.0` 是合法值，而且往往正是最需要告警的时刻。
+  一律 `x is not None`。
+
+### 重复实现
+
+- 同一个量不许在两处各算一遍。已有 `tests/test_no_drift.py` 守住
+  `_yearfrac` / `_atr` / `_sma` 的跨模块一致性——新增共用计算请一并加进去。
+- 「详细结论」与「摘要标签」必须在**同一个分支**里产出。两套并行 if 链必然漂移
+  （`verdict.py` 曾漂出三处自相矛盾）。
+
+---
+
+## 五、金融语义（改 `analyze/` 前必读）
+
+- **买方与卖方是两套框架，不可混用。**
+  买方（付权金）：看**净Δ**与**每日 theta 打平所需波动**，因为要提前平仓；
+  卖方（收权金）：才看**到期越过行权价的概率**。
+  用错框架会选出完全错误的结构。注意净Δ判闸门要用 `abs()`——
+  看跌结构的净Δ本就为负。
+- **借记价差的最大亏损 = 已付权金**，价值下界为 0、跌不穿，没有强平尾巴。
+  这类结构的止损是「减损选择」，不是「防灾必需」。
+- **仓位双层限额**：单笔止损风险 ≤10%（定仓位）、单笔最大亏损 ≤20%（防跳空）。
+- **手续费按张计**，不按合约代码数。
+- **组合单 vs 分腿建仓决定出场机制**：组合单进 → 券商锁腿、只能整体平；
+  分腿进 → 不认作组合、必须逐腿手动且**永远先买回短腿**（否则留下裸卖）。
+
+---
+
+## 六、诚实边界（改动与汇报时都要保持）
+
+- 期权层是 **ETF 代理**（USO ≈ WTI 属弱代理，无稳定乘数）；
+  真·CME 期货期权需券商/付费源，尚未接入。
+- COT 周频、发布滞后约 3 天。
+- 输出只作**波段级风险情景**，不是交易指令、不是投资建议。
+- 不确定就说不确定。**推测不能当作事实写进代码注释或规则**——
+  若要断言券商/交易所的行为，先去查；查不到就明说查不到。
+
+---
+
+## 七、提交
+
+- 提交信息讲清**为什么**，不只是改了什么；bug 修复要写明**原来错在哪、后果是什么**。
+- 快照（`data/snapshots/`）纳入 git——期权链不可再生，入库即备份。
+- 提交前：`pytest -q` 全绿 + 敏感文件检查（见第一节）。

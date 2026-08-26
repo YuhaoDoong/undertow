@@ -2,11 +2,14 @@
 name: undertow
 description: >-
   读懂价格表面之下的机构持仓暗流。聚合 CFTC COT 持仓、期权 Gamma/OI 墙、买卖方
-  资金流（含多腿价差识别）与 FRED 宏观，给出黄金/白银/原油/美元指数的方向研判、
-  关键支撑阻力位与情景推演。当用户问期货持仓、期权 OI 墙/Gamma、聪明钱/资金流向、
-  COT 报告、或想要这些品种的多空研判与关键位时使用。Use for futures positioning
-  (COT), options gamma / OI walls, smart-money options flow, and directional reads
-  on gold, silver, WTI crude, and the US Dollar Index.
+  资金流（含多腿价差识别）、回测校准的超买超卖与 FRED 宏观，给出黄金/白银/原油/
+  美元指数/纳指(QQQ·TQQQ) 的方向研判、关键支撑阻力位与情景推演；并支持只读接入
+  实盘账户做持仓体检、计划交易与交易日记。当用户问期货持仓、期权 OI 墙/Gamma、
+  聪明钱/资金流向、COT 报告、超买超卖、或想要这些品种的多空研判与关键位、
+  或要复盘自己的期权持仓时使用。Use for futures positioning (COT), options gamma /
+  OI walls, smart-money options flow, backtest-calibrated overbought/oversold reads,
+  and read-only review of live option positions on gold, silver, WTI crude,
+  the US Dollar Index, and the Nasdaq-100 (QQQ / TQQQ).
 ---
 
 # Undertow — 持仓暗流情报
@@ -30,7 +33,9 @@ description: >-
 ## 前置
 - Python 3.9+；**无需 pip 安装任何依赖**（仅标准库 urllib/json/statistics…）。
 - 所有命令在**仓库根目录**运行：`python -m undertow <command> [品种...]`。
-- 品种 key：`gold` `silver` `wti` `dxy`（`python -m undertow list` 查看各品种已配齐哪些层）。
+- 品种 key：`gold` `silver` `wti` `dxy` `qqq` `tqqq`（`python -m undertow list` 查看各品种已配齐哪些层）。
+  ⚠️ `qqq`/`tqqq` 的 commodity 层共用 `NQ=F`——**价格类读数可共用（比值量纲抵消），但位点必须各自换算**：
+  TQQQ 是 3 倍杠杆，行权价与纳指点位无固定比例。
 
 ## 命令
 | 命令 | 作用 | 产物 |
@@ -45,13 +50,16 @@ description: >-
 | `python -m undertow consult ["问题"]` | **咨询/开仓前问诊（只读）**：把研判＋持仓评价＋体检＋你的问题装成"咨询上下文包"（数字全由确定性引擎算好），供 AI 给意见。`--thesis ID` 带上你的**事前判断**（AI 须先独立判读再逐条对照，并给出 实盘/模拟/否决 三选一结论）；`--pre-trade SPEC` 对拟开仓做开仓前问诊；`--json` 出机器可读完整包（供其它 AI 接入） | 默认打印可投喂任意 LLM 的 prompt；`--json` 出 JSON 包 |
 | `python -m undertow serve` | **本地只读 HTTP API**：把咨询上下文包暴露成 localhost 端点（标准库 http.server），方便接入其它 AI。`GET /consult?q=...`、`/prompt`、`/positions`、`/health`；**无任何下单端点** | 本地 HTTP 服务（默认 127.0.0.1:8787） |
 | `python -m undertow backtest [品种...]` | COT 信号事件研究回测 | 终端 Markdown |
+| `python -m undertow vol [品种...]` | **波动率溢价 VRP 跨周期检验**：「卖方这个 edge 能不能穿越牛熊」。属长周期研究，只落盘存档 `data/history/vrp/`，**不进每日报告** | 终端 Markdown |
 | `python -m undertow snapshot [品种...]` | 落盘当日期权链原始全字段 | gzip 存 `data/snapshots/`（纳入 git） |
 | `python -m undertow calendar [品种...]` | 事件雷达：关键节点倒计时 + **实时预测/前值/影响**（本周自动拉 FairEconomy 公开 feed，远期用手维护锚点） | 终端；也自动嵌入 `report` 顶部。`--no-live` 仅用本地锚点 |
 | `python -m undertow soul [--check]` | **交易灵魂档案（个人专属·只读）**：你的交易体系/铁律/纪律/已知弱点/教训；`--init` 从公开模板 `config/soul.template.json` 生成本地私有档案；`--check` 用其中的机器限额（**双层仓位：止损风险%(软,决定仓位) + 最大亏损%(硬,跳空防线)**/集中度/**闸门分两套：方向性看R:R、卖方看胜率边际**/空头腿了结线/禁强平结构）**核查当前持仓是否破戒**。档案自动进 `consult` 并置于 prompt 最前——任何 AI 先读你的规则再给意见 | 终端 Markdown；档案存 gitignore 的 `data/soul/` |
 | `python -m undertow journal [--capture\|--date\|--limit]` | **交易日记（本地私有）**：`--theses` 看**事前判断记录**（开仓前写下方向/依据/失效条件/目标，事后标对错——**判断对错与交易盈亏分开统计**，两者背离即说明问题不在判断力）；`--capture` 从券商**自动抓当日成交**（时间/合约/方向/张数/成交价/金额/手续费）+ 账户前后变化；再补**复盘、盖棺定论、心情**。档案记『规则』，日记记『发生了什么』，互补 | 终端 Markdown；存 gitignore 的 `data/soul/journal.json` |
 | `python -m undertow event LABEL [品种...]` | **事件影响捕捉（只读）**：数据/事件落地【前】与【后约10分钟】各捕一次横截面快照（**期货实时价为主口径**——≈23h交易、数据公布瞬间最真实；ETF 常规/夜盘/盘前/盘后**各场次分开记**；+ATM IV+过热分+墙位+新闻），`--compare KEY` 出前后对比表。**事件时点不可再生**，攒够后可用自己的数据统计各类事件对各品种的真实冲击。盘前 IV 不更新会标⚠陈旧 | 快照存 `data/history/events/`（入 git，市场数据非个人） |
 | `python -m undertow plan [--check\|--notify\|--orders ID]` | **计划交易（只读监控）**：记录完整交易计划（触发价+出场四要素+张数+闸门）；`--check` 抓实时价核触发/接近；`--notify` 弹通知+落 ALERT（可接 launchd 盯盘）；`--orders ID` 输出**可照抄的下单参数**。**绝不下单/撤单/改单**——执行永远是你在券商端的动作 | 终端 Markdown；计划存 gitignore 的 `data/soul/plans.json` |
-| `python -m undertow tech [品种...]` | **技术面（短线过热度 + 趋势结构）**：从真实价序确定性算 均线排列/RSI/KDJ/MACD/布林/CCI/BIAS + 多窗口涨幅 → 超买-超卖综合分。与期权结构层**正交交叉印证**（如"结构偏多 + 短线超买→别追"） | 终端 Markdown；也进 `consult` 上下文包与 InstrumentContext |
+| `python -m undertow tech [品种...]` | **技术面：超买超卖（回测校准）+ 趋势结构**。<br>主读数是**两个正交维度**：①偏离度 `(现价−MA20)/ATR14`「离常态多远」；②回撤度 `(现价−60日最高)/ATR14`「从近期高点掉多少」——两者分位相关仅 0.73，是真互补（而 20 日回撤/区间位置与偏离度相关 0.91/0.95，是同一件事换写法，故不采用）。**每个读数强制带上该 (档位×regime) 的回测边缘/跑赢中性桶比例/触发次数/检验样本量/Welch t**，不输出未校准的裸标签。<br>⚠️ 实测边界：**只有超卖侧四格可用**（|t|≥2 且检验样本≥50）；**超买侧一格都不可用**，只能读作「追高性价比差」，**不可读作「要反转」**；**仅日线成立，1H/4H 是噪音**。<br>传统过热分（RSI/KDJ/CCI/布林/BIAS）保留但**已降级**——五个分量彼此相关 0.79~0.93，是同一信息数了四遍。两者分歧时以校准读数为准 | 终端 Markdown；也进 `report` 卡片、`consult` 包与 InstrumentContext |
+| `python -m undertow live` | **持仓实时体检（只读）**：长桥 Level-2 实时盘口 → **真实可平仓价**（多头腿按 bid 卖、空头腿按 ask 买回）。⚠️ 券商 App 的持仓盈亏用 last 价，对流动性差的腿会**系统性高估**（实测同一时刻 App $100 / 真实可平仓 $67，差 $33）——**止损判定必须用本命令的数**。另出**生命周期台账**：只吃现金流水，不信券商成本价（后者在部分减仓后会被改写成该轮打平价）。任一持仓拿不到盘口时，总敞口显式标为「不完整的下界」 | 终端 Markdown；无持仓则直接返回 |
+| `python -m undertow backtest-stretch [--mode\|--compare\|--emit]` | **重跑超买超卖校准表**：长历史（1993→2026）+ regime 分层 + 不重叠 Welch 双样本 t。`--compare` 对照 combo/stretch/drawdown 三种口径；`--emit` 输出可粘回 `stretch.py` 的 CALIB 字面量。改了指标参数就重跑，**别手改数字** | 终端 Markdown |
 | `python -m undertow news [品种...]` | **事件感知（只读）**：品种相关新闻（长桥）+ 影响本品种的临近关键事件；**高影响事件临近（≤3天）置顶告警**（如"到期日撞 Core PCE"）。新闻只作背景/催化剂旁证，不改判方向 | 终端 Markdown；也进 `consult` 上下文包 |
 | `python -m undertow list` | 列出品种与各自数据层 | 终端 |
 

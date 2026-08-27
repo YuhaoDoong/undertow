@@ -473,14 +473,28 @@ def render_flow_section(fa) -> str:
         return ""
     head = '<h2>期权资金流 / 持仓异动（买方 vs 卖方）</h2>'
     tilt = f'<div class="sub">净倾向：<b>{_esc(fa.flow_tilt)}</b></div>'
+    # 裁决的【全部】理由 + 未校准标记必须落到用户眼前。
+    # 旧版只渲染 reasons[0]，而"未经校准"提示常在 reasons[1] —— 于是
+    # "每条理由强制带标注"只在对象级测试成立，用户看到的报告里没有。
+    _cc = getattr(fa, "call", None)
+    if _cc is not None:
+        _rs = list(getattr(_cc, "reasons", []) or [])
+        if len(_rs) > 1:
+            tilt += ('<ul class="sub" style="margin:4px 0 0 18px">'
+                     + "".join(f"<li>{_esc(r)}</li>" for r in _rs[1:]) + "</ul>")
+        if not getattr(_cc, "calibrated", False):
+            tilt += ('<div class="sub" style="color:#9a6700">⚠ 本层方向判定'
+                     '<b>未经回测校准</b>——实测覆盖率/正确率权衡里没有任何门槛的 '
+                     'Wilson 95% 区间下界超过 50%。</div>')
     # —— 净有效 Delta：与上面的"资金力"并列展示，两者性质不同，冲突时必须让读者看见 ——
     nd = getattr(fa, "net_delta_total", None)
-    if nd:
+    if nd is not None:          # 0.0 是合法读数，不得隐藏
         ndc = getattr(fa, "net_delta_call", 0.0)
         ndp = getattr(fa, "net_delta_put", 0.0)
-        up_t = "偏多" in fa.flow_tilt
-        dn_t = "偏空" in fa.flow_tilt
-        clash = (nd > 0 and dn_t) or (nd < 0 and up_t)
+        # ⚠️ 读结构化裁决，不在散文里搜"多"/"空"（弃权文案同时含两字）
+        _c = getattr(fa, "call", None)
+        _d = getattr(_c, "direction", "") if (_c and not getattr(_c, "abstain", True)) else ""
+        clash = (nd > 0 and _d == "偏空") or (nd < 0 and _d == "偏多")
         warn = ('　<b style="color:#bf8700">⚠ 与上面的资金力倾向方向相反</b>'
                 '——资金力是【推断】（先按 IV 判买卖方），净 Delta 是【观测】（纯算术，'
                 '不需知道谁主动）。两者实测约 6 成日子不同向，本层未校准，'
@@ -1262,7 +1276,7 @@ def render_strong_signal_banner(ss, display_name: str = "", stale_note: str = ""
         f'<ul style="margin:6px 0 0;padding-left:20px;font-size:13.5px">{reasons}</ul>'
         f'{diverge}'
         f'<div class="sub" style="margin-top:8px;font-size:12px">'
-        f'口径：近月主翼(20~45Δ)买卖方加权，独立于下方综合投票 · 波段级情景预警，非交易指令</div>'
+        f'口径：近月主翼(20~45Δ)买卖方加权。⚠️ 它与资金力用同一套压力数（实测方向 100% 共线），**不是第二份独立证据**；方向裁决弃权时本告警不会出现 · 波段级情景预警，非交易指令</div>'
         f'</div>'
     )
 

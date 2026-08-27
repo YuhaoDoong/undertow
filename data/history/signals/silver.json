@@ -25,6 +25,11 @@
   "call_hard_abstain": false,
   "call_ratio": 1.54,
   "call_reason": "两个口径反向：推断口径（资金力 1.54×）指向偏空，观测口径（净有效 Delta +16,833）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 1.54×）指向偏空，观测口径（净有效 Delta +16,833）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 13690.9,
   "net_delta_put": 3141.9,
   "net_delta_total": 16832.8,
@@ -87,6 +92,11 @@
   "call_hard_abstain": false,
   "call_ratio": 1.68,
   "call_reason": "两个口径反向：推断口径（资金力 1.68×）指向偏空，观测口径（净有效 Delta +2,289）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 1.68×）指向偏空，观测口径（净有效 Delta +2,289）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 8627.0,
   "net_delta_put": -6338.2,
   "net_delta_total": 2288.8,
@@ -149,6 +159,11 @@
   "call_hard_abstain": false,
   "call_ratio": 1.54,
   "call_reason": "两个口径反向：推断口径（资金力 1.54×）指向偏空，观测口径（净有效 Delta +5,058）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 1.54×）指向偏空，观测口径（净有效 Delta +5,058）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 7007.6,
   "net_delta_put": -1950.2,
   "net_delta_total": 5057.5,
@@ -211,6 +226,10 @@
   "call_hard_abstain": false,
   "call_ratio": 1.04,
   "call_reason": "压力比 1.04× < 1.3×，两侧势均力敌（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）",
+  "call_reasons": [
+   "压力比 1.04× < 1.3×，两侧势均力敌（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 9166.7,
   "net_delta_put": -5582.2,
   "net_delta_total": 3584.5,
@@ -273,6 +292,11 @@
   "call_hard_abstain": false,
   "call_ratio": 4.69,
   "call_reason": "两个口径反向：推断口径（资金力 4.69×）指向偏空，观测口径（净有效 Delta +8,920）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 4.69×）指向偏空，观测口径（净有效 Delta +8,920）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 9298.4,
   "net_delta_put": -378.2,
   "net_delta_total": 8920.2,
@@ -335,6 +359,11 @@
   "call_hard_abstain": false,
   "call_ratio": 4.37,
   "call_reason": "两口径同向：资金力 4.37× 与净有效 Delta +3,193 均指向偏多",
+  "call_reasons": [
+   "两口径同向：资金力 4.37× 与净有效 Delta +3,193 均指向偏多",
+   "压力比 4.37×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 8578.0,
   "net_delta_put": -5385.0,
   "net_delta_total": 3193.0,
@@ -397,6 +426,11 @@
   "call_hard_abstain": false,
   "call_ratio": 1.57,
   "call_reason": "两个口径反向：推断口径（资金力 1.57×）指向偏多，观测口径（净有效 Delta -5,235）指向偏空",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 1.57×）指向偏多，观测口径（净有效 Delta -5,235）指向偏空",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 4212.7,
   "net_delta_put": -9447.9,
   "net_delta_total": -5235.2,
@@ -459,6 +493,11 @@
   "call_hard_abstain": false,
   "call_ratio": 31.71,
   "call_reason": "两个口径反向：推断口径（资金力 31.71×）指向偏空，观测口径（净有效 Delta +10,022）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 31.71×）指向偏空，观测口径（净有效 Delta +10,022）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 11772.1,
   "net_delta_put": -1749.9,
   "net_delta_total": 10022.2,
@@ -521,6 +560,11 @@
   "call_hard_abstain": false,
   "call_ratio": 11.53,
   "call_reason": "两口径同向：资金力 11.53× 与净有效 Delta +7,664 均指向偏多",
+  "call_reasons": [
+   "两口径同向：资金力 11.53× 与净有效 Delta +7,664 均指向偏多",
+   "压力比 11.53×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 10446.4,
   "net_delta_put": -2782.3,
   "net_delta_total": 7664.1,
@@ -583,6 +627,11 @@
   "call_hard_abstain": false,
   "call_ratio": 12.65,
   "call_reason": "两个口径反向：推断口径（资金力 12.65×）指向偏多，观测口径（净有效 Delta -5,514）指向偏空",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 12.65×）指向偏多，观测口径（净有效 Delta -5,514）指向偏空",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 4648.8,
   "net_delta_put": -10162.8,
   "net_delta_total": -5514.0,
@@ -645,6 +694,11 @@
   "call_hard_abstain": false,
   "call_ratio": 4.85,
   "call_reason": "两个口径反向：推断口径（资金力 4.85×）指向偏空，观测口径（净有效 Delta +7,071）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 4.85×）指向偏空，观测口径（净有效 Delta +7,071）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 9042.6,
   "net_delta_put": -1972.0,
   "net_delta_total": 7070.7,
@@ -707,6 +761,11 @@
   "call_hard_abstain": false,
   "call_ratio": 18.55,
   "call_reason": "两口径同向：资金力 18.55× 与净有效 Delta +706 均指向偏多",
+  "call_reasons": [
+   "两口径同向：资金力 18.55× 与净有效 Delta +706 均指向偏多",
+   "压力比 18.55×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 3509.3,
   "net_delta_put": -2803.1,
   "net_delta_total": 706.2,
@@ -769,6 +828,11 @@
   "call_hard_abstain": false,
   "call_ratio": 32.03,
   "call_reason": "两个口径反向：推断口径（资金力 32.03×）指向偏多，观测口径（净有效 Delta -1,831）指向偏空",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 32.03×）指向偏多，观测口径（净有效 Delta -1,831）指向偏空",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 2012.1,
   "net_delta_put": -3843.3,
   "net_delta_total": -1831.2,
@@ -831,6 +895,11 @@
   "call_hard_abstain": false,
   "call_ratio": 11.58,
   "call_reason": "两个口径反向：推断口径（资金力 11.58×）指向偏空，观测口径（净有效 Delta +4,033）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 11.58×）指向偏空，观测口径（净有效 Delta +4,033）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 7486.2,
   "net_delta_put": -3453.5,
   "net_delta_total": 4032.7,
@@ -893,6 +962,10 @@
   "call_hard_abstain": true,
   "call_ratio": null,
   "call_reason": "当日 ΔOI 全零（OCC 隔夜结算尚未落地），数据不携带任何持仓变化",
+  "call_reasons": [
+   "当日 ΔOI 全零（OCC 隔夜结算尚未落地），数据不携带任何持仓变化"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 0,
   "net_delta_put": 0,
   "net_delta_total": 0,
@@ -955,6 +1028,11 @@
   "call_hard_abstain": false,
   "call_ratio": 1.7,
   "call_reason": "两个口径反向：推断口径（资金力 1.70×）指向偏空，观测口径（净有效 Delta +12,053）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 1.70×）指向偏空，观测口径（净有效 Delta +12,053）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 19743.1,
   "net_delta_put": -7690.3,
   "net_delta_total": 12052.8,
@@ -1017,6 +1095,11 @@
   "call_hard_abstain": false,
   "call_ratio": 2.82,
   "call_reason": "两个口径反向：推断口径（资金力 2.82×）指向偏空，观测口径（净有效 Delta +2,231）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 2.82×）指向偏空，观测口径（净有效 Delta +2,231）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 5094.7,
   "net_delta_put": -2863.5,
   "net_delta_total": 2231.3,
@@ -1079,6 +1162,10 @@
   "call_hard_abstain": false,
   "call_ratio": 1.03,
   "call_reason": "压力比 1.03× < 1.3×，两侧势均力敌（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）",
+  "call_reasons": [
+   "压力比 1.03× < 1.3×，两侧势均力敌（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 2721.9,
   "net_delta_put": -1405.1,
   "net_delta_total": 1316.8,
@@ -1141,6 +1228,11 @@
   "call_hard_abstain": false,
   "call_ratio": 3.48,
   "call_reason": "两口径同向：资金力 3.48× 与净有效 Delta +3,237 均指向偏多",
+  "call_reasons": [
+   "两口径同向：资金力 3.48× 与净有效 Delta +3,237 均指向偏多",
+   "压力比 3.48×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 5240.0,
   "net_delta_put": -2003.4,
   "net_delta_total": 3236.6,
@@ -1203,6 +1295,11 @@
   "call_hard_abstain": false,
   "call_ratio": 5.92,
   "call_reason": "两口径同向：资金力 5.92× 与净有效 Delta -1,670 均指向偏空",
+  "call_reasons": [
+   "两口径同向：资金力 5.92× 与净有效 Delta -1,670 均指向偏空",
+   "压力比 5.92×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 889.8,
   "net_delta_put": -2559.6,
   "net_delta_total": -1669.8,
@@ -1265,6 +1362,11 @@
   "call_hard_abstain": false,
   "call_ratio": 26.38,
   "call_reason": "两口径同向：资金力 26.38× 与净有效 Delta +1,282 均指向偏多",
+  "call_reasons": [
+   "两口径同向：资金力 26.38× 与净有效 Delta +1,282 均指向偏多",
+   "压力比 26.38×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 5672.5,
   "net_delta_put": -4390.9,
   "net_delta_total": 1281.6,
@@ -1327,6 +1429,10 @@
   "call_hard_abstain": false,
   "call_ratio": 1.01,
   "call_reason": "压力比 1.01× < 1.3×，两侧势均力敌（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）",
+  "call_reasons": [
+   "压力比 1.01× < 1.3×，两侧势均力敌（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 2116.2,
   "net_delta_put": -3817.9,
   "net_delta_total": -1701.7,
@@ -1389,6 +1495,11 @@
   "call_hard_abstain": false,
   "call_ratio": 2.76,
   "call_reason": "两个口径反向：推断口径（资金力 2.76×）指向偏空，观测口径（净有效 Delta +10,261）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 2.76×）指向偏空，观测口径（净有效 Delta +10,261）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 19063.7,
   "net_delta_put": -8802.5,
   "net_delta_total": 10261.2,
@@ -1451,6 +1562,11 @@
   "call_hard_abstain": false,
   "call_ratio": 2.93,
   "call_reason": "两个口径反向：推断口径（资金力 2.93×）指向偏空，观测口径（净有效 Delta +659）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 2.93×）指向偏空，观测口径（净有效 Delta +659）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 5357.9,
   "net_delta_put": -4699.0,
   "net_delta_total": 658.9,
@@ -1513,6 +1629,11 @@
   "call_hard_abstain": false,
   "call_ratio": 1.96,
   "call_reason": "两口径同向：资金力 1.96× 与净有效 Delta +4,846 均指向偏多",
+  "call_reasons": [
+   "两口径同向：资金力 1.96× 与净有效 Delta +4,846 均指向偏多",
+   "压力比 1.96×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 7338.3,
   "net_delta_put": -2492.4,
   "net_delta_total": 4845.9,
@@ -1575,6 +1696,11 @@
   "call_hard_abstain": false,
   "call_ratio": 2.32,
   "call_reason": "两个口径反向：推断口径（资金力 2.32×）指向偏空，观测口径（净有效 Delta +15,616）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 2.32×）指向偏空，观测口径（净有效 Delta +15,616）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 16575.9,
   "net_delta_put": -959.5,
   "net_delta_total": 15616.4,
@@ -1637,6 +1763,11 @@
   "call_hard_abstain": false,
   "call_ratio": 2.34,
   "call_reason": "两口径同向：资金力 2.34× 与净有效 Delta +8,084 均指向偏多",
+  "call_reasons": [
+   "两口径同向：资金力 2.34× 与净有效 Delta +8,084 均指向偏多",
+   "压力比 2.34×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 9880.0,
   "net_delta_put": -1796.1,
   "net_delta_total": 8083.9,
@@ -1699,6 +1830,11 @@
   "call_hard_abstain": false,
   "call_ratio": 4.0,
   "call_reason": "两个口径反向：推断口径（资金力 4.00×）指向偏空，观测口径（净有效 Delta +3,870）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 4.00×）指向偏空，观测口径（净有效 Delta +3,870）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 4081.7,
   "net_delta_put": -211.7,
   "net_delta_total": 3869.9,
@@ -1761,6 +1897,10 @@
   "call_hard_abstain": true,
   "call_ratio": null,
   "call_reason": "当日 ΔOI 全零（OCC 隔夜结算尚未落地），数据不携带任何持仓变化",
+  "call_reasons": [
+   "当日 ΔOI 全零（OCC 隔夜结算尚未落地），数据不携带任何持仓变化"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 0,
   "net_delta_put": 0,
   "net_delta_total": 0,
@@ -1823,6 +1963,11 @@
   "call_hard_abstain": false,
   "call_ratio": 5.96,
   "call_reason": "两个口径反向：推断口径（资金力 5.96×）指向偏空，观测口径（净有效 Delta +4,739）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 5.96×）指向偏空，观测口径（净有效 Delta +4,739）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 7276.2,
   "net_delta_put": -2536.8,
   "net_delta_total": 4739.4,
@@ -1885,6 +2030,11 @@
   "call_hard_abstain": false,
   "call_ratio": 1.9,
   "call_reason": "两口径同向：资金力 1.90× 与净有效 Delta +5,743 均指向偏多",
+  "call_reasons": [
+   "两口径同向：资金力 1.90× 与净有效 Delta +5,743 均指向偏多",
+   "压力比 1.90×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 9246.4,
   "net_delta_put": -3503.1,
   "net_delta_total": 5743.3,
@@ -1947,6 +2097,11 @@
   "call_hard_abstain": false,
   "call_ratio": 6.43,
   "call_reason": "两个口径反向：推断口径（资金力 6.43×）指向偏空，观测口径（净有效 Delta +524）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 6.43×）指向偏空，观测口径（净有效 Delta +524）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 2172.3,
   "net_delta_put": -1648.8,
   "net_delta_total": 523.6,
@@ -2009,6 +2164,11 @@
   "call_hard_abstain": false,
   "call_ratio": 12.25,
   "call_reason": "两口径同向：资金力 12.25× 与净有效 Delta -5,238 均指向偏空",
+  "call_reasons": [
+   "两口径同向：资金力 12.25× 与净有效 Delta -5,238 均指向偏空",
+   "压力比 12.25×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": -3089.5,
   "net_delta_put": -2148.3,
   "net_delta_total": -5237.7,
@@ -2071,6 +2231,11 @@
   "call_hard_abstain": false,
   "call_ratio": 2.05,
   "call_reason": "两个口径反向：推断口径（资金力 2.05×）指向偏空，观测口径（净有效 Delta +8,280）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 2.05×）指向偏空，观测口径（净有效 Delta +8,280）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 9926.5,
   "net_delta_put": -1646.7,
   "net_delta_total": 8279.8,
@@ -2133,6 +2298,10 @@
   "call_hard_abstain": true,
   "call_ratio": null,
   "call_reason": "当日 ΔOI 全零（OCC 隔夜结算尚未落地），数据不携带任何持仓变化",
+  "call_reasons": [
+   "当日 ΔOI 全零（OCC 隔夜结算尚未落地），数据不携带任何持仓变化"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 0,
   "net_delta_put": 0,
   "net_delta_total": 0,
@@ -2195,6 +2364,10 @@
   "call_hard_abstain": false,
   "call_ratio": 1.09,
   "call_reason": "压力比 1.09× < 1.3×，两侧势均力敌（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）",
+  "call_reasons": [
+   "压力比 1.09× < 1.3×，两侧势均力敌（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 8569.1,
   "net_delta_put": -109.3,
   "net_delta_total": 8459.7,
@@ -2257,6 +2430,11 @@
   "call_hard_abstain": false,
   "call_ratio": 4.74,
   "call_reason": "两个口径反向：推断口径（资金力 4.74×）指向偏多，观测口径（净有效 Delta -4,016）指向偏空",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 4.74×）指向偏多，观测口径（净有效 Delta -4,016）指向偏空",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 7575.8,
   "net_delta_put": -11591.9,
   "net_delta_total": -4016.0,
@@ -2319,6 +2497,11 @@
   "call_hard_abstain": false,
   "call_ratio": 1.69,
   "call_reason": "两口径同向：资金力 1.69× 与净有效 Delta +9,506 均指向偏多",
+  "call_reasons": [
+   "两口径同向：资金力 1.69× 与净有效 Delta +9,506 均指向偏多",
+   "压力比 1.69×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 14434.5,
   "net_delta_put": -4928.3,
   "net_delta_total": 9506.2,
@@ -2381,6 +2564,11 @@
   "call_hard_abstain": false,
   "call_ratio": 2.65,
   "call_reason": "两个口径反向：推断口径（资金力 2.65×）指向偏空，观测口径（净有效 Delta +2,588）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 2.65×）指向偏空，观测口径（净有效 Delta +2,588）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 7859.6,
   "net_delta_put": -5272.1,
   "net_delta_total": 2587.5,
@@ -2443,6 +2631,10 @@
   "call_hard_abstain": true,
   "call_ratio": null,
   "call_reason": "当日 ΔOI 全零（OCC 隔夜结算尚未落地），数据不携带任何持仓变化",
+  "call_reasons": [
+   "当日 ΔOI 全零（OCC 隔夜结算尚未落地），数据不携带任何持仓变化"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 0,
   "net_delta_put": 0,
   "net_delta_total": 0,
@@ -2505,6 +2697,11 @@
   "call_hard_abstain": false,
   "call_ratio": 9.81,
   "call_reason": "两口径同向：资金力 9.81× 与净有效 Delta +5,028 均指向偏多",
+  "call_reasons": [
+   "两口径同向：资金力 9.81× 与净有效 Delta +5,028 均指向偏多",
+   "压力比 9.81×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 11123.3,
   "net_delta_put": -6095.6,
   "net_delta_total": 5027.7,
@@ -2552,36 +2749,41 @@
   "direction": null,
   "level": null,
   "vol_confirms": null,
-  "outlook_bias": "偏多(弱)",
+  "outlook_bias": null,
   "diverges": null,
-  "up_pressure": 12398.5,
-  "dn_pressure": 59446.8,
-  "bull_wing": 7.5,
-  "bear_wing": 40.2,
-  "bull_wing_oi": 3965.0,
-  "bear_wing_oi": 26683.9,
+  "up_pressure": 7474.0,
+  "dn_pressure": 59813.8,
+  "bull_wing": 6.5,
+  "bear_wing": 43.7,
+  "bull_wing_oi": 2117.0,
+  "bear_wing_oi": 28372.0,
   "churn_call": 1.0,
   "churn_put": 1.0,
   "call_direction": null,
   "call_abstain": true,
   "call_hard_abstain": false,
-  "call_ratio": 4.79,
-  "call_reason": "两个口径反向：推断口径（资金力 4.79×）指向偏空，观测口径（净有效 Delta +11,083）指向偏多",
-  "net_delta_call": 20012.8,
-  "net_delta_put": -8930.0,
-  "net_delta_total": 11082.9,
-  "net_call_doi": 83491,
-  "net_put_doi": 39536,
-  "oi_build_ratio": 2.11,
+  "call_ratio": 8.0,
+  "call_reason": "两个口径反向：推断口径（资金力 8.00×）指向偏空，观测口径（净有效 Delta +5,698）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 8.00×）指向偏空，观测口径（净有效 Delta +5,698）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
+  "net_delta_call": 13159.0,
+  "net_delta_put": -7461.5,
+  "net_delta_total": 5697.5,
+  "net_call_doi": 62014,
+  "net_put_doi": 32718,
+  "oi_build_ratio": 1.9,
   "d_spot_pct": 0.19,
   "d_atm_pp": -1.26,
   "d_skew25_pp": 1.31,
-  "bull_pressure_ratio": 0.209,
-  "bear_pressure_ratio": 4.795,
-  "bull_wing_ratio": 0.187,
-  "bear_wing_ratio": 5.36,
-  "bull_scale_doi": 83491,
-  "bear_scale_doi": 39536,
+  "bull_pressure_ratio": 0.125,
+  "bear_pressure_ratio": 8.003,
+  "bull_wing_ratio": 0.149,
+  "bear_wing_ratio": 6.723,
+  "bull_scale_doi": 62014,
+  "bear_scale_doi": 32718,
   "bull_gates": [
    false,
    false,
@@ -2629,6 +2831,11 @@
   "call_hard_abstain": false,
   "call_ratio": 20.72,
   "call_reason": "两个口径反向：推断口径（资金力 20.72×）指向偏多，观测口径（净有效 Delta -810）指向偏空",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 20.72×）指向偏多，观测口径（净有效 Delta -810）指向偏空",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 2068.8,
   "net_delta_put": -2879.0,
   "net_delta_total": -810.2,

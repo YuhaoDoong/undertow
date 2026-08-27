@@ -25,6 +25,11 @@
   "call_hard_abstain": false,
   "call_ratio": 16.64,
   "call_reason": "两个口径反向：推断口径（资金力 16.64×）指向偏空，观测口径（净有效 Delta +7,381）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（资金力 16.64×）指向偏空，观测口径（净有效 Delta +7,381）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 15243.1,
   "net_delta_put": -7862.4,
   "net_delta_total": 7380.7,

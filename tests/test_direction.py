@@ -142,6 +142,46 @@ def test_strong_signal_obeys_abstention():
     print("PASS test_strong_signal_obeys_abstention")
 
 
+
+
+def test_downstream_must_not_parse_tilt_prose():
+    """下游不得在 flow_tilt 散文里搜"多"/"空" —— 弃权文案同时含两个字。
+
+    2026-08-27 codex review 实测：冲突文案是
+      「方向不明（两个口径反向：推断口径（资金力 13.95×）指向偏空，
+        观测口径（净有效 Delta +5,689）指向偏多）」
+    同时含"空"和"多"。condor.py 旧代码先查"空"，于是把【方向不明】
+    无条件当成偏空、给出"铁鹰宜整体下移半档"的建议。
+    """
+    from undertow.analyze.direction import decide
+    c = decide(up_pressure=6_576, dn_pressure=91_763, net_delta=+5_689)
+    tilt = f"方向不明（{c.reasons[0]}）"
+    assert "空" in tilt and "多" in tilt, "前提：弃权文案确实同时含两个方向字"
+    # 结构化字段必须干净：弃权时 direction 为空
+    assert c.abstain and c.direction == ""
+    print("PASS test_downstream_must_not_parse_tilt_prose")
+
+
+def test_condor_ignores_direction_when_abstaining():
+    """裁决弃权时，铁鹰不得应用任何方向微调。"""
+    from dataclasses import dataclass
+    from undertow.analyze import condor as C
+    from undertow.analyze.direction import decide
+
+    @dataclass
+    class _FA:
+        call: object
+        flow_tilt: str = "方向不明（两个口径反向：…指向偏空，…指向偏多）"
+
+    abst = _FA(call=decide(up_pressure=6_576, dn_pressure=91_763, net_delta=+5_689))
+    src = C.__file__
+    txt = open(src, encoding="utf-8").read()
+    assert '"空" in tilt' not in txt, "condor 不得再解析 flow_tilt 散文"
+    assert 'getattr(_call, "direction"' in txt or '_call, "direction"' in txt
+    assert abst.call.abstain and abst.call.direction == ""
+    print("PASS test_condor_ignores_direction_when_abstaining")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for fn in fns:

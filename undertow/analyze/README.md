@@ -77,3 +77,5 @@
 ## Boundary / 边界
 
 imports `core`（+ 少量分析层内部互引，如 `outlook` 吃 gamma/flow 结果；`portfolio` 吃 blackscholes）；**不 import** `collect`/`report`（`portfolio` 只吃调用方喂入的 `InstrumentContext`，账户数据由 CLI 层从 `collect/longbridge_account` 取后注入）。输出只作**波段级风险情境**，非交易指令、非投资建议。
+- `direction.py` —— **方向裁决与弃权**。区分【硬弃权】（无前日快照/ΔOI 全零/数据已过期，属逻辑约束）与【软弃权】（压力比不足/两口径反向，阈值**未校准**）。所有软弃权理由强制带「未经校准」标注；实测没有任何门槛的 Wilson 95% 下界超过 50%。
+- `structure_read.py` —— 机构口径的结构读数，**不输出方向票**（防守强度轴与多空正交）。

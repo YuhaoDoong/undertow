@@ -25,6 +25,11 @@
   "call_hard_abstain": false,
   "call_ratio": 2.1,
   "call_reason": "两口径同向：资金力 2.10× 与净有效 Delta +4,715 均指向偏多",
+  "call_reasons": [
+   "两口径同向：资金力 2.10× 与净有效 Delta +4,715 均指向偏多",
+   "压力比 2.10×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
   "net_delta_call": 5742.6,
   "net_delta_put": -1027.9,
   "net_delta_total": 4714.7,

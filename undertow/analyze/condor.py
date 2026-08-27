@@ -295,13 +295,16 @@ def assess_condor(*, snap: OptionsSnapshot, vr, today: date, fa=None) -> CondorP
     else:
         reasons.append(f"买翼/卖身 IV 差 {skew_cost:+.0f}pp → skew 摩擦不显著")
 
-    # 方向微调（来自 flow 当日方向盘）
-    tilt = getattr(fa, "flow_tilt", "") if fa is not None else ""
-    if tilt and not tilt.startswith("—"):
-        if "空" in tilt:
-            caveats.append("当日资金方向偏空——铁鹰宜整体下移半档（put 卖腿离现价远些）对冲下行威胁")
-        elif "多" in tilt:
-            caveats.append("当日资金方向偏多——铁鹰宜整体上移半档（call 卖腿离现价远些）对冲上行威胁")
+    # 方向微调（来自 flow 当日裁决）
+    # ⚠️ **必须读结构化的 call.direction，不得在 flow_tilt 散文里搜"多"/"空"**。
+    # 2026-08-27 实测：弃权文案是「方向不明（两个口径反向：…指向偏空，…指向偏多）」，
+    # 同时含"空"和"多"；旧代码先查"空"，于是把【方向不明】无条件当成偏空处理。
+    _call = getattr(fa, "call", None) if fa is not None else None
+    _dir = getattr(_call, "direction", "") if (_call and not getattr(_call, "abstain", True)) else ""
+    if _dir == "偏空":
+        caveats.append("当日资金方向偏空——铁鹰宜整体下移半档（put 卖腿离现价远些）对冲下行威胁")
+    elif _dir == "偏多":
+        caveats.append("当日资金方向偏多——铁鹰宜整体上移半档（call 卖腿离现价远些）对冲上行威胁")
 
     if not in_sweet:
         caveats.append(f"注意：所选到期距今 {dte} 天，不在 theta 甜区({SWEET_DTE_LO}~{SWEET_DTE_HI}天)——"

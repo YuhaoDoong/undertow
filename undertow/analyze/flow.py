@@ -282,8 +282,10 @@ class FlowAnalysis:
     #     高 Delta call 减仓 + 远虚 call 增仓 → 即便 call 总 OI 上升，净 Delta 仍为负。
     #   · 资金力(pressure) 是【推断】：先用 IV 方向判买卖方，再按 |ΔOI|×权重聚合。
     # 2026-08-27 实测：两者在有明确方向的 30 个样本里方向相反 18 个（60%），
-    # QQQ 近 8 天更是无一日一致。因此**只展示、只记账，不参与任何判定**，
-    # 等台账攒够样本再谈谁更可信。
+    # QQQ 近 8 天更是无一日一致。
+    # ⚠️ 口径更新（同日晚些）：净 Delta 已**不再只是展示项** —— direction.decide()
+    # 用"两口径反向"作为软弃权条件之一，因此它会否决方向裁决（进而否决强信号）。
+    # 但它仍**不单独产生方向**：反向时的结果是"方向不明"，不是"按净 Delta 判"。
     net_delta_call: float = 0.0
     net_delta_put: float = 0.0
     net_delta_total: float = 0.0
@@ -340,6 +342,12 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "",
     # （实测与 pressure 方向 100% 共线）。裁决因"两口径反向"或"数据过期/未结算"
     # 而弃权时，让红色横幅照亮，就是我们反复修掉的那种"指标互相打架"。
     # 2026-08-27 实测：QQQ/WTI 裁决为"方向不明（两口径反向）"，⚡ 却仍在亮。
+    # ⚠️ call 缺失（旧构造/测试桩）时**按开火处理**，与历史行为一致；
+    # 但生产路径的 analyze_flow 一定会填 call，所以真实行为由裁决决定。
+    # codex review 指出：现有强信号测试大多传 call=None，因此它们**守不住生产路径** ——
+    # 已补 test_strong_signal_obeys_abstention 专门覆盖 call 存在的情形。
+    # 注：这里 return None 只影响【展示与下游判定】；台账走的是 probe_strong_signal，
+    # 它独立记录三条闸门的连续值与通过情况，候选样本不会因此丢失。
     _call = getattr(fa, "call", None)
     if _call is not None and getattr(_call, "abstain", False):
         return None
@@ -487,6 +495,9 @@ def probe_strong_signal(fa: "FlowAnalysis") -> dict:
         "call_hard_abstain": (bool(getattr(_c, "hard", False)) if _c is not None else None),
         "call_ratio": getattr(_c, "ratio", None),
         "call_reason": ((getattr(_c, "reasons", None) or [""])[0][:120]) if _c is not None else None,
+        # 全部理由 + 校准标记：只存第一条会丢掉"未经校准"提示（它常在第二条）
+        "call_reasons": [r[:160] for r in (getattr(_c, "reasons", None) or [])] if _c is not None else None,
+        "call_calibrated": bool(getattr(_c, "calibrated", False)) if _c is not None else None,
         # 观测型方向敞口，与推断型的 pressure 并列记录，供日后比较谁更有预测力
         "net_delta_call": getattr(fa, "net_delta_call", None),
         "net_delta_put": getattr(fa, "net_delta_put", None),

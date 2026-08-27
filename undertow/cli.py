@@ -24,7 +24,8 @@ from undertow.core.calendar import load_events, upcoming, merge as merge_events,
 from undertow.collect.store import SnapshotStore
 from undertow.collect.faireconomy_cal import FairEconomyCalSource
 from undertow.collect.cftc_cot import CftcCotSource
-from undertow.collect.cboe_options import CboeOptionsSource, snapshot_from_payload, chain_fingerprint
+from undertow.collect.cboe_options import (CboeOptionsSource, snapshot_from_payload,
+                                          chain_fingerprint, oi_change_total)
 from undertow.collect.cboe_history import CboeHistorySource
 from undertow.collect.yahoo_futures import YahooFuturesSource
 from undertow.collect.fred_macro import FredMacroSource
@@ -487,16 +488,20 @@ def _save_snapshot_dedup(store, inst, sym, payload, today):
     """落盘今日期权快照，但若内容与上一份完全相同则跳过（休市/数据未刷新的重复）。
     返回 (path|None, skipped_bool)。跳过可避免 flow 层日对日 diff 退化成全 0。"""
     try:
-        fp = chain_fingerprint(snapshot_from_payload(payload, inst.key, sym))
+        curr = snapshot_from_payload(payload, inst.key, sym)
         latest = store.latest("options", sym)
         if latest is not None:
             ld, lpayload = latest
             if ld != today and lpayload is not None:
-                lfp = chain_fingerprint(snapshot_from_payload(lpayload, inst.key, sym))
-                if lfp == fp:
-                    return None, True   # 与上一交易日逐行相同 → 休市重复，不落盘
+                prev = snapshot_from_payload(lpayload, inst.key, sym)
+                # 判据是【已建仓合约的 OI 变动总量】，不是指纹是否相同。
+                # 指纹只看单份快照，判不了"到期合约滚出导致行集合变化、
+                # 而存活合约一张没动"的情形 —— 那正是 OI 未结算的残缺快照
+                # （现价新、OI 旧），落盘后会让次日 diff 把两天变动记成一天。
+                if oi_change_total(prev, curr) == 0:
+                    return None, True
     except Exception:
-        pass  # 指纹失败不应阻断落盘（宁可多存）
+        pass  # 判定失败不应阻断落盘（宁可多存）
     return store.save("options", sym, payload, on_date=today), False
 
 

@@ -119,6 +119,31 @@ def chain_fingerprint(snap: OptionsSnapshot) -> str:
     return h.hexdigest()
 
 
+def oi_change_total(prev: OptionsSnapshot, curr: OptionsSnapshot) -> int:
+    """两份快照之间【已建仓合约】的 OI 变动总量 Σ|ΔOI|（按 到期/类型/行权价 对齐）。
+
+    比 chain_fingerprint 更严格，用来判定"OCC 隔夜结算是否已落地"。
+    指纹是【单快照】函数，判不了两类情形：
+      1. 交易所新挂 OI=0 的行权价（已在指纹里排除）；
+      2. **合约到期消失** —— 存活合约的 OI 一张没动，但 OI>0 的行集合变了，
+         指纹照样不同 → 放行一份 OI 未结算的残缺快照。
+    2026-08-27 实测：GLD 在指纹修好之后仍因到期滚出而被放行，Σ|ΔOI| 恰为 0。
+
+    返回 0 表示【没有任何已建仓合约的持仓发生变化】＝ OI 尚未结算，不应落盘。
+    """
+    pm: dict = {}
+    for c in prev.contracts:
+        pm[(c.expiry, c.kind, round(c.strike, 4))] = c.open_interest or 0
+    total = 0
+    seen = set()
+    for c in curr.contracts:
+        k = (c.expiry, c.kind, round(c.strike, 4))
+        seen.add(k)
+        total += abs((c.open_interest or 0) - pm.get(k, 0))
+    # 消失的合约（到期滚出）不计入：它们的"归零"不是持仓变化，是合约不存在了
+    return total
+
+
 class CboeOptionsSource:
     name = "cboe_etf"
     # 延迟报价日内会变，但对"人工监控"30 分钟缓存够用；调试可 use_cache=False

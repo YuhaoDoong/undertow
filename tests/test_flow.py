@@ -218,6 +218,38 @@ def test_fingerprint_ignores_newly_listed_zero_oi_contracts():
     print("PASS test_fingerprint_ignores_newly_listed_zero_oi_contracts")
 
 
+
+def test_oi_change_total_detects_unsettled_chain():
+    """到期合约滚出不得被误判成"有新持仓数据"。
+
+    指纹是单快照函数，判不了这种情形：存活合约的 OI 一张没动，但因为有合约
+    到期消失，OI>0 的行集合变了 → 指纹不同 → 放行一份 OI 未结算的残缺快照
+    （现价新、OI 旧），次日 diff 会把两天的 OI 变动记成一天。
+    2026-08-27 实测：GLD 在指纹修好之后仍因到期滚出被放行，Σ|ΔOI| 恰为 0。
+    """
+    from datetime import date as _d
+    from undertow.collect.cboe_options import chain_fingerprint, oi_change_total
+    from undertow.core.models import OptionContract, OptionsSnapshot
+
+    def _c(strike, oi, exp=(2026, 9, 18)):
+        return OptionContract(expiry=_d(*exp), strike=strike, kind="C",
+                              open_interest=oi, volume=10, gamma=0.01,
+                              delta=0.3, iv=0.2)
+
+    def _snap(cs):
+        return OptionsSnapshot(instrument="gold", proxy_symbol="GLD", asof="x",
+                               spot=400.0, contracts=cs)
+
+    survivors = [_c(400.0, 1000), _c(405.0, 500)]
+    prev = _snap(survivors + [_c(410.0, 300, exp=(2026, 8, 26))])   # 这条次日到期滚出
+    curr = _snap(survivors)
+    assert chain_fingerprint(prev) != chain_fingerprint(curr), "前提：指纹确实会不同"
+    assert oi_change_total(prev, curr) == 0, "存活合约一张没动 → 判为未结算"
+    # 真实持仓变动必须被认出来
+    assert oi_change_total(prev, _snap([_c(400.0, 1200), _c(405.0, 500)])) == 200
+    print("PASS test_oi_change_total_detects_unsettled_chain")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

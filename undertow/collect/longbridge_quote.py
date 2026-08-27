@@ -86,8 +86,32 @@ class OptionQuote:
 
 
 def _freshest(r: dict) -> tuple[float, str]:
-    """从股票报价里挑最新场次价：夜盘 > 盘后 > 盘前 > 常规。"""
+    """从股票报价里挑【当前时段】的价。
+
+    ⚠️ 不能用固定优先级。旧版写死「夜盘 > 盘后 > 盘前 > 常规」，
+    收盘后是对的，**盘中就完全反了** —— 2026-08-27 ET10:44 实测：
+        TQQQ 常规盘 last 72.27，而 freshest 取"夜盘" 72.19（几小时前的残留）
+        SLV  常规盘 62.145，freshest 取 61.84，差 0.3
+    盘中常规盘正在交易，它才是最新的；夜盘/盘后价是上一时段的历史值。
+
+    改为按美东时间选时段（美股 RTH 09:30-16:00 ET）：
+        盘中     → 常规
+        非盘中   → 夜盘 > 盘后 > 盘前 > 常规（保持原逻辑）
+    取不到 ET 时间时退回旧优先级（保守：宁可用非常规价，也不静默给错时段）。
+    """
     last = _f(r, "last")
+    rth = False
+    try:
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        et = datetime.now(ZoneInfo("America/New_York"))
+        if et.weekday() < 5:
+            hm = et.hour * 60 + et.minute
+            rth = 570 <= hm < 960          # 09:30 - 16:00 ET
+    except Exception:
+        rth = False
+    if rth and last > 0:
+        return last, "常规"
     for key, label in (("overnight", "夜盘"), ("post_market", "盘后"), ("pre_market", "盘前")):
         sess = r.get(key)
         if isinstance(sess, dict):

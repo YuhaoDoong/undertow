@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.yuhaodoong.undertow.eventwatch</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>/Users/yhdong/Trading/scripts/event_watch.sh</string>
+    </array>
+    <!-- 每 10 分钟唤醒一次；脚本自己判断"现在是否落在某个高影响事件的捕捉窗口"，
+         不在窗口内静默退出（开销极小）。三个时点：数据前30分 / 数据后10分 / 开盘后30分。
+         幂等：同一(事件,阶段)已有快照就跳过。
+         限制：launchd 仅在本机醒着时触发；睡眠/关机则错过，用对话手动补捕。 -->
+    <key>StartInterval</key>
+    <integer>600</integer>
+    <key>WorkingDirectory</key>
+    <string>/Users/yhdong/Trading</string>
+    <key>StandardOutPath</key>
+    <string>/Users/yhdong/Trading/data/history/events/watch.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/yhdong/Trading/data/history/events/watch.err.log</string>
+    <key>RunAtLoad</key>
+    <false/>
+</dict>
+</plist>

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.yuhaodoong.undertow.daily</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>/Users/yhdong/Trading/scripts/daily_update.sh</string>
+    </array>
+    <!-- 多时点触发（本地 WITA = 夏令时 ET+12）：14:05≈ET02:05 主跑，
+         19:00/20:00/20:45≈ET07:00/08:00/08:45 为重试点——覆盖 OCC 隔夜 OI
+         发布时刻的不确定性。脚本幂等：OI 未结算的点跳过不出报告，OCC 发布后
+         第一个命中的点提交，其余点因"无变更"不重复提交。 -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict>
+            <key>Hour</key>
+            <integer>14</integer>
+            <key>Minute</key>
+            <integer>5</integer>
+        </dict>
+        <dict>
+            <key>Hour</key>
+            <integer>19</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Hour</key>
+            <integer>20</integer>
+            <key>Minute</key>
+            <integer>0</integer>
+        </dict>
+        <dict>
+            <key>Hour</key>
+            <integer>20</integer>
+            <key>Minute</key>
+            <integer>45</integer>
+        </dict>
+    </array>
+    <key>StandardOutPath</key>
+    <string>/Users/yhdong/Library/Logs/undertow-daily.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/yhdong/Library/Logs/undertow-daily.log</string>
+    <key>WorkingDirectory</key>
+    <string>/Users/yhdong/Trading</string>
+</dict>
+</plist>

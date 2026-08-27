@@ -151,6 +151,12 @@ def record(key: str, *, on_date: str, prev_date: str | None, spot: float,
         "call_reason": probe.get("call_reason"),
         "call_reasons": probe.get("call_reasons"),
         "call_calibrated": probe.get("call_calibrated"),
+        # 四轴 shadow：规模 / 广度 / 集中度 / 删除稳健性（详见 flow.concentration_stats）
+        **{k: probe.get(k) for k in
+           ("size_bull", "size_bear", "size_ratio",
+            "breadth_bull", "breadth_bear", "breadth_ratio",
+            "top1_share", "top3_share", "top5_share",
+            "flip_k", "n_legs", "whale_like")},
         "net_delta_call": probe.get("net_delta_call"),
         "net_delta_put": probe.get("net_delta_put"),
         "net_delta_total": probe.get("net_delta_total"),

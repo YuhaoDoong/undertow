@@ -466,6 +466,61 @@ def wing_weights_oi(fa: "FlowAnalysis") -> tuple[float, float]:
             _w("C", "bearish") + _w("P", "bearish"))
 
 
+def concentration_stats(fa: "FlowAnalysis") -> dict:
+    """规模 / 广度 / 集中度 / 删除稳健性 —— 四组 shadow 字段。**纯记录，不参与任何判定。**
+
+    动机（2026-08-27 稳健性验证 + codex 建议）：实测发现方向判定极不稳健 ——
+      · 随机删某一侧 20% 报价 → 方向翻转 42%
+      · 方向由中位仅 6 条腿决定（Top1 占该侧 18%、Top3 占 41%、Top5 占 52%）
+      · 最脆弱：gold 2026-08-25（259 条腿，Top1 占 70%，移除 1 条即翻向）
+
+    但**所有稳健化手段都无效**（秩次 59% / 广度 58% / 份额封顶 59~61%，
+    与不封顶的 59% 无差别；分位 winsorize P90 的 63% 是 7 选 1 的产物，
+    而理论驱动的份额封顶针对同一机制却毫无改善 → 判为噪音）。
+    ⇒ 不稳定是真的，但改聚合方式改善不了准确率：**信号本身弱，不只是脆弱**。
+
+    因此正确做法不是删掉规模信息，而是把「规模」与「广度/稳定性」拆成两个证据轴：
+    规模强但单点依赖 → 那不是"市场共识"，是**一笔大单**（鲸鱼异动），两者该分开说。
+
+    这些字段只入台账，供样本攒够后做一次性、簇级、预注册的检验。
+    """
+    ch = [c for c in fa.changes if c.bias in ("bullish", "bearish")]
+    if not ch:
+        return {}
+    bull = sorted((abs(c.d_oi) * c.weight for c in ch if c.bias == "bullish"), reverse=True)
+    bear = sorted((abs(c.d_oi) * c.weight for c in ch if c.bias == "bearish"), reverse=True)
+    if not bull or not bear:
+        return {}
+    sb, sr = sum(bull), sum(bear)
+    win, gap = (bull if sb > sr else bear), abs(sb - sr)
+    # 删除稳健性 k：需移除几条最大顺向腿才会翻向。k 越小 = 越依赖单点。
+    acc = 0.0
+    k = 0
+    for v in win:
+        acc += v
+        k += 1
+        if acc >= gap:
+            break
+    tot = sum(win) or 1.0
+    return {
+        # —— 规模轴 ——
+        "size_bull": round(sb, 1), "size_bear": round(sr, 1),
+        "size_ratio": round(max(sb, sr) / max(min(sb, sr), 1.0), 2),
+        # —— 广度轴（腿数，与规模无关）——
+        "breadth_bull": len(bull), "breadth_bear": len(bear),
+        "breadth_ratio": round(max(len(bull), len(bear))
+                               / max(min(len(bull), len(bear)), 1), 2),
+        # —— 集中度：优势侧被前 N 条腿占多少 ——
+        "top1_share": round(win[0] / tot, 3),
+        "top3_share": round(sum(win[:3]) / tot, 3),
+        "top5_share": round(sum(win[:5]) / tot, 3),
+        # —— 删除稳健性 ——
+        "flip_k": k, "n_legs": len(ch),
+        # 规模强但集中度高 = 一笔大单，不是市场共识。仅作标记，不改判定。
+        "whale_like": bool(k <= 2 and win[0] / tot >= 0.35),
+    }
+
+
 def probe_strong_signal(fa: "FlowAnalysis") -> dict:
     """台账用：强信号各分量的原始数值 + 逐条闸门通过情况。**不下结论。**
 
@@ -503,6 +558,8 @@ def probe_strong_signal(fa: "FlowAnalysis") -> dict:
         # 全部理由 + 校准标记：只存第一条会丢掉"未经校准"提示（它常在第二条）
         "call_reasons": [r[:160] for r in (getattr(_c, "reasons", None) or [])] if _c is not None else None,
         "call_calibrated": bool(getattr(_c, "calibrated", False)) if _c is not None else None,
+        # 规模/广度/集中度/删除稳健性四轴（shadow，纯记录不判定）
+        **concentration_stats(fa),
         # 观测型方向敞口，与推断型的 pressure 并列记录，供日后比较谁更有预测力
         "net_delta_call": getattr(fa, "net_delta_call", None),
         "net_delta_put": getattr(fa, "net_delta_put", None),

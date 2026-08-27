@@ -284,6 +284,72 @@ def test_thin_is_per_instrument(tmp_path):
     print("PASS test_thin_is_per_instrument")
 
 
+
+
+def test_concentration_stats_are_shadow_only(tmp_path):
+    """四轴 shadow 字段必须【纯记录、不参与判定】。
+
+    2026-08-27 稳健性验证：所有稳健化手段（秩次/广度/份额封顶/分位winsorize）
+    都无法提升准确率，说明信号本身弱、不只是脆弱。因此不删规模信息，
+    改为把「规模」与「广度/稳定性」拆成两个证据轴入台账，等样本够了再检验。
+    """
+    from undertow.analyze.flow import concentration_stats
+    # 单侧为空时无法算比值 → 返回 {}（这是正确行为，不许瞎凑一个数）
+    assert concentration_stats(_bearish_fa()) == {}
+    fa = _FA(changes=[_fc("P", "bearish", 1.0, -0.30) for _ in range(20)]
+             + [_fc("C", "bullish", 1.0, 0.30) for _ in range(8)],
+             upside_pressure=10_000.0, downside_pressure=90_000.0,
+             net_call_doi=10_000, net_put_doi=50_000,
+             vol=_Vol(d_spot_pct=0.0, d_atm_pp=-1.0, d_skew25_pp=0.0))
+    st = concentration_stats(fa)
+    for k in ("size_ratio", "breadth_ratio", "top1_share", "flip_k", "whale_like"):
+        assert k in st, k
+    assert st["breadth_bull"] == 8 and st["breadth_bear"] == 20
+    # 判定结果不得因这些字段改变：同一 fa 走 detect/decide 前后一致
+    from undertow.analyze.flow import detect_strong_signal
+    before = detect_strong_signal(fa)
+    _ = concentration_stats(fa)          # 调用它不得改变任何判定
+    assert (detect_strong_signal(fa) is None) == (before is None)
+    print("PASS test_concentration_stats_are_shadow_only")
+
+
+def test_whale_like_flags_single_leg_dominance():
+    """规模强但集中度高 = 一笔大单（鲸鱼异动），不是市场共识 —— 必须能区分。
+
+    实测最脆弱案例：gold 2026-08-25，259 条腿而 Top1 占该侧 70%、移除 1 条即翻向。
+    这种日子不该说成"市场偏空"，而该说"有一笔大单"。
+    """
+    from datetime import date as _d
+    from dataclasses import dataclass, field
+    from undertow.analyze.flow import concentration_stats, FlowChange
+
+    def _leg(bias, d_oi, strike):
+        return FlowChange(expiry=_d(2026, 9, 18), strike=strike, kind="P",
+                          prev_oi=100, curr_oi=100 + d_oi, d_oi=d_oi, delta=-0.30,
+                          prev_iv=0.2, curr_iv=0.23, d_iv_pp=3.0, adj_iv_pp=2.0,
+                          curr_volume=900, moneyness=-0.03, bias=bias,
+                          judgment="x", on_wall="", note="", weight=1.0)
+
+    @dataclass
+    class _F:
+        changes: list = field(default_factory=list)
+
+    # 一条 50,000 张压过 20 条 200 张 → 鲸鱼
+    whale = _F(changes=[_leg("bearish", 50_000, 90.0)]
+               + [_leg("bearish", 200, 91.0 + i) for i in range(20)]
+               + [_leg("bullish", 400, 110.0 + i) for i in range(20)])
+    st = concentration_stats(whale)
+    assert st["whale_like"] is True and st["flip_k"] <= 2
+    assert st["top1_share"] > 0.8
+
+    # 广泛分布的同等规模 → 不是鲸鱼
+    broad = _F(changes=[_leg("bearish", 2_500, 90.0 + i) for i in range(20)]
+               + [_leg("bullish", 400, 110.0 + i) for i in range(20)])
+    st2 = concentration_stats(broad)
+    assert st2["whale_like"] is False and st2["flip_k"] > 2
+    print("PASS test_whale_like_flags_single_leg_dominance")
+
+
 if __name__ == "__main__":
     import shutil, tempfile
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]

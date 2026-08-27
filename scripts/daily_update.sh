@@ -22,10 +22,27 @@ if (( ET_HOUR < 1 || ET_HOUR >= 9 )); then
 fi
 
 # 幂等守卫：当日报告已提交（早前时点已成功）→ 后续重试点直接跳过，省掉重复抓取/出报告
-if git cat-file -e "HEAD:data/reports/gold_${ET_DATE}.html" 2>/dev/null; then
-    echo "[跳过] 当日报告(${ET_DATE})已提交，本时点无需重复运行"
+# ⚠️ 幂等守卫必须看【全部期权品种是否都已有当日快照】，不能只看 gold 的报告。
+# 旧写法：`git cat-file -e HEAD:data/reports/gold_$DATE.html` —— 一旦 gold 先结算
+# 并提交，后续所有重试点直接 exit 0，那些 OCC 结算较晚的品种当天就再也拿不到链。
+# 2026-08-27 实测暴露：ET01:06 时 gold/wti/qqq/tqqq 已结算，而 silver/tlt/spy/iwm
+# 的 OI 仍与上一交易日逐行相同 —— 若此时提交，这四个品种当天的链就永久缺失。
+# 链不可再生，缺一天就是永久少一天。
+EXPECTED=$(python3 - <<'PYEOF'
+import sys; sys.path.insert(0, ".")
+from undertow.core.config import load_config
+print(" ".join(v.options.symbol for v in load_config().instruments.values() if v.options))
+PYEOF
+)
+MISSING=""
+for SYM in ${=EXPECTED}; do
+    [[ -f "data/snapshots/options/${SYM}/${ET_DATE}.json.gz" ]] || MISSING="$MISSING $SYM"
+done
+if [[ -z "${MISSING// /}" ]]; then
+    echo "[跳过] 全部品种(${EXPECTED})均已有 ${ET_DATE} 快照，本时点无需重复运行"
     exit 0
 fi
+echo "[待补] 尚缺当日快照：${MISSING}"
 
 python3 -m undertow snapshot
 

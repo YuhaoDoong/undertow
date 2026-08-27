@@ -674,6 +674,23 @@ def scan_unusual(snap: OptionsSnapshot, *, today: date,
     return out[:TOP_N]
 
 
+def _iv_at_delta_strict(pts, target):
+    """在报价范围【内】插值；超界返回 None，**绝不复制端点**。
+
+    ⚠️ 通用的 _interp 超界时取最近端点，用在固定 Delta 阶梯上会造成致命错觉：
+    某到期若只有 [0.403, 0.838] 这一段报价（2026-08-25 GLD Call 实测，仅 16 个报价），
+    六档 0.40~0.10 会**全部**落在范围外、全取同一个端点值 ——
+    于是"六档同号"看起来像 6 份独立证据，实际是 1 份重复了 6 次。
+    """
+    if len(pts) < 2:
+        return None
+    lo = min(x for x, _ in pts)
+    hi = max(x for x, _ in pts)
+    if not (lo <= target <= hi):
+        return None
+    return _interp(pts, target)
+
+
 def _surface_dirs(prev_live, curr_live) -> dict:
     """逐到期、逐 C/P 侧算【固定 Delta 曲面】的方向。返回 {(到期, C/P): +1/-1/0}。
 
@@ -708,7 +725,7 @@ def _surface_dirs(prev_live, curr_live) -> dict:
         for kind in ("C", "P"):
             k = (exp, kind)
             if k in P and k in C and len(P[k]) >= VOL_MIN_QUOTES and len(C[k]) >= VOL_MIN_QUOTES:
-                a, b = _interp(P[k], 0.40), _interp(C[k], 0.40)
+                a, b = _iv_at_delta_strict(P[k], 0.40), _iv_at_delta_strict(C[k], 0.40)
                 if a and b:
                     vals.append((b - a) * 100.0)
         return sum(vals) / len(vals) if vals else None
@@ -725,7 +742,7 @@ def _surface_dirs(prev_live, curr_live) -> dict:
             continue
         diffs = []
         for d in LADDER:
-            a, b = _interp(P[k], d), _interp(C[k], d)
+            a, b = _iv_at_delta_strict(P[k], d), _iv_at_delta_strict(C[k], d)
             if a and b:
                 # 减去该到期的整体 IV 位移 → 该侧【相对】重定价
                 diffs.append((b - a) * 100.0 - base)
@@ -1115,11 +1132,38 @@ def analyze_flow(
                          "corrected": corrected, "known": prev_known, "vol": a["vol"],
                          "exp": expiry})
 
-        # "相对化"基准：行权价足够多时减去中位修正 ΔIV，剔除全市场 vol 平移；少则不减
-        cv = sorted(r["corrected"] for r in rows if r["known"])
-        ref = cv[len(cv) // 2] if len(cv) >= REL_MIN_STRIKES else 0.0
+        # "相对化"基准：减去中位修正 ΔIV，剔除全市场 vol 平移。
+        # ⚠️ **按【到期】分组，但【不能按 C/P 侧】再分**。
+        # · 按到期分组是必须的：不同到期期限结构不同，跨期混算的基准对谁都不成立
+        #   （"跨期混算"根 bug 的最后一处残留，codex review 2026-08-27 指出）。
+        # · 但【不能】再按 C/P 拆：那样每条腿只和"同到期同侧"比，
+        #   **Put-Call skew 这个维度就被整个消掉了** —— 而 skew 恰恰是方向信息的
+        #   主要载体（机构口径的核心就是 Put-Call skew）。
+        #   实测：按 (到期,侧) 分组后全样本正确率 54%→49%、silver 55%→36%、
+        #   黄金 8/19「强烈转多」由"偏多"退回"分歧"。只按到期分组则不会。
+        # 分组样本不足 REL_MIN_STRIKES 时回落到全局中位（聊胜于无，并如实降级）。
+        from collections import defaultdict as _dd
+        _grp = _dd(list)
+        for r in rows:
+            if r["known"]:
+                _grp[r["exp"]].append(r["corrected"])      # 只按到期，保留 C/P 对比
+        def _median(xs):
+            """真中位数。⚠️ 偶数长度必须取中间两个的均值。
+            旧版写的是 xs[len(xs)//2]，对偶数长度系统性偏高 —— 当 call/put 两侧
+            恰好对称分裂时（如各半、幅度相反），它会取到上半支的最小值，
+            使一侧相对值整体归零、另一侧被翻倍，skew 读数被扭曲。"""
+            n = len(xs)
+            return (xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2.0)
+
+        _all = sorted(r["corrected"] for r in rows if r["known"])
+        ref_all = _median(_all) if len(_all) >= REL_MIN_STRIKES else 0.0
+        refs = {}
+        for k, vs_ in _grp.items():
+            vs_ = sorted(vs_)
+            refs[k] = _median(vs_) if len(vs_) >= REL_MIN_STRIKES else ref_all
 
         for r in rows:
+            ref = refs.get(r["exp"], ref_all)
             adj_iv_pp = ((r["corrected"] - ref) * 100.0) if r["known"] else 0.0
             d_iv_pp = r["d_iv"] * 100.0
             # 闸门用【Delta 修正后的绝对】ΔIV(corrected*100)——剔除现价移动沿偏斜的机械项、

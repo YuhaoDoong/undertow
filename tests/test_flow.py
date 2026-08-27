@@ -382,6 +382,73 @@ def test_closing_spread_is_neutral():
     print("PASS test_closing_spread_is_neutral")
 
 
+
+
+def test_relativization_baseline_groups_by_expiry_not_side():
+    """相对化基准按【到期】分组，但**不得**再按 C/P 拆——那会消掉 skew 维度。
+
+    · 按到期分组是必须的：不同到期期限结构不同，跨期混算的基准对谁都不成立。
+    · 但再按 C/P 拆，每条腿就只和"同到期同侧"比，**Put-Call skew 被整个消掉**，
+      而 skew 恰是方向信息的主要载体。
+      实测（2026-08-27）：按 (到期,侧) 分组后全样本正确率 54%→49%、
+      silver 55%→36%、黄金 8/19 由"偏多"退回"分歧"；只按到期分组则 55%、silver 62%。
+
+    构造：同一到期，call 侧整体涨 2pp、put 侧整体跌 2pp（典型的 skew 向 call 旋转）。
+    若基准按侧分，两侧各自减去自己的中位 → 相对值全归零，skew 信息消失。
+    只按到期分，基准是两侧合并的中位（≈0），call 保持 +2pp、put 保持 -2pp。
+    """
+    from datetime import date as _d
+    from undertow.analyze.flow import analyze_flow
+    from undertow.core.models import OptionContract, OptionsSnapshot
+
+    E = _d(2026, 9, 18)
+
+    def _c(strike, kind, iv, oi):
+        return OptionContract(expiry=E, strike=strike, kind=kind, open_interest=oi,
+                              volume=800, gamma=0.01,
+                              delta=(0.30 if kind == "C" else -0.30), iv=iv)
+
+    def _snap(cs):
+        return OptionsSnapshot(instrument="gold", proxy_symbol="GLD", asof="x",
+                               spot=400.0, contracts=cs)
+
+    # 每侧 10 个行权价，满足 REL_MIN_STRIKES
+    prev, curr = [], []
+    for i in range(10):
+        prev.append(_c(405 + i, "C", 0.20, 5_000))
+        prev.append(_c(395 - i, "P", 0.20, 5_000))
+        curr.append(_c(405 + i, "C", 0.22, 5_000 + 1_000))   # call 侧 +2pp
+        curr.append(_c(395 - i, "P", 0.18, 5_000 + 1_000))   # put 侧 -2pp
+    fa = analyze_flow(_snap(prev), _snap(curr), today=_d(2026, 8, 27))
+    calls = [c for c in fa.changes if c.kind == "C"]
+    puts = [c for c in fa.changes if c.kind == "P"]
+    assert calls and puts
+    # skew 必须被保留：call 相对为正、put 相对为负
+    assert all(c.adj_iv_pp > 0.5 for c in calls), \
+        f"call 侧相对值应为正（skew 向 call 旋转），实得 {[round(c.adj_iv_pp,2) for c in calls[:3]]}"
+    assert all(p_.adj_iv_pp < -0.5 for p_ in puts), \
+        f"put 侧相对值应为负，实得 {[round(p_.adj_iv_pp,2) for p_ in puts[:3]]}"
+    print("PASS test_relativization_baseline_groups_by_expiry_not_side")
+
+
+def test_ladder_interp_does_not_extrapolate():
+    """固定 Delta 阶梯超出报价范围的档位必须返回 None，绝不复制端点。
+
+    通用 _interp 超界取最近端点，用在阶梯上会造成致命错觉：某到期若只有
+    [0.403, 0.838] 这一段报价（2026-08-25 GLD Call 实测，仅 16 个报价），
+    六档 0.40~0.10 会全部落在范围外、全取同一个端点值 ——
+    "六档同号"看起来像 6 份独立证据，实际是 1 份重复了 6 次。
+    """
+    from undertow.analyze.flow import _iv_at_delta_strict
+    pts = [(0.403, 0.21), (0.60, 0.23), (0.838, 0.26)]
+    assert _iv_at_delta_strict(pts, 0.10) is None    # 超下界
+    assert _iv_at_delta_strict(pts, 0.30) is None    # 超下界
+    assert _iv_at_delta_strict(pts, 0.90) is None    # 超上界
+    v = _iv_at_delta_strict(pts, 0.50)               # 界内正常插值
+    assert v is not None and 0.21 < v < 0.23
+    print("PASS test_ladder_interp_does_not_extrapolate")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

@@ -473,6 +473,21 @@ def render_flow_section(fa) -> str:
         return ""
     head = '<h2>期权资金流 / 持仓异动（买方 vs 卖方）</h2>'
     tilt = f'<div class="sub">净倾向：<b>{_esc(fa.flow_tilt)}</b></div>'
+    # —— 净有效 Delta：与上面的"资金力"并列展示，两者性质不同，冲突时必须让读者看见 ——
+    nd = getattr(fa, "net_delta_total", None)
+    if nd:
+        ndc = getattr(fa, "net_delta_call", 0.0)
+        ndp = getattr(fa, "net_delta_put", 0.0)
+        up_t = "偏多" in fa.flow_tilt
+        dn_t = "偏空" in fa.flow_tilt
+        clash = (nd > 0 and dn_t) or (nd < 0 and up_t)
+        warn = ('　<b style="color:#bf8700">⚠ 与上面的资金力倾向方向相反</b>'
+                '——资金力是【推断】（先按 IV 判买卖方），净 Delta 是【观测】（纯算术，'
+                '不需知道谁主动）。两者实测约 6 成日子不同向，本层未校准，'
+                '不据此下结论，仅并列呈现。') if clash else ""
+        tilt += (f'<div class="sub">净有效 Delta（Σ ΔOI×delta，观测口径）：'
+                 f'<b style="color:{"#1a7f37" if nd > 0 else "#cf222e"}">{nd:+,.0f}</b>'
+                 f'（call {ndc:+,.0f} / put {ndp:+,.0f}）{warn}</div>')
     if fa.prev_date and fa.changes:
         spread_html = ""
         if fa.spreads:

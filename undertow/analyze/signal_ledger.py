@@ -141,6 +141,11 @@ def record(key: str, *, on_date: str, prev_date: str | None, spot: float,
         "bull_wing": probe.get("bull_wing"), "bear_wing": probe.get("bear_wing"),
         "bull_wing_oi": probe.get("bull_wing_oi"), "bear_wing_oi": probe.get("bear_wing_oi"),
         "churn_call": probe.get("churn_call"), "churn_put": probe.get("churn_put"),
+        # 净有效 Delta（观测型）与 up/dn_pressure（推断型）并存，
+        # 日后可直接比较两个口径谁更有预测力 —— 实测两者 60% 的日子方向相反。
+        "net_delta_call": probe.get("net_delta_call"),
+        "net_delta_put": probe.get("net_delta_put"),
+        "net_delta_total": probe.get("net_delta_total"),
         "net_call_doi": probe.get("net_call_doi"), "net_put_doi": probe.get("net_put_doi"),
         "oi_build_ratio": probe.get("oi_build_ratio"),
         "d_spot_pct": probe.get("d_spot_pct"), "d_atm_pp": probe.get("d_atm_pp"),

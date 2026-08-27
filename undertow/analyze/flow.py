@@ -263,6 +263,17 @@ class FlowAnalysis:
     # 台账拿不到 → 无法回答"强信号是不是建立在滚仓上"。暴露成字段供记录，不改判定逻辑。
     churn_call: float = 1.0
     churn_put: float = 1.0
+    # —— 净有效 Delta：Σ(ΔOI × delta)，机构常用的方向敞口口径（外部分析者 8/26 帖同款）——
+    # ⚠️ 它与 upside/downside_pressure 是【两种不同性质的量】，务必分清：
+    #   · 净有效 Delta 是【观测】：纯算术，不需要判断谁是主动方。
+    #     高 Delta call 减仓 + 远虚 call 增仓 → 即便 call 总 OI 上升，净 Delta 仍为负。
+    #   · 资金力(pressure) 是【推断】：先用 IV 方向判买卖方，再按 |ΔOI|×权重聚合。
+    # 2026-08-27 实测：两者在有明确方向的 30 个样本里方向相反 18 个（60%），
+    # QQQ 近 8 天更是无一日一致。因此**只展示、只记账，不参与任何判定**，
+    # 等台账攒够样本再谈谁更可信。
+    net_delta_call: float = 0.0
+    net_delta_put: float = 0.0
+    net_delta_total: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -440,6 +451,10 @@ def probe_strong_signal(fa: "FlowAnalysis") -> dict:
         # churning 折减系数：压力已被它缩放，但主翼门与规模门【没有】同步折减。
         "churn_call": getattr(fa, "churn_call", None),
         "churn_put": getattr(fa, "churn_put", None),
+        # 观测型方向敞口，与推断型的 pressure 并列记录，供日后比较谁更有预测力
+        "net_delta_call": getattr(fa, "net_delta_call", None),
+        "net_delta_put": getattr(fa, "net_delta_put", None),
+        "net_delta_total": getattr(fa, "net_delta_total", None),
         # ⚠️ net_*_doi 实为【增仓总额】(analyze_flow 里只累加 d_oi>0)，不是净额。
         # 建仓比 = 两侧增仓总额之比。规模闸门只查信号侧绝对量、从不与另一侧比，
         # 所以"名为一边倒、实则两边都在建"完全可能通过——记下来供日后检验。
@@ -1058,6 +1073,9 @@ def analyze_flow(
         upside_pressure=round(upside, 1),
         churn_call=round(f_call, 3),
         churn_put=round(f_put, 3),
+        net_delta_call=round(sum(c.d_oi * c.delta for c in changes if c.kind == "C"), 1),
+        net_delta_put=round(sum(c.d_oi * c.delta for c in changes if c.kind == "P"), 1),
+        net_delta_total=round(sum(c.d_oi * c.delta for c in changes), 1),
         flow_tilt=tilt,
         spreads=spreads,
         call_wall=call_wall,

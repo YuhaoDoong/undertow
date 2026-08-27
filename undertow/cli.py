@@ -57,7 +57,7 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_strategy_hub, render_condor_section,
                           render_credit_spread_section, render_expiry_ladder_section,
                           render_fib_rr_section, render_strong_signal_banner,
-                          render_structure_section,
+                          render_structure_section, render_vintage_banner,
                           render_verdict_section, render_technicals_section)
 from undertow.analyze.volregime import assess_vol_regime
 from undertow.analyze.condor import assess_condor
@@ -978,7 +978,9 @@ def cmd_report(args) -> int:
                 fa, outlook_bias=(getattr(outlook, "near_bias", "") or outlook.bias),
                 mid_bias=getattr(outlook, "mid_bias", ""))
             _persist_signal_probe(inst.key, fa, strong_sig, outlook.bias)
-            strong_html = render_strong_signal_banner(strong_sig, inst.display_name)
+            _stale = ("" if (curr_date_s or "") >= today.isoformat() else
+                      f"它描述 {prev_date} 交易日，本该在 {curr_date_s} 开盘交易，今天已是 {today}")
+            strong_html = render_strong_signal_banner(strong_sig, inst.display_name, _stale)
 
             # —— 结构读数（机构口径，不输出方向票）——
             # 与投票层正交：只描述"防守强度/位置/逐腿可靠度/证伪清单"，
@@ -1222,12 +1224,15 @@ def cmd_report(args) -> int:
                                       vol_analysis_html=vol_analysis_html,
                                       expiry_html=expiry_html, fib_html=fib_html,
                                       strong_html=strong_html, struct_html=struct_html,
+                                      vintage_html=render_vintage_banner(
+                                          prev_date or "", curr_date_s or "", today.isoformat()),
                                       verdict_html=verdict_html,
                                       tech_html=tech_html, stretch_read=stretch_read)
             fn = f"{inst.key}_{today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
-            written.append((inst, outlook, fn, strong_sig, verdict, stretch_read))
+            written.append((inst, outlook, fn, strong_sig, verdict, stretch_read,
+                            curr_date_s or ""))
         except Exception as e:
             failed.append(inst.key)
             print(f"[警告] {inst.key} 研判报告失败: {e}", file=sys.stderr)
@@ -1248,15 +1253,16 @@ def cmd_report(args) -> int:
                       "verdict_head": (v.headline if v and getattr(v, "ok", False) else ""),
                       "stretch": sr,
                       "near_bias": getattr(o, "near_bias", ""),
-                      "mid_bias": getattr(o, "mid_bias", "")}
-                     for _, o, fn, ss, v, sr in written]
+                      "mid_bias": getattr(o, "mid_bias", ""),
+                      "trade_date": td, "today": today.isoformat()}
+                     for _, o, fn, ss, v, sr, td in written]
         index_html = render_index_html(idx_items, today.isoformat())
         index_path = reports_dir / f"index_{today.isoformat()}.html"
         _archive_existing(index_path)
         index_path.write_text(index_html, encoding="utf-8")
 
     print(f"已生成综合研判报告（{today}）:")
-    for inst, o, fn, ss, v, _sr in written:
+    for inst, o, fn, ss, v, _sr, _td in written:
         flag = f"  ⚡{ss.level}{ss.direction}" if ss else ""
         vh = f"  · {v.headline}" if v and getattr(v, "ok", False) else ""
         print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence}){flag}{vh}  → {reports_dir / fn}")

@@ -1209,7 +1209,7 @@ def render_structure_section(sr, display_name: str = "") -> str:
         '</div>')
 
 
-def render_strong_signal_banner(ss, display_name: str = "") -> str:
+def render_strong_signal_banner(ss, display_name: str = "", stale_note: str = "") -> str:
     """近端资金流强信号置顶红/绿告警（一边倒时才由 detect_strong_signal 产出）。
 
     动机：综合投票会把这种一边倒的领先信号对冲成"分歧/中性"而埋没（复盘 8/19 黄金），
@@ -1246,6 +1246,11 @@ def render_strong_signal_banner(ss, display_name: str = "") -> str:
             f'"领先"只是一次黄金复盘得来的猜想，<b>没有统计证据</b>，'
             f'不足以据此推翻已校准的综合研判与超买超卖层。</div>'
         )
+    if stale_note:
+        diverge = (f'<div style="margin-top:8px;padding:8px 10px;background:#fff8c5;'
+                   f'border-radius:6px;font-size:13px;color:#7d4e00">'
+                   f'⚠️ <b>本告警已过期</b>：{_esc(stale_note)}'
+                   f'——<b>不是今日可执行的信号</b>。</div>') + diverge
     name = f'{_esc(display_name)} · ' if display_name else ""
     return (
         f'<div class="card" style="border:2px solid {accent};background:{bg}">'
@@ -1262,6 +1267,36 @@ def render_strong_signal_banner(ss, display_name: str = "") -> str:
     )
 
 
+def render_vintage_banner(sess_date: str, trade_date: str, today: str) -> str:
+    """数据时效横幅。**过期的信号不得以"当前告警"的面目出现。**
+
+    时序（见 flow.py 顶部约定）：快照对 (X, X+1) 描述交易日 X 的持仓变化，
+    在 X+1 开盘前可读 → 可交易日 = X+1。若 X+1 已经过去，这份判读就已经错过。
+
+    动机（2026-08-27 用户实测）：SLV 因 OCC 尚未结算 8/27 的 OI，管线仍拿
+    (8/25, 8/26) 当"最新"，于是在 8/27 早晨弹出 ⚡极强看跌 —— 但它描述的是
+    **8/25 交易日**、本该在 **8/26 开盘**交易，已过期一天，而报告毫无提示。
+    同一批报告里 wti/qqq/tqqq/tlt 是 8/26 的数据、gold/silver 是 8/25 的，
+    **混龄并排展示，看不出区别**。
+    """
+    if not (sess_date and trade_date and today):
+        return ""
+    fresh = trade_date >= today
+    if fresh:
+        return (f'<div class="sub" style="margin-top:4px">数据时效：'
+                f'描述 <b>{_esc(sess_date)}</b> 交易日的持仓变化 · '
+                f'可交易日 <b>{_esc(trade_date)}</b>（今日）✅</div>')
+    return (
+        f'<div style="margin-top:8px;padding:9px 11px;background:#fff8c5;'
+        f'border-left:4px solid #bf8700;border-radius:6px;font-size:13px;color:#7d4e00">'
+        f'⚠️ <b>数据已过期</b>：本报告基于 <b>{_esc(sess_date)}</b> 交易日的持仓变化，'
+        f'其可交易时点是 <b>{_esc(trade_date)}</b> 开盘，而今天是 {_esc(today)} —— '
+        f'<b>已经错过</b>。原因通常是该品种的 OCC 隔夜结算尚未落地，管线仍在用上一对快照。'
+        f'下方任何方向判读与 ⚡ 告警<b>都不是今日可执行的信号</b>，'
+        f'等新快照到位后会自动刷新。</div>'
+    )
+
+
 def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        flow_html: str = "", macro_html: str = "", events_html: str = "",
                        tldr_html: str = "", strategy_html: str = "",
@@ -1269,7 +1304,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        vol_analysis_html: str = "", expiry_html: str = "",
                        fib_html: str = "", strong_html: str = "", struct_html: str = "",
                        verdict_html: str = "", tech_html: str = "",
-                       stretch_read=None) -> str:
+                       stretch_read=None, vintage_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -1282,6 +1317,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
     head = (
         f'<div class="card"><h1>{_esc(o.display_name)} · 综合研判</h1>'
         f'<div class="sub">{price_line} · 数据 {_esc(o.asof)}</div>'
+        f'{vintage_html}'
         f'{basis_line}'
         f'<div style="margin:10px 0">{_bias_badge(o)}</div>'
         + (f'<div style="margin:8px 0 2px">{stretch_pill(stretch_read)}</div>'
@@ -1360,6 +1396,12 @@ def render_index_html(items: list[dict], asof: str) -> str:
             sig_pill = (f'<span class="pill" style="background:{"#1a7f37" if up else "#cf222e"};'
                         f'color:#fff">⚡{_esc(ss.level)}{_esc(ss.direction)}</span>')
         os_pill = stretch_pill(it.get("stretch"), compact=True)
+        # 时效标：同一页里各品种的 OCC 结算进度可能不同（混龄），必须一眼可见
+        vt = ""
+        td, tdy = it.get("trade_date", ""), it.get("today", "")
+        if td and tdy and td < tdy:
+            vt = (f'<span class="pill" style="background:#bf8700;color:#fff">'
+                  f'⚠️过期·数据止于 {_esc(td)}</span>')
         # 近端/中期分层上索引页：综合 bias 是两层投票的合成，只看它会把
         # "近端偏空、中期偏多"这种分歧压成一个字，正是矛盾感的来源之一。
         nb, mb = it.get("near_bias", ""), it.get("mid_bias", "")
@@ -1386,7 +1428,7 @@ def render_index_html(items: list[dict], asof: str) -> str:
                f'中期{_esc(mb)}｜近端{_esc(nb)}</span>'
                if split else
                f'<span class="badge" style="background:{color}">{_esc(bias)}</span>')
-            + f'<span class="pill">可信度 {_esc(conf)}</span>{sig_pill}{os_pill}'
+            + f'<span class="pill">可信度 {_esc(conf)}</span>{vt}{sig_pill}{os_pill}'
             f'{verdict_div}'
             f'{summary_div}'
             f'</a>'

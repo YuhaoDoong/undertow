@@ -36,7 +36,12 @@ if [[ -z $(git status --porcelain data/snapshots) ]]; then
     exit 0
 fi
 
-REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq --no-snapshot)
+# 品种分两类：
+#   交易品种 —— gold silver qqq tqqq（有实盘或计划仓位）
+#   分析品种 —— wti tlt spy（不交易，但驱动/映射前者：利率→金银、标普持仓→纳指轮动）
+#     tlt/spy 的价值不在价格（SPY 与 QQQ 日收益相关 0.95），在【持仓层与偏斜】：
+#     实测投机资金在标普长期净空、纳指长期净多，周变化相关仅 -0.07 —— 信息完全独立。
+REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq tlt spy --no-snapshot)
 echo "$REPORT_OUT"
 
 # —— 强信号推送：报告若打出 ⚡（近端资金流一边倒），弹 macOS 通知 + 落一份告警文件兜底 ——

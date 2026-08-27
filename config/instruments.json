@@ -160,6 +160,56 @@
         "quality": "weak",
         "note": "用CME纳指期货作真实纳指基准显示；TQQQ与NQ非线性(3倍复合+损耗)，不做位点换算。"
       }
+    },
+    "tlt": {
+      "key": "tlt",
+      "display_name": "20年美债 (TLT)",
+      "asset_class": "rates",
+      "cot": {
+        "report": "legacy_fut",
+        "contract_market_code": "020604",
+        "market_name": "ULTRA UST BOND - CHICAGO BOARD OF TRADE"
+      },
+      "options": {
+        "source": "cboe_etf",
+        "symbol": "TLT",
+        "approx_commodity_multiplier": null,
+        "proxy_quality": "good",
+        "note": "TLT=20年以上美债ETF，本身即主战场（非隔层代理）。行权价以TLT计。COT 用 ULTRA UST BOND(超长债期货)——久期最接近 TLT，但**不是同一标的**：TLT 是现券组合、期货是特定交割篮子，持仓结构可参考、不可等同。"
+      },
+      "price": {
+        "source": "cboe_history",
+        "symbol": "TLT",
+        "quality": "good",
+        "note": "TLT 日线，2002 年至今；美债 ETF 自身即定价对象，无代理误差。"
+      },
+      "commodity": null,
+      "vol_index": "VXTLT"
+    },
+    "spy": {
+      "key": "spy",
+      "display_name": "标普500 (SPY)",
+      "asset_class": "equity",
+      "cot": {
+        "report": "legacy_fut",
+        "contract_market_code": "13874+",
+        "market_name": "S&P 500 Consolidated - CHICAGO MERCANTILE EXCHANGE"
+      },
+      "options": {
+        "source": "cboe_etf",
+        "symbol": "SPY",
+        "approx_commodity_multiplier": null,
+        "proxy_quality": "good",
+        "note": "SPY=标普500 ETF，全球最深的期权链，其偏斜是**市场整体对冲需求**的基准表。与 QQQ 的日收益相关 0.95（价格冗余），但**持仓层完全独立**：实测投机资金在标普长期净空(均值-4.2%、160周仅18周为正)、纳指长期净多(+5.1%、131周为正)，周变化相关仅 -0.07。故 SPY 的价值在 COT 与偏斜，不在价格。"
+      },
+      "price": {
+        "source": "cboe_history",
+        "symbol": "SPY",
+        "quality": "good",
+        "note": "SPY 日线=标普500代理，跟踪误差极小。"
+      },
+      "commodity": null,
+      "vol_index": "VIX"
     }
   },
   "defaults": {

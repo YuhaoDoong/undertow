@@ -38,7 +38,8 @@ python3 -m undertow report gold      # 综合研判 → data/reports/*.html
 python3 -m undertow live             # 持仓实时体检（需长桥 CLI）
 ```
 
-品种：`gold silver wti dxy qqq tqqq`
+品种：`gold silver wti dxy qqq tqqq tlt spy`
+  交易品种 `gold silver qqq tqqq` ／ 分析品种 `wti dxy tlt spy`（不交易，但驱动或映射前者）
 命令：`analyze gamma vol snapshot flow expiry fib backtest report list account
 consult serve soul journal event plan tech live backtest-stretch news calendar`
 
@@ -81,6 +82,9 @@ cli.py     命令编排（唯一允许把 collect 与 analyze 接起来的地方
 
 ### 数据口径
 
+- **加品种的判据是【持仓/结构层是否独立】，不是价格相关性。**
+  SPY 与 QQQ 日收益相关 0.95 却仍值得加——因为投机资金持仓的周变化相关只有 −0.07。
+  反过来，价格不相关但持仓层缺失（如股票板块 ETF 无 CFTC COT）的品种不该加。
 - **ETF 代理 vs 商品价**：行权价以 ETF 计，换算商品价用**当日实时比值**
   （`期货价 / ETF价`），不用静态乘数——乘数随基金费率漂移。
   位点必须换算；而 `(价差)/(ATR)` 这类**比值**量纲自动抵消，不用换算。

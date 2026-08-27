@@ -38,8 +38,8 @@ python3 -m undertow report gold      # 综合研判 → data/reports/*.html
 python3 -m undertow live             # 持仓实时体检（需长桥 CLI）
 ```
 
-品种：`gold silver wti dxy qqq tqqq tlt spy`
-  交易品种 `gold silver qqq tqqq` ／ 分析品种 `wti dxy tlt spy`（不交易，但驱动或映射前者）
+品种：`gold silver wti dxy qqq tqqq tlt spy iwm`
+  交易 `gold silver qqq tqqq` ／ 分析 `wti dxy tlt spy` ／ 观察 `iwm`（为将来攒链，非独立信息源）
 命令：`analyze gamma vol snapshot flow expiry fib backtest report list account
 consult serve soul journal event plan tech live backtest-stretch news calendar`
 

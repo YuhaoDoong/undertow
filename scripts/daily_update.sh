@@ -38,10 +38,13 @@ fi
 
 # 品种分两类：
 #   交易品种 —— gold silver qqq tqqq（有实盘或计划仓位）
-#   分析品种 —— wti tlt spy（不交易，但驱动/映射前者：利率→金银、标普持仓→纳指轮动）
+#   分析品种 —— wti tlt spy iwm（不交易，但驱动/映射前者：利率→金银、标普持仓→纳指轮动）
+#     iwm 的定位不同于 tlt/spy：它与 SPY 相关 0.89，信息大半冗余；加它是为了
+#     **提前攒期权链历史**（链不可再生），等本金到位（约 $800）它就是交易候选——
+#     点差仅 5%，远好于 TQQQ 的 20%。
 #     tlt/spy 的价值不在价格（SPY 与 QQQ 日收益相关 0.95），在【持仓层与偏斜】：
 #     实测投机资金在标普长期净空、纳指长期净多，周变化相关仅 -0.07 —— 信息完全独立。
-REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq tlt spy --no-snapshot)
+REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq tlt spy iwm --no-snapshot)
 echo "$REPORT_OUT"
 
 # —— 强信号推送：报告若打出 ⚡（近端资金流一边倒），弹 macOS 通知 + 落一份告警文件兜底 ——

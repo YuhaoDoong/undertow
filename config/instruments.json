@@ -210,6 +210,31 @@
       },
       "commodity": null,
       "vol_index": "VIX"
+    },
+    "iwm": {
+      "key": "iwm",
+      "display_name": "罗素2000 (IWM)",
+      "asset_class": "equity",
+      "cot": {
+        "report": "legacy_fut",
+        "contract_market_code": "239742",
+        "market_name": "RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE"
+      },
+      "options": {
+        "source": "cboe_etf",
+        "symbol": "IWM",
+        "approx_commodity_multiplier": null,
+        "proxy_quality": "good",
+        "note": "IWM=罗素2000小盘ETF，本身即主战场。行权价以IWM计。⚠️ 与 SPY 相关 0.89、与 QQQ 0.82——信息大部分被 SPY 覆盖，故定位是【将来资金够时的交易候选】而非独立分析源。加它的主因是提前攒期权链历史（链不可再生）+ 点差仅 5%（TQQQ 是 20%）。"
+      },
+      "price": {
+        "source": "cboe_history",
+        "symbol": "IWM",
+        "quality": "good",
+        "note": "IWM 日线=罗素2000代理，跟踪误差极小。"
+      },
+      "commodity": null,
+      "vol_index": "RVX"
     }
   },
   "defaults": {

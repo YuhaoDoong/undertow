@@ -1145,7 +1145,7 @@
   "level": "强",
   "vol_confirms": false,
   "outlook_bias": "偏多",
-  "diverges": true,
+  "diverges": false,
   "up_pressure": 22375.9,
   "dn_pressure": 98763.8,
   "bull_wing": 4.0,

@@ -186,6 +186,38 @@ def test_snapshot_store_roundtrip():
         assert store.dates("options", "GLD") == [d1, d2]  # 仍是两天
 
 
+
+
+def test_fingerprint_ignores_newly_listed_zero_oi_contracts():
+    """新挂 OI=0 的合约不得改变持仓指纹。
+
+    交易所每天新挂一批行权价/到期，全是 OI=0。若计入指纹，「持仓完全没变」
+    也会因多了几百条空合约而哈希不同 → 放行落盘一份 OI 未结算的残缺快照
+    （现价新、OI 旧），使次日 diff 把两天的 OI 变动记成一天。
+    2026-08-27 实测：SPY 新增 388 条、IWM 新增 236 条全为 OI=0，
+    而已有合约总 |ΔOI| 恰为 0，指纹却判为「新数据」。
+    """
+    from datetime import date as _d
+    from undertow.collect.cboe_options import chain_fingerprint
+    from undertow.core.models import OptionContract, OptionsSnapshot
+
+    def _c(strike, oi):
+        return OptionContract(expiry=_d(2026, 9, 18), strike=strike, kind="C",
+                              open_interest=oi, volume=10, gamma=0.01,
+                              delta=0.3, iv=0.2)
+
+    def _snap(cs):
+        return OptionsSnapshot(instrument="spy", proxy_symbol="SPY", asof="x",
+                               spot=600.0, contracts=cs)
+
+    base = [_c(600.0, 1000), _c(605.0, 500)]
+    assert chain_fingerprint(_snap(base)) == chain_fingerprint(
+        _snap(base + [_c(700.0, 0), _c(705.0, 0)])), "新挂空合约不应改变指纹"
+    assert chain_fingerprint(_snap(base)) != chain_fingerprint(
+        _snap([_c(600.0, 1001), _c(605.0, 500)])), "真实 OI 变动必须改变指纹"
+    print("PASS test_fingerprint_ignores_newly_listed_zero_oi_contracts")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

@@ -105,9 +105,14 @@ def chain_fingerprint(snap: OptionsSnapshot) -> str:
     二者都不该参与"是否有新持仓"的判定。
     """
     import hashlib
+    # ⚠️ 只取 OI>0 的行。交易所每天都会新挂一批 OI=0 的行权价/到期，
+    # 若把它们计入指纹，"持仓完全没变"也会因为多了几百条空合约而哈希不同 →
+    # 放行落盘一份 OI 未结算的残缺快照，正是本函数声称要防的那种。
+    # 2026-08-27 实测：SPY 新增 388 条、IWM 新增 236 条，全部 OI=0，
+    # 而两者已有合约的总 |ΔOI| 恰为 0 —— 指纹却判定为"新数据"。
     rows = sorted(
         (c.expiry.isoformat(), c.kind, round(c.strike, 4), c.open_interest)
-        for c in snap.contracts
+        for c in snap.contracts if (c.open_interest or 0) > 0
     )
     h = hashlib.md5()
     h.update(repr(rows).encode("utf-8"))

@@ -227,7 +227,7 @@ def stretch_pill(sr, *, compact: bool = False) -> str:
                 f'{_esc(sr.band)}{mark} {pct}</span>')
     div = "　⚠️两维分歧" if getattr(sr, "diverge", "") else ""
     return (f'<span class="pill" style="background:{col};color:#fff">'
-            f'超买超卖 {_esc(sr.band)}{mark}</span>'
+            f'{_esc(sr.band)}{mark}</span>'      # 不再重复"超买超卖"：卡片标题已有
             f'<span class="sub" style="margin-left:8px">合并分位 {pct}'
             f'（偏离 {sr.stretch_pctile*100:.0f}% / 回撤 {sr.dd_pctile*100:.0f}%）'
             f'{_esc(div)}</span>')
@@ -1133,12 +1133,25 @@ def render_strong_signal_banner(ss, display_name: str = "") -> str:
     arrow = "▲" if up else "▼"
     reasons = "".join(f'<li style="margin:2px 0">{_esc(r)}</li>' for r in ss.reasons)
     diverge = ""
-    if ss.diverges:
+    # 与近端一致、只和中期冲突 —— 这是最常见也最容易被误读成"自相矛盾"的情形，
+    # 必须显式说出来（2026-08-27 QQQ 正是如此：近端偏空(弱)、中期偏多）。
+    if not ss.diverges and getattr(ss, "conflicts_mid", False):
+        diverge = (
+            f'<div style="margin-top:8px;padding:8px 10px;background:#ddf4ff;'
+            f'border-radius:6px;font-size:13px;color:#0a3069">'
+            f'ℹ <b>与近端方向一致</b>（近端＝{_esc(ss.outlook_bias or "—")}），'
+            f'<b>只与中期冲突</b>（中期＝{_esc(ss.mid_bias or "—")}）：'
+            f'这不是自相矛盾，而是<b>时间尺度不同</b>——'
+            f'中期看的是 COT 持仓与宏观（周频、慢），近端看的是当日期权链。'
+            f'本层<b>未经回测校准</b>，不足以推翻中期结论；'
+            f'合理读法是「上升背景里的短线风险窗口」。</div>'
+        )
+    elif ss.diverges:
         diverge = (
             f'<div style="margin-top:8px;padding:8px 10px;background:#fff8c5;'
             f'border-radius:6px;font-size:13px;color:#7d4e00">'
-            f'⚠ <b>与综合研判方向背离</b>（综合＝{_esc(ss.outlook_bias or "—")}）：'
-            f'当日期权端资金流与综合研判不同向。<b>本层未经回测校准</b>'
+            f'⚠ <b>与近端方向不同向</b>（近端＝{_esc(ss.outlook_bias or "—")}）：'
+            f'连当日的近端层都没站在这一侧。<b>本层未经回测校准</b>'
             f'（核心闸门需历史逐行 OI，免费源拿不到，正在用 signal_ledger 向前累积样本）——'
             f'"领先"只是一次黄金复盘得来的猜想，<b>没有统计证据</b>，'
             f'不足以据此推翻已校准的综合研判与超买超卖层。</div>'
@@ -1256,6 +1269,20 @@ def render_index_html(items: list[dict], asof: str) -> str:
             sig_pill = (f'<span class="pill" style="background:{"#1a7f37" if up else "#cf222e"};'
                         f'color:#fff">⚡{_esc(ss.level)}{_esc(ss.direction)}</span>')
         os_pill = stretch_pill(it.get("stretch"), compact=True)
+        # 近端/中期分层上索引页：综合 bias 是两层投票的合成，只看它会把
+        # "近端偏空、中期偏多"这种分歧压成一个字，正是矛盾感的来源之一。
+        nb, mb = it.get("near_bias", ""), it.get("mid_bias", "")
+        layer_pill = ""
+        split = False
+        if nb or mb:
+            # ⚠️ 必须比方向【符号】，不能比字符串："偏多" 与 "偏多(弱)" 同向、强弱不同，
+            # 字符串不等会把它误判成方向冲突。
+            _sgn = lambda t: 1 if "偏多" in t else (-1 if "偏空" in t else 0)
+            split = bool(nb and mb and _sgn(nb) * _sgn(mb) < 0)
+            layer_pill = (f'<span class="pill" style="background:'
+                          f'{"#bf8700" if split else "#57606a"};color:#fff">'
+                          f'近 {_esc(nb or "—")} / 中 {_esc(mb or "—")}'
+                          f'{" ⚠分歧" if split else ""}</span>')
         verdict_head = it.get("verdict_head", "")
         verdict_div = (f'<div style="margin-top:7px;font-weight:700;color:#0969da;'
                        f'line-height:1.5">🧭 {_esc(verdict_head)}</div>' if verdict_head else "")
@@ -1264,8 +1291,11 @@ def render_index_html(items: list[dict], asof: str) -> str:
         cards.append(
             f'<a class="card" style="display:block;text-decoration:none;color:inherit" href="{_esc(fn)}">'
             f'<h1 style="font-size:17px">{_esc(name)}</h1>'
-            f'<span class="badge" style="background:{color}">{_esc(bias)}</span>'
-            f'<span class="pill">可信度 {_esc(conf)}</span>{sig_pill}{os_pill}'
+            + (f'<span class="badge" style="background:#bf8700">'
+               f'中期{_esc(mb)}｜近端{_esc(nb)}</span>'
+               if split else
+               f'<span class="badge" style="background:{color}">{_esc(bias)}</span>')
+            + f'<span class="pill">可信度 {_esc(conf)}</span>{sig_pill}{os_pill}'
             f'{verdict_div}'
             f'{summary_div}'
             f'</a>'

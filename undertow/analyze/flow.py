@@ -275,8 +275,10 @@ class StrongSignal:
     net_doi: int             # 顺向净建仓 OI
     vol_confirms: bool       # 波动率面是否同向追认
     reasons: list[str] = field(default_factory=list)
-    diverges: bool = False   # 与综合研判方向背离（近端资金流领先/抢跑）
-    outlook_bias: str = ""
+    diverges: bool = False   # 与【近端】方向不同向
+    outlook_bias: str = ""   # 对照用的近端方向
+    mid_bias: str = ""       # 中期方向（供文案讲清"与哪一层一致、与哪一层冲突"）
+    conflicts_mid: bool = False
 
 
 def wing_weights(fa: "FlowAnalysis") -> tuple[float, float]:
@@ -295,7 +297,8 @@ def wing_weights(fa: "FlowAnalysis") -> tuple[float, float]:
             _w("C", "bearish") + _w("P", "bearish"))
 
 
-def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "") -> "StrongSignal | None":
+def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "",
+                         mid_bias: str = "") -> "StrongSignal | None":
     """检测资金流是否"一边倒"到值得置顶的强信号；不满足严格门槛则返回 None。
 
     看涨：上行压力 ≫ 下行 + 主翼(20~45Δ)买盘(call 买 + put 卖支撑)权重 ≫ 反向 +
@@ -309,9 +312,17 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "") -> "Stro
     up, dn = fa.upside_pressure, fa.downside_pressure
 
     def _diverges(direction: str) -> bool:
+        """是否与【对照方向】不同向。
+
+        ⚠️ 对照对象必须是【近端】层，不是综合分。强信号本身就是 Flow 子层的产物，
+        拿它去比被中期主导的综合 bias，会得出荒谬结论：2026-08-27 QQQ 近端＝偏空(弱)、
+        中期＝偏多、综合＝偏多，强看跌信号与【近端一致】，横幅却写"与综合研判背离"，
+        把真正调和二者的那一层藏了起来 —— 这正是用户看到"偏多"和"强看跌"并列
+        觉得自相矛盾的根源。调用方应传 near_bias；未传时退回综合分并在文案里说明。
+        """
         b = outlook_bias or ""
         key = "多" if direction == "看涨" else "空"
-        return key not in b   # 综合未同向（分歧/中性/反向）＝背离
+        return key not in b
 
     def _atm_conf(want_up: bool) -> bool:
         # 涨且 ATM IV 抬升 = 买方追价（看涨确认）；跌且 ATM IV 抬升 = 恐慌买保护（看跌确认）
@@ -360,7 +371,8 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "") -> "Stro
         if _skew_conf(True):
             reasons.append(f"skew 向 call 倾斜：25Δ(put−call) {fa.vol.d_skew25_pp:+.2f}pp（call 相对变贵＝抢 call）")
         return StrongSignal("看涨", "极强" if vc else "强", round(pr, 1), round(wr, 1),
-                            fa.net_call_doi, vc, reasons, _diverges("看涨"), outlook_bias)
+                            fa.net_call_doi, vc, reasons, _diverges("看涨"), outlook_bias,
+                            mid_bias, "空" in (mid_bias or ""))
 
     # —— 看跌 ——
     if (dn >= STRONG_PRESSURE_RATIO * max(up, 1.0)
@@ -381,7 +393,8 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "") -> "Stro
         if _skew_conf(False):
             reasons.append(f"skew 向 put 倾斜：25Δ(put−call) {fa.vol.d_skew25_pp:+.2f}pp（put 相对变贵＝抢保护）")
         return StrongSignal("看跌", "极强" if vc else "强", round(pr, 1), round(wr, 1),
-                            fa.net_put_doi, vc, reasons, _diverges("看跌"), outlook_bias)
+                            fa.net_put_doi, vc, reasons, _diverges("看跌"), outlook_bias,
+                            mid_bias, "多" in (mid_bias or ""))
 
     return None
 

@@ -965,7 +965,11 @@ def cmd_report(args) -> int:
                                     commodity_symbol=comm_sym, commodity_basis=basis,
                                     extra_votes=macro_votes)
             # —— 近端资金流强信号：一边倒时置顶告警，独立于综合投票（复盘 8/19 黄金埋没案）——
-            strong_sig = detect_strong_signal(fa, outlook_bias=outlook.bias)
+            # 对照【近端】层：强信号本就是 Flow 子层，拿它比被中期主导的综合分
+            # 会把"与近端一致"误报成"与综合背离"（见 _diverges docstring）。
+            strong_sig = detect_strong_signal(
+                fa, outlook_bias=(getattr(outlook, "near_bias", "") or outlook.bias),
+                mid_bias=getattr(outlook, "mid_bias", ""))
             _persist_signal_probe(inst.key, fa, strong_sig, outlook.bias)
             strong_html = render_strong_signal_banner(strong_sig, inst.display_name)
 
@@ -1141,7 +1145,13 @@ def cmd_report(args) -> int:
             fib_an = rr_plan = None
             try:
                 if real_series is not None:
-                    fib_an = build_fibonacci(real_series, ratio=ratio,
+                    # ⚠️ 必须用 series_done（已剔掉当日未完成 bar）：超买超卖用的是它，
+                    # 斐波若用生 real_series，同一份报告里两层就有两个截止时点 ——
+                    # 盘中半根 K 会改变摆动腿方向，于是"偏超卖"和"短线等回调"
+                    # 基于不同的日线截止日，这正是假矛盾的来源之一。
+                    # 现价仍用实时价（只影响"距位点多少"，不改已确认的摆动腿）。
+                    fib_an = build_fibonacci(series_done if series_done is not None else real_series,
+                                             ratio=ratio,
                                              spot=(real_price if real_price else curr.spot))
                     rr_plan = build_risk_reward(fib_an, o=outlook)
                     fib_html = render_fib_rr_section(
@@ -1207,7 +1217,9 @@ def cmd_report(args) -> int:
         idx_items = [{"name": o.display_name, "fn": fn, "bias": o.bias,
                       "conf": o.confidence, "summary": _index_summary(o), "signal": ss,
                       "verdict_head": (v.headline if v and getattr(v, "ok", False) else ""),
-                      "stretch": sr}
+                      "stretch": sr,
+                      "near_bias": getattr(o, "near_bias", ""),
+                      "mid_bias": getattr(o, "mid_bias", "")}
                      for _, o, fn, ss, v, sr in written]
         index_html = render_index_html(idx_items, today.isoformat())
         index_path = reports_dir / f"index_{today.isoformat()}.html"
@@ -1303,7 +1315,9 @@ def _account_context(inst, store, sources, today, *, no_cache, live_quotes=None)
 
     outlook = build_outlook(an, signals, ga, fa, display_name=inst.display_name,
                             extra_votes=macro_votes)
-    strong_sig = detect_strong_signal(fa, outlook_bias=outlook.bias)
+    strong_sig = detect_strong_signal(
+        fa, outlook_bias=(getattr(outlook, "near_bias", "") or outlook.bias),
+        mid_bias=getattr(outlook, "mid_bias", ""))
     # ⚠️ 此处【不】写台账：_account_context 走盘中实时链，report 走结算后链。
     # 两者同日同方向会互相覆盖，谁赢取决于当天先跑 live 还是先跑 report。
     # 台账只认结算后口径（report 路径），否则攒出来的样本是混口径的，回测作废。

@@ -101,10 +101,43 @@ def check_position(name: str, legs: list, *, cost: float | None = None,
         gap=gap, stop=stop, target=target, to_stop_pct=to_stop, warnings=warns)
 
 
+def market_session(now=None) -> tuple[str, str]:
+    """美股【期权】市场时段。返回 (状态, 提示语)。
+
+    期权只在 09:30-16:00 ET 交易 —— 没有夜盘、没有盘前盘后（个股/ETF 正股有，期权没有）。
+    收盘后取到的 bid/ask 是昨夜残留挂单，**不是能成交的价**：点差会异常放大，
+    "真实可平仓价"因此系统性偏低，据以判止损会误触发。
+    2026-08-27 ET03:27 实测：TQQQ 价差真实可平仓显示 $67、中价 $84 —— 差 $17，
+    全部来自休市的宽点差，而报表当时毫无提示。
+    """
+    from datetime import datetime
+    try:
+        from zoneinfo import ZoneInfo
+        et = (now or datetime.now(ZoneInfo("America/New_York")))
+    except Exception:
+        return "未知", ""
+    if et.weekday() >= 5:
+        return "休市", f"⚠️ 现在是 ET {et:%a %H:%M}，**周末休市**"
+    hm = et.hour * 60 + et.minute
+    if 570 <= hm < 960:                      # 09:30 - 16:00
+        return "盘中", ""
+    return "休市", f"⚠️ 现在是 ET {et:%H:%M}，**期权盘未开**（仅 09:30-16:00 ET 交易）"
+
+
 def render_md(checks: list, net_assets: float | None = None) -> str:
-    L = ["# 持仓实时体检（长桥实时盘口 · 按【真实可平仓价】计）", ""]
+    sess, warn = market_session()
+    title = "持仓实时体检" + ("（长桥实时盘口 · 按【真实可平仓价】计）" if sess == "盘中"
+                              else "（⚠️ 休市时段 · 报价不可成交）")
+    L = [f"# {title}", ""]
+    if warn:
+        L.append(f"> {warn}。表中 bid/ask 是**昨夜残留挂单**，点差被放大，"
+                 f"「真实可平仓价」会系统性偏低。")
+        L.append("> **此时不得据本表判止损**——要判止损请在开盘后重跑。"
+                 "参考时可看「中价」，它受宽点差影响较小。")
+        L.append("")
     L.append("> 多头腿按 bid 卖、空头腿按 ask 买回——这才是「现在就走能拿回多少」。")
-    L.append("> 券商 App 的持仓盈亏用 last 价，对流动性差的腿会系统性高估。**止损判定用本表。**")
+    L.append("> 券商 App 的持仓盈亏用 last 价，对流动性差的腿会系统性高估。"
+             + ("**止损判定用本表。**" if sess == "盘中" else ""))
     L.append("")
     L.append("| 持仓 | 成本 | 真实可平仓 | 中价 | App(last) | 盈亏(可平仓) | 盈亏(App) | 距止损 |")
     L.append("|---|---:|---:|---:|---:|---:|---:|---:|")

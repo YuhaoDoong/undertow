@@ -109,7 +109,10 @@ def test_zero_value_position_counted_in_total():
 
 def test_render_contains_exit_basis_warning():
     md = render_md([check_position("spread", _tqqq(), cost=90.0, stop=45.0)], net_assets=436.77)
-    assert "真实可平仓" in md and "止损判定用本表" in md
+    # ⚠️ 断言不得与运行时刻相关：盘中/休市两版措辞不同，但「止损该看什么」
+    # 这条指引必须始终在场（休市版是"不得据本表判止损"）。
+    assert "真实可平仓" in md
+    assert ("止损判定用本表" in md) or ("不得据本表判止损" in md)
     assert "总敞口" in md
     print("PASS test_render_contains_exit_basis_warning")
 
@@ -188,6 +191,29 @@ def test_ledger_render_warns_about_cost_basis():
     assert "不等于「已实现盈亏」" in md
     assert render_ledger_md([]) == ""
     print("PASS test_ledger_render_warns_about_cost_basis")
+
+
+
+
+def test_market_session_flags_closed_hours():
+    """休市时段必须明示报价不可成交 —— 否则会据昨夜残留挂单误判止损。
+
+    2026-08-27 ET03:27 实测：TQQQ 价差「真实可平仓」显示 $67、中价 $84，
+    差 $17 全部来自休市宽点差，而报表当时毫无提示，据此算出的「距止损 33%」
+    是个不可成交的数。
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    from undertow.analyze.livecheck import market_session
+    ET = ZoneInfo("America/New_York")
+    assert market_session(datetime(2026, 8, 27, 3, 27, tzinfo=ET))[0] == "休市"
+    assert market_session(datetime(2026, 8, 27, 9, 29, tzinfo=ET))[0] == "休市"
+    assert market_session(datetime(2026, 8, 27, 9, 30, tzinfo=ET))[0] == "盘中"
+    assert market_session(datetime(2026, 8, 27, 15, 59, tzinfo=ET))[0] == "盘中"
+    assert market_session(datetime(2026, 8, 27, 16, 0, tzinfo=ET))[0] == "休市"
+    assert market_session(datetime(2026, 8, 29, 11, 0, tzinfo=ET))[0] == "休市"   # 周六
+    assert "期权盘未开" in market_session(datetime(2026, 8, 27, 3, 27, tzinfo=ET))[1]
+    print("PASS test_market_session_flags_closed_hours")
 
 
 if __name__ == "__main__":

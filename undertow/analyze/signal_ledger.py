@@ -143,6 +143,12 @@ def record(key: str, *, on_date: str, prev_date: str | None, spot: float,
         "churn_call": probe.get("churn_call"), "churn_put": probe.get("churn_put"),
         # 净有效 Delta（观测型）与 up/dn_pressure（推断型）并存，
         # 日后可直接比较两个口径谁更有预测力 —— 实测两者 60% 的日子方向相反。
+        # 方向裁决与弃权（软/硬），供日后校准弃权阈值
+        "call_direction": probe.get("call_direction"),
+        "call_abstain": probe.get("call_abstain"),
+        "call_hard_abstain": probe.get("call_hard_abstain"),
+        "call_ratio": probe.get("call_ratio"),
+        "call_reason": probe.get("call_reason"),
         "net_delta_call": probe.get("net_delta_call"),
         "net_delta_put": probe.get("net_delta_put"),
         "net_delta_total": probe.get("net_delta_total"),

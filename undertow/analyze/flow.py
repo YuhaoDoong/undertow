@@ -287,6 +287,10 @@ class FlowAnalysis:
     net_delta_call: float = 0.0
     net_delta_put: float = 0.0
     net_delta_total: float = 0.0
+    # —— 方向裁决（含弃权与理由）。见 analyze/direction.py ——
+    # flow_tilt 是给人读的散文；这个是给下游模块判定用的结构化结果。
+    # 两者必须同源：tilt 由它渲染而来，不得各算各的。
+    call: object | None = None
 
 
 @dataclass(frozen=True)
@@ -330,6 +334,14 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "",
     与综合 outlook_bias 方向不一致时置 diverges（提示"近端领先、可能抢跑于慢因子"）。
     """
     if not fa.prev_date:
+        return None
+    # —— 与方向裁决保持一致：裁决弃权时，强信号不得独自开火 ——
+    # 强信号用的就是同一套 upside/downside_pressure，它不是第二份独立证据
+    # （实测与 pressure 方向 100% 共线）。裁决因"两口径反向"或"数据过期/未结算"
+    # 而弃权时，让红色横幅照亮，就是我们反复修掉的那种"指标互相打架"。
+    # 2026-08-27 实测：QQQ/WTI 裁决为"方向不明（两口径反向）"，⚡ 却仍在亮。
+    _call = getattr(fa, "call", None)
+    if _call is not None and getattr(_call, "abstain", False):
         return None
 
     bull_wing, bear_wing = wing_weights(fa)
@@ -455,6 +467,7 @@ def probe_strong_signal(fa: "FlowAnalysis") -> dict:
     up, dn = fa.upside_pressure, fa.downside_pressure
     vs = fa.vol if (fa.vol and fa.vol.prev) else None
     nc, npu = fa.net_call_doi, fa.net_put_doi
+    _c = getattr(fa, "call", None)
     out: dict = {
         "up_pressure": round(up, 1), "dn_pressure": round(dn, 1),
         "bull_wing": round(bull_wing, 2), "bear_wing": round(bear_wing, 2),
@@ -464,6 +477,16 @@ def probe_strong_signal(fa: "FlowAnalysis") -> dict:
         # churning 折减系数：压力已被它缩放，但主翼门与规模门【没有】同步折减。
         "churn_call": getattr(fa, "churn_call", None),
         "churn_put": getattr(fa, "churn_put", None),
+        # —— 方向裁决与弃权（含类型与理由），入台账供日后校准阈值 ——
+        # 现在所有软弃权阈值都未校准：实测覆盖率/正确率权衡里没有任何门槛的
+        # Wilson 95% 下界超过 50%。攒够样本才谈得上定值。
+        # ⚠️ 用 getattr 兜底：probe 是【记录器】，任何字段缺失都只能记成 None，
+        # 绝不能因此抛异常拖垮当日报告或台账写入。
+        "call_direction": (getattr(_c, "direction", "") or None),
+        "call_abstain": (bool(getattr(_c, "abstain", True)) if _c is not None else None),
+        "call_hard_abstain": (bool(getattr(_c, "hard", False)) if _c is not None else None),
+        "call_ratio": getattr(_c, "ratio", None),
+        "call_reason": ((getattr(_c, "reasons", None) or [""])[0][:120]) if _c is not None else None,
         # 观测型方向敞口，与推断型的 pressure 并列记录，供日后比较谁更有预测力
         "net_delta_call": getattr(fa, "net_delta_call", None),
         "net_delta_put": getattr(fa, "net_delta_put", None),
@@ -1044,6 +1067,9 @@ def analyze_flow(
     spot = curr.spot
     live = _live(curr, today, horizon_days)
     f_call = f_put = 1.0     # 无 prev（单快照）时不折减，见下方 churning 段
+    # 单快照时没有日对日 diff → 硬弃权（逻辑约束，不是阈值问题）
+    from undertow.analyze.direction import decide as _decide0
+    call = _decide0(up_pressure=0.0, dn_pressure=0.0, has_prev=False)
 
     unusual = scan_unusual(curr, today=today, horizon_days=horizon_days)
     tcv = sum(c.volume for c in live if c.kind == "C")
@@ -1264,27 +1290,25 @@ def analyze_flow(
             cbits.append(f"put 端 churning 净 {nsig_put:+,}/毛 {gabs_put:,}→压力×{f_put:.2f}")
         cnote = ("；" + "、".join(cbits)) if cbits else ""
 
-        # —— 方向裁决权闸门（codex review 2026-08-27「止血版」①）——
+        # —— 方向裁决：统一走 direction.decide()，弃权是一等输出而非兜底 ——
         # pressure 是【推断】（先按 IV 判主动方），净有效 Delta 是【观测】（纯算术）。
         # 实测两者 60% 的日子方向相反。两者反向时，我们并不知道哪个对 ——
         # 此时**不许给方向票**，如实说"方向不明"。
         # ⚠️ 只撤销裁决权，不改任何计算：pressure 原值照常进 signal_ledger 累积，
         # 否则反事实样本作废、这层永远无法校准。
+        from undertow.analyze.direction import decide as _decide
         _nd = round(sum(c.d_oi * c.delta for c in changes), 1)
-        _p_dir = 1 if upside > downside * 1.3 else (-1 if downside > upside * 1.3 else 0)
-        _d_dir = 1 if _nd > 0 else (-1 if _nd < 0 else 0)
-        if _p_dir and _d_dir and _p_dir != _d_dir:
-            tilt = (f"方向不明（两个口径反向：推断口径{'偏多' if _p_dir > 0 else '偏空'}"
-                    f"「看跌资金力 {downside:,.0f} / 看涨 {upside:,.0f}」，"
-                    f"观测口径净有效 Delta {_nd:+,.0f} 指向{'偏多' if _d_dir > 0 else '偏空'}"
-                    f"）——本日资金流不提供方向判断{cnote}")
-        elif downside or upside:
-            if downside > upside * 1.3:
-                tilt = f"偏空（看跌资金力 {downside:,.0f} > 看涨 {upside:,.0f}；put 买保护/call 卖压制占优{cnote}）"
-            elif upside > downside * 1.3:
-                tilt = f"偏多（看涨资金力 {upside:,.0f} > 看跌 {downside:,.0f}；call 买盘/put 卖方做支撑占优{cnote}）"
-            else:
-                tilt = f"分歧（看跌 {downside:,.0f} ≈ 看涨 {upside:,.0f}{cnote}）"
+        call = _decide(up_pressure=upside, dn_pressure=downside, net_delta=_nd,
+                       has_prev=True, oi_changed=bool(changes),
+                       trade_date=curr_date or "", today="")
+        if call.abstain:
+            tilt = f"方向不明（{call.reasons[0]}）{cnote}"
+        elif call.direction == "偏空":
+            tilt = (f"偏空（看跌资金力 {downside:,.0f} > 看涨 {upside:,.0f}；"
+                    f"put 买保护/call 卖压制占优{cnote}）")
+        else:
+            tilt = (f"偏多（看涨资金力 {upside:,.0f} > 看跌 {downside:,.0f}；"
+                    f"call 买盘/put 卖方做支撑占优{cnote}）")
 
     return FlowAnalysis(
         instrument=curr.instrument,
@@ -1304,6 +1328,7 @@ def analyze_flow(
         upside_pressure=round(upside, 1),
         churn_call=round(f_call, 3),
         churn_put=round(f_put, 3),
+        call=call,
         net_delta_call=round(sum(c.d_oi * c.delta for c in changes if c.kind == "C"), 1),
         net_delta_put=round(sum(c.d_oi * c.delta for c in changes if c.kind == "P"), 1),
         net_delta_total=round(sum(c.d_oi * c.delta for c in changes), 1),

@@ -449,6 +449,53 @@ def test_ladder_interp_does_not_extrapolate():
     print("PASS test_ladder_interp_does_not_extrapolate")
 
 
+
+
+def test_rel_schemes_are_preregistered_and_switchable():
+    """三种相对化基准方案必须可切换且预注册 —— 供稳健性检验，不许事后加方案。
+
+    2026-08-27 稳健性验证结论（118 品种-日、**38 个日期簇**，按簇 block bootstrap）：
+        pooled   55.7%  [44%, 67%]
+        side_mid 55.2%  [44%, 66%]
+        per_side 54.8%  [44%, 65%]
+    **三者统计上无法区分。** 此前"按侧拆会消掉 skew 维度导致 54%→49%"的说法
+    是逐行统计的假象（把 118 行当 118 个独立样本，实际只有 38 簇），已撤回。
+
+    保留三方案不是为了将来挑一个，是为了**记住它们没差别**、防止有人再去调它。
+    """
+    from datetime import date as _d
+    from undertow.analyze.flow import analyze_flow, REL_SCHEMES
+    from undertow.core.models import OptionContract, OptionsSnapshot
+
+    E = _d(2026, 9, 18)
+
+    def _c(strike, kind, iv, oi):
+        return OptionContract(expiry=E, strike=strike, kind=kind, open_interest=oi,
+                              volume=800, gamma=0.01,
+                              delta=(0.30 if kind == "C" else -0.30), iv=iv)
+
+    def _snap(cs):
+        return OptionsSnapshot(instrument="gold", proxy_symbol="GLD", asof="x",
+                               spot=400.0, contracts=cs)
+
+    prev, curr = [], []
+    for i in range(10):
+        prev += [_c(405 + i, "C", 0.20, 5_000), _c(395 - i, "P", 0.20, 5_000)]
+        curr += [_c(405 + i, "C", 0.22, 6_000), _c(395 - i, "P", 0.18, 6_000)]
+    for scheme in REL_SCHEMES:
+        fa = analyze_flow(_snap(prev), _snap(curr), today=_d(2026, 8, 27),
+                          rel_scheme=scheme)
+        assert fa.changes, scheme
+    # 未注册的方案必须报错，不能静默回退
+    try:
+        analyze_flow(_snap(prev), _snap(curr), today=_d(2026, 8, 27), rel_scheme="whatever")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("未注册的 rel_scheme 必须抛 ValueError，不得静默回退")
+    print("PASS test_rel_schemes_are_preregistered_and_switchable")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

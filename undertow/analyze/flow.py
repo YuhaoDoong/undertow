@@ -1069,11 +1069,36 @@ def vol_surface(prev: OptionsSnapshot | None, curr: OptionsSnapshot, *,
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+# —— 相对化基准的三种【预注册】方案（供稳健性检验；默认 pooled = 现行口径）——
+#   pooled   : 按到期取全体（C+P 合并）中位数 —— 保留 Put-Call skew 维度
+#   side_mid : 按到期分别取 C 侧、P 侧中位数，再取两者中点 —— C/P 等权，
+#              避免报价数多的一侧主导 pooled median
+#   per_side : 按 (到期, C/P) 各自取中位数 —— **会消掉 skew 维度**（对照组）
+# 预注册的意思：三种方案在看结果之前就定好，不许看完数据再加方案。
+#
+# ⚠️ 2026-08-27 稳健性验证结论（118 品种-日，**38 个日期簇**，按簇 block bootstrap）：
+#       pooled 55.7% [44%,67%] / side_mid 55.2% [44%,66%] / per_side 54.8% [44%,65%]
+#     **三者统计上无法区分。** 此前"按侧拆会消掉 skew、导致 54%→49%"的说法是逐行
+#     统计的假象（把 118 行当 118 个独立样本，实际只有 38 簇），已撤回。
+#     保留三方案不是为了将来挑一个，而是为了**记住它们没差别**、防止有人再去调它。
+#
+# 同日还验证了其它稳健化手段，**全部无效**：
+#     秩次聚合 59% / 广度(腿数)聚合 58% / 脆弱度当置信度（反向，脆弱的反而更准）
+#     份额封顶（单腿 ≤50%/35%/25%/15% 该侧总量）59~61%，与不封顶的 59% 无差别
+#     分位 winsorize P90 看似 63%，但那是 7 个分位里挑的；**理论驱动的份额封顶
+#     直接针对同一机制却毫无改善** → 判定 P90 为噪音，不采纳。
+# 真实存在的问题是：随机删 20% 报价方向翻转 42%，方向由中位仅 6 条腿决定
+# （Top1 占该侧 18%、Top3 占 41%）。但改聚合方式改善不了准确率 ——
+# 说明信号本身弱，不只是脆弱。
+REL_SCHEMES = ("pooled", "side_mid", "per_side")
+
+
 def analyze_flow(
     prev: OptionsSnapshot | None,
     curr: OptionsSnapshot,
     *,
     today: date,
+    rel_scheme: str = "pooled",
     horizon_days: int = DEFAULT_HORIZON_DAYS,
     call_wall: float | None = None,
     put_wall: float | None = None,
@@ -1185,10 +1210,14 @@ def analyze_flow(
         #   黄金 8/19「强烈转多」由"偏多"退回"分歧"。只按到期分组则不会。
         # 分组样本不足 REL_MIN_STRIKES 时回落到全局中位（聊胜于无，并如实降级）。
         from collections import defaultdict as _dd
+        if rel_scheme not in REL_SCHEMES:
+            raise ValueError(f"rel_scheme 须为 {REL_SCHEMES} 之一，收到 {rel_scheme!r}")
         _grp = _dd(list)
+        _grp_side = _dd(list)
         for r in rows:
             if r["known"]:
-                _grp[r["exp"]].append(r["corrected"])      # 只按到期，保留 C/P 对比
+                _grp[r["exp"]].append(r["corrected"])          # 只按到期，保留 C/P 对比
+                _grp_side[(r["exp"], r["kind"])].append(r["corrected"])
         def _median(xs):
             """真中位数。⚠️ 偶数长度必须取中间两个的均值。
             旧版写的是 xs[len(xs)//2]，对偶数长度系统性偏高 —— 当 call/put 两侧
@@ -1199,13 +1228,27 @@ def analyze_flow(
 
         _all = sorted(r["corrected"] for r in rows if r["known"])
         ref_all = _median(_all) if len(_all) >= REL_MIN_STRIKES else 0.0
-        refs = {}
+        refs, refs_side = {}, {}
         for k, vs_ in _grp.items():
             vs_ = sorted(vs_)
             refs[k] = _median(vs_) if len(vs_) >= REL_MIN_STRIKES else ref_all
+        for k, vs_ in _grp_side.items():
+            vs_ = sorted(vs_)
+            refs_side[k] = _median(vs_) if len(vs_) >= REL_MIN_STRIKES else None
+        if rel_scheme == "side_mid":
+            # C/P 等权：两侧中位数的中点，避免报价多的一侧主导
+            for e in list(refs):
+                a, b = refs_side.get((e, "C")), refs_side.get((e, "P"))
+                if a is not None and b is not None:
+                    refs[e] = (a + b) / 2.0
 
         for r in rows:
-            ref = refs.get(r["exp"], ref_all)
+            if rel_scheme == "per_side":
+                ref = refs_side.get((r["exp"], r["kind"]))
+                if ref is None:
+                    ref = refs.get(r["exp"], ref_all)
+            else:
+                ref = refs.get(r["exp"], ref_all)
             adj_iv_pp = ((r["corrected"] - ref) * 100.0) if r["known"] else 0.0
             d_iv_pp = r["d_iv"] * 100.0
             # 闸门用【Delta 修正后的绝对】ΔIV(corrected*100)——剔除现价移动沿偏斜的机械项、

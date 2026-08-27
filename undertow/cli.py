@@ -35,7 +35,7 @@ from undertow.analyze.signals import generate_signals, net_bias
 from undertow.analyze.gamma import analyze_gamma, structure_delta
 from undertow.analyze.flow import (analyze_flow, counter_signals,
                                    flip_driver_summary, structural_moves,
-                                   detect_strong_signal)
+                                   detect_strong_signal, probe_strong_signal)
 from undertow.analyze.outlook import (build_outlook, macro_to_votes,
                                       plain_summary_blocks)
 from undertow.analyze.strategy import build_strategy
@@ -609,6 +609,21 @@ def _persist_vrp(key: str, h) -> None:
         encoding="utf-8")
 
 
+def _persist_signal_probe(key: str, fa, strong_sig, outlook_bias: str) -> None:
+    """强信号候选落台账（含被逆向闸门拦下的）。见 signal_ledger 模块 docstring。
+
+    ⚠️ 绝不能让台账写入失败拖垮当日报告——报告是每天要用的，台账是攒给未来的。
+    但也不静默吞掉：出错打到 stderr，否则会像 2026-08-26 那次"以为修了其实没生效"。
+    """
+    try:
+        from undertow.analyze import signal_ledger as sl
+        sl.record(key, on_date=fa.curr_date, prev_date=fa.prev_date, spot=fa.spot,
+                  probe=probe_strong_signal(fa), signal=strong_sig,
+                  outlook_bias=outlook_bias or "")
+    except Exception as e:
+        print(f"[警告] {key} 强信号台账写入失败：{type(e).__name__} {e}", file=sys.stderr)
+
+
 def _persist_resonance(row: dict) -> None:
     """共振层每日联合状态落盘（append，按品种一个文件，同日覆盖）。
 
@@ -951,6 +966,7 @@ def cmd_report(args) -> int:
                                     extra_votes=macro_votes)
             # —— 近端资金流强信号：一边倒时置顶告警，独立于综合投票（复盘 8/19 黄金埋没案）——
             strong_sig = detect_strong_signal(fa, outlook_bias=outlook.bias)
+            _persist_signal_probe(inst.key, fa, strong_sig, outlook.bias)
             strong_html = render_strong_signal_banner(strong_sig, inst.display_name)
 
             # —— 价格图：优先真实期货价 + 关键位换算到商品价；否则回退 ETF 日线 ——
@@ -1288,6 +1304,9 @@ def _account_context(inst, store, sources, today, *, no_cache, live_quotes=None)
     outlook = build_outlook(an, signals, ga, fa, display_name=inst.display_name,
                             extra_votes=macro_votes)
     strong_sig = detect_strong_signal(fa, outlook_bias=outlook.bias)
+    # ⚠️ 此处【不】写台账：_account_context 走盘中实时链，report 走结算后链。
+    # 两者同日同方向会互相覆盖，谁赢取决于当天先跑 live 还是先跑 report。
+    # 台账只认结算后口径（report 路径），否则攒出来的样本是混口径的，回测作废。
     verdict = None
     try:
         fib_an = build_fibonacci(real_series, ratio=ratio,
@@ -1814,6 +1833,91 @@ CALIB_PANEL = [("GLD", "黄金GLD"), ("SLV", "白银SLV"), ("USO", "原油USO"),
                ("QQQ", "QQQ"), ("SPY", "SPY")]
 
 
+def cmd_signals(args) -> int:
+    """强信号台账：重建 / 回填真实走势 / 出统计。
+
+    这一层是全报告唯一顶红色告警却从未回测过的部分，核心三闸门需历史逐行 OI、
+    免费源拿不到，只能向前累积。详见 signal_ledger 模块 docstring。
+    """
+    from undertow.analyze import signal_ledger as sl
+    from undertow.collect.cboe_options import snapshot_from_payload
+
+    cfg = load_config()
+    keys = args.instruments or [k for k, v in cfg.instruments.items() if v.options]
+    unknown = [k for k in keys if k not in cfg.instruments]
+    if unknown:
+        print(f"未知品种：{', '.join(unknown)}", file=sys.stderr)
+        return 2
+
+    if args.horizon not in sl.HORIZONS:
+        print(f"--horizon 必须是 {sl.HORIZONS} 之一（台账只回填这几个格子），"
+              f"收到 {args.horizon}", file=sys.stderr)
+        return 2
+
+    if args.rebuild:
+        store = SnapshotStore()
+        for key in keys:
+            inst = cfg.instruments[key]
+            if not inst.options:
+                continue
+            sym = inst.options.symbol
+            # 真重建：先清空。否则改了阈值/修了算法后旧定义的行会残留，
+            # 统计就成了不同版本定义的混合，不可解释。
+            dropped = sl.clear(key)
+            dates = store.dates("options", sym)
+            snaps = {}
+            for d in dates:
+                try:
+                    snaps[d] = snapshot_from_payload(store.load("options", sym, d), key, sym)
+                except Exception as e:
+                    print(f"[警告] {key} {d} 快照解析失败：{type(e).__name__} {e}",
+                          file=sys.stderr)
+            dates = [d for d in dates if d in snaps]
+            got = 0
+            for i in range(1, len(dates)):
+                pv, cu = dates[i - 1], dates[i]
+                try:
+                    fa = analyze_flow(snaps[pv], snaps[cu], today=cu,
+                                      prev_date=pv.isoformat(), curr_date=cu.isoformat())
+                except Exception as e:
+                    print(f"[警告] {key} {cu} 资金流分析失败：{type(e).__name__} {e}",
+                          file=sys.stderr)
+                    continue
+                # ⚠️ 重建时不带 outlook_bias：综合研判依赖 COT/宏观等【当时】的数据，
+                # 事后重跑拿到的是修订后的版本，会造成前视偏差。diverges 因此留空，
+                # 只有日常管线实时写入的那些才有该字段。
+                row = sl.record(key, on_date=cu.isoformat(), prev_date=pv.isoformat(),
+                                spot=snaps[cu].spot, probe=probe_strong_signal(fa),
+                                signal=detect_strong_signal(fa))
+                got += bool(row["fired"])
+            print(f"  {key:<8} 清旧 {max(dropped,0)} 行 → 回放 {len(dates)} 份快照，"
+                  f"记录 {max(len(dates)-1,0)} 天，其中开火 {got} 次")
+
+    if args.backfill:
+        price_src = CboeHistorySource()
+        for key in keys:
+            inst = cfg.instruments[key]
+            try:
+                ser = price_src.fetch_series(inst, use_cache=not args.no_cache)
+            except Exception as e:
+                print(f"[警告] {key} 价格序列获取失败，跳过回填：{type(e).__name__} {e}",
+                      file=sys.stderr)
+                continue
+            filled, pending = sl.backfill(key, ser.dates, ser.closes)
+            print(f"  {key:<8} 回填 {filled} 行，仍有 {pending} 个前瞻格未到期")
+
+    rows = sl.load_all(keys)
+    if not rows:
+        print("台账为空。先跑 `undertow signals --rebuild --backfill`。")
+        return 0
+    if not any(r.get("fired") for r in rows):
+        print(f"台账有 {len(rows)} 天记录，但尚无开火信号，无从统计。")
+        return 0
+    print()
+    print(sl.render_md(rows, horizon=args.horizon))
+    return 0
+
+
 def cmd_backtest_stretch(args) -> int:
     """重跑拉伸度校准表。改了指标参数就跑这个，别手改 stretch.py 里的数字。"""
     from undertow.analyze import stretch_backtest as sb
@@ -2259,6 +2363,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     plv = sub.add_parser("live", help="持仓实时体检：长桥实时盘口 → 真实可平仓价（只读）")
     plv.set_defaults(func=cmd_live)
+
+    psig = sub.add_parser("signals",
+                          help="强信号台账：重建/回填/统计（这层从未回测过，靠向前累积）")
+    psig.add_argument("instruments", nargs="*", help="品种键（留空=全部有期权源的）")
+    psig.add_argument("--rebuild", action="store_true",
+                      help="用已落盘的历史快照回放重建台账（同日同方向覆盖）")
+    psig.add_argument("--backfill", action="store_true",
+                      help="用真实价格序列回填前瞻收益/漂移/牛熊制度")
+    psig.add_argument("--horizon", type=int, default=5, help="统计用前瞻天数（默认 5）")
+    psig.add_argument("--no-cache", action="store_true", help="回填时不用本地缓存")
+    psig.set_defaults(func=cmd_signals)
 
     pbs = sub.add_parser("backtest-stretch",
                          help="重跑拉伸度(超买超卖)校准表：长历史+regime分层+不重叠t检验")

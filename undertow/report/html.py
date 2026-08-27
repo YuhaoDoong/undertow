@@ -1138,8 +1138,10 @@ def render_strong_signal_banner(ss, display_name: str = "") -> str:
             f'<div style="margin-top:8px;padding:8px 10px;background:#fff8c5;'
             f'border-radius:6px;font-size:13px;color:#7d4e00">'
             f'⚠ <b>与综合研判方向背离</b>（综合＝{_esc(ss.outlook_bias or "—")}）：'
-            f'这是<b>近端资金流的领先信号</b>，可能抢跑于 COT/宏观等慢因子——'
-            f'综合层因多因子对冲暂显中性，但当日期权端已一边倒。近端权重更高，值得优先盯。</div>'
+            f'当日期权端资金流与综合研判不同向。<b>本层未经回测校准</b>'
+            f'（核心闸门需历史逐行 OI，免费源拿不到，正在用 signal_ledger 向前累积样本）——'
+            f'"领先"只是一次黄金复盘得来的猜想，<b>没有统计证据</b>，'
+            f'不足以据此推翻已校准的综合研判与超买超卖层。</div>'
         )
     name = f'{_esc(display_name)} · ' if display_name else ""
     return (

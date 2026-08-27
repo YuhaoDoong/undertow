@@ -259,6 +259,10 @@ class FlowAnalysis:
     call_wall: float | None = None
     put_wall: float | None = None
     vol: VolSurface | None = None  # 波动率面：ATM IV / skew 日变化（买方确认检查）
+    # churning 折减系数（已作用于 upside/downside_pressure）。此前只出现在 tilt 字符串里，
+    # 台账拿不到 → 无法回答"强信号是不是建立在滚仓上"。暴露成字段供记录，不改判定逻辑。
+    churn_call: float = 1.0
+    churn_put: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -275,6 +279,22 @@ class StrongSignal:
     outlook_bias: str = ""
 
 
+def wing_weights(fa: "FlowAnalysis") -> tuple[float, float]:
+    """主翼(20~45Δ)方向权重 (看涨, 看跌)。
+
+    方向聚合：看涨=call 买盘 + put 卖方做支撑；看跌=call 卖压制 + put 买保护。
+    只计新建仓(d_oi>0)——减仓腿由 _judge 半权定性，不参与"一边倒"判定。
+    ⚠️ 单一实现：detect_strong_signal 与 probe_strong_signal 共用，别复制第二份
+    （否则台账记下的数会和告警用的数悄悄漂移，回测就白攒了）。
+    """
+    def _w(kind: str, bias: str) -> float:
+        return sum(c.weight for c in fa.changes
+                   if c.kind == kind and c.bias == bias and c.d_oi > 0
+                   and STRONG_WING_DELTA_LO <= abs(c.delta) <= STRONG_WING_DELTA_HI)
+    return (_w("C", "bullish") + _w("P", "bullish"),
+            _w("C", "bearish") + _w("P", "bearish"))
+
+
 def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "") -> "StrongSignal | None":
     """检测资金流是否"一边倒"到值得置顶的强信号；不满足严格门槛则返回 None。
 
@@ -285,14 +305,7 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "") -> "Stro
     if not fa.prev_date:
         return None
 
-    def _wing(kind: str, bias: str) -> float:
-        return sum(c.weight for c in fa.changes
-                   if c.kind == kind and c.bias == bias and c.d_oi > 0
-                   and STRONG_WING_DELTA_LO <= abs(c.delta) <= STRONG_WING_DELTA_HI)
-
-    # 方向聚合：看涨=call 买盘 + put 卖方做支撑；看跌=call 卖压制 + put 买保护
-    bull_wing = _wing("C", "bullish") + _wing("P", "bullish")
-    bear_wing = _wing("C", "bearish") + _wing("P", "bearish")
+    bull_wing, bear_wing = wing_weights(fa)
     up, dn = fa.upside_pressure, fa.downside_pressure
 
     def _diverges(direction: str) -> bool:
@@ -371,6 +384,80 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "") -> "Stro
                             fa.net_put_doi, vc, reasons, _diverges("看跌"), outlook_bias)
 
     return None
+
+
+def wing_weights_oi(fa: "FlowAnalysis") -> tuple[float, float]:
+    """主翼方向权重的【按 ΔOI 加权】版本 (看涨, 看跌)。
+
+    ⚠️ 与 wing_weights 的区别，是理解"主翼买卖比 4×"到底是什么的关键：
+    wing_weights 累加的是每一行的分类系数 c.weight —— 50 手的一行和 50,000 手的一行
+    贡献几乎相同，所以那个比值本质是【被分到某方向的行权价条数/强度之比】，
+    不含任何规模含义。这里用 |ΔOI|×weight 给出真正带规模的版本。
+
+    **不参与任何判定**，只供台账记录，日后回答"该用哪个口径当闸门"。
+    """
+    def _w(kind: str, bias: str) -> float:
+        return sum(abs(c.d_oi) * c.weight for c in fa.changes
+                   if c.kind == kind and c.bias == bias and c.d_oi > 0
+                   and STRONG_WING_DELTA_LO <= abs(c.delta) <= STRONG_WING_DELTA_HI)
+    return (_w("C", "bullish") + _w("P", "bullish"),
+            _w("C", "bearish") + _w("P", "bearish"))
+
+
+def probe_strong_signal(fa: "FlowAnalysis") -> dict:
+    """台账用：强信号各分量的原始数值 + 逐条闸门通过情况。**不下结论。**
+
+    与 detect_strong_signal 的分工——那个回答"要不要置顶告警"，这个回答"当时到底是
+    什么数"。台账要能回答"闸门该不该这么设"，就必须把【被闸门拦下的】一起记下来，
+    否则永远没有反事实样本，闸门阈值就只能靠讲故事去调（2026-08-27 差点因此改错）。
+
+    共用 wing_weights 与 fa 的压力字段，不另起一套实现。
+    """
+    bull_wing, bear_wing = wing_weights(fa)
+    bwo, bearwo = wing_weights_oi(fa)
+    up, dn = fa.upside_pressure, fa.downside_pressure
+    vs = fa.vol if (fa.vol and fa.vol.prev) else None
+    nc, npu = fa.net_call_doi, fa.net_put_doi
+    out: dict = {
+        "up_pressure": round(up, 1), "dn_pressure": round(dn, 1),
+        "bull_wing": round(bull_wing, 2), "bear_wing": round(bear_wing, 2),
+        "net_call_doi": nc, "net_put_doi": npu,
+        # 主翼的两个口径：行数权重 vs |ΔOI| 加权。闸门用的是前者（无规模含义）。
+        "bull_wing_oi": round(bwo, 1), "bear_wing_oi": round(bearwo, 1),
+        # churning 折减系数：压力已被它缩放，但主翼门与规模门【没有】同步折减。
+        "churn_call": getattr(fa, "churn_call", None),
+        "churn_put": getattr(fa, "churn_put", None),
+        # ⚠️ net_*_doi 实为【增仓总额】(analyze_flow 里只累加 d_oi>0)，不是净额。
+        # 建仓比 = 两侧增仓总额之比。规模闸门只查信号侧绝对量、从不与另一侧比，
+        # 所以"名为一边倒、实则两边都在建"完全可能通过——记下来供日后检验。
+        "oi_build_ratio": round(max(nc, npu) / max(min(nc, npu), 1), 2),
+        "d_spot_pct": round(vs.d_spot_pct, 3) if vs else None,
+        "d_atm_pp": round(vs.d_atm_pp, 3) if vs else None,
+        "d_skew25_pp": round(vs.d_skew25_pp, 3) if vs else None,
+    }
+    for direction in ("看涨", "看跌"):
+        up_side = direction == "看涨"
+        fwd, rev = (up, dn) if up_side else (dn, up)
+        wf, wr = (bull_wing, bear_wing) if up_side else (bear_wing, bull_wing)
+        doi = nc if up_side else npu
+        dsp = out["d_spot_pct"]
+        adverse = (-dsp if up_side else dsp) if dsp is not None else None
+        out[direction] = {
+            # ⚠️ 连续比值必须和布尔一起记：只存"过没过 3×"，日后永远无法回答
+            # "3× 这个数对不对"——画不出阈值与结果的关系曲线。
+            "pressure_ratio": round(fwd / max(rev, 1.0), 3),
+            "wing_ratio": round(wf / max(wr, 0.5), 3),
+            "wing_abs": round(wf, 2),
+            "scale_doi": doi,
+            "pressure_ok": fwd >= STRONG_PRESSURE_RATIO * max(rev, 1.0),
+            "wing_ok": wf >= STRONG_WING_RATIO * max(wr, 0.5) and wf >= STRONG_MIN_WING_W,
+            "scale_ok": doi >= STRONG_MIN_NET_DOI,
+            # 逆向闸门余量：正=离触发还差多少 pp（越小越险），负=已被抑制。
+            # 2026-08-27 QQQ 以 +0.010 擦过 —— 记下余量才能事后问"1.5 这个数对不对"。
+            "contra_margin": (round(STRONG_CONTRA_SPOT - adverse, 3)
+                              if adverse is not None else None),
+        }
+    return out
 
 
 def _px_fmt(fa: "FlowAnalysis", conv):
@@ -768,6 +855,7 @@ def analyze_flow(
 ) -> FlowAnalysis:
     spot = curr.spot
     live = _live(curr, today, horizon_days)
+    f_call = f_put = 1.0     # 无 prev（单快照）时不折减，见下方 churning 段
 
     unusual = scan_unusual(curr, today=today, horizon_days=horizon_days)
     tcv = sum(c.volume for c in live if c.kind == "C")
@@ -955,6 +1043,8 @@ def analyze_flow(
         net_put_doi=net_put,
         downside_pressure=round(downside, 1),
         upside_pressure=round(upside, 1),
+        churn_call=round(f_call, 3),
+        churn_put=round(f_put, 3),
         flow_tilt=tilt,
         spreads=spreads,
         call_wall=call_wall,

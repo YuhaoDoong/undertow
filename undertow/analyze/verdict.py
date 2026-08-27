@@ -76,8 +76,19 @@ def build_verdict(o: Outlook, fa: FlowAnalysis | None,
     dirw = _dir_word(long_side)
 
     # ── 1) 做空？──────────────────────────────────────────────
-    if strong_sig and strong_sig.direction == "看跌":
-        short_answer = (f"⚡近端强看跌信号（{strong_sig.level}）——空头有近端资金流支持，"
+    # ⚠️ 强信号【未经回测校准】（见 signal_ledger 模块 docstring：核心三闸门需历史
+    # 逐行 OI，免费源没有，只能向前累积）。因此它不得单独把结论翻成「可空」去压过
+    # 已校准的中期趋势层——旧版本正是这么写的：看跌强信号是第一个分支，
+    # 直接盖掉「中期偏多、趋势未坏」，一个未校准的单层规则否决了综合研判。
+    # 现在改为：与中期趋势【同向】时才加持，【背离】时如实报冲突、不给方向结论。
+    if strong_sig and strong_sig.direction == "看跌" and trend == 1:
+        short_answer = (f"⚠️ 冲突：⚡近端强看跌信号（{strong_sig.level}，**未经回测校准**）"
+                        f"撞上中期偏多、趋势未坏。近端资金流只是一层未校准的观察，"
+                        f"不足以单独否定趋势——**不据此做空**；若要减仓请按仓位规则，"
+                        f"别当反转信号用。")
+    elif strong_sig and strong_sig.direction == "看跌":
+        short_answer = (f"⚡近端强看跌信号（{strong_sig.level}，未经回测校准）——"
+                        f"中期未站在多头一侧，空头有近端资金流支持，"
                         f"可考虑波段空，但仍先过盈亏比闸门、控仓。")
     elif "偏空" in near and "偏空" in mid:
         short_answer = "近端+中期共识偏空——做空有结构支持，择机（看盈亏比、别追空）。"
@@ -123,10 +134,14 @@ def build_verdict(o: Outlook, fa: FlowAnalysis | None,
     # 同上：标签跟着分支走。旧版标签链只认「有没有 strong_sig」，导致
     # 强信号方向与摆动腿不符时详细写「回调进行中·别顺短腿追空」、标签却写「短线跟势」。
     chase_poor = bool(chase and chase.grade == "差")
-    if strong_sig and strong_sig.direction == "看涨" and up_leg:
+    # ⚠️ 与「做空？」一格同一条原则：强信号未经回测校准，只能【加持同向】读数，
+    # 不得【反转反向】读数。旧版本里，中期偏多 + 逆势下腿时非信号分支写的是
+    # "别顺短腿追空"，一个未校准信号却能把它翻成"可跟空"——和它在总纲那格
+    # 直接盖掉"中期偏多、趋势未坏"是同一个缺陷，只是低一格。
+    if strong_sig and strong_sig.direction == "看涨" and up_leg and trend != -1:
         swing_action = f"短线可跟多：⚡{strong_sig.level}看涨信号在（主翼买盘一边倒），顺势波段。"
         swing_tag = "短线跟多"
-    elif strong_sig and strong_sig.direction == "看跌" and (down_leg or trend == -1):
+    elif strong_sig and strong_sig.direction == "看跌" and (down_leg or trend == -1) and trend != 1:
         swing_action = f"短线可跟空：⚡{strong_sig.level}看跌信号在，顺势波段。"
         swing_tag = "短线跟空"
     elif counter and trend == 1:
@@ -160,8 +175,11 @@ def build_verdict(o: Outlook, fa: FlowAnalysis | None,
         core_action = "中期中性/分歧——底仓维持，等方向明朗再动。"
 
     # ── 总纲一句话 ───────────────────────────────────────────
-    short_tag = ("可空" if (strong_sig and strong_sig.direction == "看跌") or ("偏空" in near and "偏空" in mid)
-                 else ("轻仓短空" if ("偏空" in near and trend != 1) else "不做空"))
+    # 未校准的强信号不得单独把总纲翻成「可空」；与中期偏多背离时标注冲突。
+    _bear_sig = bool(strong_sig and strong_sig.direction == "看跌")
+    short_tag = ("信号与趋势冲突" if (_bear_sig and trend == 1)
+                 else ("可空" if _bear_sig or ("偏空" in near and "偏空" in mid)
+                       else ("轻仓短空" if ("偏空" in near and trend != 1) else "不做空")))
     # chase_tag / swing_tag 已在上面各自的分支里定出，此处不得重算——
     # 重算就是把刚拆掉的那两套并行 if 链又装回来。
     core_tag = ("长线拿住" if "偏多" in mid else ("长线减" if "偏空" in mid else "长线维持"))

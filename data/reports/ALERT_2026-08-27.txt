@@ -1,2 +1,2 @@
-2026-08-27 | silver ⚡极强看跌
-  silver  偏多(弱)   (可信度中)  ⚡极强看跌  · 信号与趋势冲突 · 别追·等回调 · 短线止盈/收紧 · 长线拿住  → /Users/yhdong/Trading/data/reports/silver_2026-08-27.html
+2026-08-27 | spy ⚡强看涨
+  spy     偏多      (可信度高)  ⚡强看涨  · 不做空 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/spy_2026-08-27.html

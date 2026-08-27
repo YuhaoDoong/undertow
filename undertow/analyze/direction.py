@@ -50,21 +50,47 @@ class DirectionCall:
     hard: bool = False           # 是否属于逻辑性（硬）弃权
     ratio: float | None = None
     calibrated: bool = False     # 恒为 False，直到台账样本足够并通过检验
+    # —— shadow 模式（codex review 2026-08-27）——
+    # 项目铁律是"未校准的东西不得正式裁决"。软弃权的阈值全部未校准，
+    # 因此默认走 shadow：**记录但不改变输出**。
+    # shadow_direction 保存"若正式执行软弃权，它本会给出的方向"，
+    # 供台账日后校准；low_confidence 标记该方向证据不足。
+    shadow_direction: str = ""   # 软弃权时它本来会给的方向（仅记录）
+    low_confidence: bool = False  # 给了方向但证据不足（软条件未过）
 
     @property
     def label(self) -> str:
-        return self.direction if not self.abstain else "方向不明"
+        if self.abstain:
+            return "方向不明"
+        return f"{self.direction}（低置信）" if self.low_confidence else self.direction
+
+    @property
+    def range_friendly(self) -> bool:
+        """方向不明/低置信 → 区间策略（铁鹰）的适用场景。
+
+        用户 2026-08-27 指出：「方向不明，墙明确的时候，也可以铁鹰」。
+        弃权不等于不能交易 —— 铁鹰本就是中性结构，方向未知恰是它的正当理由，
+        前提是上下两道墙把现价夹住（这个前提由 condor.assess_condor 的门槛 3 把关）。
+        """
+        return self.abstain or self.low_confidence
 
 
 def decide(*, up_pressure: float, dn_pressure: float,
            net_delta: float | None = None,
            has_prev: bool = True, oi_changed: bool = True,
-           trade_date: str = "", today: str = "") -> DirectionCall:
+           trade_date: str = "", today: str = "",
+           shadow_soft: bool = True) -> DirectionCall:
     """裁决方向或弃权。
 
     弃权分两类，输出里必须能区分：
-      **硬弃权**（逻辑约束，无关统计）：无前日可比 / OI 未结算 / 数据已过期
+      **硬弃权**（逻辑约束，无关统计）：无前日可比 / OI 未结算 / 数据已过期 —— 始终生效
       **软弃权**（未校准阈值）：压力比不足 / 两口径反向
+
+    shadow_soft=True（默认）时软弃权走 **shadow 模式**：不抑制输出，改为
+    给出方向并标 low_confidence，把"本会弃权"记进 shadow_direction。
+    理由（codex review）：项目铁律是未校准的东西不得正式裁决，而软弃权的
+    阈值全部未校准 —— 实测没有任何门槛的 Wilson 95% 下界超过 50%。
+    正式启用需先在台账里证明它确实提升了"给方向时的准确率"。
     """
     R: list[str] = []
     if not has_prev:
@@ -86,20 +112,25 @@ def decide(*, up_pressure: float, dn_pressure: float,
     d = "偏多" if up_pressure > dn_pressure else "偏空"
 
     if ratio < MIN_RATIO:
-        return DirectionCall(
-            reasons=[f"压力比 {ratio:.2f}× < {MIN_RATIO}×，两侧势均力敌（{UNCALIBRATED_NOTE}）"],
-            ratio=round(ratio, 2))
+        rs = [f"压力比 {ratio:.2f}× < {MIN_RATIO}×，两侧势均力敌（{UNCALIBRATED_NOTE}）"]
+        if shadow_soft:
+            return DirectionCall(direction=d, abstain=False, low_confidence=True,
+                                 shadow_direction="", reasons=rs, ratio=round(ratio, 2))
+        return DirectionCall(reasons=rs, ratio=round(ratio, 2))
 
     # 两口径反向 → 弃权。pressure 是【推断】（按 IV 判主动方），
     # 净有效 Delta 是【观测】（纯算术）。两者反向时我们并不知道哪个对。
     if net_delta is not None and net_delta != 0:
         obs = "偏多" if net_delta > 0 else "偏空"
         if obs != d:
-            return DirectionCall(
-                reasons=[f"两个口径反向：推断口径（资金力 {ratio:.2f}×）指向{d}，"
-                         f"观测口径（净有效 Delta {net_delta:+,.0f}）指向{obs}",
-                         UNCALIBRATED_NOTE],
-                ratio=round(ratio, 2))
+            rs = [f"两个口径反向：推断口径（资金力 {ratio:.2f}×）指向{d}，"
+                  f"观测口径（净有效 Delta {net_delta:+,.0f}）指向{obs}",
+                  UNCALIBRATED_NOTE]
+            if shadow_soft:
+                # shadow：不抑制，但明确标低置信；shadow_direction 记下"本会弃权"
+                return DirectionCall(direction=d, abstain=False, low_confidence=True,
+                                     shadow_direction="", reasons=rs, ratio=round(ratio, 2))
+            return DirectionCall(reasons=rs, ratio=round(ratio, 2))
         R.append(f"两口径同向：资金力 {ratio:.2f}× 与净有效 Delta {net_delta:+,.0f} 均指向{d}")
     R.append(f"压力比 {ratio:.2f}×（{UNCALIBRATED_NOTE}）")
     return DirectionCall(direction=d, abstain=False, reasons=R, ratio=round(ratio, 2))

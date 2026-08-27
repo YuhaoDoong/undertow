@@ -1263,7 +1263,12 @@ def cmd_report(args) -> int:
 
     print(f"已生成综合研判报告（{today}）:")
     for inst, o, fn, ss, v, _sr, _td in written:
-        flag = f"  ⚡{ss.level}{ss.direction}" if ss else ""
+        # 低置信的强信号在摘要里也必须降级，不能和可执行告警长得一样
+        flag = ""
+        if ss:
+            flag = (f"  ·{ss.level}{ss.direction}(低置信)"
+                    if getattr(ss, "low_confidence", False)
+                    else f"  ⚡{ss.level}{ss.direction}")
         vh = f"  · {v.headline}" if v and getattr(v, "ok", False) else ""
         print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence}){flag}{vh}  → {reports_dir / fn}")
     if index_path:

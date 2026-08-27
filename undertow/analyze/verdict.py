@@ -81,6 +81,10 @@ def build_verdict(o: Outlook, fa: FlowAnalysis | None,
     # 已校准的中期趋势层——旧版本正是这么写的：看跌强信号是第一个分支，
     # 直接盖掉「中期偏多、趋势未坏」，一个未校准的单层规则否决了综合研判。
     # 现在改为：与中期趋势【同向】时才加持，【背离】时如实报冲突、不给方向结论。
+    # ⚠️ 低置信的强信号（方向裁决软条件未过）不得驱动任何交易结论 ——
+    # 它已在渲染层降级为琥珀观察项，判定层必须同步，否则又是"指标互相打架"。
+    if strong_sig is not None and getattr(strong_sig, "low_confidence", False):
+        strong_sig = None
     if strong_sig and strong_sig.direction == "看跌" and trend == 1:
         short_answer = (f"⚠️ 冲突：⚡近端强看跌信号（{strong_sig.level}，**未经回测校准**）"
                         f"撞上中期偏多、趋势未坏。近端资金流只是一层未校准的观察，"

@@ -300,11 +300,21 @@ def assess_condor(*, snap: OptionsSnapshot, vr, today: date, fa=None) -> CondorP
     # 2026-08-27 实测：弃权文案是「方向不明（两个口径反向：…指向偏空，…指向偏多）」，
     # 同时含"空"和"多"；旧代码先查"空"，于是把【方向不明】无条件当成偏空处理。
     _call = getattr(fa, "call", None) if fa is not None else None
-    _dir = getattr(_call, "direction", "") if (_call and not getattr(_call, "abstain", True)) else ""
+    _abst = getattr(_call, "abstain", True) if _call is not None else True
+    _lowc = getattr(_call, "low_confidence", False) if _call is not None else False
+    _dir = getattr(_call, "direction", "") if (_call is not None and not _abst and not _lowc) else ""
     if _dir == "偏空":
         caveats.append("当日资金方向偏空——铁鹰宜整体下移半档（put 卖腿离现价远些）对冲下行威胁")
     elif _dir == "偏多":
         caveats.append("当日资金方向偏多——铁鹰宜整体上移半档（call 卖腿离现价远些）对冲上行威胁")
+    elif _call is not None and getattr(_call, "range_friendly", False):
+        # ⭐ 方向不明 / 低置信 + 上下两道墙都在（能走到这里说明门槛 3 已过）
+        #    → 这**正是**铁鹰的适用场景，而不是"没方向所以别做"。
+        #    铁鹰是中性结构：它赚的是区间内的时间价值，不需要方向判断。
+        #    用户 2026-08-27：「方向不明，墙明确的时候，也可以铁鹰」。
+        reasons.append("⭐ 当日方向判读不明确，而现价被上下两道墙夹住 —— "
+                       "这正是铁鹰（中性区间结构）的适用场景：不需要赌方向，"
+                       "赚的是区间内的时间价值。方向明确时反而该用单边价差。")
 
     if not in_sweet:
         caveats.append(f"注意：所选到期距今 {dte} 天，不在 theta 甜区({SWEET_DTE_LO}~{SWEET_DTE_HI}天)——"

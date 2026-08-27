@@ -1232,8 +1232,14 @@ def render_strong_signal_banner(ss, display_name: str = "", stale_note: str = ""
     if ss is None:
         return ""
     up = ss.direction == "看涨"
-    accent = "#1a7f37" if up else "#cf222e"
-    bg = "#e6f4ea" if up else "#ffebe9"
+    lowc = bool(getattr(ss, "low_confidence", False))
+    # 低置信（方向裁决的软条件未过）→ 降为琥珀色"未校准异常"，不占红色置顶。
+    # 检测口径不变，只是可执行性不同（codex review 2026-08-27）。
+    if lowc:
+        accent, bg = "#bf8700", "#fff8c5"
+    else:
+        accent = "#1a7f37" if up else "#cf222e"
+        bg = "#e6f4ea" if up else "#ffebe9"
     arrow = "▲" if up else "▼"
     reasons = "".join(f'<li style="margin:2px 0">{_esc(r)}</li>' for r in ss.reasons)
     diverge = ""
@@ -1260,6 +1266,13 @@ def render_strong_signal_banner(ss, display_name: str = "", stale_note: str = ""
             f'"领先"只是一次黄金复盘得来的猜想，<b>没有统计证据</b>，'
             f'不足以据此推翻已校准的综合研判与超买超卖层。</div>'
         )
+    if lowc:
+        diverge = (f'<div style="margin-top:8px;padding:8px 10px;background:#fff8c5;'
+                   f'border-radius:6px;font-size:13px;color:#7d4e00">'
+                   f'⚠️ <b>本告警为「低置信」</b>：当日方向裁决的软条件未通过'
+                   f'（压力比不足或两个口径反向），而这些阈值<b>全部未经校准</b>。'
+                   f'按项目规矩，未校准的判据只记录、不正式裁决 —— '
+                   f'因此本条<b>降级为观察项</b>，不作为可执行告警。</div>') + diverge
     if stale_note:
         diverge = (f'<div style="margin-top:8px;padding:8px 10px;background:#fff8c5;'
                    f'border-radius:6px;font-size:13px;color:#7d4e00">'

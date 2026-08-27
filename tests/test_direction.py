@@ -37,23 +37,45 @@ def test_no_prev_snapshot_is_hard_abstain():
     print("PASS test_no_prev_snapshot_is_hard_abstain")
 
 
-def test_low_ratio_is_soft_abstain():
-    """压力比不足 = 软弃权（未校准阈值），必须与硬弃权区分开。"""
-    c = decide(up_pressure=1000, dn_pressure=900)
-    assert c.abstain and not c.hard and c.direction == ""
-    assert any("未经校准" in r for r in c.reasons)
-    print("PASS test_low_ratio_is_soft_abstain")
+def test_low_ratio_soft_abstain_two_modes():
+    """压力比不足 = 软弃权（未校准阈值）。默认走 shadow：不抑制，但标低置信。
 
-
-def test_gauge_conflict_abstains():
-    """推断口径与观测口径反向时弃权——我们并不知道哪个对。
-
-    实测两者只有约三分之一的日子同向。
+    项目铁律：未校准的东西不得正式裁决。软弃权阈值全部未校准
+    （实测没有任何门槛的 Wilson 95% 下界超过 50%），故默认 shadow。
     """
-    c = decide(up_pressure=90_000, dn_pressure=1000, net_delta=-25_000)
-    assert c.abstain and not c.hard
-    assert "两个口径反向" in c.reasons[0]
-    print("PASS test_gauge_conflict_abstains")
+    sh = decide(up_pressure=1000, dn_pressure=900)                    # 默认 shadow
+    assert not sh.abstain and sh.low_confidence and sh.direction == "偏多"
+    assert any("未经校准" in r for r in sh.reasons)
+    st = decide(up_pressure=1000, dn_pressure=900, shadow_soft=False)  # 正式执行
+    assert st.abstain and not st.hard and st.direction == ""
+    print("PASS test_low_ratio_soft_abstain_two_modes")
+
+
+def test_gauge_conflict_two_modes():
+    """两口径反向：默认 shadow（给方向但标低置信），strict 才真弃权。"""
+    sh = decide(up_pressure=90_000, dn_pressure=1000, net_delta=-25_000)
+    assert not sh.abstain and sh.low_confidence
+    assert "两个口径反向" in sh.reasons[0]
+    st = decide(up_pressure=90_000, dn_pressure=1000, net_delta=-25_000,
+                shadow_soft=False)
+    assert st.abstain and not st.hard and st.direction == ""
+    print("PASS test_gauge_conflict_two_modes")
+
+
+def test_range_friendly_when_direction_unclear():
+    """方向不明或低置信 → 区间策略（铁鹰）的适用场景。
+
+    用户 2026-08-27：「方向不明，墙明确的时候，也可以铁鹰」。
+    弃权不等于不能交易 —— 铁鹰本就是中性结构，方向未知恰是它的正当理由。
+    """
+    assert decide(up_pressure=1000, dn_pressure=900).range_friendly          # 低置信
+    assert decide(up_pressure=90_000, dn_pressure=1000,
+                  net_delta=-25_000).range_friendly                          # 两口径反向
+    assert decide(up_pressure=5, dn_pressure=5, oi_changed=False).range_friendly  # 硬弃权
+    # 高置信方向 → 不是区间场景
+    clear = decide(up_pressure=90_000, dn_pressure=1000, net_delta=+25_000)
+    assert not clear.range_friendly and not clear.low_confidence
+    print("PASS test_range_friendly_when_direction_unclear")
 
 
 def test_agreement_gives_direction():
@@ -68,7 +90,8 @@ def test_never_claims_calibrated():
     """任何裁决都不得声称已校准——实测没有门槛的 Wilson 下界超过 50%。"""
     for kw in ({"up_pressure": 90_000, "dn_pressure": 1000},
                {"up_pressure": 1000, "dn_pressure": 900},
-               {"up_pressure": 1000, "dn_pressure": 90_000, "net_delta": 5}):
+               {"up_pressure": 1000, "dn_pressure": 90_000, "net_delta": 5},
+               {"up_pressure": 1000, "dn_pressure": 900, "shadow_soft": False}):
         c = decide(**kw)
         assert c.calibrated is False
         if not c.hard:
@@ -77,12 +100,15 @@ def test_never_claims_calibrated():
 
 
 def test_abstain_never_leaks_direction():
-    """弃权时 direction 必须为空字符串，label 显示"方向不明"。"""
-    for kw in ({"up_pressure": 1000, "dn_pressure": 900},
-               {"up_pressure": 1000, "dn_pressure": 90_000, "net_delta": +9},
+    """真弃权时 direction 必须为空、label 为"方向不明"；低置信则显式标注。"""
+    for kw in ({"up_pressure": 1000, "dn_pressure": 900, "shadow_soft": False},
+               {"up_pressure": 1000, "dn_pressure": 90_000, "net_delta": +9,
+                "shadow_soft": False},
                {"up_pressure": 5, "dn_pressure": 5, "oi_changed": False}):
         c = decide(**kw)
         assert c.direction == "" and c.label == "方向不明"
+    lc = decide(up_pressure=1000, dn_pressure=900)
+    assert lc.direction == "偏多" and "低置信" in lc.label
     print("PASS test_abstain_never_leaks_direction")
 
 
@@ -131,7 +157,10 @@ def test_strong_signal_obeys_abstention():
     # 推断口径压倒性偏空，但观测口径（净有效 Delta）指向偏多 → 裁决弃权
     fa = _FA(changes=legs, upside_pressure=6_576, downside_pressure=91_763,
              net_delta=+5_689)
-    assert fa.call.abstain, "前提：裁决应因两口径反向而弃权"
+    object.__setattr__(fa, "call",
+                       decide(up_pressure=6_576, dn_pressure=91_763,
+                              net_delta=+5_689, shadow_soft=False))
+    assert fa.call.abstain, "前提：strict 模式下应因两口径反向而弃权"
     assert detect_strong_signal(fa) is None, "裁决弃权时 ⚡ 不得开火"
 
     # 两口径同向时正常开火
@@ -154,7 +183,8 @@ def test_downstream_must_not_parse_tilt_prose():
     无条件当成偏空、给出"铁鹰宜整体下移半档"的建议。
     """
     from undertow.analyze.direction import decide
-    c = decide(up_pressure=6_576, dn_pressure=91_763, net_delta=+5_689)
+    c = decide(up_pressure=6_576, dn_pressure=91_763, net_delta=+5_689,
+               shadow_soft=False)
     tilt = f"方向不明（{c.reasons[0]}）"
     assert "空" in tilt and "多" in tilt, "前提：弃权文案确实同时含两个方向字"
     # 结构化字段必须干净：弃权时 direction 为空
@@ -173,13 +203,34 @@ def test_condor_ignores_direction_when_abstaining():
         call: object
         flow_tilt: str = "方向不明（两个口径反向：…指向偏空，…指向偏多）"
 
-    abst = _FA(call=decide(up_pressure=6_576, dn_pressure=91_763, net_delta=+5_689))
+    abst = _FA(call=decide(up_pressure=6_576, dn_pressure=91_763, net_delta=+5_689,
+                           shadow_soft=False))
     src = C.__file__
     txt = open(src, encoding="utf-8").read()
     assert '"空" in tilt' not in txt, "condor 不得再解析 flow_tilt 散文"
     assert 'getattr(_call, "direction"' in txt or '_call, "direction"' in txt
     assert abst.call.abstain and abst.call.direction == ""
     print("PASS test_condor_ignores_direction_when_abstaining")
+
+
+
+
+def test_condor_promoted_when_direction_unclear_and_walls_present():
+    """方向不明/低置信 + 墙明确 → 铁鹰应被**主动推荐**，而非仅"不阻止"。
+
+    用户 2026-08-27：「方向不明，墙明确的时候，也可以铁鹰」。
+    铁鹰是中性结构，赚区间内的时间价值，不需要方向判断 ——
+    方向未知恰是它的正当理由（墙的前提由 assess_condor 门槛 3 把关）。
+    """
+    from undertow.analyze import condor as C
+    txt = open(C.__file__, encoding="utf-8").read()
+    assert "range_friendly" in txt, "condor 必须消费 call.range_friendly"
+    assert "正是铁鹰" in txt, "方向不明时应给出正面理由，而不是沉默"
+    # 方向明确时不得触发该分支
+    from undertow.analyze.direction import decide
+    clear = decide(up_pressure=90_000, dn_pressure=1000, net_delta=+25_000)
+    assert not clear.range_friendly
+    print("PASS test_condor_promoted_when_direction_unclear_and_walls_present")
 
 
 if __name__ == "__main__":

@@ -309,6 +309,10 @@ class StrongSignal:
     outlook_bias: str = ""   # 对照用的近端方向
     mid_bias: str = ""       # 中期方向（供文案讲清"与哪一层一致、与哪一层冲突"）
     conflicts_mid: bool = False
+    # 方向裁决为"低置信"（软条件未过、走 shadow）时置位。
+    # **检测与可执行性分离**（codex review 2026-08-27）：检测口径保持稳定，
+    # 由渲染层决定降级为琥珀提示还是置顶红色告警 —— 不再用 return None 把两件事耦死。
+    low_confidence: bool = False
 
 
 def wing_weights(fa: "FlowAnalysis") -> tuple[float, float]:
@@ -350,7 +354,8 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "",
     # 它独立记录三条闸门的连续值与通过情况，候选样本不会因此丢失。
     _call = getattr(fa, "call", None)
     if _call is not None and getattr(_call, "abstain", False):
-        return None
+        return None      # 硬弃权（无数据/未结算/已过期）→ 检测本身不成立
+    _lowc = bool(getattr(_call, "low_confidence", False)) if _call is not None else False
 
     bull_wing, bear_wing = wing_weights(fa)
     up, dn = fa.upside_pressure, fa.downside_pressure
@@ -416,7 +421,7 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "",
             reasons.append(f"skew 向 call 倾斜：25Δ(put−call) {fa.vol.d_skew25_pp:+.2f}pp（call 相对变贵＝抢 call）")
         return StrongSignal("看涨", "极强" if vc else "强", round(pr, 1), round(wr, 1),
                             fa.net_call_doi, vc, reasons, _diverges("看涨"), outlook_bias,
-                            mid_bias, "空" in (mid_bias or ""))
+                            mid_bias, "空" in (mid_bias or ""), _lowc)
 
     # —— 看跌 ——
     if (dn >= STRONG_PRESSURE_RATIO * max(up, 1.0)
@@ -438,7 +443,7 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "",
             reasons.append(f"skew 向 put 倾斜：25Δ(put−call) {fa.vol.d_skew25_pp:+.2f}pp（put 相对变贵＝抢保护）")
         return StrongSignal("看跌", "极强" if vc else "强", round(pr, 1), round(wr, 1),
                             fa.net_put_doi, vc, reasons, _diverges("看跌"), outlook_bias,
-                            mid_bias, "多" in (mid_bias or ""))
+                            mid_bias, "多" in (mid_bias or ""), _lowc)
 
     return None
 

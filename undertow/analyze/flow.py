@@ -51,6 +51,18 @@ REL_MIN_STRIKES = 8        # 行权价数 ≥ 此才做"相对化"(减中位 ΔI
 # 相对判定(买方需 IV 升 / 卖方需 IV 降)与其【绝对 ΔIV】方向矛盾且绝对变化显著(≥此)时，
 # 判为"随市"存疑 → 不投方向票(neutral)。只在事件级 IV 整体位移时触发，日常小波动不误伤。
 IV_ABS_GATE = 0.5          # |绝对 ΔIV| ≥ 此(pp)且与相对判定方向矛盾 → 存疑，不计方向
+# —— 曲面闸门：用【固定 Delta】曲面方向否决与之矛盾的逐腿判定 ——
+# 动机（2026-08-19 黄金复盘，作者当天判"强烈转多"、次日兑现）：
+# 当日 ATM IV 齐涨 +2.78pp、现价 +2.68%。逐腿走的是"固定行权价 ΔIV → Delta 修正
+# → 再减中位数"两次扣减，在这种大幅单边日会把真实买盘整体翻成卖压：
+#   445C ΔOI +55,845 原始ΔIV +1.20pp → 判「卖方压制」（≈作者说的 4800 需求激活）
+#   425C ΔOI +55,388 原始ΔIV +1.59pp → 判「极强卖方压制」（≈作者说的 4600 第一关）
+# 共 33 条腿、ΔOI +126,777 被反向计票，凑出"看跌资金力 253,097"。
+# 而【固定 Delta】阶梯同一天读到 Call 六档全线 +3.27~+3.86pp —— 完全正确，
+# 因为固定 Delta 天然吸收 moneyness 漂移，不需要机械项修正、也就不会被扣翻。
+# 因此：曲面方向明确时，与之矛盾的逐腿判定一律降级为存疑（权重 0），**只否决、不反转**。
+SURF_GATE_PP = 0.8         # 固定 Delta 曲面某侧净变动 ≥ 此(pp) 才算"方向明确"
+SURF_GATE_CONSISTENT = 5   # 六档中至少几档同号才算曲面一致（避免拿噪音当曲面）
 # —— churning 折减：某方向大量换手但净 OI 小 = 结构调整/滚仓，方向压力打折 ——
 # 转化率 = |净ΔOI| / 毛|ΔOI|总额（机构口径"成交巨大但净 OI 只 +N = churning"）。
 # turnover ≥ 此视为干净方向仓（f=1）；低于则线性折减到 0，杜绝毛增仓被读成方向。
@@ -662,8 +674,73 @@ def scan_unusual(snap: OptionsSnapshot, *, today: date,
     return out[:TOP_N]
 
 
+def _surface_dirs(prev_live, curr_live) -> dict:
+    """逐到期、逐 C/P 侧算【固定 Delta 曲面】的方向。返回 {(到期, C/P): +1/-1/0}。
+
+    固定 Delta（而非固定行权价）比较，天然吸收现价移动带来的 moneyness 漂移，
+    因此**不需要机械项修正、也就不会被"两次扣减"翻转符号**——这正是它能在
+    2026-08-19 那种"现价 +2.68%、ATM IV 齐涨 +2.78pp"的日子读对方向的原因。
+
+    ⚠️ 方向必须取【该侧相对 ATM 的重定价】，不能取绝对涨跌。
+    2026-08-18 实测：Call 六档 -1.15~-1.73pp、Put 六档 -0.80~-0.91pp、ATM -0.92pp
+    —— 两侧绝对值都在跌，用绝对方向会把"put 跌得少"误判成 put 卖方做支撑(看多)，
+    与作者当天"Call 端重新建卖墙、短期防守"完全相反。
+    减去 ATM 之后：Call 相对 -0.23~-0.81（真卖压）、Put 相对 +0.01~+0.12（防御保留），
+    才与作者的表一致。这也正是机构那张"固定 Delta 相对 IV 变化"表的读法。
+
+    判"方向明确"要同时满足：六档中至少 SURF_GATE_CONSISTENT 档同号，
+    且净变动 ≥ SURF_GATE_PP。宁可判 0（不设闸）也不拿噪音当曲面。
+    """
+    LADDER = (0.40, 0.30, 0.25, 0.20, 0.15, 0.10)
+
+    def by_exp(cs):
+        m: dict = {}
+        for c in cs:
+            if c.iv > 0 and VOL_MIN_ABS_DELTA <= abs(c.delta) <= VOL_MAX_ABS_DELTA:
+                m.setdefault((c.expiry, c.kind), []).append((abs(c.delta), c.iv))
+        return m
+
+    P, C = by_exp(prev_live), by_exp(curr_live)
+
+    def atm_shift(exp) -> float | None:
+        """该到期整体的 IV 位移：取 C/P 两侧 40Δ 档变动的均值作 ATM 代理。"""
+        vals = []
+        for kind in ("C", "P"):
+            k = (exp, kind)
+            if k in P and k in C and len(P[k]) >= VOL_MIN_QUOTES and len(C[k]) >= VOL_MIN_QUOTES:
+                a, b = _interp(P[k], 0.40), _interp(C[k], 0.40)
+                if a and b:
+                    vals.append((b - a) * 100.0)
+        return sum(vals) / len(vals) if vals else None
+
+    out: dict = {}
+    shifts = {}
+    for exp in {e for e, _ in set(P) & set(C)}:
+        shifts[exp] = atm_shift(exp)
+    for k in set(P) & set(C):
+        if len(P[k]) < VOL_MIN_QUOTES or len(C[k]) < VOL_MIN_QUOTES:
+            continue
+        base = shifts.get(k[0])
+        if base is None:
+            continue
+        diffs = []
+        for d in LADDER:
+            a, b = _interp(P[k], d), _interp(C[k], d)
+            if a and b:
+                # 减去该到期的整体 IV 位移 → 该侧【相对】重定价
+                diffs.append((b - a) * 100.0 - base)
+        if len(diffs) < 4:
+            continue
+        pos = sum(1 for x in diffs if x > 0)
+        neg = len(diffs) - pos
+        net = sum(diffs) / len(diffs)
+        if max(pos, neg) >= SURF_GATE_CONSISTENT and abs(net) >= SURF_GATE_PP:
+            out[k] = 1 if net > 0 else -1
+    return out
+
+
 def _judge(kind: str, d_oi: int, adj_pp: float, prev_known: bool,
-           d_iv_abs_pp: float = 0.0) -> tuple[str, str, float]:
+           d_iv_abs_pp: float = 0.0, surf: int = 0) -> tuple[str, str, float]:
     """按 持仓C/P × OI增减 × Delta修正IV方向 判定买卖方。
     返回 (粗方向 bearish/bullish/neutral, 细判中文, 聚合权重系数 0~1)。
 
@@ -671,6 +748,11 @@ def _judge(kind: str, d_oi: int, adj_pp: float, prev_known: bool,
     d_iv_abs_pp：该腿【绝对】ΔIV(未相对化，pp)。相对判定(adj_pp)与绝对方向矛盾且
     绝对变化显著时触发闸门——买方需 IV 升、卖方需 IV 降，若绝对方向相反=相对化产生的
     "随市"假信号(见 IV_ABS_GATE)，判存疑不投方向票。
+
+    surf：该侧【固定 Delta 曲面】的方向（+1 该侧 IV 整体在涨 / -1 在跌 / 0 不明）。
+    曲面方向明确而逐腿判定与之矛盾时，一律降级为存疑（权重 0）——**只否决、不反转**。
+    见 SURF_GATE_PP 处的 2026-08-19 复盘：两次扣减会在大幅单边日把买盘整体翻成卖压，
+    而固定 Delta 曲面同一天是对的。
     """
     if not prev_known:  # 无昨日 IV：无法判主动方，只按 OI 方向定性且降权
         if kind == "P":
@@ -680,6 +762,11 @@ def _judge(kind: str, d_oi: int, adj_pp: float, prev_known: bool,
     a = adj_pp
     if abs(a) < IV_NOISE:
         return "neutral", "噪音", 0.0
+    # —— 曲面闸门：逐腿的"抬价/压价"结论不得与固定 Delta 曲面方向相反 ——
+    # 只对【新建仓】设闸（减仓腿本就半权定性、不受相对化拖累），且只否决不反转。
+    if surf and d_oi > 0 and (1 if a > 0 else -1) != surf:
+        side = "抬价" if surf > 0 else "压价"
+        return "neutral", f"与固定Delta曲面矛盾存疑(该侧整体在{side})", 0.0
     up_oi = d_oi > 0
     strong = abs(a) >= IV_STRONG
     mild = abs(a) < IV_MILD
@@ -727,6 +814,40 @@ def detect_spreads(changes: list[FlowChange]) -> list[Spread]:
     """
     out: list[Spread] = []
     used: set = set()
+    # —— 先识别【平仓中的价差】：两腿同到期、同 C/P、都在减仓、量级相当 ——
+    # 平掉一个价差是方向中性的，但逐腿看会变成"卖方撤退(看涨) + 买方了结(看跌)"
+    # 各投半票，净出一个假方向。2026-08-18 黄金实测：
+    #   410C 昨OI 56,174→22,827 (ΔOI -33,347)、430C 昨OI 56,082→24,293 (-31,789)
+    #   两腿昨日 OI 仅差 92 张、同为 9/04 到期 —— 明显是一笔约 5.6 万张的
+    #   410/430 看涨价差平掉一半。旧版只认 d_oi>0 的建仓价差，完全看不见它，
+    #   于是凑出 34,724 的假看涨压力，与作者当天"Call端重新建卖墙、短期防守"完全相反。
+    for kind in ("C", "P"):
+        closing = [c for c in changes if c.kind == kind and c.d_oi < 0]
+        for a in sorted(closing, key=lambda x: x.d_oi):
+            if (a.expiry, a.strike, kind) in used:
+                continue
+            mw = SPREAD_MAX_WIDTH_FRAC * a.strike
+            cands = [b for b in closing
+                     if (b.expiry, b.strike, kind) not in used
+                     and b is not a and b.expiry == a.expiry
+                     and 1e-6 < abs(b.strike - a.strike) <= mw
+                     and 0.4 <= (b.d_oi / a.d_oi) <= 2.5
+                     # 建仓时两腿 OI 必然接近（同一笔价差建起来的）
+                     and a.prev_oi > 0 and 0.5 <= (b.prev_oi / a.prev_oi) <= 2.0]
+            if not cands:
+                continue
+            b = min(cands, key=lambda x: abs(x.strike - a.strike))
+            size = min(abs(a.d_oi), abs(b.d_oi))
+            if size < SPREAD_MIN_SIZE:
+                continue
+            used.add((a.expiry, a.strike, kind)); used.add((b.expiry, b.strike, kind))
+            lo, hi = sorted((a.strike, b.strike))
+            out.append(Spread(
+                kind=kind, expiry=a.expiry, name="价差平仓(中性)",
+                short_strike=lo, long_strike=hi, size=size, net_bias="neutral",
+                detail=f"{lo:.0f}/{hi:.0f}{kind} 两腿同步减仓各约 {size:,}"
+                       f"（昨日 OI {a.prev_oi:,}/{b.prev_oi:,} 接近）→ 判为**平掉旧价差**，"
+                       f"方向中性，两腿均不计方向票"))
     for kind in ("C", "P"):
         building = [c for c in changes if c.kind == kind and c.d_oi > 0]
         sellers = [c for c in building if "卖方" in c.judgment]
@@ -942,6 +1063,8 @@ def analyze_flow(
             return m
 
         cagg, pagg = _agg(live), _agg(prev_live)
+        # 固定 Delta 曲面方向（逐到期逐侧），用于否决与之矛盾的逐腿判定
+        surf_dirs = _surface_dirs(prev_live, live)
         # 第一遍：每个行权价的 Delta 修正 ΔIV（尚未相对化）
         rows = []
         for (expiry, strike, kind), a in cagg.items():
@@ -982,7 +1105,8 @@ def analyze_flow(
             # 闸门用【Delta 修正后的绝对】ΔIV(corrected*100)——剔除现价移动沿偏斜的机械项、
             # 但保留全市场 vol 整体位移(正是要闸门看见的"齐落/齐涨")，比生 d_iv 更稳。
             abs_iv_pp = (r["corrected"] * 100.0) if r["known"] else 0.0
-            bias, judgment, w = _judge(r["kind"], r["d_oi"], adj_iv_pp, r["known"], abs_iv_pp)
+            bias, judgment, w = _judge(r["kind"], r["d_oi"], adj_iv_pp, r["known"], abs_iv_pp,
+                                       surf_dirs.get((r["exp"], r["kind"]), 0))
             on_wall = ""
             if call_wall is not None and abs(r["strike"] - call_wall) < 1e-6:
                 on_wall = "call墙"
@@ -1031,6 +1155,18 @@ def analyze_flow(
                     if not (is_short or is_long):
                         continue
                     labels[(c.expiry, c.strike, c.kind)] = sp.name + ("·短腿(方向)" if is_short else "·长腿(保护)")
+                    # 平仓价差：两腿都不计方向（平掉旧结构是中性动作）
+                    if sp.net_bias == "neutral":
+                        pp_ = min(abs(c.d_oi), sp.size) * c.weight
+                        if c.bias == "bearish":
+                            downside -= pp_
+                            if c.kind == "C": dn_call -= pp_
+                            else: dn_put -= pp_
+                        elif c.bias == "bullish":
+                            upside -= pp_
+                            if c.kind == "C": up_call -= pp_
+                            else: up_put -= pp_
+                        continue
                     # 与净方向相反的腿 = 封顶腿，只扣【匹配数量】的压力
                     # （腿不等量时，未配对的剩余仓仍是方向仓）
                     if c.bias != sp.net_bias and c.bias in ("bearish", "bullish"):

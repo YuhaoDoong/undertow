@@ -321,6 +321,67 @@ def test_same_strike_different_expiry_iv_not_blended():
     print("PASS test_same_strike_different_expiry_iv_not_blended")
 
 
+
+
+def test_surface_gate_vetoes_relativization_flip():
+    """固定 Delta 曲面方向明确时，逐腿的反向判定必须降级为存疑（只否决、不反转）。
+
+    复刻 2026-08-19 黄金：现价 +2.68%、ATM IV 齐涨 +2.78pp。逐腿走"固定行权价
+    ΔIV → Delta 修正 → 再减中位数"两次扣减，把真实买盘整体翻成卖压：
+      445C ΔOI +55,845 原始ΔIV +1.20pp → 判「卖方压制」
+      425C ΔOI +55,388 原始ΔIV +1.59pp → 判「极强卖方压制」
+    共 33 条腿 ΔOI +126,777 被反向计票，凑出"看跌资金力 253,097"，
+    而作者当天判「强烈转多」、次日兑现。固定 Delta 阶梯同日读到
+    Call 六档全线 +3.27~+3.86pp —— 完全正确。
+    """
+    from undertow.analyze.flow import _judge
+    # 相对判定为"卖方压制"(a<0)，但该侧曲面整体在抬价(surf=+1) → 必须存疑
+    bias, judgment, w = _judge("C", d_oi=55_845, adj_pp=-0.90, prev_known=True,
+                               d_iv_abs_pp=-0.2, surf=+1)
+    assert bias == "neutral" and w == 0.0, (bias, judgment, w)
+    assert "曲面矛盾" in judgment
+    # 曲面同向时不受影响
+    b2, _, w2 = _judge("C", d_oi=55_845, adj_pp=-0.90, prev_known=True,
+                       d_iv_abs_pp=-0.2, surf=-1)
+    assert b2 == "bearish" and w2 > 0
+    # 只对新建仓设闸：减仓腿本就半权定性，不受相对化拖累
+    b3, _, w3 = _judge("C", d_oi=-5_000, adj_pp=-0.90, prev_known=True,
+                       d_iv_abs_pp=-0.2, surf=+1)
+    assert b3 == "bearish" and w3 > 0
+    print("PASS test_surface_gate_vetoes_relativization_flip")
+
+
+def test_closing_spread_is_neutral():
+    """两腿同步减仓、昨日 OI 接近 = 平掉旧价差，方向中性，两腿都不计方向票。
+
+    复刻 2026-08-18 黄金：410C 昨OI 56,174→22,827(ΔOI -33,347)、
+    430C 昨OI 56,082→24,293(-31,789)，同为 9/04 到期、昨日 OI 仅差 92 张
+    —— 一笔约 5.6 万张的 410/430 看涨价差平掉一半。
+    旧版 detect_spreads 只认 d_oi>0 的建仓价差，看不见它，于是把两腿各自
+    判成「卖方撤退=看涨」，凑出 34,724 假看涨压力，与作者当天"短期防守"相反。
+    """
+    from datetime import date as _d
+    from undertow.analyze.flow import detect_spreads, FlowChange
+
+    def _leg(strike, d_oi, prev_oi, judgment):
+        return FlowChange(expiry=_d(2026, 9, 4), strike=strike, kind="C",
+                          prev_oi=prev_oi, curr_oi=prev_oi + d_oi, d_oi=d_oi,
+                          delta=0.30, prev_iv=0.22, curr_iv=0.22, d_iv_pp=0.0,
+                          adj_iv_pp=0.5, curr_volume=1000, moneyness=0.02,
+                          bias="bullish", judgment=judgment, on_wall="", note="",
+                          weight=0.5)
+
+    legs = [_leg(410.0, -33_347, 56_174, "卖方撤退"),
+            _leg(430.0, -31_789, 56_082, "卖方撤退")]
+    sps = detect_spreads(legs)
+    assert any(s.net_bias == "neutral" and s.name == "价差平仓(中性)" for s in sps), sps
+    # 昨日 OI 相差悬殊时不得配对（不是同一笔价差建起来的）
+    legs2 = [_leg(410.0, -33_347, 56_174, "卖方撤退"),
+             _leg(430.0, -31_789, 200, "卖方撤退")]
+    assert not [s for s in detect_spreads(legs2) if s.net_bias == "neutral"]
+    print("PASS test_closing_spread_is_neutral")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

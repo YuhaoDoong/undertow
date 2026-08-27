@@ -250,6 +250,77 @@ def test_oi_change_total_detects_unsettled_chain():
     print("PASS test_oi_change_total_detects_unsettled_chain")
 
 
+
+def test_agg_key_must_include_expiry():
+    """同一行权价的不同到期【不得】合并成一条腿。
+
+    这是 2026-08-27 codex review 查出的根 bug：旧版 _agg 按 (行权价, C/P) 把
+    60 天窗口内所有月份合成一条，后果——
+      · IV 跨期按 OI 加权平均后再做日差 → ΔIV 可能纯粹来自期限权重变化；
+      · 换月（近月平、远月开）在同一个桶里互相抵消，ΔOI 失真；
+      · 污染传导到 pressure / 强信号 / 结构读数 / 墙位增量 / 台账。
+    实测影响：QQQ 8/26→8/27 腿数 154→520（13 个到期）、上行压力 +128%、
+    压力比 4.89×→1.78×，那条「⚡强看跌」横幅随之消失。
+
+    ⚠️ 当时 307 个测试全过也没抓到，因为所有 fixture 都是单到期。
+    """
+    from datetime import date as _d
+    from undertow.analyze.flow import analyze_flow
+    from undertow.core.models import OptionContract, OptionsSnapshot
+
+    E1, E2 = _d(2026, 9, 18), _d(2026, 10, 16)
+
+    def _c(exp, strike, oi, iv):
+        return OptionContract(expiry=exp, strike=strike, kind="C", open_interest=oi,
+                              volume=500, gamma=0.01, delta=0.30, iv=iv)
+
+    def _snap(cs):
+        return OptionsSnapshot(instrument="qqq", proxy_symbol="QQQ", asof="x",
+                               spot=700.0, contracts=cs)
+
+    # 同一行权价 720，两个到期：一个增仓一个减仓，量相当。
+    # 混算会互相抵消成 ΔOI≈0（该腿凭空消失）；分月则是两条真实的腿。
+    prev = _snap([_c(E1, 720.0, 10_000, 0.20), _c(E2, 720.0, 10_000, 0.22)])
+    curr = _snap([_c(E1, 720.0, 18_000, 0.20), _c(E2, 720.0, 2_000, 0.22)])
+    fa = analyze_flow(prev, curr, today=_d(2026, 8, 27))
+    at720 = [c for c in fa.changes if abs(c.strike - 720.0) < 1e-6]
+    assert len(at720) == 2, f"720 应拆成两条腿（两个到期），实得 {len(at720)}"
+    assert {c.expiry for c in at720} == {E1, E2}
+    assert {c.d_oi for c in at720} == {8000, -8000}, \
+        "换月的一增一减必须各自保留，混算会抵消成 0、整条腿消失"
+    print("PASS test_agg_key_must_include_expiry")
+
+
+def test_same_strike_different_expiry_iv_not_blended():
+    """不同到期的 IV 不得跨期加权平均后再做日差。
+
+    两个到期 IV 各自纹丝不动，只是 OI 权重变了——混算版会算出一个假的 ΔIV
+    （纯粹来自期限权重迁移），分月版必须是 0。
+    """
+    from datetime import date as _d
+    from undertow.analyze.flow import analyze_flow
+    from undertow.core.models import OptionContract, OptionsSnapshot
+
+    E1, E2 = _d(2026, 9, 18), _d(2026, 10, 16)
+
+    def _c(exp, oi, iv):
+        return OptionContract(expiry=exp, strike=720.0, kind="C", open_interest=oi,
+                              volume=500, gamma=0.01, delta=0.30, iv=iv)
+
+    def _snap(cs):
+        return OptionsSnapshot(instrument="qqq", proxy_symbol="QQQ", asof="x",
+                               spot=700.0, contracts=cs)
+
+    # 近月 IV 0.20、远月 0.30，两日都不变；仅权重由 9:1 变成 1:9。
+    prev = _snap([_c(E1, 9_000, 0.20), _c(E2, 1_000, 0.30)])
+    curr = _snap([_c(E1, 1_000, 0.20), _c(E2, 9_000, 0.30)])
+    fa = analyze_flow(prev, curr, today=_d(2026, 8, 27))
+    for c in fa.changes:
+        assert abs(c.d_iv_pp) < 1e-6, \
+            f"{c.expiry} 的 IV 未变，ΔIV 必须为 0，实得 {c.d_iv_pp:+.2f}pp（跨期混算的伪信号）"
+    print("PASS test_same_strike_different_expiry_iv_not_blended")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for fn in fns:

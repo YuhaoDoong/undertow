@@ -34,6 +34,7 @@ from undertow.analyze.vrp_history import assess_vrp_history, render_markdown as 
 from undertow.analyze.positioning import analyze
 from undertow.analyze.signals import generate_signals, net_bias
 from undertow.analyze.gamma import analyze_gamma, structure_delta
+from undertow.analyze.flow import _live as _flow_live
 from undertow.analyze.flow import (analyze_flow, counter_signals,
                                    flip_driver_summary, structural_moves,
                                    detect_strong_signal, probe_strong_signal)
@@ -56,6 +57,7 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_strategy_hub, render_condor_section,
                           render_credit_spread_section, render_expiry_ladder_section,
                           render_fib_rr_section, render_strong_signal_banner,
+                          render_structure_section,
                           render_verdict_section, render_technicals_section)
 from undertow.analyze.volregime import assess_vol_regime
 from undertow.analyze.condor import assess_condor
@@ -978,6 +980,27 @@ def cmd_report(args) -> int:
             _persist_signal_probe(inst.key, fa, strong_sig, outlook.bias)
             strong_html = render_strong_signal_banner(strong_sig, inst.display_name)
 
+            # —— 结构读数（机构口径，不输出方向票）——
+            # 与投票层正交：只描述"防守强度/位置/逐腿可靠度/证伪清单"，
+            # 因此不会和 偏多/偏空 打架。见 structure_read 模块 docstring。
+            struct_html = ""
+            try:
+                from undertow.analyze import structure_read as _sr
+                _vols = []
+                for _d in store.dates("options", inst.options.symbol)[-11:-1]:
+                    try:
+                        _sn = snapshot_from_payload(store.load("options", inst.options.symbol, _d),
+                                                    inst.key, inst.options.symbol)
+                        _vols.append(sum(c.volume for c in _flow_live(_sn, _d, 60)))
+                    except Exception:
+                        pass
+                _read = _sr.analyze_structure(
+                    fa, _flow_live(prev, today, 60) if prev is not None else [],
+                    _flow_live(curr, today, 60), recent_volumes=_vols or None)
+                struct_html = render_structure_section(_read, inst.display_name)
+            except Exception as e:
+                print(f"[警告] {inst.key} 结构读数失败：{type(e).__name__} {e}", file=sys.stderr)
+
             # —— 价格图：优先真实期货价 + 关键位换算到商品价；否则回退 ETF 日线 ——
             def lvl(etf_v):
                 return ga.to_commodity(etf_v) if ratio is not None else etf_v
@@ -1198,7 +1221,8 @@ def cmd_report(args) -> int:
                                       volregime_html=volregime_html,
                                       vol_analysis_html=vol_analysis_html,
                                       expiry_html=expiry_html, fib_html=fib_html,
-                                      strong_html=strong_html, verdict_html=verdict_html,
+                                      strong_html=strong_html, struct_html=struct_html,
+                                      verdict_html=verdict_html,
                                       tech_html=tech_html, stretch_read=stretch_read)
             fn = f"{inst.key}_{today.isoformat()}.html"
             _archive_existing(reports_dir / fn)

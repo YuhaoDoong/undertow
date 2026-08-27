@@ -1134,6 +1134,81 @@ def render_verdict_section(v, display_name: str = "") -> str:
     )
 
 
+_DEFENSE_COLOR = {"进攻": "#1a7f37", "中性": "#6e7781", "中性偏防守": "#9a6700",
+                  "短线偏防守": "#bc4c00", "恐慌防守": "#cf222e"}
+
+
+def render_structure_section(sr, display_name: str = "") -> str:
+    """结构读数卡片（机构口径）。**本卡片不含任何方向结论**。
+
+    与投票层正交：只描述防守强度、位置、逐腿可靠度、证伪清单，因此不与
+    偏多/偏空 打架。见 analyze/structure_read.py 模块 docstring。
+    """
+    if sr is None or not getattr(sr, "ok", False):
+        return ""
+    col = _DEFENSE_COLOR.get(sr.defense, "#6e7781")
+    n_all, n_ok = len(sr.legs), len(sr.usable_legs)
+    rows = "".join(
+        f'<tr><td>{r.delta*100:.0f}Δ</td>'
+        + "".join(f'<td style="text-align:right">'
+                  f'{"—" if v is None else f"{v:+.2f}pp"}</td>'
+                  for v in (r.d_call_pp, r.d_put_pp, r.d_skew_pp))
+        + "</tr>" for r in sr.ladder)
+    checks = "".join(
+        f'<tr><td>{_esc(lab)}</td><td style="text-align:center">'
+        f'{"❓" if ok is None else ("✅" if ok else "❌")}</td>'
+        f'<td class="sub">{_esc(det)}</td></tr>'
+        for lab, ok, det in sr.checklist)
+    if sr.usable_legs:
+        legs = "".join(
+            f'<tr><td>{l.strike:g}</td><td>{l.kind}</td>'
+            f'<td style="text-align:right">{l.d_oi:+,}</td>'
+            f'<td style="text-align:right">{l.volume:,}</td>'
+            f'<td style="text-align:right">{"—" if l.purity is None else f"{l.purity:.2f}"}</td>'
+            f'<td style="text-align:right">{l.delta_adj_pp:+.2f}pp</td>'
+            f'<td style="text-align:right">{l.effective_delta:+,.0f}</td>'
+            f'<td>{_esc(l.interpretation)}</td></tr>'
+            for l in sorted(sr.usable_legs, key=lambda x: -abs(x.d_oi))[:12])
+        legs_html = (
+            '<table><thead><tr><th>行权价</th><th>C/P</th><th>ΔOI</th><th>成交</th>'
+            '<th>纯净度</th><th>Delta修正后</th><th>有效Δ</th><th>解读</th></tr></thead>'
+            f'<tbody>{legs}</tbody></table>')
+    else:
+        legs_html = ('<div class="sub" style="padding:8px 0"><b>今日无可用腿——'
+                     '没有方向性信息。</b>这是正常结果，不是数据缺失。</div>')
+    why = "".join(f"<li>{_esc(w)}</li>" for w in sr.defense_why) or "<li>无显著偏斜/波动率变化</li>"
+    return (
+        '<div class="card">'
+        f'<h2>结构读数{" · " + _esc(display_name) if display_name else ""}'
+        f'（机构口径 · <b>不输出方向票</b>）</h2>'
+        f'<div style="margin:6px 0 10px">防守强度 '
+        f'<span class="pill" style="background:{col};color:#fff">{_esc(sr.defense)}</span>'
+        f'　<span class="sub">逐腿 {n_all} 条中仅 <b>{n_ok}</b> 条载有效信息'
+        f'（{sr.noise_ratio*100:.0f}% 噪音/低可靠度，属正常）</span></div>'
+        f'<div class="sub" style="margin-bottom:10px">{_esc(sr.state_summary)}</div>'
+        f'<h3>偏斜与波动率面</h3>'
+        f'<div class="sub">ATM IV {sr.atm_iv_pp:.2f}%（{sr.d_atm_pp:+.2f}pp）'
+        f'　25Δ skew {sr.skew25_pp:+.2f}pp（{sr.d_skew25_pp:+.2f}pp）'
+        f'　10Δ skew {sr.skew10_pp:+.2f}pp（{sr.d_skew10_pp:+.2f}pp）</div>'
+        '<table><thead><tr><th>Delta</th><th>Call 变化</th><th>Put 变化</th>'
+        f'<th>Skew 变化</th></tr></thead><tbody>{rows}</tbody></table>'
+        f'<h3>有效 Delta（观测口径 · Σ ΔOI×delta）</h3>'
+        f'<div class="sub">Call <b>{sr.eff_delta_call:+,.0f}</b>'
+        f' ／ Put <b>{sr.eff_delta_put:+,.0f}</b>'
+        f' ／ 净 <b>{sr.eff_delta_total:+,.0f}</b>'
+        f'　—— 纯算术，不需判断谁是主动方，与「按 IV 推断主动方」互为参照</div>'
+        f'<h3>防守强度依据</h3><ul class="sub">{why}</ul>'
+        f'<h3>趋势转折证伪清单</h3>'
+        f'<div class="sub">真正的趋势下杀应<b>同时</b>出现放量 + ATM IV 大涨 + '
+        f'主翼 put 大幅变贵；❓=数据不足测不了，不算「不满足」</div>'
+        f'<table><tbody>{checks}</tbody></table>'
+        f'<h3>可用腿（噪音与低可靠度贡献恒为 0）</h3>{legs_html}'
+        '<div class="sub" style="margin-top:8px">⚠️ 两条反直觉的判读规则：'
+        '<b>①远虚 Put 加保护 ≠ 看跌到那个价位</b>，只是防那段风险，位置比数量重要；'
+        '<b>②成交量大 + OI 变化大 ≠ 有方向信息</b>——多数是调仓换月。</div>'
+        '</div>')
+
+
 def render_strong_signal_banner(ss, display_name: str = "") -> str:
     """近端资金流强信号置顶红/绿告警（一边倒时才由 detect_strong_signal 产出）。
 
@@ -1192,7 +1267,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        tldr_html: str = "", strategy_html: str = "",
                        conc_html: str = "", volregime_html: str = "",
                        vol_analysis_html: str = "", expiry_html: str = "",
-                       fib_html: str = "", strong_html: str = "",
+                       fib_html: str = "", strong_html: str = "", struct_html: str = "",
                        verdict_html: str = "", tech_html: str = "",
                        stretch_read=None) -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
@@ -1215,6 +1290,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
     )
     body = (
         f'{strong_html}'
+        f'{struct_html}'
         f'{verdict_html}'
         f'{tldr_html}'
         f'{events_html}'

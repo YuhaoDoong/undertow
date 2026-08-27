@@ -189,8 +189,9 @@ def purity_reliability(ratio: float | None) -> str:
 
 @dataclass(frozen=True)
 class Spread:
-    """检测到的疑似垂直价差结构（同 C/P、相邻行权价、卖一腿 + 买一腿）。"""
+    """检测到的疑似垂直价差结构（同 C/P、**同到期**、相邻行权价、卖一腿 + 买一腿）。"""
     kind: str
+    expiry: date          # 垂直价差必须同到期；标签回填也按它匹配，防跨月串标签
     name: str             # 熊市看涨价差(Bear Call) 等
     short_strike: float   # 卖出腿（决定方向）
     long_strike: float    # 买入腿（封顶/保护腿）
@@ -731,10 +732,10 @@ def detect_spreads(changes: list[FlowChange]) -> list[Spread]:
         sellers = [c for c in building if "卖方" in c.judgment]
         buyers = [c for c in building if "买方" in c.judgment]
         for s in sorted(sellers, key=lambda x: -x.d_oi):
-            if (s.strike, kind) in used:
+            if (s.expiry, s.strike, kind) in used:
                 continue
             max_width = SPREAD_MAX_WIDTH_FRAC * s.strike
-            cands = [b for b in buyers if (b.strike, kind) not in used
+            cands = [b for b in buyers if (b.expiry, b.strike, kind) not in used
                      and b.expiry == s.expiry                          # 垂直价差必须同到期
                      and 1e-6 < abs(b.strike - s.strike) <= max_width  # 两腿相近
                      and 0.4 <= (b.d_oi / s.d_oi) <= 2.5]              # 量级相当
@@ -750,10 +751,11 @@ def detect_spreads(changes: list[FlowChange]) -> list[Spread]:
             else:
                 name, net = ("牛市看跌价差(Bull Put)", "bullish") if s.strike > b.strike \
                     else ("熊市看跌价差(Bear Put)", "bearish")
-            used.add((s.strike, kind)); used.add((b.strike, kind))
+            used.add((s.expiry, s.strike, kind)); used.add((b.expiry, b.strike, kind))
             dir_cn = "看空" if net == "bearish" else "看多"
             out.append(Spread(
-                kind=kind, name=name, short_strike=s.strike, long_strike=b.strike,
+                kind=kind, expiry=s.expiry, name=name,
+                short_strike=s.strike, long_strike=b.strike,
                 size=size, net_bias=net,
                 detail=f"卖 {s.strike:.0f}{kind} + 买 {b.strike:.0f}{kind}（各约 {size:,}）"
                        f" → {name}，净{dir_cn}（与净向相反的腿为封顶/保护，不计方向）",
@@ -902,30 +904,47 @@ def analyze_flow(
     if prev is not None:
         d_spot = spot - prev.spot
         prev_live = _live(prev, today, horizon_days, band_spot=spot)
-        # 当前链的偏斜 ∂IV/∂K（put / call 各一条），用于 Delta 修正
+        # 当前链的偏斜 ∂IV/∂K，用于 Delta 修正。
+        # ⚠️ **必须逐到期拟合**：不同到期的偏斜陡峭度不同（近月更陡），
+        # 跨期混合拟合出的斜率对任何单一到期都不成立，会让"机械项"扣错。
+        slopes: dict[tuple, float] = {}
+        by_exp_kind: dict[tuple, list] = {}
+        for c in live:
+            if c.iv > 0:
+                by_exp_kind.setdefault((c.expiry, c.kind), []).append((c.strike, c.iv))
+        for k, pts in by_exp_kind.items():
+            slopes[k] = _lin_slope(pts)
+        # 跨期兜底（某到期报价太少时用）
         put_slope = _lin_slope([(c.strike, c.iv) for c in live if c.kind == "P" and c.iv > 0])
         call_slope = _lin_slope([(c.strike, c.iv) for c in live if c.kind == "C" and c.iv > 0])
 
         def _agg(contracts):
-            """按 (行权价,C/P) 合并多个到期：OI 求和，IV/Delta 按 OI 加权；
-            同时留 per-expiry OI 明细，供计算"主导到期"（|ΔOI| 最大的到期）。"""
+            """按 **(到期, 行权价, C/P)** 合并同一合约的多条记录。
+
+            ⚠️ 主键必须含到期。旧版按 (行权价, C/P) 把 60 天窗口内所有月份合成一条，
+            后果（2026-08-27 codex review 查出）：
+              · IV 跨期按 OI 加权平均后再做日差 → ΔIV 可能纯粹来自**期限权重变化**，
+                与任何真实的定价变动无关；
+              · 换月（近月平、远月开）在同一个桶里互相抵消，ΔOI 失真；
+              · 价差识别拿到的"同一到期"其实是主导到期，可能配出伪垂直价差。
+            污染会传导到 pressure / 强信号 / 结构读数 / 墙位增量 / 台账 —— 即全部下游。
+            机构口径始终分月份看（近月/次月各一张表）。
+            """
             m: dict[tuple, dict] = {}
             for c in contracts:
-                k = (c.strike, c.kind)
-                a = m.setdefault(k, {"oi": 0, "ivw": 0.0, "dlw": 0.0, "vol": 0,
-                                     "exp_oi": {}})
+                k = (c.expiry, c.strike, c.kind)
+                a = m.setdefault(k, {"oi": 0, "ivw": 0.0, "dlw": 0.0, "vol": 0})
                 a["oi"] += c.open_interest
                 if c.iv > 0:
                     a["ivw"] += c.iv * c.open_interest
                 a["dlw"] += c.delta * c.open_interest
                 a["vol"] += c.volume
-                a["exp_oi"][c.expiry] = a["exp_oi"].get(c.expiry, 0) + c.open_interest
             return m
 
         cagg, pagg = _agg(live), _agg(prev_live)
         # 第一遍：每个行权价的 Delta 修正 ΔIV（尚未相对化）
         rows = []
-        for (strike, kind), a in cagg.items():
+        for (expiry, strike, kind), a in cagg.items():
             coi = a["oi"]
             if coi <= 0:
                 continue
@@ -933,27 +952,25 @@ def analyze_flow(
             if abs(cdelta) > MAX_ABS_DELTA:   # 深 ITM，IV 不可靠
                 continue
             civ = a["ivw"] / coi if a["ivw"] > 0 else 0.0
-            p = pagg.get((strike, kind))
+            p = pagg.get((expiry, strike, kind))
             poi = p["oi"] if p else 0
             piv = (p["ivw"] / p["oi"]) if (p and p["oi"] > 0 and p["ivw"] > 0) else 0.0
             d_oi = coi - poi
             if abs(d_oi) < MIN_DOI:
                 continue
-            # 主导到期 = |ΔOI| 最大的到期（价差配对按它比对，杜绝跨到期伪垂直价差）
-            p_exp = p["exp_oi"] if p else {}
-            exp_d = {e: a["exp_oi"].get(e, 0) - p_exp.get(e, 0)
-                     for e in set(a["exp_oi"]) | set(p_exp)}
-            dom_exp = max(exp_d, key=lambda e: abs(exp_d[e])) if exp_d else min(a["exp_oi"])
             prev_known = bool(p and piv > 0 and civ > 0)
             d_iv = (civ - piv) if prev_known else 0.0
-            slope = put_slope if kind == "P" else call_slope
+            # 该到期自己的偏斜斜率；报价太少时回落到跨期斜率
+            slope = slopes.get((expiry, kind))
+            if slope is None:
+                slope = put_slope if kind == "P" else call_slope
             # 机械项：现价动 ΔS 后固定行权价沿偏斜'继承'的 IV ≈ -slope×ΔS
             # （sticky-moneyness 近似），去除机械项 = d_iv - (-slope×ΔS)
             corrected = (d_iv + slope * d_spot) if prev_known else 0.0
             rows.append({"strike": strike, "kind": kind, "coi": coi, "poi": poi, "d_oi": d_oi,
                          "delta": cdelta, "civ": civ, "piv": piv, "d_iv": d_iv,
                          "corrected": corrected, "known": prev_known, "vol": a["vol"],
-                         "exp": dom_exp})
+                         "exp": expiry})
 
         # "相对化"基准：行权价足够多时减去中位修正 ΔIV，剔除全市场 vol 平移；少则不减
         cv = sorted(r["corrected"] for r in rows if r["known"])
@@ -1007,13 +1024,13 @@ def analyze_flow(
             labels: dict[tuple, str] = {}
             for sp in spreads:
                 for c in changes:
-                    if c.kind != sp.kind:
+                    if c.kind != sp.kind or c.expiry != sp.expiry:
                         continue
                     is_short = abs(c.strike - sp.short_strike) < 1e-6
                     is_long = abs(c.strike - sp.long_strike) < 1e-6
                     if not (is_short or is_long):
                         continue
-                    labels[(c.strike, c.kind)] = sp.name + ("·短腿(方向)" if is_short else "·长腿(保护)")
+                    labels[(c.expiry, c.strike, c.kind)] = sp.name + ("·短腿(方向)" if is_short else "·长腿(保护)")
                     # 与净方向相反的腿 = 封顶腿，只扣【匹配数量】的压力
                     # （腿不等量时，未配对的剩余仓仍是方向仓）
                     if c.bias != sp.net_bias and c.bias in ("bearish", "bullish"):
@@ -1029,7 +1046,7 @@ def analyze_flow(
             downside, upside = max(0.0, downside), max(0.0, upside)
             dn_call, dn_put = max(0.0, dn_call), max(0.0, dn_put)
             up_call, up_put = max(0.0, up_call), max(0.0, up_put)
-            changes = [replace(c, spread_note=labels.get((c.strike, c.kind), "")) for c in changes]
+            changes = [replace(c, spread_note=labels.get((c.expiry, c.strike, c.kind), "")) for c in changes]
 
         # —— churning 折减：按各 kind 的净额/毛额转化率缩放方向压力 ——
         # 机构口径：成交/毛增仓再大，若净 OI 几乎没动就是滚仓/结构调整，不是方向。
@@ -1047,7 +1064,21 @@ def analyze_flow(
             cbits.append(f"put 端 churning 净 {nsig_put:+,}/毛 {gabs_put:,}→压力×{f_put:.2f}")
         cnote = ("；" + "、".join(cbits)) if cbits else ""
 
-        if downside or upside:
+        # —— 方向裁决权闸门（codex review 2026-08-27「止血版」①）——
+        # pressure 是【推断】（先按 IV 判主动方），净有效 Delta 是【观测】（纯算术）。
+        # 实测两者 60% 的日子方向相反。两者反向时，我们并不知道哪个对 ——
+        # 此时**不许给方向票**，如实说"方向不明"。
+        # ⚠️ 只撤销裁决权，不改任何计算：pressure 原值照常进 signal_ledger 累积，
+        # 否则反事实样本作废、这层永远无法校准。
+        _nd = round(sum(c.d_oi * c.delta for c in changes), 1)
+        _p_dir = 1 if upside > downside * 1.3 else (-1 if downside > upside * 1.3 else 0)
+        _d_dir = 1 if _nd > 0 else (-1 if _nd < 0 else 0)
+        if _p_dir and _d_dir and _p_dir != _d_dir:
+            tilt = (f"方向不明（两个口径反向：推断口径{'偏多' if _p_dir > 0 else '偏空'}"
+                    f"「看跌资金力 {downside:,.0f} / 看涨 {upside:,.0f}」，"
+                    f"观测口径净有效 Delta {_nd:+,.0f} 指向{'偏多' if _d_dir > 0 else '偏空'}"
+                    f"）——本日资金流不提供方向判断{cnote}")
+        elif downside or upside:
             if downside > upside * 1.3:
                 tilt = f"偏空（看跌资金力 {downside:,.0f} > 看涨 {upside:,.0f}；put 买保护/call 卖压制占优{cnote}）"
             elif upside > downside * 1.3:

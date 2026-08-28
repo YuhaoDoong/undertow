@@ -1,0 +1,19 @@
+[
+ {
+  "instrument": "spy",
+  "date": "2026-08-28",
+  "spot": 768.94,
+  "state": "仅结构",
+  "struct_bias": "偏多(弱)",
+  "band": "中性",
+  "regime": "牛",
+  "stretch": 0.6194690265487199,
+  "stretch_pctile": 0.468,
+  "drawdown": -1.7076696165191714,
+  "dd_pctile": 0.3,
+  "combo_pctile": 0.384,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
+ }
+]

@@ -1,0 +1,19 @@
+[
+ {
+  "instrument": "iwm",
+  "date": "2026-08-28",
+  "spot": 299.08,
+  "state": "仅结构",
+  "struct_bias": "偏多(弱)",
+  "band": "中性",
+  "regime": "牛",
+  "stretch": -0.08387841477494233,
+  "stretch_pctile": 0.304,
+  "drawdown": -2.0661792997306727,
+  "dd_pctile": 0.284,
+  "combo_pctile": 0.294,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
+ }
+]

@@ -1293,12 +1293,19 @@ def cmd_report(args) -> int:
 
     print(f"已生成综合研判报告（{today}）:")
     for inst, o, fn, ss, v, _sr, _td in written:
-        # 低置信的强信号在摘要里也必须降级，不能和可执行告警长得一样
+        # 低置信 / 已过期 的强信号在摘要里也必须降级，不能和可执行告警长得一样。
+        # ⚠️ 报告横幅、索引页、CLI 摘要**三处口径必须同步** —— 2026-08-28 实测：
+        # SPY 的 ⚡强看涨 在报告里已正确标注"本告警已过期"，CLI 摘要却仍是满格 ⚡，
+        # 与昨天修低置信时"渲染层改了、摘要层漏了"是同一类错。
         flag = ""
         if ss:
-            flag = (f"  ·{ss.level}{ss.direction}(低置信)"
-                    if getattr(ss, "low_confidence", False)
-                    else f"  ⚡{ss.level}{ss.direction}")
+            _stale_flag = bool(_td and _td < today.isoformat())
+            if _stale_flag:
+                flag = f"  ·{ss.level}{ss.direction}(已过期)"
+            elif getattr(ss, "low_confidence", False):
+                flag = f"  ·{ss.level}{ss.direction}(低置信)"
+            else:
+                flag = f"  ⚡{ss.level}{ss.direction}"
         vh = f"  · {v.headline}" if v and getattr(v, "ok", False) else ""
         print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence}){flag}{vh}  → {reports_dir / fn}")
     if index_path:

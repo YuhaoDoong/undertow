@@ -233,6 +233,30 @@ def test_condor_promoted_when_direction_unclear_and_walls_present():
     print("PASS test_condor_promoted_when_direction_unclear_and_walls_present")
 
 
+
+
+def test_summary_and_banner_agree_on_downgrade():
+    """报告横幅 / 索引页 / CLI 摘要 —— 三处对「降级」的口径必须一致。
+
+    2026-08-28 实测：SPY 的 ⚡强看涨 在报告横幅里已正确标注「本告警已过期」
+    （它描述 8/26 交易日、本该 8/27 开盘交易），**CLI 摘要却仍是满格 ⚡** ——
+    与前一天修「低置信」时"渲染层改了、摘要层漏了"是同一类错。
+
+    降级有两种，摘要必须都能体现：
+      · 已过期（硬）：可交易日已过，判对也吃不到
+      · 低置信（软）：方向裁决的软条件未过，阈值未校准
+    """
+    from pathlib import Path
+    cli = (Path(__file__).resolve().parents[1] / "undertow" / "cli.py").read_text(encoding="utf-8")
+    assert "(已过期)" in cli, "CLI 摘要缺过期降级标记"
+    assert "(低置信)" in cli, "CLI 摘要缺低置信降级标记"
+    # 三处口径同步的意图必须写在代码里，防止将来只改一处
+    assert "三处口径必须同步" in cli
+    html = (Path(__file__).resolve().parents[1] / "undertow" / "report" / "html.py").read_text(encoding="utf-8")
+    assert "本告警已过期" in html and "本告警为「低置信」" in html
+    print("PASS test_summary_and_banner_agree_on_downgrade")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for fn in fns:

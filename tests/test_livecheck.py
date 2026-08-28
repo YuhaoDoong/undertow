@@ -272,6 +272,34 @@ def test_daily_update_alerts_on_silent_failure():
     print("PASS test_daily_update_alerts_on_silent_failure")
 
 
+
+
+def test_daily_update_hardening():
+    """静默失败告警的四条硬要求（每条都来自实测发现的缺陷）。
+
+    ① `$(...) || true` 会把原始退出码永远变成 0（实测确认）——
+       抓取进程崩溃会被当成"正常跑完"，正是要消灭的静默失败。必须分开捕获 rc。
+    ② 末班车判据若用 ET_HOUR>=8，plist 的 08:00 与 08:45 会各弹一次，
+       同一天两条"末班车"告警 = 噪音。须用分钟判据只命中最后一次。
+    ③ 告警不能只弹 osascript：launchd 下未必弹得出（用户关了通知/不在 GUI 会话），
+       而我们恰恰在修"静默失败"。必须同时落兜底文件并纳入 git。
+    ④ 函数必须定义在调用之前 —— 曾出现 alert 在第 59 行被调用、第 66 行才定义。
+    """
+    from pathlib import Path
+    txt = (Path(__file__).resolve().parents[1] / "scripts" / "daily_update.sh").read_text(encoding="utf-8")
+    assert "SNAP_RC=$?" in txt, "① 必须分开捕获 snapshot 的退出码"
+    assert "$(python3 -m undertow snapshot 2>&1) || true" not in txt, "① 不得用 || true 吞退出码"
+    assert "ET_MIN_NOW >= 510" in txt, "② 末班车须用分钟判据（08:30 ET）"
+    assert "FAILURE_${ET_DATE}.txt" in txt, "③ 告警须落兜底文件"
+    assert "data/logs/daily_" in txt, "运行日志须归档进仓库"
+    # ④ alert 定义行号必须小于所有调用行号
+    lines = txt.splitlines()
+    def_ln = next(i for i, l in enumerate(lines) if l.startswith("alert()"))
+    calls = [i for i, l in enumerate(lines) if l.strip().startswith("alert ")]
+    assert calls and min(calls) > def_ln, f"④ alert 在定义前被调用：定义@{def_ln} 调用@{min(calls)}"
+    print("PASS test_daily_update_hardening")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for fn in fns:

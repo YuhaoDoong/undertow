@@ -15,6 +15,25 @@ cd /Users/yhdong/Trading
 ET_NOW=$(TZ=America/New_York date '+%F %H:%M')
 ET_DATE=$(TZ=America/New_York date +%F)
 ET_HOUR=$((10#$(TZ=America/New_York date +%H)))
+# 告警 = 弹通知 + 落兜底文件。
+# ⚠️ 只弹通知不够：launchd 环境下 osascript 未必能弹（用户可能关了通知、
+# 或不在 GUI 会话），而我们现在恰恰在修"静默失败"。兜底文件纳入 git 一并备份，
+# 事后一定查得到。文件用 append，同一天多次失败都留痕。
+alert() {  # $1=标题 $2=正文
+  local f="data/reports/FAILURE_${ET_DATE}.txt"
+  printf '%s | ET %s | %s\n  %s\n' "$(date '+%F %H:%M %Z')" "$ET_NOW" "$1" "$2" >> "$f"
+  echo "[告警] $1 — $2" >&2
+  /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Basso\"" 2>/dev/null || true
+}
+notify() { alert "$@"; }   # 兼容旧调用名
+
+# —— 运行日志归档进仓库 ——
+# 用户 2026-08-28 提出：日志要能核对。原先只写 ~/Library/Logs/undertow-daily.log，
+# 在仓库外、不进 git、换机器就没了 —— 而今天排查「ET02:00 到底成没成功」
+# 正是靠翻它才查清的。现在每次运行的完整输出同时追加到 data/logs/，随每日提交备份。
+RUNLOG="data/logs/daily_$(TZ=America/New_York date +%Y-%m).log"
+mkdir -p data/logs
+exec > >(tee -a "$RUNLOG") 2>&1
 echo "==== $(date '+%F %H:%M %Z') | ET $ET_NOW ===="
 if (( ET_HOUR < 1 || ET_HOUR >= 9 )); then
     echo "[跳过] ET ${ET_HOUR}时 不在快照窗口(1:00–8:59)——避免旧OI/盘中脏数据"
@@ -25,8 +44,12 @@ fi
 # 这是"整天没数据"的最后一道防线。前面每个时点失败都会推送，但如果全天所有时点
 # 都因 OCC 未结算而静默跳过（这是【正常】行为，不推送），到收盘前就没人知道
 # 当天缺数据了。整条交易流程依赖每日研报，缺一天必须让人当场知道。
+# ⚠️ 只在【真正的最后一个时点】告警。plist 时点是 ET02:05/07:00/08:00/08:45，
+# 用 ET_HOUR>=8 会让 08:00 和 08:45 各弹一次，同一天两条"末班车"告警 = 噪音。
+# 判据取 ET_MIN >= 08:30：只有 08:45 那次落在里面。
+ET_MIN_NOW=$(( 10#$(TZ=America/New_York date +%H) * 60 + 10#$(TZ=America/New_York date +%M) ))
 IS_LAST_SLOT=0
-if (( ET_HOUR >= 8 )); then IS_LAST_SLOT=1; fi
+if (( ET_MIN_NOW >= 510 )); then IS_LAST_SLOT=1; fi   # 08:30 ET
 
 # 幂等守卫：当日报告已提交（早前时点已成功）→ 后续重试点直接跳过，省掉重复抓取/出报告
 # ⚠️ 幂等守卫必须看【全部期权品种是否都已有当日快照】，不能只看 gold 的报告。
@@ -52,21 +75,27 @@ fi
 echo "[待补] 尚缺当日快照：${MISSING}"
 if (( IS_LAST_SLOT )); then
     # 已是末班车还缺 → 今天大概率就补不上了，当场告警（不 exit，仍尝试抓一次）
-    /usr/bin/osascript -e "display notification \"仍缺:${MISSING}。这是当日最后一个重试点，缺则当天无数据。\" with title \"🚨 末班车仍缺当日快照\" sound name \"Basso\"" 2>/dev/null || true
-    echo "[严重] 末班车(ET${ET_HOUR}时)仍缺：${MISSING}" >&2
+    alert "🚨 末班车仍缺当日快照" "仍缺:${MISSING}。这是当日最后一个重试点，缺则当天无数据。"
 fi
 
-notify() {  # $1=标题 $2=正文
-  /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Basso\"" 2>/dev/null || true
-}
 
 # ⚠️ 快照失败必须【当场推送】，不能只写进日志。
 # 2026-08-28 复盘发现：8/21 ET02:07、8/22 ET02:09 两次全部品种「网络错误
 # nodename nor servname」→「没有保存任何快照」，**只写进了日志文件**。
 # 用户不会去翻日志，若当天后续重试点也失败，他会以为一切正常而实际当天无数据。
 # 整条交易流程依赖每日研报，静默失败是最危险的失败方式。
-SNAP_OUT=$(python3 -m undertow snapshot 2>&1) || true
+# ⚠️ 分开捕获退出码：`$(...) || true` 会把原始退出码永远变成 0（实测确认），
+# 抓取进程崩溃（非零退出）就会被当成"正常跑完"，正是我们要消灭的静默失败。
+set +e
+SNAP_OUT=$(python3 -m undertow snapshot 2>&1)
+SNAP_RC=$?
+set -e
 echo "$SNAP_OUT"
+if (( SNAP_RC != 0 )); then
+    echo "[严重] snapshot 进程异常退出（rc=$SNAP_RC）" >&2
+    alert "🚨 快照进程异常退出（ET $ET_NOW）" "退出码 $SNAP_RC：$(printf '%s' "$SNAP_OUT" | tail -1)"
+    exit 1
+fi
 FAILS=$(printf '%s\n' "$SNAP_OUT" | grep -c '快照失败' || true)
 if printf '%s\n' "$SNAP_OUT" | grep -q '没有保存任何快照'; then
     if (( FAILS > 0 )); then

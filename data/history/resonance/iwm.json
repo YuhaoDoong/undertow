@@ -2,9 +2,9 @@
  {
   "instrument": "iwm",
   "date": "2026-08-28",
-  "spot": 299.08,
-  "state": "仅结构",
-  "struct_bias": "偏多(弱)",
+  "spot": 300.02,
+  "state": "无信号",
+  "struct_bias": "中性",
   "band": "中性",
   "regime": "牛",
   "stretch": -0.08387841477494233,

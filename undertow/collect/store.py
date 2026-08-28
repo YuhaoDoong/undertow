@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
+import sys
 import time
 from datetime import date
 from pathlib import Path
@@ -57,8 +59,23 @@ class SnapshotStore:
             "payload": payload,
         }
         blob = json.dumps(record, ensure_ascii=False).encode("utf-8")
-        with gzip.open(path, "wb") as f:
-            f.write(blob)
+        # ⚠️ 原子写：先写临时文件 → 验证能完整读回 → 才 rename 覆盖目标。
+        # 旧写法直接 gzip.open(path,"wb")，中途崩溃/磁盘满会留下**半截的坏文件**，
+        # 而 load() 又把坏文件静默折成 None —— 一份不可再生的期权链就这样没了，
+        # 且没有任何人知道（codex review 2026-08-28）。
+        tmp = path.with_suffix(path.suffix + f".tmp.{os.getpid()}")
+        try:
+            with gzip.open(tmp, "wb") as f:
+                f.write(blob)
+            with gzip.open(tmp, "rb") as f:          # 回读验证，坏就不覆盖
+                json.loads(f.read().decode("utf-8"))
+            os.replace(tmp, path)
+        finally:
+            if tmp.exists():
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
         return path
 
     def dates(self, kind: str, symbol: str) -> list[date]:
@@ -75,15 +92,39 @@ class SnapshotStore:
                 continue
         return sorted(out)
 
-    def load(self, kind: str, symbol: str, on_date: date) -> Any | None:
-        """读回某日的原始 payload；无则 None。"""
+    def load(self, kind: str, symbol: str, on_date: date, *,
+             quarantine: bool = True) -> Any | None:
+        """读回某日的原始 payload；文件不存在返回 None。
+
+        ⚠️ **损坏 ≠ 不存在**。旧写法把二者都折成 None，后果：
+          · 上层的"文件存在即算齐全"判据会把损坏文件当成有效快照；
+          · 下一次 save 直接覆盖它，损坏的历史被静默抹掉；
+          · 一份不可再生的期权链就这样没了，没有任何人知道。
+        现在损坏文件会被【隔离】为 .corrupt-N 并在 stderr 显式报告，
+        再返回 None —— 调用方看到的仍是"没有数据"，但证据留下了、不会被覆盖。
+        """
         path = self._path(kind, symbol, on_date)
         if not path.exists():
             return None
         try:
             with gzip.open(path, "rb") as f:
                 rec = json.loads(f.read().decode("utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except (OSError, json.JSONDecodeError, EOFError, UnicodeDecodeError) as e:
+            if quarantine:
+                n = 1
+                while (q := path.with_suffix(path.suffix + f".corrupt-{n}")).exists():
+                    n += 1
+                try:
+                    path.rename(q)
+                    print(f"[严重] 快照损坏已隔离：{path.name} → {q.name}"
+                          f"（{type(e).__name__}）—— 该日数据不可再生，请检查",
+                          file=sys.stderr)
+                except OSError:
+                    print(f"[严重] 快照损坏且隔离失败：{path}（{type(e).__name__}）",
+                          file=sys.stderr)
+            return None
+        if not isinstance(rec, dict) or "payload" not in rec:
+            print(f"[严重] 快照结构异常（缺 payload 字段）：{path.name}", file=sys.stderr)
             return None
         return rec.get("payload")
 

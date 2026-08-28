@@ -141,10 +141,12 @@ case "$SNAP_OVERALL" in
     exit 0 ;;
 esac
 
-# 休市日 / OCC 未结算（OI 与上一交易日逐行相同）→ 指纹去重不落盘 → 无新文件就
-# 不出报告、不提交（交给后续重试点）；避免残缺报告（OI 旧、现价新）污染序列
-if [[ -z $(git status --porcelain data/snapshots) ]]; then
-    echo "[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试"
+# 休市日 / OCC 未结算 → 指纹去重不落盘 → 无新数据就不出报告、不提交（交给后续重试点）。
+# ⚠️ 判据必须来自【本次运行的状态 JSON】(SNAP_SAVED)，不能用 git status --porcelain：
+# 后者会把【运行前就存在的脏文件】（上一次跑剩的、手工改的）当成"本次有新快照"，
+# 于是在实际什么都没抓到的日子照样出报告并提交（codex review 2026-08-28）。
+if (( SNAP_SAVED == 0 )); then
+    echo "[跳过] 本次运行未落盘任何新快照——等下一时点重试"
     exit 0
 fi
 

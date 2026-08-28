@@ -309,6 +309,11 @@ def test_daily_update_hardening():
         assert st in txt, f"⑤ 缺 overall 状态分支：{st}"
     assert "grep -c '快照失败'" not in txt, "⑤ 不得再 grep 中文提示串"
     assert "grep -c '研判报告失败'" not in txt, "⑤ 不得再 grep 中文提示串"
+    # ⑥ "本次是否有新快照"必须来自状态 JSON，不能用 git status --porcelain ——
+    #    后者会把【运行前就存在的脏文件】当成本次新增，在什么都没抓到的日子照样出报告
+    assert "git status --porcelain data/snapshots" not in txt, \
+        "⑥ 不得用 git status 判断本次运行结果"
+    assert "SNAP_SAVED == 0" in txt, "⑥ 须用本次运行的 n_saved 判断"
     # ④ alert 定义行号必须小于所有调用行号
     lines = txt.splitlines()
     def_ln = next(i for i, l in enumerate(lines) if l.startswith("alert()"))
@@ -344,6 +349,43 @@ def test_cli_status_file_is_machine_readable():
         _write_status("/nonexistent-dir-xyz/st.json", {"overall": "x"})
         _write_status(None, {"overall": "x"})     # 未指定则静默跳过
     print("PASS test_cli_status_file_is_machine_readable")
+
+
+
+
+def test_snapshot_store_atomic_and_quarantine():
+    """快照落盘必须原子 + 损坏必须隔离保留。**期权链不可再生，丢一天就是永久少一天。**
+
+    codex review 2026-08-28 指出三处连环问题：
+      · save 直接 gzip.open(path,"wb")：中途崩溃/磁盘满会留半截坏文件
+      · load 把损坏静默折成 None —— 与"文件不存在"无法区分
+      · 上层"文件存在即算齐全"于是把坏文件当有效快照，下次 save 直接覆盖
+    结果：一份不可再生的期权链被静默抹掉，没有任何人知道。
+    """
+    import gzip
+    import tempfile
+    from datetime import date as _d
+    from pathlib import Path
+    from undertow.collect.store import SnapshotStore
+
+    with tempfile.TemporaryDirectory() as td:
+        st = SnapshotStore(Path(td))
+        day = _d(2026, 8, 28)
+        p = st.save("options", "TEST", {"x": 1}, on_date=day)
+        assert st.load("options", "TEST", day) == {"x": 1}
+        # 落盘后不得残留 .tmp
+        assert not [f for f in p.parent.iterdir() if ".tmp" in f.name]
+        # 损坏 → 隔离保留、返回 None、原文件不再占位
+        p.write_bytes(b"\x1f\x8b broken")
+        assert st.load("options", "TEST", day) is None
+        names = sorted(f.name for f in p.parent.iterdir())
+        assert any("corrupt" in n for n in names), names
+        assert not p.exists(), "损坏件必须挪走，否则下次 save 会静默覆盖它"
+        # 隔离后可重新落盘，且坏件仍在（证据保留）
+        st.save("options", "TEST", {"x": 2}, on_date=day)
+        assert st.load("options", "TEST", day) == {"x": 2}
+        assert any("corrupt" in f.name for f in p.parent.iterdir())
+    print("PASS test_snapshot_store_atomic_and_quarantine")
 
 
 if __name__ == "__main__":

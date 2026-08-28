@@ -274,6 +274,29 @@ def cmd_backtest(args) -> int:
     return 0
 
 
+def _write_status(path: str | None, payload: dict) -> None:
+    """把本次运行的机器可读状态原子写盘。**自动化只读它，不许 grep 人读文案。**
+
+    动机（codex review 2026-08-28）：daily_update.sh 原先靠 grep 中文提示串
+    （'快照失败'/'没有保存任何快照'/'研判报告失败'）来判断成败 —— 脆弱耦合，
+    改一句文案告警就静默失效，而我们恰恰在修"静默失败"。
+    人读输出保持不变，另写一份 JSON 供脚本消费。
+
+    写不出来不抛异常（不能因为状态文件拖垮主流程），但会打到 stderr —— 不静默。
+    """
+    if not path:
+        return
+    import json as _json
+    import os as _os
+    try:
+        tmp = f"{path}.tmp.{_os.getpid()}"
+        with open(tmp, "w", encoding="utf-8") as f:
+            _json.dump({"schema": 1, **payload}, f, ensure_ascii=False, indent=1)
+        _os.replace(tmp, path)      # 原子改名：读方永远看到完整文件
+    except Exception as e:
+        print(f"[警告] 状态文件写入失败 {path}: {type(e).__name__} {e}", file=sys.stderr)
+
+
 def cmd_snapshot(args) -> int:
     """把当前期权链【原始 payload 全字段】按日落盘——攒 flow 层所需的历史。"""
     cfg = load_config()
@@ -287,9 +310,11 @@ def cmd_snapshot(args) -> int:
         return 2
 
     saved = []
+    items: list[dict] = []          # 逐品种状态，供 --status-file
     for inst in instruments:
         if inst.options is None:
             print(f"[跳过] {inst.key} 未配置期权数据源", file=sys.stderr)
+            items.append({"instrument": inst.key, "status": "skipped_no_source"})
             continue
         sym = inst.options.symbol
         try:
@@ -299,13 +324,34 @@ def cmd_snapshot(args) -> int:
             if skipped and not already:
                 print(f"[提示] {inst.key} 期权数据与上一交易日逐行相同（休市重复），跳过落盘",
                       file=sys.stderr)
+                items.append({"instrument": inst.key, "status": "unchanged"})
                 continue
+            if skipped and already:
+                items.append({"instrument": inst.key, "status": "already_present"})
             snap = snapshot_from_payload(payload, inst.key, sym)
             n_oi = len(snap.with_oi())
             n_dates = len(store.dates("options", sym))
             saved.append((inst, sym, path, len(snap.contracts), n_oi, n_dates))
+            items.append({"instrument": inst.key, "status": "saved",
+                          "contracts": len(snap.contracts), "with_oi": n_oi})
         except Exception as e:
             print(f"[警告] {inst.key} 快照失败: {e}", file=sys.stderr)
+            items.append({"instrument": inst.key, "status": "failed",
+                          "error_type": type(e).__name__, "error": str(e)[:200]})
+
+    n_fail = sum(1 for x in items if x["status"] == "failed")
+    n_saved = len(saved)
+    # overall 四态：complete(全部处理妥当) / partial(有成功也有失败) /
+    #              failed(一个都没成且有失败) / unchanged(全部因 OI 未结算跳过，属正常)
+    if n_fail == 0:
+        overall = "complete" if n_saved else "unchanged"
+    elif n_saved:
+        overall = "partial"
+    else:
+        overall = "failed"
+    _write_status(getattr(args, "status_file", None), {
+        "command": "snapshot", "date": str(today), "overall": overall,
+        "n_saved": n_saved, "n_failed": n_fail, "items": items})
 
     if not saved:
         print("没有保存任何快照。", file=sys.stderr)
@@ -1266,6 +1312,16 @@ def cmd_report(args) -> int:
         except Exception as e:
             failed.append(inst.key)
             print(f"[警告] {inst.key} 研判报告失败: {e}", file=sys.stderr)
+
+    # 机器可读状态：区分 complete / partial / failed，供定时脚本按名分流告警。
+    # ⚠️ codex review 指出：cmd_report 只要有一个品种失败就 return 1，
+    # 于是脚本侧的"个别品种失败"分支永远不可达 —— 必须靠 overall 区分。
+    _ok = [inst.key for inst, *_ in written]
+    _ov = ("complete" if not failed else ("partial" if written else "failed"))
+    _write_status(getattr(args, "status_file", None), {
+        "command": "report", "date": str(today), "overall": _ov,
+        "n_ok": len(_ok), "n_failed": len(failed),
+        "ok": _ok, "failed": failed})
 
     if not written:
         print("没有生成任何报告。", file=sys.stderr)
@@ -2361,6 +2417,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     psn = sub.add_parser("snapshot", help="落盘期权链原始快照（攒 flow 所需历史，纳入 git）")
     psn.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")
+    psn.add_argument("--status-file", help="把本次运行的机器可读状态原子写入该 JSON 文件"
+                                          "（供定时脚本消费，避免 grep 人读文案）")
     psn.set_defaults(func=cmd_snapshot)
 
     pf = sub.add_parser("flow", help="期权资金流/持仓异动：单快照异常活跃 + 两日 ΔOI/ΔIV")
@@ -2397,6 +2455,7 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--no-snapshot", action="store_true", help="不自动落盘今日快照")
     pr.add_argument("--no-live", action="store_true", help="事件雷达不拉实时 feed，仅用手维护锚点")
     pr.add_argument("--json", action="store_true", help="输出 outlook 结构化 JSON")
+    pr.add_argument("--status-file", help="机器可读状态 JSON（同 snapshot）")
     pr.set_defaults(func=cmd_report)
 
     pl = sub.add_parser("list", help="列出已配置品种")

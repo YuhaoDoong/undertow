@@ -31,3 +31,4 @@ venv/
 /docs/screenshot/
 /docs/author_notes.md
 /docs/author_playbook.md
+data/logs/.status_*.json

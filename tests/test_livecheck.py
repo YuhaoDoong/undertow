@@ -263,12 +263,17 @@ def test_daily_update_alerts_on_silent_failure():
     """
     from pathlib import Path
     txt = (Path(__file__).resolve().parents[1] / "scripts" / "daily_update.sh").read_text(encoding="utf-8")
-    assert "快照失败" in txt and "没有保存任何快照" in txt, "缺失败检测"
-    assert "全部品种抓取失败" in txt, "缺全失败告警"
-    assert "研报生成失败" in txt, "缺研报失败告警"
-    assert "IS_LAST_SLOT" in txt and "末班车" in txt, "缺末班车兜底告警"
+    # ⚠️ 断言【行为】而非提示文案 —— 早先这条测试断言的是中文串（"全部品种抓取失败"等），
+    # 正是我们刚废弃的那种脆弱耦合：改一句文案，测试和告警一起静默失效。
+    assert "--status-file" in txt, "须用机器可读状态判成败"
+    assert "SNAP_OVERALL" in txt and "RPT_OVERALL" in txt, "须按 overall 分流"
+    assert "IS_LAST_SLOT" in txt, "缺末班车兜底"
     # 关键：必须能区分「抓取失败」与「OCC 未结算」，后者不得告警
-    assert "无 failure 行 = 全部因" in txt, "缺「未结算不告警」的区分逻辑"
+    assert "unchanged)" in txt, "缺 unchanged 分支（OCC 未结算属正常，不得告警）"
+    # unchanged 分支必须是 exit 0 且不调 alert
+    seg = txt.split("unchanged)", 1)[1].split(";;", 1)[0]
+    assert "alert" not in seg, "unchanged（OCC未结算）不得告警——否则每天狼来了"
+    assert "exit 0" in seg
     print("PASS test_daily_update_alerts_on_silent_failure")
 
 
@@ -289,15 +294,56 @@ def test_daily_update_hardening():
     txt = (Path(__file__).resolve().parents[1] / "scripts" / "daily_update.sh").read_text(encoding="utf-8")
     assert "SNAP_RC=$?" in txt, "① 必须分开捕获 snapshot 的退出码"
     assert "$(python3 -m undertow snapshot 2>&1) || true" not in txt, "① 不得用 || true 吞退出码"
-    assert "ET_MIN_NOW >= 510" in txt, "② 末班车须用分钟判据（08:30 ET）"
+    # ② 末班车判据不得写死 ET 时刻：plist 时点是【本地时间】，ET 随夏令时漂 1 小时。
+    #    夏令时 本地20:45→ET08:45；冬令时→ET07:45。写死 "ET_MIN>=08:30" 会让
+    #    **冬令时半年内永远不触发** —— 修静默失败的代码自己静默失效（codex review）。
+    assert "ET_MIN_NOW >= 510" not in txt, "② 不得写死 ET 时刻（冬令时会失效）"
+    assert "LAST_LOCAL" in txt and "StartCalendarInterval" in txt, \
+        "② 末班车须从 plist 读【本地】最后时点"
     assert "FAILURE_${ET_DATE}.txt" in txt, "③ 告警须落兜底文件"
     assert "data/logs/daily_" in txt, "运行日志须归档进仓库"
+    # ⑤ 判成败只读机器可读状态 JSON，绝不 grep 人读文案（脆弱耦合：改文案即静默失效）
+    assert "--status-file" in txt, "⑤ 须用 --status-file 输出机器可读状态"
+    assert 'SNAP_OVERALL' in txt and 'RPT_OVERALL' in txt, "⑤ 须按 overall 分流"
+    for st in ("crashed", "failed", "partial", "unchanged"):
+        assert st in txt, f"⑤ 缺 overall 状态分支：{st}"
+    assert "grep -c '快照失败'" not in txt, "⑤ 不得再 grep 中文提示串"
+    assert "grep -c '研判报告失败'" not in txt, "⑤ 不得再 grep 中文提示串"
     # ④ alert 定义行号必须小于所有调用行号
     lines = txt.splitlines()
     def_ln = next(i for i, l in enumerate(lines) if l.startswith("alert()"))
     calls = [i for i, l in enumerate(lines) if l.strip().startswith("alert ")]
     assert calls and min(calls) > def_ln, f"④ alert 在定义前被调用：定义@{def_ln} 调用@{min(calls)}"
     print("PASS test_daily_update_hardening")
+
+
+
+
+def test_cli_status_file_is_machine_readable():
+    """snapshot/report 的 --status-file 必须写出带 schema 的原子 JSON。
+
+    自动化只读它，不许 grep 人读文案 —— 改一句提示文案告警就静默失效
+    （codex review 2026-08-28）。overall 四态必须能区分：
+        complete   全部处理妥当
+        partial    有成功也有失败
+        failed     一个都没成且有失败
+        unchanged  全部因 OI 未结算跳过（**正常**，不得告警）
+    """
+    import json
+    import tempfile
+    from pathlib import Path
+    from undertow.cli import _write_status
+
+    with tempfile.TemporaryDirectory() as td:
+        f = Path(td) / "st.json"
+        _write_status(str(f), {"command": "snapshot", "overall": "partial",
+                               "n_saved": 2, "n_failed": 1, "items": []})
+        d = json.loads(f.read_text(encoding="utf-8"))
+        assert d["schema"] == 1 and d["overall"] == "partial"
+        # 写不出去不得抛异常（不能因状态文件拖垮主流程）
+        _write_status("/nonexistent-dir-xyz/st.json", {"overall": "x"})
+        _write_status(None, {"overall": "x"})     # 未指定则静默跳过
+    print("PASS test_cli_status_file_is_machine_readable")
 
 
 if __name__ == "__main__":

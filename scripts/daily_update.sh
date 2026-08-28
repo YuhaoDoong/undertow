@@ -44,12 +44,27 @@ fi
 # 这是"整天没数据"的最后一道防线。前面每个时点失败都会推送，但如果全天所有时点
 # 都因 OCC 未结算而静默跳过（这是【正常】行为，不推送），到收盘前就没人知道
 # 当天缺数据了。整条交易流程依赖每日研报，缺一天必须让人当场知道。
-# ⚠️ 只在【真正的最后一个时点】告警。plist 时点是 ET02:05/07:00/08:00/08:45，
-# 用 ET_HOUR>=8 会让 08:00 和 08:45 各弹一次，同一天两条"末班车"告警 = 噪音。
-# 判据取 ET_MIN >= 08:30：只有 08:45 那次落在里面。
-ET_MIN_NOW=$(( 10#$(TZ=America/New_York date +%H) * 60 + 10#$(TZ=America/New_York date +%M) ))
+# —— 末班车识别：不能写死 ET 时刻 ——
+# ⚠️ codex review 2026-08-28 指出：plist 时点是【本地时间】，ET 随夏令时漂 1 小时。
+# 夏令时 本地20:45→ET08:45；冬令时 本地20:45→ET07:45。
+# 若判据写死 "ET_MIN>=08:30"，**冬令时半年内永远不成立** ——
+# 修静默失败的代码自己会静默失效，正是我们要消灭的那类 bug。
+# 改为：直接读 plist 的本地触发时刻，判断"本次是否为当日最后一个时点"。
+LAST_LOCAL=$(python3 - <<'PYEOF'
+import plistlib, pathlib
+try:
+    d = plistlib.loads((pathlib.Path.home() /
+        "Library/LaunchAgents/com.yuhaodoong.undertow.daily.plist").read_bytes())
+    pts = [(x.get("Hour", 0), x.get("Minute", 0)) for x in d.get("StartCalendarInterval", [])]
+    print(max(h * 60 + m for h, m in pts) if pts else -1)
+except Exception:
+    print(-1)          # 读不到就退化为"不是末班车"，宁可不报也不误报
+PYEOF
+)
+LOCAL_MIN=$(( 10#$(date +%H) * 60 + 10#$(date +%M) ))
 IS_LAST_SLOT=0
-if (( ET_MIN_NOW >= 510 )); then IS_LAST_SLOT=1; fi   # 08:30 ET
+# 允许 launchd 迟到几分钟：落在最后时点之后即算末班车
+if (( LAST_LOCAL >= 0 && LOCAL_MIN >= LAST_LOCAL )); then IS_LAST_SLOT=1; fi
 
 # 幂等守卫：当日报告已提交（早前时点已成功）→ 后续重试点直接跳过，省掉重复抓取/出报告
 # ⚠️ 幂等守卫必须看【全部期权品种是否都已有当日快照】，不能只看 gold 的报告。
@@ -84,35 +99,47 @@ fi
 # nodename nor servname」→「没有保存任何快照」，**只写进了日志文件**。
 # 用户不会去翻日志，若当天后续重试点也失败，他会以为一切正常而实际当天无数据。
 # 整条交易流程依赖每日研报，静默失败是最危险的失败方式。
-# ⚠️ 分开捕获退出码：`$(...) || true` 会把原始退出码永远变成 0（实测确认），
-# 抓取进程崩溃（非零退出）就会被当成"正常跑完"，正是我们要消灭的静默失败。
+# ⚠️ 判成败只读【机器可读状态 JSON】，绝不 grep 人读文案。
+# codex review 2026-08-28：靠 grep 中文串（'快照失败'/'没有保存任何快照'）是脆弱耦合，
+# 改一句提示文案告警就静默失效 —— 而我们恰恰在修"静默失败"。
+# 另：`$(...) || true` 会把原始退出码永远变成 0（实测），进程崩溃会被当成正常跑完。
+SNAP_ST="data/logs/.status_snapshot_${ET_DATE}.json"
+rm -f "$SNAP_ST"
 set +e
-SNAP_OUT=$(python3 -m undertow snapshot 2>&1)
+python3 -m undertow snapshot --status-file "$SNAP_ST"
 SNAP_RC=$?
 set -e
-echo "$SNAP_OUT"
-if (( SNAP_RC != 0 )); then
-    echo "[严重] snapshot 进程异常退出（rc=$SNAP_RC）" >&2
-    alert "🚨 快照进程异常退出（ET $ET_NOW）" "退出码 $SNAP_RC：$(printf '%s' "$SNAP_OUT" | tail -1)"
-    exit 1
-fi
-FAILS=$(printf '%s\n' "$SNAP_OUT" | grep -c '快照失败' || true)
-if printf '%s\n' "$SNAP_OUT" | grep -q '没有保存任何快照'; then
-    if (( FAILS > 0 )); then
-        REASON=$(printf '%s\n' "$SNAP_OUT" | grep '快照失败' | head -1 | sed -E 's/.*失败: //; s/ \(http.*//')
-        echo "[严重] 全部品种抓取失败（$FAILS 个）：$REASON" >&2
-        notify "🚨 快照全部失败（ET $ET_NOW）" "${FAILS} 个品种抓取失败：${REASON}。当日数据可能缺失，请检查网络/接口。"
-    else
-        # 无 failure 行 = 全部因「与上一交易日逐行相同」被跳过 → OCC 未结算，正常
-        echo "[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试"
-    fi
-    exit 0
-fi
-if (( FAILS > 0 )); then
-    # 部分失败也要报：有品种落盘了，但另一些抓不到
-    REASON=$(printf '%s\n' "$SNAP_OUT" | grep '快照失败' | head -1 | sed -E 's/.*失败: //; s/ \(http.*//')
-    notify "⚠️ 部分品种快照失败（ET $ET_NOW）" "${FAILS} 个品种抓取失败：${REASON}"
-fi
+# 状态文件缺失/损坏 = crashed，与"跑完但失败"必须区分开
+SNAP_JSON=$(python3 - "$SNAP_ST" <<'PYEOF'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
+    if d.get("schema") != 1:
+        raise ValueError("schema")
+    bad = ",".join(i["instrument"] for i in d.get("items", []) if i.get("status") == "failed")
+    print(f"{d.get('overall','crashed')}|{d.get('n_saved',0)}|{d.get('n_failed',0)}|{bad}")
+except Exception:
+    print("crashed|0|0|")
+PYEOF
+)
+SNAP_OVERALL="${SNAP_JSON%%|*}"; _R="${SNAP_JSON#*|}"
+SNAP_SAVED="${_R%%|*}"; _R="${_R#*|}"
+SNAP_NFAIL="${_R%%|*}"; SNAP_BAD="${_R#*|}"
+echo "[状态] snapshot overall=$SNAP_OVERALL saved=$SNAP_SAVED failed=$SNAP_NFAIL rc=$SNAP_RC"
+case "$SNAP_OVERALL" in
+  crashed)
+    alert "🚨 快照进程异常（ET $ET_NOW）" "rc=$SNAP_RC 且状态文件缺失/损坏——无法确认当日是否有数据"
+    exit 1 ;;
+  failed)
+    alert "🚨 快照全部失败（ET $ET_NOW）" "${SNAP_NFAIL} 个品种抓取失败：${SNAP_BAD}。请检查网络/接口。"
+    exit 1 ;;
+  partial)
+    alert "⚠️ 部分品种快照失败（ET $ET_NOW）" "${SNAP_NFAIL} 个失败：${SNAP_BAD}（另 ${SNAP_SAVED} 个成功）" ;;
+  unchanged)
+    # 全部因「与上一交易日逐行相同」跳过 → OCC 未结算，**正常**，静默重试
+    echo "[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试"
+    exit 0 ;;
+esac
 
 # 休市日 / OCC 未结算（OI 与上一交易日逐行相同）→ 指纹去重不落盘 → 无新文件就
 # 不出报告、不提交（交给后续重试点）；避免残缺报告（OI 旧、现价新）污染序列
@@ -129,19 +156,39 @@ fi
 #     点差仅 5%，远好于 TQQQ 的 20%。
 #     tlt/spy 的价值不在价格（SPY 与 QQQ 日收益相关 0.95），在【持仓层与偏斜】：
 #     实测投机资金在标普长期净空、纳指长期净多，周变化相关仅 -0.07 —— 信息完全独立。
-if ! REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq tlt spy iwm --no-snapshot 2>&1); then
-    echo "[严重] 研报生成失败" >&2
-    echo "$REPORT_OUT" >&2
-    notify "🚨 研报生成失败（ET $ET_NOW）" "$(printf '%s' "$REPORT_OUT" | tail -1)"
-    exit 1
-fi
+RPT_ST="data/logs/.status_report_${ET_DATE}.json"
+rm -f "$RPT_ST"
+set +e
+REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq tlt spy iwm \
+             --no-snapshot --status-file "$RPT_ST" 2>&1)
+RPT_RC=$?
+set -e
 echo "$REPORT_OUT"
-# 研报是整条交易流程的输入：失败/缺品种都必须当场知道
-RPT_FAIL=$(printf '%s\n' "$REPORT_OUT" | grep -c '研判报告失败' || true)
-if (( RPT_FAIL > 0 )); then
-    notify "⚠️ ${RPT_FAIL} 个品种研报失败（ET $ET_NOW）" \
-           "$(printf '%s\n' "$REPORT_OUT" | grep '研判报告失败' | head -1)"
-fi
+RPT_JSON=$(python3 - "$RPT_ST" <<'PYEOF'
+import json, sys
+try:
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
+    if d.get("schema") != 1:
+        raise ValueError("schema")
+    print(f"{d.get('overall','crashed')}|{','.join(d.get('failed', []))}")
+except Exception:
+    print("crashed|")
+PYEOF
+)
+RPT_OVERALL="${RPT_JSON%%|*}"; RPT_BAD="${RPT_JSON#*|}"
+echo "[状态] report overall=$RPT_OVERALL rc=$RPT_RC"
+case "$RPT_OVERALL" in
+  crashed)
+    alert "🚨 研报进程异常（ET $ET_NOW）" "rc=$RPT_RC 且状态文件缺失/损坏"
+    exit 1 ;;
+  failed)
+    alert "🚨 研报全部失败（ET $ET_NOW）" "$(printf '%s' "$REPORT_OUT" | tail -1)"
+    exit 1 ;;
+  partial)
+    # ⚠️ cmd_report 只要有一个品种失败就 return 1，所以不能靠退出码分流，
+    #    必须读 overall —— 否则"个别品种失败"这个分支永远不可达（codex review）。
+    alert "⚠️ 部分品种研报失败（ET $ET_NOW）" "失败：${RPT_BAD}" ;;
+esac
 
 # —— 强信号推送：报告若打出 ⚡（近端资金流一边倒），弹 macOS 通知 + 落一份告警文件兜底 ——
 # 动机：这种领先信号（复盘 8/19 黄金）值得当天就看到，别等翻报告。宁缺勿滥，多数日不触发。

@@ -216,6 +216,36 @@ def test_market_session_flags_closed_hours():
     print("PASS test_market_session_flags_closed_hours")
 
 
+
+
+def test_session_hooks_has_postevent_window():
+    """事件后复核窗口必须存在，且只在【今日有高影响事件】+【有持仓】时才跑。
+
+    美国宏观数据/美联储讲话多在 ET 10:00 落地。事件后 IV 与价格骤变，
+    ET09:40 那次体检算出的「距止损 X%」当场作废 —— 而 TQQQ 这类组合单
+    在券商端锁腿、**挂不了自动止损**，只能靠提醒后手动平，
+    所以事件后必须重新核一次真实可平仓价。
+
+    同时守住三条既有铁律：
+      · live 失败不得写成"成功"文件（否则幂等检查阻止当日重试）
+      · 用 mkdir 原子锁防并发重入
+      · 无持仓则跳过，不产出空文件
+    """
+    from pathlib import Path
+    src = Path(__file__).resolve().parents[1] / "scripts" / "session_hooks.sh"
+    txt = src.read_text(encoding="utf-8")
+    assert "ET_MIN >= 610 && ET_MIN <= 625" in txt, "缺事件后复核窗口 ET10:10-10:25"
+    assert "_postevent.md" in txt
+    assert ".lock_postevent_" in txt, "事件后分支缺并发锁"
+    assert "不落盘，等下一次唤醒重试" in txt
+    assert "当前无持仓" in txt
+    # 必须先判有无高影响事件，无事件则跳过
+    assert "今日无高影响事件" in txt
+    # 距止损过近要单独告警（止损是手动的）
+    assert "距止损仅" in txt
+    print("PASS test_session_hooks_has_postevent_window")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for fn in fns:

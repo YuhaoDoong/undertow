@@ -3,6 +3,9 @@
 #
 #   ET 09:00–09:15  盘前简报  —— 仅当【有待执行计划】或【今日有高影响事件】才跑
 #   ET 09:40–09:55  持仓体检  —— 仅当【有持仓】才跑（开盘10分钟后，避开最宽点差）
+#   ET 10:10–10:25  事件后复核 —— 仅当【今日有高影响事件】且【有持仓】才跑。
+#                    美国宏观数据/讲话多在 ET 10:00 落地，事件后 IV 与价格会骤变，
+#                    而止损阈值是按【真实可平仓价】定的，事件前的读数当场作废。
 #
 # 为什么时点判断放在脚本里而不是 plist：plist 的 StartCalendarInterval 用的是本机
 # 本地时间，美国夏令时切换后会整体漂 1 小时。故 plist 多挂几个 SGT 时点覆盖两种
@@ -120,6 +123,62 @@ if (( ET_MIN >= 580 && ET_MIN <= 595 )); then
       SUM=$(printf '%s\n' "$RES" | grep -E '^\*\*总敞口' | head -1)
       notify "🩺 持仓体检" "${ALERT:-$SUM}"
       echo "[体检] → $F"
+    fi
+  fi
+fi
+
+# ── ③ 事件后复核（ET 10:10–10:25）：仅当今日有高影响事件 且 有持仓 ──
+# 美国宏观数据/美联储讲话多在 ET 10:00 落地。事件后 IV 与价格骤变，
+# 事件前那次体检的「距止损 X%」当场作废 —— 必须重新核一次真实可平仓价。
+if (( ET_MIN >= 610 && ET_MIN <= 625 )); then
+  F3="$OUT/${ET_DATE}_postevent.md"
+  if [[ ! -f "$F3" ]]; then
+    HI=$("$PY" - <<'PYEOF'
+import sys; sys.path.insert(0, ".")
+# 只在今日确有 🔴 高影响事件时才跑；检查出错一律当作"要跑"（宁可多跑，不可静默漏掉）
+try:
+    from undertow.core.calendar import load_events, merge
+    from undertow.core.clock import market_today
+    from undertow.collect.faireconomy_cal import FairEconomyCalSource
+    ev = merge(load_events(), FairEconomyCalSource().fetch_events(use_cache=True))
+    hi = [e for e in ev if e.date == market_today() and e.importance == "high"]
+    print(" / ".join(e.name for e in hi[:3]) if hi else "")
+except Exception as e:
+    print(f"⚠️事件检查失败({type(e).__name__})——按有事件处理")
+PYEOF
+)
+    if [[ -n "${HI// /}" ]]; then
+      LOCK3="${OUT}/.lock_postevent_${ET_DATE}"
+      if ! mkdir "$LOCK3" 2>/dev/null; then
+        echo "[事件后] 另一实例正在运行 —— 跳过"; exit 0
+      fi
+      trap 'rmdir "$LOCK3" 2>/dev/null' EXIT
+      if ! RES3=$("$PY" -m undertow.cli live 2>&1); then
+        echo "[事件后] live 失败 —— 不落盘，等下一次唤醒重试" >&2
+        notify "⚠️ 事件后复核失败" "$(printf '%s' "$RES3" | tail -1)"
+        exit 0
+      fi
+      if [[ "$RES3" == *"当前无持仓"* ]]; then
+        echo "[事件后] 无持仓 —— 跳过"
+      else
+        printf '# 事件后持仓复核 %s（ET %s）
+
+**今日高影响事件**：%s
+
+%s
+'           "$ET_DATE" "$(TZ=America/New_York date +%H:%M)" "$HI" "$RES3" > "$F3"
+        # 距止损 <20% 的持仓单独拎出来告警：止损是手动的，必须当面提醒
+        NEAR=$(printf '%s
+' "$RES3" | awk -F'|' '
+          /距止损/ {next}
+          NF>7 {gsub(/[ %]/,"",$9); if ($9 != "" && $9+0 > 0 && $9+0 < 20) print "⚠️距止损仅" $9 "%"}' | head -2 | tr "\n" " ")
+        SUM3=$(printf '%s
+' "$RES3" | grep -E "^\*\*总敞口" | head -1)
+        notify "🔔 事件后复核（$HI）" "${NEAR:-$SUM3}"
+        echo "[事件后] $HI → $F3"
+      fi
+    else
+      echo "[事件后] 今日无高影响事件 —— 跳过"
     fi
   fi
 fi

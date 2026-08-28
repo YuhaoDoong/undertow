@@ -19,9 +19,9 @@
  {
   "instrument": "tlt",
   "date": "2026-08-28",
-  "spot": 83.17,
+  "spot": 82.98,
   "state": "仅结构",
-  "struct_bias": "偏空(弱)",
+  "struct_bias": "偏多(弱)",
   "band": "中性",
   "regime": "熊",
   "stretch": 0.9487258528565679,

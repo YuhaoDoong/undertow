@@ -7,6 +7,7 @@
 差 $33。止损判定若看 App，会系统性晚动手——本模块就是为了消除这个偏差。
 """
 import sys
+import pathlib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -246,6 +247,46 @@ def test_session_hooks_has_postevent_window():
     print("PASS test_session_hooks_has_postevent_window")
 
 
+
+
+def test_session_hooks_leaves_a_trace_every_wakeup():
+    """每次唤醒都必须留痕 —— 否则「没唤醒」和「唤醒了但没做事」无法区分。
+
+    起因（2026-08-28）：用户问「时点生效了吗？live 捕获到没有」，我答不上来：
+    脚本成功时写 md、跳过时什么都不留，事后没有任何证据可查。
+    """
+    src = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "session_hooks.sh"
+    txt = src.read_text(encoding="utf-8")
+    assert "hb()" in txt, "缺少心跳函数"
+    # 每条静默跳过路径都要有 hb
+    for must in ("周末，不跑", "今日已出，跳过", "撞锁，跳过",
+                 "无持仓，跳过", "今日无🔴事件，跳过",
+                 "live 失败", "已出体检", "已出复核", "已出简报"):
+        assert must in txt, f"心跳缺路径：{must}"
+    # 窗口外只 touch 心跳文件，不灌日志（5 分钟一次会把日志刷爆）
+    assert ".session_alive" in txt, "窗口外缺存活心跳文件"
+    # 日志只记决策不记持仓内容 —— 它会入库
+    assert "$LOG_DIR/session_" in txt or 'LOG="$LOG_DIR' in txt
+    print("PASS test_session_hooks_leaves_a_trace_every_wakeup")
+
+
+def test_session_plist_uses_polling_not_dense_calendar():
+    """launchd 密集日历时点不可靠 —— 2026-08-28 实测 12 枪几乎一枪没投。
+
+    同机器上 StartInterval 的任务跑了 353/587 次零故障。脚本本来就自己按真 ET
+    判窗口，天生适合轮询。这条测试防止以后被改回 StartCalendarInterval。
+    """
+    import plistlib
+    f = (pathlib.Path.home() / "Library/LaunchAgents"
+         / "com.yuhaodoong.undertow.session.plist")
+    if not f.exists():
+        print("SKIP test_session_plist_uses_polling（本机未安装该 launchd 任务）")
+        return
+    d = plistlib.loads(f.read_bytes())
+    assert "StartInterval" in d, "session 任务必须用 StartInterval 轮询"
+    assert d["StartInterval"] <= 300, "轮询间隔须 ≤300s，否则可能整个窗口都错过"
+    assert "StartCalendarInterval" not in d, "不得再用日历时点（实测投递不可靠）"
+    print("PASS test_session_plist_uses_polling_not_dense_calendar")
 
 
 def test_daily_update_alerts_on_silent_failure():

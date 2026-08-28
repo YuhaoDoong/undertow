@@ -271,6 +271,17 @@ def structure_delta(prev: "GammaAnalysis", curr: "GammaAnalysis",
     scaled = conv(curr.spot) is not None and abs((conv(curr.spot) or curr.spot) - curr.spot) > 1e-6
     def etf(v: float, dp: int = 0) -> str:
         return f"（ETF {v:.{dp}f}）" if scaled else ""
+
+    def swall(v: float) -> str:
+        """墙的写法：【先报期权行权价】，换算价放括号。
+
+        墙就是一个行权价，是你在交易软件里能直接搜到的东西。旧写法
+        「call 墙 30,059（ETF 730）」把换算后的期货点位摆在前面，
+        用户得先在脑子里除以 41 才知道说的是 730C（用户 2026-08-28 反馈）。
+        """
+        if not scaled:
+            return f"{v:g}"
+        return f"{v:g}（≈{conv(v):,.0f}）"
     out: list[str] = []
 
     # 零伽马位移（相对现价的贴近/远离一并说明）
@@ -298,15 +309,15 @@ def structure_delta(prev: "GammaAnalysis", curr: "GammaAnalysis",
                 base = (r.call_oi if kind == "C" else r.put_oi) if r else p_oi
             d = c_oi - base
             if abs(d) < max(200, base * 0.01):
-                out.append(f"{name} {fmt(c_w)}{etf(c_w)} 未移，厚度基本不变（OI {c_oi:,}）")
+                out.append(f"{name} {swall(c_w)} 未移，厚度基本不变（OI {c_oi:,}）")
             else:
                 word = "增厚" if d > 0 else "削弱"
-                out.append(f"{name} {fmt(c_w)}{etf(c_w)} 未移但{word}（OI {d:+,} 手，{role}"
+                out.append(f"{name} {swall(c_w)} 未移但{word}（OI {d:+,} 手，{role}"
                            f"{'更结实' if d > 0 else '在松动'}）")
         else:
             word = "上移" if c_w > p_w else "下移"
-            anchor = f"ETF {p_w:.0f}→{c_w:.0f}，" if scaled else ""
-            out.append(f"{name} {fmt(p_w)}→{fmt(c_w)}（{anchor}{word}，新墙 OI {c_oi:,}）")
+            # 旧版这里还要再补一句 "ETF 700→730，"——swall 已经先报行权价，重复了
+            out.append(f"{name} {swall(p_w)}→{swall(c_w)}（{word}，新墙 OI {c_oi:,}）")
 
     if prev.call_wall_oi > 0 and curr.call_wall_oi > 0:
         wall("C", prev.call_wall, prev.call_wall_oi, curr.call_wall, curr.call_wall_oi)

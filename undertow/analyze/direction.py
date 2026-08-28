@@ -123,7 +123,7 @@ def decide(*, up_pressure: float, dn_pressure: float,
     if net_delta is not None and net_delta != 0:
         obs = "偏多" if net_delta > 0 else "偏空"
         if obs != d:
-            rs = [f"两个口径反向：推断口径（资金力 {ratio:.2f}×）指向{d}，"
+            rs = [f"两个口径反向：推断口径（加权增仓 {ratio:.2f}×）指向{d}，"
                   f"观测口径（净有效 Delta {net_delta:+,.0f}）指向{obs}",
                   UNCALIBRATED_NOTE]
             if shadow_soft:
@@ -131,6 +131,6 @@ def decide(*, up_pressure: float, dn_pressure: float,
                 return DirectionCall(direction=d, abstain=False, low_confidence=True,
                                      shadow_direction="", reasons=rs, ratio=round(ratio, 2))
             return DirectionCall(reasons=rs, ratio=round(ratio, 2))
-        R.append(f"两口径同向：资金力 {ratio:.2f}× 与净有效 Delta {net_delta:+,.0f} 均指向{d}")
+        R.append(f"两口径同向：加权增仓 {ratio:.2f}× 与净有效 Delta {net_delta:+,.0f} 均指向{d}")
     R.append(f"压力比 {ratio:.2f}×（{UNCALIBRATED_NOTE}）")
     return DirectionCall(direction=d, abstain=False, reasons=R, ratio=round(ratio, 2))

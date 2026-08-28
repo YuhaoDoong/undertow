@@ -540,7 +540,7 @@ def test_structural_moves_wall_thicken_and_top_build():
                       prev_date="a", curr_date="b")
     moves = structural_moves(fa)
     assert any("call墙" in m and "增厚" in m and "+11,000" in m for m in moves)
-    assert any("95.0 put 新增 5,000 手" in m for m in moves)
+    assert any("95.0P 新增 5,000 手" in m for m in moves)
 
 
 def test_structural_moves_ignores_small_and_single_snapshot():

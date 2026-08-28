@@ -57,7 +57,7 @@ IV_ABS_GATE = 0.5          # |绝对 ΔIV| ≥ 此(pp)且与相对判定方向�
 # → 再减中位数"两次扣减，在这种大幅单边日会把真实买盘整体翻成卖压：
 #   445C ΔOI +55,845 原始ΔIV +1.20pp → 判「卖方压制」（≈作者说的 4800 需求激活）
 #   425C ΔOI +55,388 原始ΔIV +1.59pp → 判「极强卖方压制」（≈作者说的 4600 第一关）
-# 共 33 条腿、ΔOI +126,777 被反向计票，凑出"看跌资金力 253,097"。
+# 共 33 条腿、ΔOI +126,777 被反向计票，凑出"看跌加权增仓 253,097"。
 # 而【固定 Delta】阶梯同一天读到 Call 六档全线 +3.27~+3.86pp —— 完全正确，
 # 因为固定 Delta 天然吸收 moneyness 漂移，不需要机械项修正、也就不会被扣翻。
 # 因此：曲面方向明确时，与之矛盾的逐腿判定一律降级为存疑（权重 0），**只否决、不反转**。
@@ -280,7 +280,7 @@ class FlowAnalysis:
     # ⚠️ 它与 upside/downside_pressure 是【两种不同性质的量】，务必分清：
     #   · 净有效 Delta 是【观测】：纯算术，不需要判断谁是主动方。
     #     高 Delta call 减仓 + 远虚 call 增仓 → 即便 call 总 OI 上升，净 Delta 仍为负。
-    #   · 资金力(pressure) 是【推断】：先用 IV 方向判买卖方，再按 |ΔOI|×权重聚合。
+    #   · 加权增仓(pressure) 是【推断】：先用 IV 方向判买卖方，再按 |ΔOI|×权重聚合。
     # 2026-08-27 实测：两者在有明确方向的 30 个样本里方向相反 18 个（60%），
     # QQQ 近 8 天更是无一日一致。
     # ⚠️ 口径更新（同日晚些）：净 Delta 已**不再只是展示项** —— direction.decide()
@@ -410,7 +410,7 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "",
         pr, wr = up / max(dn, 1.0), bull_wing / max(bear_wing, 0.5)
         vc = _vc(True)
         reasons = [
-            f"看涨资金力 {up:,.0f} ≫ 看跌 {dn:,.0f}（{pr:.1f}×，压倒性）"
+            f"看涨加权增仓 {up:,.0f} ≫ 看跌 {dn:,.0f}（{pr:.1f}×，压倒性）"
             f"——即 call 买盘＋put 卖方做支撑 全面压过 call 卖压＋put 买保护",
             f"主翼 20~45Δ call 买盘权重 {bull_wing:.1f} ≫ 卖压 {bear_wing:.1f}（{wr:.1f}×）",
             f"近月 call 净建仓 +{fa.net_call_doi:,} 手",
@@ -432,7 +432,7 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "",
         pr, wr = dn / max(up, 1.0), bear_wing / max(bull_wing, 0.5)
         vc = _vc(False)
         reasons = [
-            f"看跌资金力 {dn:,.0f} ≫ 看涨 {up:,.0f}（{pr:.1f}×，压倒性）"
+            f"看跌加权增仓 {dn:,.0f} ≫ 看涨 {up:,.0f}（{pr:.1f}×，压倒性）"
             f"——即 call 卖压＋put 买保护 全面压过 call 买盘＋put 卖方支撑",
             f"主翼 20~45Δ 卖压/买保护权重 {bear_wing:.1f} ≫ 反向 {bull_wing:.1f}（{wr:.1f}×）",
             f"近月 put 净建仓 +{fa.net_put_doi:,} 手",
@@ -598,9 +598,26 @@ def probe_strong_signal(fa: "FlowAnalysis") -> dict:
 
 
 def _px_fmt(fa: "FlowAnalysis", conv):
-    """速读拼句用的行权价格式器：conv 换算展示口径（商品价），按量级定小数位。"""
-    cv = conv or (lambda v: v)
-    return (lambda v: f"{cv(v):,.0f}") if cv(fa.spot) >= 500 else (lambda v: f"{cv(v):,.1f}")
+    """速读拼句用的行权价格式器。
+
+    ⚠️ 行权价必须【先报期权自己的行权价】，换算价放括号里。
+    起因（用户 2026-08-28）：QQQ 速读里写「put 端 26,970 买方保护 +9,395 手」——
+    26,970 是换算后的 NQ 点位，可用户买卖的是 QQQ 655P。报告报了一个
+    在交易软件里根本搜不到的数字，等于没说。
+    """
+    def _one(v: float, kind: str = "") -> str:
+        return (f"{v:,.0f}" if v >= 500 else f"{v:,.1f}") + kind
+
+    if conv is None:
+        return _one
+
+    def _fmt(v: float, kind: str = "") -> str:
+        cv = conv(v)
+        # 换算值与原值几乎相同（无代理换算）时不重复啰嗦
+        if abs(cv - v) < max(0.01, abs(v) * 0.005):
+            return _one(v) + kind
+        return f"{_one(v)}{kind}（≈{cv:,.0f}）"
+    return _fmt
 
 
 def counter_signals(fa: "FlowAnalysis", direction: str, *,
@@ -627,7 +644,7 @@ def counter_signals(fa: "FlowAnalysis", direction: str, *,
             continue    # 价差保护腿的方向已被扣除，不再当独立对手盘
         wall = f"（{c.on_wall}）" if c.on_wall else ""
         sp = f"，{c.spread_note}" if c.spread_note else ""
-        out.append(f"{'put' if c.kind == 'P' else 'call'} 端 {fmt(c.strike)}{wall} "
+        out.append(f"{fmt(c.strike, c.kind)}{wall} "
                    f"{c.judgment}（{c.d_oi:+,} 手{sp}）")
         if len(out) >= top_n:
             break
@@ -665,7 +682,7 @@ def structural_moves(fa: "FlowAnalysis", *, conv=None, top_n: int = 2) -> list[s
                 if j == "噪音" or "减仓" in j:      # 无 IV 方向信息时只描述 OI 动作
                     j = "增仓" if c.d_oi > 0 else "减仓"
                 wall = f"（{c.on_wall}）" if c.on_wall else ""
-                return f"{fmt(c.strike)}{wall} {j}（{c.d_oi:+,} 手）"
+                return f"{fmt(c.strike, c.kind)}{wall} {j}（{c.d_oi:+,} 手）"
 
             # 净方向只看有 IV 信息的腿（中性/减仓腿不投票）；同向即明说资本方向
             sides = {b for b in (dn.bias, up.bias) if b != "neutral"}
@@ -695,7 +712,7 @@ def structural_moves(fa: "FlowAnalysis", *, conv=None, top_n: int = 2) -> list[s
         note = ("增厚，" + ("天花板更结实" if c.on_wall == "call墙" else "承接更结实")
                 ) if c.d_oi > 0 else ("被削，" + ("压制松动" if c.on_wall == "call墙"
                                                   else "承接减弱"))
-        moves.append(f"{c.on_wall} {fmt(c.strike)} {note}（ΔOI {c.d_oi:+,} 手）")
+        moves.append(f"{c.on_wall} {fmt(c.strike, c.kind)} {note}（ΔOI {c.d_oi:+,} 手）")
         used.add((c.strike, c.kind))
 
     # 3) 最大单点建仓（带买卖方判定），补足条数
@@ -705,8 +722,7 @@ def structural_moves(fa: "FlowAnalysis", *, conv=None, top_n: int = 2) -> list[s
         if (c.strike, c.kind) in used or abs(c.d_oi) < MOVE_MIN_DOI:
             continue
         act = "新增" if c.d_oi > 0 else "减仓"
-        moves.append(f"{fmt(c.strike)} {'put' if c.kind == 'P' else 'call'} "
-                     f"{act} {abs(c.d_oi):,} 手（{c.judgment}）")
+        moves.append(f"{fmt(c.strike, c.kind)} {act} {abs(c.d_oi):,} 手（{c.judgment}）")
         used.add((c.strike, c.kind))
 
     return moves[:top_n]
@@ -1420,10 +1436,10 @@ def analyze_flow(
         if call.abstain:
             tilt = f"方向不明（{call.reasons[0]}）{cnote}"
         elif call.direction == "偏空":
-            tilt = (f"偏空（看跌资金力 {downside:,.0f} > 看涨 {upside:,.0f}；"
+            tilt = (f"偏空（看跌加权增仓 {downside:,.0f} > 看涨 {upside:,.0f}；"
                     f"put 买保护/call 卖压制占优{cnote}）")
         else:
-            tilt = (f"偏多（看涨资金力 {upside:,.0f} > 看跌 {downside:,.0f}；"
+            tilt = (f"偏多（看涨加权增仓 {upside:,.0f} > 看跌 {downside:,.0f}；"
                     f"call 买盘/put 卖方做支撑占优{cnote}）")
 
     return FlowAnalysis(

@@ -274,6 +274,48 @@ def cmd_backtest(args) -> int:
     return 0
 
 
+def _flow_facts(fa, ga, ga_prev, snap_prev, snap_curr, spot: float, ref) -> dict:
+    """索引页要的【具体事实】：墙在哪、变了多少、call/put 谁在建仓、最大的几笔是什么。
+
+    动机（用户 2026-08-28）：索引页原来八个品种全是「不做空·回调买·长线拿住」，
+    模板化车轱辘话，等于什么都没说。用户要的是：
+      近端/中期方向 + 是否强信号 + call/put 主要变动。
+    这里只出**原始事实**（张数、行权价、Delta），不出自造术语。
+    """
+    out: dict = {}
+    if ga is not None:
+        pm = {}
+        for x in snap_prev.contracts:
+            pm[(x.kind, x.strike)] = pm.get((x.kind, x.strike), 0) + (x.open_interest or 0)
+        cm = {}
+        for x in snap_curr.contracts:
+            cm[(x.kind, x.strike)] = cm.get((x.kind, x.strike), 0) + (x.open_interest or 0)
+        for side, kind, wall in (("put", "P", ga.put_wall), ("call", "C", ga.call_wall)):
+            if wall and wall > 0:
+                oi = cm.get((kind, wall), 0)
+                out[f"{side}_wall"] = wall
+                out[f"{side}_wall_oi"] = oi
+                out[f"{side}_wall_chg"] = oi - pm.get((kind, wall), 0)
+                # 墙【搬家】比墙变厚更重要：420P→413P 说明承接位整体后撤，
+                # 只报「413 加厚 38,449」会让人以为支撑变强了。
+                pw = getattr(ga_prev, f"{side}_wall", None) if ga_prev is not None else None
+                if pw and abs(pw - wall) > 1e-9:
+                    out[f"{side}_wall_from"] = pw
+    if fa is not None and fa.changes:
+        ch = fa.changes
+        out["call_add"] = sum(x.d_oi for x in ch if x.kind == "C" and x.d_oi > 0)
+        out["put_add"] = sum(x.d_oi for x in ch if x.kind == "P" and x.d_oi > 0)
+        # 最大的几笔新建仓（含 Delta，供判断是尾部险还是贴身防御）
+        big = sorted([x for x in ch if x.d_oi > 0], key=lambda x: -x.d_oi)[:3]
+        out["big_legs"] = [{
+            "expiry": x.expiry.isoformat()[5:], "strike": x.strike, "kind": x.kind,
+            "d_oi": x.d_oi, "delta": x.delta,
+            "dte": (x.expiry - ref).days,   # 从今天算还有几天到期
+            "pct": (x.strike / spot - 1) * 100 if spot else 0.0,
+        } for x in big]
+    return out
+
+
 def _write_status(path: str | None, payload: dict) -> None:
     """把本次运行的机器可读状态原子写盘。**自动化只读它，不许 grep 人读文案。**
 
@@ -898,33 +940,16 @@ def cmd_vol(args) -> int:
 
 
 def _index_summary(o) -> str:
-    """index 卡片一句话摘要：方向分层 + 最近支撑/阻力 + 伽马环境（供综合研报速览）。"""
-    if getattr(o, "horizon_split", False) and o.near_bias and o.mid_bias:
-        dir_part = f"近端{o.near_bias} · 中期{o.mid_bias}（分歧）"
-    elif o.near_bias and o.mid_bias:
-        dir_part = f"近端{o.near_bias} · 中期{o.mid_bias}"
-    else:
-        dir_part = o.bias
+    """index 卡片一句话摘要。
 
-    def _fmt(v: float) -> str:
-        return f"{v:,.1f}" if abs(v) < 200 else f"{v:,.0f}"
-
-    def _v(kl):
-        return kl.commodity_level if kl.commodity_level is not None else kl.etf_level
-    sup = next((kl for kl in o.key_levels if kl.kind == "support"), None)
-    res = next((kl for kl in o.key_levels if kl.kind == "resistance"), None)
-    lv = []
-    if sup:
-        lv.append(f"支撑 {_fmt(_v(sup))}")
-    if res:
-        lv.append(f"阻力 {_fmt(_v(res))}")
-    lv_part = ("；" + " / ".join(lv)) if lv else ""
-    reg = ""
-    if "正" in o.regime and "Gamma" in o.regime or "正伽马" in o.regime:
-        reg = "；正伽马·假突破多"
-    elif "负" in o.regime and "Gamma" in o.regime or "负伽马" in o.regime:
-        reg = "；负伽马·追势顺畅"
-    return f"{dir_part}{lv_part}{reg}"
+    ⚠️ 方向已经在 pill（近X/中Y）里、墙已经在事实块里，这里【不要重复】——
+    重复正是用户说的「车轱辘话」。只留一件别处没有的事：伽马环境。
+    """
+    if "正伽马" in o.regime or ("正" in o.regime and "Gamma" in o.regime):
+        return "正伽马环境：做市商压波动，突破容易假、回归中枢的概率高"
+    if "负伽马" in o.regime or ("负" in o.regime and "Gamma" in o.regime):
+        return "负伽马环境：做市商追单，一旦启动容易走出趋势、别逆势接"
+    return ""
 
 
 def cmd_report(args) -> int:
@@ -1158,6 +1183,7 @@ def cmd_report(args) -> int:
                 counters.append(f"实时层否决票 ×{len(plan.vetoes)}（{labels}，详见策略卡）")
             # —— 结构对昨变化（墙增/削、零伽马位移）+ 综合分趋势 ——
             struct_notes = []
+            ga_prev = None
             if prev is not None:
                 try:
                     # 昨日结构必须用昨日的日期锚定（到期时间权重随 today 变，
@@ -1307,8 +1333,14 @@ def cmd_report(args) -> int:
             fn = f"{inst.key}_{today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
+            try:
+                _facts = _flow_facts(fa, ga, ga_prev, prev, curr, curr.spot, today)
+            except Exception as e:   # 出错要出声，不能静默变空卡片
+                print(f"⚠️ {inst.key} 索引事实块生成失败：{type(e).__name__}: {e}",
+                      file=sys.stderr)
+                _facts = {}
             written.append((inst, outlook, fn, strong_sig, verdict, stretch_read,
-                            curr_date_s or ""))
+                            curr_date_s or "", _facts))
         except Exception as e:
             failed.append(inst.key)
             print(f"[警告] {inst.key} 研判报告失败: {e}", file=sys.stderr)
@@ -1328,7 +1360,7 @@ def cmd_report(args) -> int:
         return 1
 
     if args.json:
-        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _, _, _, _ in written],
+        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _, _, _, _, _, _ in written],
                          ensure_ascii=False, indent=2, default=str))
         return 0
 
@@ -1340,15 +1372,16 @@ def cmd_report(args) -> int:
                       "stretch": sr,
                       "near_bias": getattr(o, "near_bias", ""),
                       "mid_bias": getattr(o, "mid_bias", ""),
-                      "trade_date": td, "today": today.isoformat()}
-                     for _, o, fn, ss, v, sr, td in written]
+                      "trade_date": td, "today": today.isoformat(),
+                      "facts": _fx, "spot": o.spot}
+                     for _, o, fn, ss, v, sr, td, _fx in written]
         index_html = render_index_html(idx_items, today.isoformat())
         index_path = reports_dir / f"index_{today.isoformat()}.html"
         _archive_existing(index_path)
         index_path.write_text(index_html, encoding="utf-8")
 
     print(f"已生成综合研判报告（{today}）:")
-    for inst, o, fn, ss, v, _sr, _td in written:
+    for inst, o, fn, ss, v, _sr, _td, _fx in written:
         # 低置信 / 已过期 的强信号在摘要里也必须降级，不能和可执行告警长得一样。
         # ⚠️ 报告横幅、索引页、CLI 摘要**三处口径必须同步** —— 2026-08-28 实测：
         # SPY 的 ⚡强看涨 在报告里已正确标注"本告警已过期"，CLI 摘要却仍是满格 ⚡，

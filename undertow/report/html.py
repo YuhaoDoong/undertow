@@ -549,7 +549,7 @@ def render_flow_section(fa) -> str:
             tilt += ('<div class="sub" style="color:#9a6700">⚠ 本层方向判定'
                      '<b>未经回测校准</b>——实测覆盖率/正确率权衡里没有任何门槛的 '
                      'Wilson 95% 区间下界超过 50%。</div>')
-    # —— 净有效 Delta：与上面的"资金力"并列展示，两者性质不同，冲突时必须让读者看见 ——
+    # —— 净有效 Delta：与上面的"加权增仓"并列展示，两者性质不同，冲突时必须让读者看见 ——
     nd = getattr(fa, "net_delta_total", None)
     if nd is not None:          # 0.0 是合法读数，不得隐藏
         ndc = getattr(fa, "net_delta_call", 0.0)
@@ -558,8 +558,8 @@ def render_flow_section(fa) -> str:
         _c = getattr(fa, "call", None)
         _d = getattr(_c, "direction", "") if (_c and not getattr(_c, "abstain", True)) else ""
         clash = (nd > 0 and _d == "偏空") or (nd < 0 and _d == "偏多")
-        warn = ('　<b style="color:#bf8700">⚠ 与上面的资金力倾向方向相反</b>'
-                '——资金力是【推断】（先按 IV 判买卖方），净 Delta 是【观测】（纯算术，'
+        warn = ('　<b style="color:#bf8700">⚠ 与上面的加权增仓倾向方向相反</b>'
+                '——加权增仓是【推断】（先按 IV 判买卖方），净 Delta 是【观测】（纯算术，'
                 '不需知道谁主动）。两者实测约 6 成日子不同向，本层未校准，'
                 '不据此下结论，仅并列呈现。') if clash else ""
         tilt += (f'<div class="sub">净有效 Delta（Σ ΔOI×delta，观测口径）：'
@@ -1347,12 +1347,12 @@ def render_strong_signal_banner(ss, display_name: str = "", stale_note: str = ""
         f'<div style="font-size:20px;font-weight:800;color:{accent}">'
         f'⚡ {name}近端资金流 <span style="font-size:23px">{arrow} {_esc(ss.level)}{_esc(ss.direction)}</span></div>'
         f'<div class="sub" style="margin:4px 0 6px">期权端"一边倒"教科书组合 · '
-        f'资金力比 {ss.pressure_ratio}× · 主翼买卖比 {ss.wing_ratio}×'
+        f'加权增仓比 {ss.pressure_ratio}× · 主翼买卖比 {ss.wing_ratio}×'
         f'{" · 波动率面追认" if ss.vol_confirms else ""}</div>'
         f'<ul style="margin:6px 0 0;padding-left:20px;font-size:13.5px">{reasons}</ul>'
         f'{diverge}'
         f'<div class="sub" style="margin-top:8px;font-size:12px">'
-        f'口径：近月主翼(20~45Δ)买卖方加权。⚠️ 它与资金力用同一套压力数（实测方向 100% 共线），**不是第二份独立证据**；方向裁决弃权时本告警不会出现 · 波段级情景预警，非交易指令</div>'
+        f'口径：近月主翼(20~45Δ)买卖方加权。⚠️ 它与加权增仓用同一套压力数（实测方向 100% 共线），**不是第二份独立证据**；方向裁决弃权时本告警不会出现 · 波段级情景预警，非交易指令</div>'
         f'</div>'
     )
 
@@ -1447,6 +1447,73 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
     )
 
 
+def _facts_html(fx: dict) -> str:
+    """索引卡的【事实块】：墙在哪、比昨天厚了还是薄了、昨天新建仓 call/put 谁多、最大几笔在哪。
+
+    动机（用户 2026-08-28）：索引页原来每个品种都是「不做空 · 回调买 · 长线拿住」，
+    八个品种一模一样，用户原话「都没有意义」。这里改成只说事实、说人话，
+    不出自造词（不写「加权增仓」「delta 口径」这类只有我自己懂的词）。
+    """
+    if not fx:
+        return ""
+    rows = []
+
+    def _n(v):
+        return f"{v:,.0f}"
+
+    def _chg(v):
+        return f"持平" if v == 0 else (f"加厚 {_n(v)}" if v > 0 else f"减薄 {_n(-v)}")
+
+    wall = []
+    for side, label, col in (("put", "下方支撑", "#1a7f37"), ("call", "上方阻力", "#cf222e")):
+        k = fx.get(f"{side}_wall")
+        if not k:
+            continue
+        oi, ch = fx.get(f"{side}_wall_oi", 0), fx.get(f"{side}_wall_chg", 0)
+        emph = "font-weight:700" if abs(ch) >= 5000 else ""
+        frm = fx.get(f"{side}_wall_from")
+        if frm:
+            dirw = "下移" if frm > k else "上移"
+            move = f'<b style="color:#bf8700">从 {frm:g} {dirw}到 {k:g}</b>'
+        else:
+            move = f'<b>{k:g}</b>'
+        wall.append(f'<span style="color:{col};{emph}">{label} {move} '
+                    f'{_n(oi)} 张（{_chg(ch)}）</span>')
+    if wall:
+        rows.append("🧱 " + "　｜　".join(wall))
+
+    ca, pa = fx.get("call_add"), fx.get("put_add")
+    if ca is not None and pa is not None and (ca or pa):
+        if pa > ca * 1.3:
+            who = f"put 是 call 的 {pa / max(ca, 1):.1f} 倍"
+        elif ca > pa * 1.3:
+            who = f"call 是 put 的 {ca / max(pa, 1):.1f} 倍"
+        else:
+            who = "两边差不多"
+        rows.append(f"📊 昨天新建仓：PUT +{_n(pa)} 张 vs CALL +{_n(ca)} 张（{who}）")
+
+    legs = fx.get("big_legs") or []
+    if legs:
+        parts = []
+        for g in legs:
+            d = abs(g.get("delta") or 0)
+            # 说清这笔到底有多少【实际方向暴露】——这是判断 put 增仓是真看空
+            # 还是买张彩票防黑天鹅的关键，不能只报张数。
+            # ⚠️ 判据必须是 Delta 不是离现价的%：同样 -2%，今天到期的 Delta 近 0，
+            #    一个月后到期的可能有 0.3。用%会把两者混为一谈。
+            tag = "彩票" if d < 0.10 else ("半仓" if d < 0.30 else "实打实")
+            days = g.get("dte")
+            when = "今日到期" if days == 0 else (f"{days}天后到期" if days is not None else "")
+            parts.append(f'<b>{g["strike"]:g}{g["kind"]}</b> +{_n(g["d_oi"])}'
+                         f'（{g["pct"]:+.0f}%·{when}·Δ{d:.2f}·{tag}）')
+        rows.append("🎯 最大几笔：" + " · ".join(parts))
+
+    if not rows:
+        return ""
+    return ('<div style="margin-top:7px;font-size:12.5px;line-height:1.75;color:#24292f">'
+            + "<br>".join(rows) + "</div>")
+
+
 def render_index_html(items: list[dict], asof: str) -> str:
     """多品种综合研报（每品种一句话摘要 + 强信号置顶），非仅链接。
 
@@ -1464,13 +1531,16 @@ def render_index_html(items: list[dict], asof: str) -> str:
         bg = "#e6f4ea" if up else "#ffebe9"
         arrow = "▲" if up else "▼"
         div = ' · 与综合背离(近端领先)' if ss.diverges else ""
+        if getattr(ss, "low_confidence", False):
+            div += ' · ⚠️低置信（方向裁决本身没过门槛）'
         alerts.append(
             f'<a class="card" style="display:block;text-decoration:none;color:inherit;'
             f'border:2px solid {accent};background:{bg}" href="{_esc(it["fn"])}">'
             f'<div style="font-size:16px;font-weight:800;color:{accent}">'
-            f'⚡ {_esc(it["name"])} 近端资金流 {arrow} {_esc(ss.level)}{_esc(ss.direction)}</div>'
-            f'<div class="sub" style="margin-top:3px">资金力比 {ss.pressure_ratio}× · '
-            f'主翼买卖比 {ss.wing_ratio}×{_esc(div)}</div></a>'
+            f'⚡ {_esc(it["name"])} 近端新建仓一边倒 {arrow} {_esc(ss.level)}{_esc(ss.direction)}</div>'
+            f'<div class="sub" style="margin-top:3px">'
+            f'{"看跌" if not up else "看涨"}方向的新建仓是反方向的 {ss.pressure_ratio}× · '
+            f'贴近现价那几档买盘/卖盘 {ss.wing_ratio}×{_esc(div)}</div></a>'
         )
 
     cards = []
@@ -1506,9 +1576,8 @@ def render_index_html(items: list[dict], asof: str) -> str:
                           f'{"#bf8700" if split else "#57606a"};color:#fff">'
                           f'近 {_esc(nb or "—")} / 中 {_esc(mb or "—")}'
                           f'{" ⚠分歧" if split else ""}</span>')
-        verdict_head = it.get("verdict_head", "")
-        verdict_div = (f'<div style="margin-top:7px;font-weight:700;color:#0969da;'
-                       f'line-height:1.5">🧭 {_esc(verdict_head)}</div>' if verdict_head else "")
+        # 结论行去模板化：原来八个品种全是「不做空 · 长线拿住」，改为直接摆事实。
+        verdict_div = _facts_html(it.get("facts") or {})
         summary_div = (f'<div class="sub" style="margin-top:4px;line-height:1.5">{_esc(summary)}</div>'
                        if summary else "")
         cards.append(

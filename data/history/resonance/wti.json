@@ -36,7 +36,7 @@
  {
   "instrument": "wti",
   "date": "2026-08-28",
-  "spot": 83.3,
+  "spot": 82.92,
   "state": "仅结构",
   "struct_bias": "偏空(弱)",
   "band": "中性",

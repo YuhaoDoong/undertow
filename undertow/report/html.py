@@ -252,7 +252,10 @@ def render_resonance_banner(rr) -> str:
             f'</div>')
 
 
-def render_technicals_section(tr, sr, rr=None) -> str:
+from datetime import date as _d
+
+
+def render_technicals_section(tr, sr, rr=None, *, cross=None, asof="", src="", today="", h4=None) -> str:
     """技术面卡片：超买超卖（拉伸度，回测校准）+ 趋势结构 + 传统指标读数。
 
     刻意的展示顺序：**先给回测校准过的拉伸度，再给传统指标**。因为过热分那五个
@@ -369,7 +372,67 @@ def render_technicals_section(tr, sr, rr=None) -> str:
            '不可读作"要反转"</b>。两维分歧时边缘只剩一致时的四成且不显著。'
            '<b>仅日线成立</b>——1H/4H 回测分离度全在 ±0.2pp 且符号不稳定，是噪音。'
            '重跑校准：<code>undertow backtest-stretch --emit --compare</code>。</small>')
-    return (f'<div class="card"><h2>技术面 · 超买超卖（回测校准）</h2>'
+    # —— 数据时效：技术面走的价格源与期权数据【不是同一套】，必须单独标注 ——
+    # 2026-08-27 实测：CBOE 历史日线滞后两天（8/27 当天仍止于 8/25），
+    # 而报告头部的时效横幅标的是期权数据的时效 —— 技术面这层滞后毫无提示，
+    # 于是"两天前的深度超卖"冒充"今天的超卖"。
+    vint = ""
+    if asof:
+        stale = bool(today and asof < today)
+        vint = (f'<div class="sub" style="margin:2px 0 8px;'
+                f'{"color:#bf8700;font-weight:700" if stale else ""}">'
+                f'{"⚠️ " if stale else ""}技术面数据源：{_esc(src or "—")} · '
+                f'截止 <b>{_esc(asof)}</b>'
+                + (f'（今天是 {_esc(today)}，<b>滞后 {(_d.fromisoformat(today)-_d.fromisoformat(asof)).days} 天</b>，'
+                   f'下方读数不代表今日状态）' if stale else '（当日）✅')
+                + '</div>')
+    # —— 穿越事件：末值答不了"有没有金叉"，而那正是交易者在看的 ——
+    cx = ""
+    if cross:
+        bits = []
+        for key, name in (("kdj", "KDJ"), ("macd", "MACD")):
+            v = cross.get(key)
+            if not v:
+                continue
+            ev = ""
+            if v.get("event"):
+                fresh = (v.get("days_ago") == 0)
+                col = "#1a7f37" if v["event"] == "金叉" else "#cf222e"
+                when = "今日刚穿" if fresh else f"{v.get('days_ago')} 根前"
+                ev = (f'　<b style="color:{col}">{v["event"]}</b>（{when}）')
+            else:
+                ev = "　<span class=\"sub\">近 30 根无穿越</span>"
+            bits.append(f'<li>{name}：{_esc(v["state"])}{ev}</li>')
+        mp = cross.get("macd_params")
+        note = (f'<div class="sub">MACD 参数 {mp}（不同看盘软件默认值不同，'
+                f'快参数会更早出现金叉；这里用标准值）</div>' if mp else "")
+        if bits:
+            cx = f'<h3>金叉/死叉</h3><ul class="sub">{"".join(bits)}</ul>{note}'
+    # —— 4H 层：**只展示，不进方向判定** ——
+    # 早期回测已验证 1H/4H 对方向是噪音、只有日线站得住。加它是为了能对上用户
+    # 看盘时实际在看的东西，绝不让它参与裁决 —— 否则又变成"指标互相打架"。
+    h4h = ""
+    if h4:
+        k4, d4, j4 = h4["kdj"]
+        f4, e4, hh4 = h4["macd"]
+        rows = []
+        for key, nm in (("kdj", "KDJ"), ("macd", "MACD")):
+            v = (h4.get("cross") or {}).get(key)
+            if not v:
+                continue
+            ev = ""
+            if v.get("event"):
+                col = "#1a7f37" if v["event"] == "金叉" else "#cf222e"
+                when = "本根刚穿" if v.get("days_ago") == 0 else f"{v.get('days_ago')} 根前"
+                ev = f'　<b style="color:{col}">{v["event"]}</b>（{when}）'
+            rows.append(f'<li>{nm}：{_esc(v["state"])}{ev}</li>')
+        h4h = (f'<h3>4 小时层 <span class="sub">（由 1h 按交易日分组聚合；'
+               f'<b>仅展示，不参与方向判定</b>——早期回测已验证 1H/4H 对方向是噪音）</span></h3>'
+               f'<div class="sub">截止 {h4["asof"]:%m-%d %H:%M}Z · {h4["n_bars"]} 根 · '
+               f'收 {h4["close"]:.2f}　RSI6 {h4["rsi6"]:.0f} · RSI14 {h4["rsi14"]:.0f} · '
+               f'KDJ K{k4:.1f}/D{d4:.1f}/J{j4:.1f} · MACD柱 {hh4:+.2f}</div>'
+               f'<ul class="sub">{"".join(rows)}</ul>')
+    return (f'<div class="card"><h2>技术面 · 超买超卖（回测校准）</h2>{vint}{cx}{h4h}'
             + "".join(parts) + render_resonance_banner(rr)
             + f'<div style="margin-top:10px">{edu}</div></div>')
 

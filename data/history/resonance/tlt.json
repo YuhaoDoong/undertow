@@ -1,0 +1,19 @@
+[
+ {
+  "instrument": "tlt",
+  "date": "2026-08-27",
+  "spot": 83.17,
+  "state": "仅结构",
+  "struct_bias": "偏空(弱)",
+  "band": "中性",
+  "regime": "熊",
+  "stretch": 0.9487258528565679,
+  "stretch_pctile": 0.772,
+  "drawdown": -6.703658035347324,
+  "dd_pctile": 0.312,
+  "combo_pctile": 0.542,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
+ }
+]

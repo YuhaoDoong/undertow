@@ -59,6 +59,90 @@ def _kdj(highs, lows, closes, n=9):
     return k, d, 3 * k - 2 * d
 
 
+def read_4h(symbol: str, *, macd_params=(12, 26, 9), count: int = 400) -> dict | None:
+    """4 小时层的经典指标读数。**只作展示，不进任何方向判定。**
+
+    为什么只展示不判定：本项目 2026-08 早期回测已验证 1H/4H 对方向是噪音，
+    只有日线站得住。加这一层是因为用户看盘时会看 4H，报告应当能对上他看到的东西，
+    但**绝不让它参与裁决**——否则又会变成"指标互相打架"。
+
+    ⚠️ 长桥没有 4h 周期，由 1h 聚合（aggregate 从最新往回数分组，
+    丢弃最早的残缺组，绝不用残缺组冒充一根完整 K 线）。
+    取不到数据返回 None，不猜、不用日线顶替。
+    """
+    try:
+        from undertow.collect.longbridge_kline import fetch_bars, aggregate
+        bars = fetch_bars(symbol, period="1h", count=count)
+    except Exception:
+        return None
+    b4 = aggregate(bars, 4)
+    if len(b4) < 40:
+        return None
+    cl = [x["close"] for x in b4]
+    hi = [x["high"] for x in b4]
+    lo = [x["low"] for x in b4]
+    k, d, j = _kdj(hi, lo, cl)
+    f, sl, sg = macd_params
+    dif, dea, hist = _macd(cl, f, sl, sg)
+    return {
+        "asof": b4[-1]["ts"], "n_bars": len(b4), "close": cl[-1],
+        "rsi6": _rsi(cl, 6), "rsi14": _rsi(cl, 14),
+        "kdj": (k, d, j), "macd": (dif, dea, hist), "macd_params": macd_params,
+        "cross": crossovers(hi, lo, cl, macd_params=macd_params),
+    }
+
+
+def crossovers(highs, lows, closes, *, macd_params=(12, 26, 9)) -> dict:
+    """金叉/死叉【事件】检测 —— 报告此前只给末值，而交易者实际在看的是穿越。
+
+    2026-08-27 用户实测：他在券商 App 看到 QQQ「KDJ 金叉」，而我们报告写
+    「KDJ-J -9.6」（深度超卖），两边看着矛盾。实为两件事：
+      ① 我们的价格源滞后两天（已改用长桥 K 线）
+      ② 我们只给末值、不给穿越事件 —— 末值再准也答不了"有没有金叉"
+
+    另注参数差异：用户 App 的 MACD 改成了 (5,20,5)，比标准 (12,26,9) 快得多。
+    同一天标准参数离金叉远、快参数已贴近 —— 不是谁对谁错，是两个不同的东西，
+    因此 macd_params 必须可配，且报告要把参数显式标出来。
+
+    返回每个指标的 {state: 金叉/死叉/多头/空头, days_ago: 距上次穿越几根K线}。
+    days_ago=0 表示【本根K线刚穿越】。数据不足时该项返回 None，不猜。
+    """
+    out: dict = {}
+    n = len(closes)
+    if n < 40:
+        return out
+
+    def _scan(vals_fn):
+        """vals_fn(i) → (快线, 慢线)。返回当前状态 + 最近一次穿越事件与距今根数。"""
+        prev_up = None
+        state = None
+        event = None
+        ago = None
+        lo = max(35, n - 30)
+        for i in range(lo, n):
+            try:
+                f, sv = vals_fn(i)
+            except Exception:
+                continue
+            if f is None or sv is None:
+                continue
+            up = f > sv
+            if prev_up is not None and up != prev_up:
+                event = "金叉" if up else "死叉"
+                ago = n - 1 - i
+            prev_up = up
+            state = "多头（快线在慢线上方）" if up else "空头（快线在慢线下方）"
+        if state is None:
+            return None
+        return {"state": state, "event": event, "days_ago": ago}
+
+    out["kdj"] = _scan(lambda i: _kdj(highs[:i + 1], lows[:i + 1], closes[:i + 1])[:2])
+    f, sl, sg = macd_params
+    out["macd"] = _scan(lambda i: _macd(closes[:i + 1], f, sl, sg)[:2])
+    out["macd_params"] = macd_params
+    return out
+
+
 def _macd(closes, fast=12, slow=26, signal=9):
     """MACD：DIF=EMA12−EMA26，DEA=EMA9(DIF)，柱=2(DIF−DEA)。返回末值 (dif,dea,hist)。"""
     if len(closes) < slow:

@@ -1083,6 +1083,22 @@ def cmd_report(args) -> int:
                 if len(timeline_rows) >= 3 else ""
             # —— 策略情景参数化（期货）先算：其否决票 = 现成的对手盘证据 ——
             series_done = _drop_incomplete_bar(real_series, today)
+            # —— 技术面价格源：优先长桥 K 线（最实时），失败才退回原序列 ——
+            # 2026-08-27 实测：CBOE 历史日线在 8/27 当天仍止于 8/25，滞后两天，
+            # 于是报告里的 KDJ/RSI/MACD 全是两天前的读数（KDJ-J -9.6「深度超卖」），
+            # 而当天 QQQ 已 KDJ 金叉、RSI6 拉到 55 —— 用户在券商 App 上一眼看出矛盾。
+            # 长桥 K 线与用户看盘同源，数值实测可对上（KDJ 差 0.1 以内）。
+            tech_series, tech_src = series_done, "价格序列"
+            if inst.options:
+                try:
+                    from undertow.collect.longbridge_kline import fetch_series as _lb_kline
+                    _lb = _lb_kline(f"{inst.options.symbol}.US", count=400)
+                    if _lb.closes and (series_done is None
+                                       or _lb.dates[-1] >= series_done.dates[-1]):
+                        tech_series, tech_src = _lb, "长桥K线"
+                except Exception as e:
+                    print(f"[提示] {inst.key} 长桥 K 线不可用（{type(e).__name__}），"
+                          f"技术面退回原价格源", file=sys.stderr)
             plan = build_strategy(outlook, vol=fa.vol, series=series_done,
                                   struct_history=struct_hist or None)
             strategy_html = render_strategy_section(plan, timeline_svg=timeline_svg)
@@ -1196,12 +1212,26 @@ def cmd_report(args) -> int:
                 from undertow.analyze.technicals import analyze_technicals
                 from undertow.analyze.stretch import analyze_stretch
                 from undertow.analyze.resonance import assess_resonance, snapshot_row
-                if series_done is not None:
-                    tech_read = analyze_technicals(series_done)
-                    stretch_read = analyze_stretch(series_done)
+                if tech_series is not None:
+                    tech_read = analyze_technicals(tech_series)
+                    stretch_read = analyze_stretch(tech_series)
+                    from undertow.analyze.technicals import crossovers as _cx
+                    cross_read = _cx(tech_series.highs, tech_series.lows, tech_series.closes)
+                    tech_asof = tech_series.dates[-1].isoformat() if tech_series.dates else ""
+                    # 4H 层：只展示不判定；取不到就不显示，绝不用日线顶替
+                    h4_read = None
+                    if inst.options:
+                        try:
+                            from undertow.analyze.technicals import read_4h as _r4
+                            h4_read = _r4(f"{inst.options.symbol}.US")
+                        except Exception:
+                            h4_read = None
                     # 共振：期权结构（近端 bias = Gamma墙位+资金流）为主，超买超卖为辅
                     res_read = assess_resonance(outlook.near_bias, stretch_read)
-                    tech_html = render_technicals_section(tech_read, stretch_read, res_read)
+                    tech_html = render_technicals_section(
+                        tech_read, stretch_read, res_read,
+                        cross=cross_read, asof=tech_asof, src=tech_src,
+                        today=today.isoformat(), h4=h4_read)
                     # 落盘当日联合状态——共振能不能用只能靠自己攒数据回答
                     _persist_resonance(snapshot_row(
                         inst.key, today.isoformat(), res_read, stretch_read,

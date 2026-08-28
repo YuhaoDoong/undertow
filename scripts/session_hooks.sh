@@ -22,9 +22,24 @@ PY="${PYTHON:-python3}"
 ET_DATE=$(TZ=America/New_York date +%F)
 ET_DOW=$(TZ=America/New_York date +%u)          # 1=周一 … 7=周日
 ET_MIN=$(( 10#$(TZ=America/New_York date +%H) * 60 + 10#$(TZ=America/New_York date +%M) ))
-(( ET_DOW >= 6 )) && exit 0                      # 周末不跑（节假日由行情为空自然兜底）
+# 周末退出也留痕，否则「周末不跑」与「没被唤醒」在日志上仍无法区分
 
 OUT="data/account/live"; mkdir -p "$OUT"
+
+# ── 心跳日志 ──────────────────────────────────────────────────────
+# 起因（用户 2026-08-28 问「时点生效了吗？live 捕获到没有」）：
+# 这个脚本成功时写 md、跳过时【什么都不留】，于是「launchd 没唤醒」和
+# 「唤醒了但判断为不该跑」在事后完全无法区分——我当时答不上来。
+# 每次唤醒都记一行，才能事后核对。
+# ⚠️ 只记【决策】不记【持仓内容】：日志会入库，账户数据一律留在 data/account/。
+LOG_DIR="data/logs"; mkdir -p "$LOG_DIR"
+LOG="$LOG_DIR/session_$(TZ=America/New_York date +%Y-%m).log"
+hb() {  # $1=一句话结果
+  printf '%s ET %s | 周%s | %s\n' "$ET_DATE" \
+    "$(TZ=America/New_York date +%H:%M:%S)" "$ET_DOW" "$1" >> "$LOG"
+}
+
+if (( ET_DOW >= 6 )); then hb "周末，不跑"; exit 0; fi
 
 notify() {  # $1=标题 $2=正文
   /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Glass\"" 2>/dev/null || true
@@ -33,6 +48,7 @@ notify() {  # $1=标题 $2=正文
 # ── ① 盘前简报（ET 09:00–09:15）：仅在有计划或有大事件时 ──
 if (( ET_MIN >= 540 && ET_MIN <= 555 )); then
   F="$OUT/${ET_DATE}_premarket.md"
+  if [[ -f "$F" ]]; then hb "①盘前：今日已出，跳过"; fi
   if [[ ! -f "$F" ]]; then
     REASON=$("$PY" - <<'PYEOF'
 import sys; sys.path.insert(0, ".")
@@ -71,7 +87,7 @@ PYEOF
       # 并发互斥：同一时点多次唤醒可能重叠。用 mkdir 做原子锁，临时文件带 PID。
       LOCK="${OUT}/.lock_premarket_${ET_DATE}"
       if ! mkdir "$LOCK" 2>/dev/null; then
-        echo "[盘前] 另一实例正在运行 —— 跳过"; exit 0
+        hb "①盘前：撞锁，跳过"; echo "[盘前] 另一实例正在运行 —— 跳过"; exit 0
       fi
       trap 'rmdir "$LOCK" 2>/dev/null' EXIT
       TMP="${F}.partial.$$"
@@ -88,12 +104,12 @@ PYEOF
       if (( OK )); then
         mv "$TMP" "$F"
         notify "📋 盘前简报" "$REASON"
-        echo "[盘前] $REASON → $F"
+        hb "①盘前：✅ 已出简报"; echo "[盘前] $REASON → $F"
       else
-        notify "⚠️ 盘前简报失败" "子命令出错，见 ${TMP}"
+        hb "①盘前：❌ 子命令失败"; notify "⚠️ 盘前简报失败" "子命令出错，见 ${TMP}"
       fi
     else
-      echo "[盘前] 无待执行计划、无高影响事件 —— 跳过"
+      hb "①盘前：无计划无大事件，跳过"; echo "[盘前] 无待执行计划、无高影响事件 —— 跳过"
     fi
   fi
 fi
@@ -101,20 +117,21 @@ fi
 # ── ② 开盘后持仓体检（ET 09:40–09:55）：仅在有持仓时 ──
 if (( ET_MIN >= 580 && ET_MIN <= 595 )); then
   F="$OUT/${ET_DATE}_live.md"
+  if [[ -f "$F" ]]; then hb "②体检：今日已出，跳过"; fi
   if [[ ! -f "$F" ]]; then
     # 同上：live 失败不得写成"成功"文件，否则当日不再重试
     LOCK2="${OUT}/.lock_live_${ET_DATE}"
     if ! mkdir "$LOCK2" 2>/dev/null; then
-      echo "[体检] 另一实例正在运行 —— 跳过"; exit 0
+      hb "②体检：撞锁，跳过"; echo "[体检] 另一实例正在运行 —— 跳过"; exit 0
     fi
     trap 'rmdir "$LOCK2" 2>/dev/null' EXIT
     if ! RES=$("$PY" -m undertow.cli live 2>&1); then
-      echo "[体检] live 执行失败 —— 不落盘，等下一次唤醒重试" >&2
+      hb "②体检：❌ live 失败，等下次重试"; echo "[体检] live 执行失败 —— 不落盘，等下一次唤醒重试" >&2
       notify "⚠️ 持仓体检失败" "$(printf '%s' "$RES" | tail -1)"
       exit 0
     fi
     if [[ "$RES" == *"当前无持仓"* ]]; then
-      echo "[体检] 无持仓 —— 跳过"
+      hb "②体检：无持仓，跳过"; echo "[体检] 无持仓 —— 跳过"
     else
       printf '# 开盘后持仓体检 %s（ET %s）\n\n%s\n' \
         "$ET_DATE" "$(TZ=America/New_York date +%H:%M)" "$RES" > "$F"
@@ -122,7 +139,7 @@ if (( ET_MIN >= 580 && ET_MIN <= 595 )); then
       ALERT=$(printf '%s\n' "$RES" | grep -E '⚠️|✅ 已达' | head -2 | tr '\n' ' ')
       SUM=$(printf '%s\n' "$RES" | grep -E '^\*\*总敞口' | head -1)
       notify "🩺 持仓体检" "${ALERT:-$SUM}"
-      echo "[体检] → $F"
+      hb "②体检：✅ 已出体检"; echo "[体检] → $F"
     fi
   fi
 fi
@@ -132,6 +149,7 @@ fi
 # 事件前那次体检的「距止损 X%」当场作废 —— 必须重新核一次真实可平仓价。
 if (( ET_MIN >= 610 && ET_MIN <= 625 )); then
   F3="$OUT/${ET_DATE}_postevent.md"
+  if [[ -f "$F3" ]]; then hb "③事件后：今日已出，跳过"; fi
   if [[ ! -f "$F3" ]]; then
     HI=$("$PY" - <<'PYEOF'
 import sys; sys.path.insert(0, ".")
@@ -150,16 +168,16 @@ PYEOF
     if [[ -n "${HI// /}" ]]; then
       LOCK3="${OUT}/.lock_postevent_${ET_DATE}"
       if ! mkdir "$LOCK3" 2>/dev/null; then
-        echo "[事件后] 另一实例正在运行 —— 跳过"; exit 0
+        hb "③事件后：撞锁，跳过"; echo "[事件后] 另一实例正在运行 —— 跳过"; exit 0
       fi
       trap 'rmdir "$LOCK3" 2>/dev/null' EXIT
       if ! RES3=$("$PY" -m undertow.cli live 2>&1); then
-        echo "[事件后] live 失败 —— 不落盘，等下一次唤醒重试" >&2
+        hb "③事件后：❌ live 失败，等下次重试"; echo "[事件后] live 失败 —— 不落盘，等下一次唤醒重试" >&2
         notify "⚠️ 事件后复核失败" "$(printf '%s' "$RES3" | tail -1)"
         exit 0
       fi
       if [[ "$RES3" == *"当前无持仓"* ]]; then
-        echo "[事件后] 无持仓 —— 跳过"
+        hb "③事件后：无持仓，跳过"; echo "[事件后] 无持仓 —— 跳过"
       else
         printf '# 事件后持仓复核 %s（ET %s）
 
@@ -175,10 +193,17 @@ PYEOF
         SUM3=$(printf '%s
 ' "$RES3" | grep -E "^\*\*总敞口" | head -1)
         notify "🔔 事件后复核（$HI）" "${NEAR:-$SUM3}"
-        echo "[事件后] $HI → $F3"
+        hb "③事件后：✅ 已出复核"; echo "[事件后] $HI → $F3"
       fi
     else
-      echo "[事件后] 今日无高影响事件 —— 跳过"
+      hb "③事件后：今日无🔴事件，跳过"; echo "[事件后] 今日无高影响事件 —— 跳过"
     fi
   fi
+fi
+
+# ── 不在任何窗口：也要留痕 ────────────────────────────────────────
+# 没有这一行，「launchd 根本没唤醒」和「唤醒了但不在窗口」看起来一模一样。
+if ! (( (ET_MIN >= 540 && ET_MIN <= 555) || (ET_MIN >= 580 && ET_MIN <= 595) \
+     || (ET_MIN >= 610 && ET_MIN <= 625) )); then
+  hb "唤醒但不在任何窗口（ET_MIN=$ET_MIN），静默退出"
 fi

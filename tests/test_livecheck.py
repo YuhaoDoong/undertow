@@ -246,6 +246,32 @@ def test_session_hooks_has_postevent_window():
     print("PASS test_session_hooks_has_postevent_window")
 
 
+
+
+def test_daily_update_alerts_on_silent_failure():
+    """快照/研报失败必须【推送】，不能只写进日志 —— 静默失败是最危险的失败。
+
+    2026-08-28 复盘发现：8/21 ET02:07、8/22 ET02:09 两次全部品种
+    「网络错误 nodename nor servname」→「没有保存任何快照」，**只写进了日志文件**。
+    用户不会去翻日志；若当天后续重试点也失败，他会以为一切正常而实际当天无数据。
+    整条交易流程依赖每日研报（据其期权结构决定交易策略），缺一天必须当场知道。
+
+    三条必须守住：
+      · 全部抓取失败 → 告警
+      · 全部因「与上一交易日逐行相同」跳过（OCC 未结算）→ **正常，不得告警**
+      · 末班车（ET≥8时）仍缺当日快照 → 告警（今天大概率补不上了）
+    """
+    from pathlib import Path
+    txt = (Path(__file__).resolve().parents[1] / "scripts" / "daily_update.sh").read_text(encoding="utf-8")
+    assert "快照失败" in txt and "没有保存任何快照" in txt, "缺失败检测"
+    assert "全部品种抓取失败" in txt, "缺全失败告警"
+    assert "研报生成失败" in txt, "缺研报失败告警"
+    assert "IS_LAST_SLOT" in txt and "末班车" in txt, "缺末班车兜底告警"
+    # 关键：必须能区分「抓取失败」与「OCC 未结算」，后者不得告警
+    assert "无 failure 行 = 全部因" in txt, "缺「未结算不告警」的区分逻辑"
+    print("PASS test_daily_update_alerts_on_silent_failure")
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     for fn in fns:

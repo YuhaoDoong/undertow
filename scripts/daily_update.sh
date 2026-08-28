@@ -21,6 +21,13 @@ if (( ET_HOUR < 1 || ET_HOUR >= 9 )); then
     exit 0
 fi
 
+# —— 末班车兜底：最后一个重试点（ET08:45）跑完若仍缺当日快照，必须当场告警 ——
+# 这是"整天没数据"的最后一道防线。前面每个时点失败都会推送，但如果全天所有时点
+# 都因 OCC 未结算而静默跳过（这是【正常】行为，不推送），到收盘前就没人知道
+# 当天缺数据了。整条交易流程依赖每日研报，缺一天必须让人当场知道。
+IS_LAST_SLOT=0
+if (( ET_HOUR >= 8 )); then IS_LAST_SLOT=1; fi
+
 # 幂等守卫：当日报告已提交（早前时点已成功）→ 后续重试点直接跳过，省掉重复抓取/出报告
 # ⚠️ 幂等守卫必须看【全部期权品种是否都已有当日快照】，不能只看 gold 的报告。
 # 旧写法：`git cat-file -e HEAD:data/reports/gold_$DATE.html` —— 一旦 gold 先结算
@@ -43,8 +50,40 @@ if [[ -z "${MISSING// /}" ]]; then
     exit 0
 fi
 echo "[待补] 尚缺当日快照：${MISSING}"
+if (( IS_LAST_SLOT )); then
+    # 已是末班车还缺 → 今天大概率就补不上了，当场告警（不 exit，仍尝试抓一次）
+    /usr/bin/osascript -e "display notification \"仍缺:${MISSING}。这是当日最后一个重试点，缺则当天无数据。\" with title \"🚨 末班车仍缺当日快照\" sound name \"Basso\"" 2>/dev/null || true
+    echo "[严重] 末班车(ET${ET_HOUR}时)仍缺：${MISSING}" >&2
+fi
 
-python3 -m undertow snapshot
+notify() {  # $1=标题 $2=正文
+  /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Basso\"" 2>/dev/null || true
+}
+
+# ⚠️ 快照失败必须【当场推送】，不能只写进日志。
+# 2026-08-28 复盘发现：8/21 ET02:07、8/22 ET02:09 两次全部品种「网络错误
+# nodename nor servname」→「没有保存任何快照」，**只写进了日志文件**。
+# 用户不会去翻日志，若当天后续重试点也失败，他会以为一切正常而实际当天无数据。
+# 整条交易流程依赖每日研报，静默失败是最危险的失败方式。
+SNAP_OUT=$(python3 -m undertow snapshot 2>&1) || true
+echo "$SNAP_OUT"
+FAILS=$(printf '%s\n' "$SNAP_OUT" | grep -c '快照失败' || true)
+if printf '%s\n' "$SNAP_OUT" | grep -q '没有保存任何快照'; then
+    if (( FAILS > 0 )); then
+        REASON=$(printf '%s\n' "$SNAP_OUT" | grep '快照失败' | head -1 | sed -E 's/.*失败: //; s/ \(http.*//')
+        echo "[严重] 全部品种抓取失败（$FAILS 个）：$REASON" >&2
+        notify "🚨 快照全部失败（ET $ET_NOW）" "${FAILS} 个品种抓取失败：${REASON}。当日数据可能缺失，请检查网络/接口。"
+    else
+        # 无 failure 行 = 全部因「与上一交易日逐行相同」被跳过 → OCC 未结算，正常
+        echo "[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试"
+    fi
+    exit 0
+fi
+if (( FAILS > 0 )); then
+    # 部分失败也要报：有品种落盘了，但另一些抓不到
+    REASON=$(printf '%s\n' "$SNAP_OUT" | grep '快照失败' | head -1 | sed -E 's/.*失败: //; s/ \(http.*//')
+    notify "⚠️ 部分品种快照失败（ET $ET_NOW）" "${FAILS} 个品种抓取失败：${REASON}"
+fi
 
 # 休市日 / OCC 未结算（OI 与上一交易日逐行相同）→ 指纹去重不落盘 → 无新文件就
 # 不出报告、不提交（交给后续重试点）；避免残缺报告（OI 旧、现价新）污染序列
@@ -61,8 +100,19 @@ fi
 #     点差仅 5%，远好于 TQQQ 的 20%。
 #     tlt/spy 的价值不在价格（SPY 与 QQQ 日收益相关 0.95），在【持仓层与偏斜】：
 #     实测投机资金在标普长期净空、纳指长期净多，周变化相关仅 -0.07 —— 信息完全独立。
-REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq tlt spy iwm --no-snapshot)
+if ! REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq tlt spy iwm --no-snapshot 2>&1); then
+    echo "[严重] 研报生成失败" >&2
+    echo "$REPORT_OUT" >&2
+    notify "🚨 研报生成失败（ET $ET_NOW）" "$(printf '%s' "$REPORT_OUT" | tail -1)"
+    exit 1
+fi
 echo "$REPORT_OUT"
+# 研报是整条交易流程的输入：失败/缺品种都必须当场知道
+RPT_FAIL=$(printf '%s\n' "$REPORT_OUT" | grep -c '研判报告失败' || true)
+if (( RPT_FAIL > 0 )); then
+    notify "⚠️ ${RPT_FAIL} 个品种研报失败（ET $ET_NOW）" \
+           "$(printf '%s\n' "$REPORT_OUT" | grep '研判报告失败' | head -1)"
+fi
 
 # —— 强信号推送：报告若打出 ⚡（近端资金流一边倒），弹 macOS 通知 + 落一份告警文件兜底 ——
 # 动机：这种领先信号（复盘 8/19 黄金）值得当天就看到，别等翻报告。宁缺勿滥，多数日不触发。

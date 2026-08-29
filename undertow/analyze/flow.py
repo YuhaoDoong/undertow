@@ -276,7 +276,7 @@ class FlowAnalysis:
     # 台账拿不到 → 无法回答"强信号是不是建立在滚仓上"。暴露成字段供记录，不改判定逻辑。
     churn_call: float = 1.0
     churn_put: float = 1.0
-    # —— 净有效 Delta：Σ(ΔOI × delta)，机构常用的方向敞口口径（外部分析者 8/26 帖同款）——
+    # —— 净有效 Delta：Σ(ΔOI × delta)，机构常用的方向敞口口径 ——
     # ⚠️ 它与 upside/downside_pressure 是【两种不同性质的量】，务必分清：
     #   · 净有效 Delta 是【观测】：纯算术，不需要判断谁是主动方。
     #     高 Delta call 减仓 + 远虚 call 增仓 → 即便 call 总 OI 上升，净 Delta 仍为负。
@@ -587,7 +587,7 @@ def _split_by_dte(changes: list, curr_date: str | None) -> list[dict]:
         # ⚠️ 拆开「买 put」与「卖 call」：都算看跌侧，但买 put 是花钱押跌、
         # 卖 call 是收权利金做压制。2026-08-28 黄金 22天+ 桶合并报「看跌 14.6×」，
         # 拆开却是买 put 仅 312 张、卖 call 3,774 张 —— 合并会让人以为远月也在押跌，
-        # 而外部分析者当天的结论正是「10 月端没有规模相当的主动买 put」。（用户指出）
+        # 远月端并没有出现规模相当的主动买 put。（用户 2026-08-29 指出）
         out.append({"bucket": name, "legs": len(legs), "dn": dn, "up": up,
                     "buy_put": sum(abs(c.d_oi) for c in legs
                                    if c.kind == "P" and c.bias == "bearish"),
@@ -1802,8 +1802,8 @@ def expiry_split_html(rows: list[dict], esc) -> str:
         '<b>四列分开看</b>：买 put／买 call 是<b>花钱</b>押方向，'
         '卖 call／卖 put 是<b>收权利金</b>做压制或托底 —— 都记在同一侧，'
         '但前者才是主动押注。2026-08-28 黄金 22天+ 桶合并显示「看跌 14.6×」，'
-        '拆开却是买 put 仅 312 张、卖 call 3,774 张，而外部分析者当天的结论正是'
-        '「10 月端没有规模相当的主动买 put」。<br>'
+        '拆开却是买 put 仅 312 张、卖 call 3,774 张 —— 远月端并没有规模相当的'
+        '主动买 put。<br>'
         '实测 127 个样本：各桶同向时命中 67.4%（日聚类 95% 区间 [54.5%, 80.0%]），'
         '打架时 53.1%（区间跨 50%）。差值中位 +14.7pp 但区间跨 0，样本不足以下结论，'
         '故只用来降置信、不否决方向。<br>'
@@ -1951,78 +1951,53 @@ def migration_text(fa: "FlowAnalysis", wall: float | None,
 
 def wall_structure(fa: "FlowAnalysis", wall: float | None,
                    spot: float | None = None) -> dict | None:
-    """墙附近在发生什么 —— 两种结构都要认得出来，不能只认看跌那一种。
+    """墙上方 / 墙上 / 墙下方各自发生了什么 —— **只报原始事实，不下结论**。
 
-    用户 2026-08-29：「白银当日守在 60 价位，也正好是墙的位置…
-    这样的描述我才能简单直白地理解。」
+    ⚠️⚠️ 这一版是被 codex 2026-08-29 P0 打回来重写的。上一版做了三件不该做的事：
+      1. 用的正是 break_warning() 的两个门槛（BREAK_MIN_DOI / BREAK_IV_GAP）来
+         【筛选】是否展示 —— 那个预测器回测 30 次只中 1 次、已明确不上线；
+      2. 输出「保护向墙下搬家 / 就地加固 / 卖 put 托底」这类**结论**，
+         还配「在给跌破定价」「下一道防线」的预测措辞；
+      3. 红绿方向色 + 置顶高亮，视觉权重最高。
+      末尾写一句「不是预测」抵不掉正文的措辞与视觉分量 —— 那等于换个名字上线。
 
-    2026-08-28 的两个样板，正好相反：
+    现在只做一件事：把三个区域的 ΔOI 与相对 IV 变化摆出来，让人自己看。
+      · 不筛选（有数据就报，不设触发门槛）
+      · 不分类（不说这是"搬家"还是"加固"）
+      · 不给"下一道防线"（那是目标价，属于预测）
+      · 不用方向色
 
-      黄金（跌破 413，收 408.89）—— **保护向墙下搬家**
-        420P 平掉 981 张（IV −2.5pp）→ 413P 加 38,631（IV +1.0pp）
-        → 408P 加 38,319（IV **+3.4pp，涨得最急**）
-        钱一路往下堆，越低那档涨价越急 = 在给「跌破」定价。
-
-      白银（守住 60，收 60.02）—— **墙上方有人卖 put 托底**
-        64.0P 平掉 968（IV −3.0pp）
-        61.5/62.0/62.5P 合计加 2,797，但判定是【卖方做支撑】，IV −4.4/−6.3pp
-        60.0P（墙）加 9,068，买方保护，IV +0.3~1.6pp
-        有人在墙上方收权利金，等于押注不破 60 = 防线扎在墙上，没有下移。
-
-    ⚠️ 与 break_warning() 同样的界线：本函数**只描述结构，不预测**，
-    不参与方向判定、不改置信度。
+    用户 2026-08-29 要的是"简单直白地理解钱从哪到哪"—— 那是事实需求，保留；
+    "所以要跌破了"是结论需求，删除。
     """
     if not wall or not fa.changes or wall <= 0:
         return None
     below = [c for c in fa.changes if c.kind == "P" and wall * 0.94 <= c.strike < wall - 0.01]
     at = [c for c in fa.changes if c.kind == "P" and abs(c.strike - wall) < 0.51]
     above = [c for c in fa.changes if c.kind == "P" and wall + 0.01 < c.strike <= wall * 1.06]
-    if not at and not below:
+    if not at and not below and not above:
         return None
-
-    def _sum(legs, f=None):
-        return sum(c.d_oi for c in legs if (f is None or f(c)))
 
     def _wiv(legs):
         rows = [(abs(c.d_oi), c.adj_iv_pp) for c in legs if c.prev_iv > 0 and c.d_oi]
         w = sum(x for x, _ in rows)
         return round(sum(x * y for x, y in rows) / w, 2) if w else None
 
-    buy = lambda c: c.bias == "bearish"        # put 的 bearish = 买方保护
-    sell = lambda c: c.bias == "bullish"       # put 的 bullish = 卖方做支撑（收权利金）
+    def _zone(legs):
+        buy = sum(c.d_oi for c in legs if c.bias == "bearish")     # put 买方保护
+        sell = sum(c.d_oi for c in legs if c.bias == "bullish")    # put 卖方收权利金
+        strikes = sorted({c.strike for c in legs if abs(c.d_oi) >= MOVE_MIN_DOI})
+        return {"buy_put": buy, "sell_put": sell, "iv": _wiv(legs),
+                "doi": sum(abs(c.d_oi) for c in legs),
+                "strikes": strikes[:4]}
 
-    at_buy, at_sell = _sum(at, buy), _sum(at, sell)
-    ab_buy, ab_sell = _sum(above, buy), _sum(above, sell)
-    bl_buy = _sum(below, buy)
-    iv_at, iv_below, iv_above = _wiv(at), _wiv(below), _wiv(above)
-
-    # 形态判定：只看结构，不看结果
-    shape, why = "", ""
-    if (bl_buy >= BREAK_MIN_DOI and iv_below is not None and iv_at is not None
-            and iv_below - iv_at >= BREAK_IV_GAP):
-        shape = "保护向墙下搬家"
-        why = "钱一路往更低的行权价堆，且越低那档涨价越急 —— 在给「跌破」定价"
-    elif ab_sell > 0 and ab_sell >= abs(ab_buy) and at_buy > 0:
-        shape = "墙上方有人卖 put 托底"
-        why = ("有人在墙上方收权利金（IV 反而回落），等于押注不破这道墙；"
-               "墙上本身仍是买方保护 —— 防线扎在墙上，没有下移")
-    elif at_buy > 0 and bl_buy < BREAK_MIN_DOI:
-        shape = "就地加固这道墙"
-        why = "增仓集中在墙上，墙下方没有像样的接力 —— 防线没有后撤"
-    else:
-        return None
-
-    top_below = max(below, key=lambda c: c.d_oi, default=None) if below else None
     return {
-        "wall": wall, "shape": shape, "why": why,
+        "wall": wall,
         "wall_pct": ((wall / spot - 1) * 100 if spot else None),
-        "at_buy": at_buy, "at_sell": at_sell, "iv_at": iv_at,
-        "above_buy": ab_buy, "above_sell": ab_sell, "iv_above": iv_above,
-        "below_buy": bl_buy, "iv_below": iv_below,
-        "next_line": (top_below.strike if (top_below and top_below.d_oi > 0) else None),
-        "next_doi": (top_below.d_oi if top_below else 0),
-        "next_pct": ((top_below.strike / spot - 1) * 100
-                     if (top_below and spot) else None),
-        "gap": (round(iv_below - iv_at, 2)
-                if (iv_below is not None and iv_at is not None) else None),
+        "above": _zone(above), "at": _zone(at), "below": _zone(below),
+        # 供人自行比较，不做任何判定
+        "iv_gap_below_minus_at": (
+            round(_wiv(below) - _wiv(at), 2)
+            if (_wiv(below) is not None and _wiv(at) is not None) else None),
     }
+

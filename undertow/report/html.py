@@ -1553,52 +1553,44 @@ def _facts_html(fx: dict) -> str:
     # 到期一致性：index 上只给【一个标记】，四个桶的明细留给品种研报
     # （用户 2026-08-29：「index 可以不用拆开这么多到期桶，如果全部同向可以
     #   额外标注一下。我觉得合并已经很有价值了。品种内部研报可以再拆开」）
-    # 🧱 墙附近在发生什么 —— 用户 2026-08-29 点名要置顶高亮的那段描述：
-    #    「既解释了极强看跌信号的原因，又描述了墙的位置，还给出了可能点位，甚至跌幅」
-    #    ⚠️ 三种形态都要认得出来，且都只是【结构描述】，不是预测。
+    # 🧱 墙附近三个区域的原始读数 —— **只摆事实，不下结论**（codex 2026-08-29 P0）。
+    #    上一版在这里输出「保护向墙下搬家 / 在给跌破定价 / 下一道防线」+ 红色高亮，
+    #    用的还是那个回测 30 次只中 1 次、已决定不上线的预测器的门槛 ——
+    #    换个名字上线而已。现在不分类、不预测、不用方向色。
     mg = fx.get("migration")
-    if mg and mg.get("shape"):
-        down = mg["shape"] == "保护向墙下搬家"
-        col = "#cf222e" if down else "#1a7f37"
-        bg = "#fff5f5" if down else "#f0fff4"
-
-        def _act(v):
-            v = v or 0
-            return (f"加 {v:,.0f} 张" if v > 0 else
-                    (f"平掉 {abs(v):,.0f} 张" if v < 0 else "没动"))
-
-        def _iv(v):
-            return f"IV {v:+.1f}pp" if isinstance(v, (int, float)) else ""
+    if mg and (mg.get("at") or mg.get("below")):
+        def _z(name, z, extra=""):
+            if not z or not z.get("doi"):
+                return ""
+            bits = []
+            if z.get("buy_put"):
+                bits.append(f'买 put {z["buy_put"]:+,}')
+            if z.get("sell_put"):
+                bits.append(f'卖 put {z["sell_put"]:+,}')
+            iv = z.get("iv")
+            ivs = f'，IV {iv:+.1f}pp' if isinstance(iv, (int, float)) else ""
+            ks = (f'　<span style="color:#6e7781">'
+                  f'{"、".join(f"{k:g}" for k in z["strikes"])}</span>'
+                  if z.get("strikes") else "")
+            return (f'<div>{name}{extra}：' + '　'.join(bits) + ivs + ks + '</div>')
         wp = mg.get("wall_pct")
-        lines = []
-        if mg.get("above_sell", 0) > 0 or mg.get("above_buy", 0) != 0:
-            ab = []
-            if mg.get("above_buy", 0):
-                ab.append(f'买保护 {_act(mg["above_buy"])}')
-            if mg.get("above_sell", 0):
-                ab.append(f'<b>卖 put 收权利金 {_act(mg["above_sell"])}</b>')
-            lines.append(f'墙<b>上方</b>：' + '、'.join(ab) + f'　{_iv(mg.get("iv_above"))}')
-        lines.append(f'<b style="font-size:14px">{mg["wall"]:g}</b>'
-                     f'（墙{f"，{wp:+.1f}%" if wp is not None else ""}）：'
-                     f'买保护 {_act(mg.get("at_buy"))}　{_iv(mg.get("iv_at"))}')
-        if mg.get("next_line"):
-            lines.append(f'墙<b>下方 {mg["next_line"]:g}</b>'
-                         f'（{mg.get("next_pct", 0):+.1f}%）：'
-                         f'买保护 {_act(mg.get("next_doi"))}　'
-                         f'<b>{_iv(mg.get("iv_below"))}'
-                         f'{" —— 涨得最急" if down else ""}</b>')
-        gap = mg.get("gap")
-        gtxt = (f'　<span style="color:#6e7781">（下方比墙上多涨 {gap:+.1f}pp）</span>'
-                if (down and gap is not None) else "")
+        gap = mg.get("iv_gap_below_minus_at")
         rows.append(
-            f'<div style="margin:6px 0;padding:7px 9px;border-left:3px solid {col};'
-            f'background:{bg};line-height:1.8">'
-            f'<b style="color:{col};font-size:13.5px">🧱 {_esc(mg["shape"])}</b>{gtxt}<br>'
-            + '<br>'.join(lines) +
-            f'<br><span style="color:#6e7781;font-size:11.5px">{_esc(mg["why"])}。<br>'
-            '⚠️ <b>这是结构描述，不是预测</b>：2026-08-28 黄金「向墙下搬家」当日确实'
-            '跌破，但 QQQ 同样形态却守住了；预测版本回测 30 次只中 1 次，未上线。'
-            '</span></div>')
+            '<div style="margin:6px 0;padding:7px 9px;border-left:3px solid #57606a;'
+            'background:#f6f8fa;line-height:1.7">'
+            '<b style="font-size:13px">🧱 put 墙附近三个区域的读数</b>'
+            '<span style="color:#6e7781;font-size:11.5px">（原始事实，不含判断）</span>'
+            + _z("墙上方（更贴身）", mg.get("above"))
+            + _z(f'<b>{mg["wall"]:g}</b>（墙上）',
+                 mg.get("at"), f'{f"，{wp:+.1f}%" if wp is not None else ""}')
+            + _z("墙下方", mg.get("below"))
+            + (f'<div style="color:#6e7781;font-size:11.5px">'
+               f'墙下方与墙上的 IV 变化之差：{gap:+.1f}pp</div>'
+               if gap is not None else "")
+            + '<div style="color:#6e7781;font-size:11.5px">'
+              '⚠️ 这里不做任何判断。把它读成「要跌破了」是**过度解读** —— '
+              '按同类结构做的预测器回测 30 次只中 1 次，已决定不上线。'
+              '</div></div>')
 
     # 主力到期：谁占了当天增仓的大头 —— 由数据决定，不由固定分桶决定
     dom = fx.get("dominant")

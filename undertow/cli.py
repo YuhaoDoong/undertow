@@ -338,7 +338,7 @@ def _flow_facts(fa, ga, ga_prev, snap_prev, snap_curr, spot: float, ref) -> dict
     # 持续墙：排除 <7 天到期后的承接/压制区 —— 这才是"跌到哪有人接"的答案。
     # 现行墙位会被 0DTE 劫持：2026-08-28 黄金 put 墙报 413，其 42,388 张里
     # 40,394 张（95%）当天到期，收盘即归零；排除后第一大是 400（≈金价 4416），
-    # 正是外部分析者当天给的「该承接区 建短线多头」位置。
+    # 那才是真正多到期分布的承接区。
     try:
         from undertow.analyze.gamma import persistent_walls
         out["persist"] = persistent_walls(snap_curr, ref)

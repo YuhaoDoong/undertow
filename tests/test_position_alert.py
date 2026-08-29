@@ -419,7 +419,7 @@ def test_persistent_walls_exclude_expiring_pins():
     用户 2026-08-29 追问「他给了位置，我们能给吗？」引出：
     2026-08-28 我们报的黄金 put 墙是 GLD 413，其 42,388 张里 40,394 张（95%）
     是当天到期的。排除 ≤7 天后第一大是 GLD 400（≈金价 4416），
-    正是外部分析者当天给的「该承接区 建短线多头」位置 —— 数据一直有，被 0DTE 盖住了。
+    那才是真正多到期分布的承接区 —— 数据一直有，被 0DTE 盖住了。
     """
     from dataclasses import dataclass
     from datetime import date as D
@@ -470,54 +470,57 @@ def test_break_warning_is_not_wired_into_any_output():
     for f in ("cli.py", "report/html.py"):
         txt = (root / "undertow" / f).read_text("utf-8")
         assert "break_warning" not in txt, f"{f} 不得直接引用未通过回测的预测信号"
-    # 描述必须自带回测结论，否则读者会当成预测
+    # 展示层必须自带回测结论，且不得出现预测措辞
     html = (root / "undertow" / "report" / "html.py").read_text("utf-8")
-    assert "这是结构描述，不是预测" in html
     assert "30 次只中 1 次" in html, "必须写明回测结论"
-    assert "QQQ 同样形态却守住了" in html, "必须给出反例，否则读者只记得成功那次"
+    assert "过度解读" in html, "必须明说把它读成「要跌破了」是过度解读"
     # 且不得进入方向判定
     flow = (root / "undertow" / "analyze" / "flow.py").read_text("utf-8")
     assert "绝不参与方向判定，也不改置信度" in flow
     print("PASS test_break_warning_is_not_wired_into_any_output")
 
 
-def test_wall_structure_covers_both_shapes():
-    """墙附近的形态必须两种都认得出来 —— 只认看跌那一种会漏掉守住的情形。
+def test_wall_zones_report_facts_not_conclusions():
+    """墙附近只报三个区域的原始读数，不得给出分类结论或目标价。
 
-    用户 2026-08-29：「白银当日守在 60 价位，也正好是墙的位置。」
-    旧的 migration_text 只认「保护向墙下搬家」，白银什么都输出不了。
+    codex 2026-08-29 P0：上一版用 break_warning 的门槛做筛选、输出
+    「保护向墙下搬家 / 在给跌破定价 / 下一道防线」+ 红色高亮 ——
+    等于把一个回测 30 次只中 1 次、已决定不上线的预测器换名上线。
+    末尾写「不是预测」抵不掉正文措辞与视觉分量。
     """
     from undertow.report.html import _facts_html
+    from undertow.analyze import flow as F
+    import inspect
 
-    # 黄金 8/28：向墙下搬家（当日跌破 413，收 408.89）
-    gold = {"migration": {"wall": 413.0, "shape": "保护向墙下搬家",
-                          "why": "钱一路往更低的行权价堆", "wall_pct": -2.26,
-                          "at_buy": 38497, "at_sell": 0, "iv_at": 1.0,
-                          "above_buy": -2487, "above_sell": -1660, "iv_above": -0.26,
-                          "below_buy": 46236, "iv_below": 3.43,
-                          "next_line": 408.0, "next_doi": 38319,
-                          "next_pct": -3.44, "gap": 2.43}}
-    h = _facts_html(gold)
-    assert "保护向墙下搬家" in h
-    assert "408" in h and "-3.4%" in h, "必须给出下一档位置与距现价的幅度"
-    assert "涨得最急" in h
-
-    # 白银 8/28：就地加固（当日守住 60，收 60.02）
-    silver = {"migration": {"wall": 60.0, "shape": "就地加固这道墙",
-                            "why": "增仓集中在墙上", "wall_pct": -5.8,
-                            "at_buy": 9506, "at_sell": 50, "iv_at": 1.02,
-                            "above_buy": 3460, "above_sell": 3095, "iv_above": -1.47,
-                            "below_buy": 426, "iv_below": 3.48,
-                            "next_line": None, "next_doi": 0, "gap": None}}
-    h2 = _facts_html(silver)
-    assert "就地加固这道墙" in h2
-    assert "涨得最急" not in h2, "守住的形态不该出现看跌措辞"
-
-    # 负数不得叫「加」—— SPY 曾显示「加仓 -19,204 张」
-    spy = {"migration": dict(gold["migration"], at_buy=-19204)}
-    h3 = _facts_html(spy)
-    assert "平掉 19,204 张" in h3 and "加 -19,204" not in h3
-    print("PASS test_wall_structure_covers_both_shapes")
+    fx = {"migration": {
+        "wall": 413.0, "wall_pct": -2.26,
+        "above": {"buy_put": -2487, "sell_put": -1660, "iv": -0.26,
+                  "doi": 4147, "strikes": [415.0, 420.0]},
+        "at": {"buy_put": 38497, "sell_put": 0, "iv": 1.0,
+               "doi": 38631, "strikes": [413.0]},
+        "below": {"buy_put": 46236, "sell_put": 0, "iv": 3.43,
+                  "doi": 46955, "strikes": [406.0, 408.0]},
+        "iv_gap_below_minus_at": 2.43}}
+    h = _facts_html(fx)
+    # 事实要在
+    assert "413" in h and "38,497" in h and "46,236" in h
+    assert "IV +3.4pp" in h and "+2.4pp" in h
+    # 结论与预测措辞不得出现
+    for banned in ("搬家", "加固", "托底", "下一道防线", "在给", "定价",
+                   "涨得最急", "防线没有后撤"):
+        assert banned not in h, f"不得出现结论/预测措辞：{banned}"
+    assert "过度解读" in h and "30 次只中 1 次" in h
+    # 源码层面：不得再【实际使用】预测器的门槛（注释里说明为何不用是允许的）
+    import ast
+    src = inspect.getsource(F.wall_structure)
+    tree = ast.parse(src.lstrip())
+    names = {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    consts = {n.value for n in ast.walk(tree)
+              if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+    assert "BREAK_MIN_DOI" not in names and "BREAK_IV_GAP" not in names, \
+        "不得复用未上线预测器的触发门槛"
+    assert not any("shape" in c for c in consts), "不得再输出形态分类"
+    print("PASS test_wall_zones_report_facts_not_conclusions")
 
 
 def test_report_section_order_and_summary_source():
@@ -541,3 +544,40 @@ def test_report_section_order_and_summary_source():
     assert "render_pills" in card and "_facts_html" in card, \
         "综合研判必须与索引页同源，不得另写一套说法"
     print("PASS test_report_section_order_and_summary_source")
+
+
+def test_no_paid_author_content_in_public_paths():
+    """公开路径里不得出现付费作者的标识、原话或其给出的点位。
+
+    codex 2026-08-29 P0：我在代码注释、CHANGELOG、HTML 渲染文案里写进了
+    作者姓名、原话和他给的建仓区间，并已推送到公开仓库（85 个 tracked 文件受影响）。
+    这直接违反项目铁律「付费作者内容绝不入库」。
+
+    ⚠️ 我们【自己算出来的】数据（如 GLD 400 这道墙）可以留；
+       要禁的是作者归属、原话转述、以及只有他给过的外部点位。
+
+    ⚠️ 禁词表用拼接构造，否则本文件自身会命中自己。
+    """
+    import re
+    root = Path(__file__).resolve().parents[1]
+    banned = re.compile("|".join([
+        "\u5251\u950b", "\u65e0\u5c18", "\u9f99\u5f00",     # 三个作者名
+        "\u77e5\u8bc6\u661f\u7403",                            # 付费平台名
+        "4400" + "-4450", "4450" + "-4500",        # 只有外部给过的点位（拼接避免自匹配）
+        "\u5e72\u51c0\u7684\u4e3b\u52a8\u4e70",              # 原话片段
+    ]))
+    hits = []
+    for pat in ("undertow/**/*.py", "scripts/**/*.py", "scripts/**/*.sh",
+                "docs/**/*.md", "tests/**/*.py", "*.md"):
+        for f in root.glob(pat):
+            # 作者笔记本身是 gitignored 的私有文件，不在此列
+            if "author_" in f.name or "screenshot" in str(f):
+                continue
+            try:
+                txt = f.read_text("utf-8")
+            except Exception:
+                continue
+            if banned.search(txt):
+                hits.append(str(f.relative_to(root)))
+    assert not hits, f"公开路径含付费作者内容：{hits}"
+    print("PASS test_no_paid_author_content_in_public_paths")

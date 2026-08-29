@@ -1548,7 +1548,7 @@ def _facts_html(fx: dict) -> str:
             + "<br>".join(rows) + "</div>")
 
 
-def render_index_html(items: list[dict], asof: str) -> str:
+def render_index_html(items: list[dict], asof: str, *, family_notes=None) -> str:
     """多品种综合研报（每品种一句话摘要 + 强信号置顶），非仅链接。
 
     items=[{name, fn, bias, conf, summary, signal}]，signal 为 StrongSignal|None。
@@ -1627,6 +1627,12 @@ def render_index_html(items: list[dict], asof: str) -> str:
             f'</a>'
         )
 
+    # 同族不一致提示：紧跟强信号告警之后 —— 它常常正是解释强信号该不该信的那一层
+    fam_block = ""
+    if family_notes:
+        from undertow.analyze.family import render_html as _fam_html
+        fam_block = _fam_html(family_notes, _esc)
+
     alert_block = ""
     if alerts:
         alert_block = (f'<div class="card" style="background:none;border:none;padding:6px 2px 0">'
@@ -1638,7 +1644,7 @@ def render_index_html(items: list[dict], asof: str) -> str:
         f'<title>综合研判 {_esc(asof)}</title><style>{_CSS}</style></head>'
         f'<body><div class="wrap"><div class="card"><h1>大宗商品综合研报</h1>'
         f'<div class="sub">{_esc(asof)} · 各品种摘要 + 强信号告警 · 点击进入详情</div></div>'
-        f'{alert_block}{"".join(cards)}'
+        f'{alert_block}{fam_block}{"".join(cards)}'
         '<div class="foot">undertow · 规则化情景工具，非投资建议 · 纯标准库生成</div></div></body></html>'
     )
 

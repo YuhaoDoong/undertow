@@ -83,3 +83,39 @@ def test_same_instrument_ranks_before_cross():
                                 "SLV": SS("看跌", "强", 4.0, [])})
     assert cf[0].source == "SLV" and cf[0].cross is False
     print("PASS test_same_instrument_ranks_before_cross")
+
+
+def test_family_consistency_flags_gold_silver_split():
+    """金银同向、QQQ/TQQQ 同向 —— 结论不一致必须被摆出来（用户 2026-08-29 要求）。
+
+    8/28 原样重演：黄金 ⚡极强看跌、白银近端中性，两者相关 0.89，
+    当时没有任何地方指出这个矛盾。次日 GLD -3.24%、SLV -4.38%。
+    """
+    from undertow.analyze.family import check
+
+    views = {
+        "gold": {"near": "偏空(弱)", "signal_dir": "看跌", "signal_level": "极强"},
+        "silver": {"near": "中性", "signal_dir": "", "signal_level": ""},
+        "qqq": {"near": "偏空(弱)", "signal_dir": "", "signal_level": ""},
+        "spy": {"near": "偏多(弱)", "signal_dir": "", "signal_level": ""},
+        "tqqq": {"near": "偏空(弱)", "signal_dir": "", "signal_level": ""},
+    }
+    notes = check(views)
+    pairs = {(n.a, n.b): n for n in notes}
+    assert ("gold", "silver") in pairs, "黄金强信号落单必须惊动白银"
+    assert pairs[("gold", "silver")].kind == "强信号落单"
+    assert ("qqq", "spy") in pairs, "QQQ 与 SPY 近端相反必须报"
+    assert pairs[("qqq", "spy")].kind == "近端方向相反"
+    # QQQ 与 TQQQ 同向 → 不该报
+    assert ("qqq", "tqqq") not in pairs, "同向不得误报，滥发等于没有告警"
+    # 相关性越高、等级越强的排前面
+    assert notes[0].severity >= notes[-1].severity
+    print("PASS test_family_consistency_flags_gold_silver_split")
+
+
+def test_family_same_direction_is_silent():
+    """同族同向时必须完全沉默 —— 每天都报的提示等于没有提示。"""
+    from undertow.analyze.family import check
+    assert check({"gold": {"near": "偏多"}, "silver": {"near": "偏多(弱)"}}) == []
+    assert check({"qqq": {"near": "偏空"}, "tqqq": {"near": "偏空(弱)"}}) == []
+    print("PASS test_family_same_direction_is_silent")

@@ -49,6 +49,7 @@ from undertow.analyze.macro import analyze_macro, series_ids_for
 from undertow.analyze.backtest import run_backtest
 from undertow.report import markdown as report_mod
 from undertow.report import viz
+from undertow.analyze.family import check as _family_check
 from undertow.report.html import (render_report_html, render_index_html,
                           render_flow_section, render_macro_section, render_events_section,
                           render_tldr_section, render_strategy_section,
@@ -973,9 +974,21 @@ def cmd_report(args) -> int:
     fred_src = FredMacroSource()
     vol_src = CboeVolSource()
     store = SnapshotStore()
-    today = market_today()
+    # --as-of：把"今天"钉在历史某天，用当时的数据重放研报（复盘验证用）。
+    # ⚠️ 回放时一律不落新快照，也不写进当日报告目录的常规文件名 —— 回放产物
+    # 必须能和真实当日产物区分开，否则复盘会污染台账与归档。
+    replay = getattr(args, "as_of", None)
+    if replay:
+        try:
+            today = date.fromisoformat(replay)
+        except ValueError:
+            print(f"--as-of 需要 YYYY-MM-DD，收到 {replay!r}", file=sys.stderr)
+            return 2
+        args.no_snapshot = True
+    else:
+        today = market_today()
     all_events, _ = _merged_events(getattr(args, "no_live", False), args.no_cache)
-    reports_dir = DATA_DIR / "reports"
+    reports_dir = DATA_DIR / "reports" / "replay" if replay else DATA_DIR / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -1388,7 +1401,18 @@ def cmd_report(args) -> int:
                       "trade_date": td, "today": today.isoformat(),
                       "facts": _fx | {"bias": o.bias}, "spot": o.spot}
                      for _, o, fn, ss, v, sr, td, _fx in written]
-        index_html = render_index_html(idx_items, today.isoformat())
+        # 同族一致性：金银同向、QQQ/TQQQ 同向 —— 不一致时并排摆出来（用户 2026-08-29）
+        _views = {}
+        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx in written:
+            _stale = bool(_td2 and _td2 < today.isoformat())
+            _views[_inst.key] = {
+                "near": _o.near_bias or "", "mid": _o.mid_bias or "", "bias": _o.bias,
+                "signal_dir": (_ss.direction if (_ss and not _stale) else ""),
+                "signal_level": (_ss.level if (_ss and not _stale) else ""),
+            }
+        idx_family = _family_check(_views)
+        index_html = render_index_html(idx_items, today.isoformat(),
+                                       family_notes=idx_family)
         index_path = reports_dir / f"index_{today.isoformat()}.html"
         _archive_existing(index_path)
         index_path.write_text(index_html, encoding="utf-8")
@@ -2562,6 +2586,9 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--no-live", action="store_true", help="事件雷达不拉实时 feed，仅用手维护锚点")
     pr.add_argument("--json", action="store_true", help="输出 outlook 结构化 JSON")
     pr.add_argument("--status-file", help="机器可读状态 JSON（同 snapshot）")
+    pr.add_argument("--as-of", metavar="YYYY-MM-DD",
+                    help="回放历史某天的研报（用当时的数据，复盘验证用）。"
+                         "产物写入 data/reports/replay/，不覆盖当日归档")
     pr.set_defaults(func=cmd_report)
 
     pl = sub.add_parser("list", help="列出已配置品种")

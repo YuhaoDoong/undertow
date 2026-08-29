@@ -328,9 +328,11 @@ def _flow_facts(fa, ga, ga_prev, snap_prev, snap_curr, spot: float, ref) -> dict
         # 保护迁移的结构描述 —— 只陈述"钱从哪撤到哪、哪档涨价最急"，不做预测。
         # 这是用户 2026-08-29 点名要置顶高亮的那段描述。
         try:
-            from undertow.analyze.flow import migration_text
+            from undertow.analyze.flow import wall_structure
             pw_ = getattr(ga, "put_wall", None) if ga is not None else None
-            out["migration"] = migration_text(fa, pw_, spot)
+            # wall_structure 取代旧的 migration_text：后者只认「保护向下搬家」
+            # 这一种形态，白银 2026-08-28「就地加固、守住 60」什么都输出不了。
+            out["migration"] = wall_structure(fa, pw_, spot)
         except Exception as e:
             print(f"⚠️ 保护迁移描述失败：{type(e).__name__}: {e}", file=sys.stderr)
     # 持续墙：排除 <7 天到期后的承接/压制区 —— 这才是"跌到哪有人接"的答案。

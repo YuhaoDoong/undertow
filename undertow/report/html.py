@@ -1545,37 +1545,51 @@ def _facts_html(fx: dict) -> str:
     # 到期一致性：index 上只给【一个标记】，四个桶的明细留给品种研报
     # （用户 2026-08-29：「index 可以不用拆开这么多到期桶，如果全部同向可以
     #   额外标注一下。我觉得合并已经很有价值了。品种内部研报可以再拆开」）
-    # 🔻 保护迁移 —— 用户 2026-08-29 点名要置顶高亮的那段描述：
+    # 🧱 墙附近在发生什么 —— 用户 2026-08-29 点名要置顶高亮的那段描述：
     #    「既解释了极强看跌信号的原因，又描述了墙的位置，还给出了可能点位，甚至跌幅」
-    #    ⚠️ 它是【结构描述】不是预测：同样的结构 30 次里只有 1 次真跌破了墙。
+    #    ⚠️ 三种形态都要认得出来，且都只是【结构描述】，不是预测。
     mg = fx.get("migration")
-    if mg and mg.get("next_line"):
-        # 措辞跟着正负走：负数不能叫"加仓"（SPY 2026-08-28 曾显示"加仓 -19,204 张"）
+    if mg and mg.get("shape"):
+        down = mg["shape"] == "保护向墙下搬家"
+        col = "#cf222e" if down else "#1a7f37"
+        bg = "#fff5f5" if down else "#f0fff4"
+
         def _act(v):
             v = v or 0
-            return (f"加仓 {v:+,.0f} 张" if v > 0 else
+            return (f"加 {v:,.0f} 张" if v > 0 else
                     (f"平掉 {abs(v):,.0f} 张" if v < 0 else "没动"))
-        inner = mg.get("inner_doi") or 0
-        parts = []
-        if inner < 0:
-            parts.append(f'墙<b>上方</b>（更贴身）{_act(inner)}')
-        parts.append(f'<b>{mg["wall"]:g}</b>（墙上）{_act(mg.get("at_doi"))}，'
-                     f'IV {mg.get("iv_at", 0):+.1f}pp')
-        parts.append(f'<b style="font-size:14px">{mg["next_line"]:g}</b>'
-                     f'（{mg.get("next_pct", 0):+.1f}%）{_act(mg.get("next_doi"))}，'
-                     f'<b>IV {mg.get("iv_beyond", 0):+.1f}pp —— 涨得最急</b>')
+
+        def _iv(v):
+            return f"IV {v:+.1f}pp" if isinstance(v, (int, float)) else ""
+        wp = mg.get("wall_pct")
+        lines = []
+        if mg.get("above_sell", 0) > 0 or mg.get("above_buy", 0) != 0:
+            ab = []
+            if mg.get("above_buy", 0):
+                ab.append(f'买保护 {_act(mg["above_buy"])}')
+            if mg.get("above_sell", 0):
+                ab.append(f'<b>卖 put 收权利金 {_act(mg["above_sell"])}</b>')
+            lines.append(f'墙<b>上方</b>：' + '、'.join(ab) + f'　{_iv(mg.get("iv_above"))}')
+        lines.append(f'<b style="font-size:14px">{mg["wall"]:g}</b>'
+                     f'（墙{f"，{wp:+.1f}%" if wp is not None else ""}）：'
+                     f'买保护 {_act(mg.get("at_buy"))}　{_iv(mg.get("iv_at"))}')
+        if mg.get("next_line"):
+            lines.append(f'墙<b>下方 {mg["next_line"]:g}</b>'
+                         f'（{mg.get("next_pct", 0):+.1f}%）：'
+                         f'买保护 {_act(mg.get("next_doi"))}　'
+                         f'<b>{_iv(mg.get("iv_below"))}'
+                         f'{" —— 涨得最急" if down else ""}</b>')
+        gap = mg.get("gap")
+        gtxt = (f'　<span style="color:#6e7781">（下方比墙上多涨 {gap:+.1f}pp）</span>'
+                if (down and gap is not None) else "")
         rows.append(
-            '<div style="margin:6px 0;padding:7px 9px;border-left:3px solid #cf222e;'
-            'background:#fff5f5;line-height:1.8">'
-            '<b style="color:#cf222e;font-size:13.5px">🔻 保护正在向墙下迁移</b>'
-            f'<span style="color:#6e7781">（下方比墙上多涨 '
-            f'{mg.get("gap", 0):+.1f}pp）</span><br>'
-            + '　→　'.join(parts) +
-            '<br><span style="color:#6e7781;font-size:11.5px">'
-            '钱从贴身保护撤出、堆到更低的行权价，且更低那档涨价更急 —— '
-            '这是市场在给「跌破」定价，不只是在墙上防守。<br>'
-            '⚠️ <b>这是结构描述，不是预测</b>：同样的结构历史上出现 30 次，'
-            '当日真跌破墙的只有 1 次。它解释「为什么看跌」，不承诺「会跌到哪」。'
+            f'<div style="margin:6px 0;padding:7px 9px;border-left:3px solid {col};'
+            f'background:{bg};line-height:1.8">'
+            f'<b style="color:{col};font-size:13.5px">🧱 {_esc(mg["shape"])}</b>{gtxt}<br>'
+            + '<br>'.join(lines) +
+            f'<br><span style="color:#6e7781;font-size:11.5px">{_esc(mg["why"])}。<br>'
+            '⚠️ <b>这是结构描述，不是预测</b>：2026-08-28 黄金「向墙下搬家」当日确实'
+            '跌破，但 QQQ 同样形态却守住了；预测版本回测 30 次只中 1 次，未上线。'
             '</span></div>')
 
     # 主力到期：谁占了当天增仓的大头 —— 由数据决定，不由固定分桶决定

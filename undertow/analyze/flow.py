@@ -1947,3 +1947,82 @@ def migration_text(fa: "FlowAnalysis", wall: float | None,
         "next_pct": ((nxt / spot - 1) * 100 if (nxt and spot) else None),
         "wall_pct": ((wall / spot - 1) * 100 if spot else None),
     }
+
+
+def wall_structure(fa: "FlowAnalysis", wall: float | None,
+                   spot: float | None = None) -> dict | None:
+    """墙附近在发生什么 —— 两种结构都要认得出来，不能只认看跌那一种。
+
+    用户 2026-08-29：「白银当日守在 60 价位，也正好是墙的位置…
+    这样的描述我才能简单直白地理解。」
+
+    2026-08-28 的两个样板，正好相反：
+
+      黄金（跌破 413，收 408.89）—— **保护向墙下搬家**
+        420P 平掉 981 张（IV −2.5pp）→ 413P 加 38,631（IV +1.0pp）
+        → 408P 加 38,319（IV **+3.4pp，涨得最急**）
+        钱一路往下堆，越低那档涨价越急 = 在给「跌破」定价。
+
+      白银（守住 60，收 60.02）—— **墙上方有人卖 put 托底**
+        64.0P 平掉 968（IV −3.0pp）
+        61.5/62.0/62.5P 合计加 2,797，但判定是【卖方做支撑】，IV −4.4/−6.3pp
+        60.0P（墙）加 9,068，买方保护，IV +0.3~1.6pp
+        有人在墙上方收权利金，等于押注不破 60 = 防线扎在墙上，没有下移。
+
+    ⚠️ 与 break_warning() 同样的界线：本函数**只描述结构，不预测**，
+    不参与方向判定、不改置信度。
+    """
+    if not wall or not fa.changes or wall <= 0:
+        return None
+    below = [c for c in fa.changes if c.kind == "P" and wall * 0.94 <= c.strike < wall - 0.01]
+    at = [c for c in fa.changes if c.kind == "P" and abs(c.strike - wall) < 0.51]
+    above = [c for c in fa.changes if c.kind == "P" and wall + 0.01 < c.strike <= wall * 1.06]
+    if not at and not below:
+        return None
+
+    def _sum(legs, f=None):
+        return sum(c.d_oi for c in legs if (f is None or f(c)))
+
+    def _wiv(legs):
+        rows = [(abs(c.d_oi), c.adj_iv_pp) for c in legs if c.prev_iv > 0 and c.d_oi]
+        w = sum(x for x, _ in rows)
+        return round(sum(x * y for x, y in rows) / w, 2) if w else None
+
+    buy = lambda c: c.bias == "bearish"        # put 的 bearish = 买方保护
+    sell = lambda c: c.bias == "bullish"       # put 的 bullish = 卖方做支撑（收权利金）
+
+    at_buy, at_sell = _sum(at, buy), _sum(at, sell)
+    ab_buy, ab_sell = _sum(above, buy), _sum(above, sell)
+    bl_buy = _sum(below, buy)
+    iv_at, iv_below, iv_above = _wiv(at), _wiv(below), _wiv(above)
+
+    # 形态判定：只看结构，不看结果
+    shape, why = "", ""
+    if (bl_buy >= BREAK_MIN_DOI and iv_below is not None and iv_at is not None
+            and iv_below - iv_at >= BREAK_IV_GAP):
+        shape = "保护向墙下搬家"
+        why = "钱一路往更低的行权价堆，且越低那档涨价越急 —— 在给「跌破」定价"
+    elif ab_sell > 0 and ab_sell >= abs(ab_buy) and at_buy > 0:
+        shape = "墙上方有人卖 put 托底"
+        why = ("有人在墙上方收权利金（IV 反而回落），等于押注不破这道墙；"
+               "墙上本身仍是买方保护 —— 防线扎在墙上，没有下移")
+    elif at_buy > 0 and bl_buy < BREAK_MIN_DOI:
+        shape = "就地加固这道墙"
+        why = "增仓集中在墙上，墙下方没有像样的接力 —— 防线没有后撤"
+    else:
+        return None
+
+    top_below = max(below, key=lambda c: c.d_oi, default=None) if below else None
+    return {
+        "wall": wall, "shape": shape, "why": why,
+        "wall_pct": ((wall / spot - 1) * 100 if spot else None),
+        "at_buy": at_buy, "at_sell": at_sell, "iv_at": iv_at,
+        "above_buy": ab_buy, "above_sell": ab_sell, "iv_above": iv_above,
+        "below_buy": bl_buy, "iv_below": iv_below,
+        "next_line": (top_below.strike if (top_below and top_below.d_oi > 0) else None),
+        "next_doi": (top_below.d_oi if top_below else 0),
+        "next_pct": ((top_below.strike / spot - 1) * 100
+                     if (top_below and spot) else None),
+        "gap": (round(iv_below - iv_at, 2)
+                if (iv_below is not None and iv_at is not None) else None),
+    }

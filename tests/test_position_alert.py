@@ -473,35 +473,48 @@ def test_break_warning_is_not_wired_into_any_output():
     # 描述必须自带回测结论，否则读者会当成预测
     html = (root / "undertow" / "report" / "html.py").read_text("utf-8")
     assert "这是结构描述，不是预测" in html
-    assert "只有 1 次" in html, "必须写明 30 次里只中 1 次"
+    assert "30 次只中 1 次" in html, "必须写明回测结论"
+    assert "QQQ 同样形态却守住了" in html, "必须给出反例，否则读者只记得成功那次"
     # 且不得进入方向判定
     flow = (root / "undertow" / "analyze" / "flow.py").read_text("utf-8")
     assert "绝不参与方向判定，也不改置信度" in flow
     print("PASS test_break_warning_is_not_wired_into_any_output")
 
 
-def test_migration_text_describes_never_predicts():
-    """保护迁移只做结构描述，措辞必须跟着正负走。
+def test_wall_structure_covers_both_shapes():
+    """墙附近的形态必须两种都认得出来 —— 只认看跌那一种会漏掉守住的情形。
 
-    用户 2026-08-29：「这句话太关键了…是最重要的描述，应该直接写在 index 里
-    标粗高亮。」—— 但它是描述不是预测：同样结构 30 次里只有 1 次真跌破墙。
+    用户 2026-08-29：「白银当日守在 60 价位，也正好是墙的位置。」
+    旧的 migration_text 只认「保护向墙下搬家」，白银什么都输出不了。
     """
     from undertow.report.html import _facts_html
 
-    fx = {"migration": {"wall": 413.0, "inner_doi": -981, "at_doi": 38631,
-                        "next_line": 408.0, "next_doi": 38319,
-                        "iv_at": 1.0, "iv_beyond": 3.43, "gap": 2.43,
-                        "next_pct": -3.44, "wall_pct": -2.26}}
-    h = _facts_html(fx)
-    assert "保护正在向墙下迁移" in h
+    # 黄金 8/28：向墙下搬家（当日跌破 413，收 408.89）
+    gold = {"migration": {"wall": 413.0, "shape": "保护向墙下搬家",
+                          "why": "钱一路往更低的行权价堆", "wall_pct": -2.26,
+                          "at_buy": 38497, "at_sell": 0, "iv_at": 1.0,
+                          "above_buy": -2487, "above_sell": -1660, "iv_above": -0.26,
+                          "below_buy": 46236, "iv_below": 3.43,
+                          "next_line": 408.0, "next_doi": 38319,
+                          "next_pct": -3.44, "gap": 2.43}}
+    h = _facts_html(gold)
+    assert "保护向墙下搬家" in h
     assert "408" in h and "-3.4%" in h, "必须给出下一档位置与距现价的幅度"
     assert "涨得最急" in h
-    assert "这是结构描述，不是预测" in h and "只有 1 次" in h, \
-        "必须自带回测结论，否则读者会当成预测"
 
-    # 负数不得叫「加仓」—— SPY 2026-08-28 曾显示「加仓 -19,204 张」
-    fx2 = dict(fx)
-    fx2["migration"] = dict(fx["migration"], at_doi=-19204, inner_doi=0)
-    h2 = _facts_html(fx2)
-    assert "平掉 19,204 张" in h2 and "加仓 -19,204" not in h2
-    print("PASS test_migration_text_describes_never_predicts")
+    # 白银 8/28：就地加固（当日守住 60，收 60.02）
+    silver = {"migration": {"wall": 60.0, "shape": "就地加固这道墙",
+                            "why": "增仓集中在墙上", "wall_pct": -5.8,
+                            "at_buy": 9506, "at_sell": 50, "iv_at": 1.02,
+                            "above_buy": 3460, "above_sell": 3095, "iv_above": -1.47,
+                            "below_buy": 426, "iv_below": 3.48,
+                            "next_line": None, "next_doi": 0, "gap": None}}
+    h2 = _facts_html(silver)
+    assert "就地加固这道墙" in h2
+    assert "涨得最急" not in h2, "守住的形态不该出现看跌措辞"
+
+    # 负数不得叫「加」—— SPY 曾显示「加仓 -19,204 张」
+    spy = {"migration": dict(gold["migration"], at_buy=-19204)}
+    h3 = _facts_html(spy)
+    assert "平掉 19,204 张" in h3 and "加 -19,204" not in h3
+    print("PASS test_wall_structure_covers_both_shapes")

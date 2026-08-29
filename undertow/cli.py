@@ -1429,6 +1429,10 @@ def cmd_report(args) -> int:
                 from undertow.analyze.indicators import render_section as _ind_sec
                 from undertow.report.html import _esc as _e
                 _indicators_html = _ind_sec(_labels, _e)
+                # 到期分桶明细：index 上只留一个标记，明细在品种研报里
+                from undertow.analyze.flow import (expiry_split as _exp_sp,
+                                                   expiry_split_html as _exp_html)
+                _indicators_html = _exp_html(_exp_sp(fa), _e) + _indicators_html
             except Exception as e:      # 指标分组失败要出声，不能静默少一栏
                 print(f"⚠️ {inst.key} 指标分组失败：{type(e).__name__}: {e}", file=sys.stderr)
                 _labels, _indicators_html, _scores = [], "", {}

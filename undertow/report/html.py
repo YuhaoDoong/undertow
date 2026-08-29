@@ -1514,19 +1514,22 @@ def _facts_html(fx: dict) -> str:
                         f'　　⚠️ 这与综合结论「{_esc(bias)}」方向相反 —— '
                         f'综合是多层投票，持仓流只是其中近端一层，冲突时以你的持仓周期为准</span>')
 
-    # 到期分桶：加总的方向读数会掩盖结构，摆出来让人自己看
+    # 到期一致性：index 上只给【一个标记】，四个桶的明细留给品种研报
+    # （用户 2026-08-29：「index 可以不用拆开这么多到期桶，如果全部同向可以
+    #   额外标注一下。我觉得合并已经很有价值了。品种内部研报可以再拆开」）
     sp = fx.get("exp_split") or []
-    if sp:
-        cells = []
-        for b in sp:
-            col = "#cf222e" if b["sign"] < 0 else ("#1a7f37" if b["sign"] > 0 else "#6e7781")
-            word = "看跌" if b["sign"] < 0 else ("看涨" if b["sign"] > 0 else "平")
-            cells.append(f'<span style="color:{col}">{_esc(b["bucket"])} '
-                         f'<b>{word} {b["ratio"]:.0f}×</b>'
-                         f'<span style="color:#6e7781">({_n(b["doi"])})</span></span>')
-        warn = ('　<b style="color:#bf8700">⚠️ 各到期方向不一致，加总读数不可信</b>'
-                if fx.get("exp_conflict") else "")
-        rows.append("📆 按到期拆开：" + "　｜　".join(cells) + warn)
+    if sp and len([b for b in sp if b["sign"]]) >= 2:
+        if fx.get("exp_conflict"):
+            rows.append('<b style="color:#bf8700">📆 各到期方向不一致</b>'
+                        '<span style="color:#6e7781">'
+                        ' —— 上面这个合并读数是把矛盾抹平后的结果，别当强信号看'
+                        '（明细见品种研报）</span>')
+        else:
+            n_b = len([b for b in sp if b["sign"]])
+            word = "看跌" if sp[0]["sign"] < 0 else "看涨"
+            rows.append(f'<b style="color:#1a7f37">✅ {n_b} 个到期桶【全部同向{word}】'
+                        f'</b><span style="color:#6e7781">'
+                        f' —— 不是某个到期的孤立现象，是全曲线共识</span>')
 
     legs = fx.get("big_legs") or []
     if legs:

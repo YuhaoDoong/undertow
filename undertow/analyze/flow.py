@@ -1680,3 +1680,52 @@ def flip_driver_summary(fa: "FlowAnalysis") -> str:
             concls.append("下方买保护加深（下行风险仍被付费定价——空头押注或多头买保险，防御性动作）")
     concl = "；".join(concls) if concls else "多空双向换仓，期权端方向分歧"
     return "驱动分解：" + "、".join(bits) + " → " + concl
+
+
+def expiry_split_html(rows: list[dict], esc) -> str:
+    """品种研报里的到期分桶明细表。
+
+    index 上只留一个「全部同向 / 方向不一致」的标记，明细放这里
+    （用户 2026-08-29 的分工要求）。
+    """
+    if not rows:
+        return ""
+    conflict = _dte_dirs_conflict(rows)
+    trs = []
+    for b in rows:
+        col = "#cf222e" if b["sign"] < 0 else ("#1a7f37" if b["sign"] > 0 else "#6e7781")
+        word = "看跌" if b["sign"] < 0 else ("看涨" if b["sign"] > 0 else "两边平")
+        trs.append(
+            f'<tr><td style="padding:5px 8px">{esc(b["bucket"])}</td>'
+            f'<td style="padding:5px 8px;text-align:right">{b["legs"]}</td>'
+            f'<td style="padding:5px 8px;text-align:right">{b["doi"]:,}</td>'
+            f'<td style="padding:5px 8px;text-align:right;color:#cf222e">{b["dn"]:,}</td>'
+            f'<td style="padding:5px 8px;text-align:right;color:#1a7f37">{b["up"]:,}</td>'
+            f'<td style="padding:5px 8px;font-weight:700;color:{col}">'
+            f'{word} {b["ratio"]:.1f}×</td></tr>')
+    head = ('<b style="color:#bf8700">⚠️ 各到期方向不一致</b> —— '
+            '上面那个合并的方向读数只是把矛盾抹平，不可当强信号看。'
+            if conflict else
+            '<b style="color:#1a7f37">✅ 各到期桶方向一致</b> —— '
+            '不是某个到期的孤立现象，是全曲线共识。')
+    return (
+        '<h2>按剩余到期拆开</h2>'
+        f'<div class="sub" style="margin-bottom:6px">{head}</div>'
+        '<table style="width:100%;border-collapse:collapse;font-size:12.5px">'
+        '<tr style="background:#f6f8fa">'
+        '<th style="text-align:left;padding:5px 8px">剩余到期</th>'
+        '<th style="text-align:right;padding:5px 8px">腿数</th>'
+        '<th style="text-align:right;padding:5px 8px">|ΔOI|</th>'
+        '<th style="text-align:right;padding:5px 8px">看跌</th>'
+        '<th style="text-align:right;padding:5px 8px">看涨</th>'
+        '<th style="text-align:left;padding:5px 8px">该桶倾向</th></tr>'
+        + "".join(trs) + '</table>'
+        '<div class="sub" style="margin-top:6px">'
+        '为什么要拆：加权增仓（上面那个倍数）是把 <b>45 天内所有到期加总</b>算的。'
+        '0DTE 的深度价外 put 是「赌明天」，30 天后的 put 是「中期保护」，'
+        '含义完全不同，加总后就分不出来了。<br>'
+        '实测 127 个样本：各桶同向时命中 67.4%（日聚类 95% 区间 [54.5%, 80.0%]），'
+        '打架时 53.1%（区间跨 50%）。差值中位 +14.7pp 但区间跨 0，样本不足以下结论，'
+        '故只用来降置信、不否决方向。<br>'
+        '⭐ 与「大波动日 vs 横盘日」不同：<b>各桶是否同向在开盘前就能算出来</b>，'
+        '不是事后分层，所以它是可执行的。</div>')

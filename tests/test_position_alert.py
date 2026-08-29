@@ -304,3 +304,32 @@ def test_expiry_buckets_split_and_conflict():
     assert _split_by_dte(legs, "") == []
     assert _split_by_dte([], ref) == []
     print("PASS test_expiry_buckets_split_and_conflict")
+
+
+def test_index_shows_one_marker_detail_goes_to_instrument_report():
+    """index 上只留一个到期一致性标记，四桶明细放品种研报。
+
+    用户 2026-08-29：「index 可以不用拆开这么多到期桶，如果全部同向可以
+    额外标注一下。我觉得合并已经很有价值了。品种内部研报可以再拆开」
+    """
+    from undertow.analyze.flow import expiry_split_html
+    from undertow.report.html import _facts_html
+
+    sp_same = [{"bucket": "0-2天", "legs": 5, "dn": 9000, "up": 300,
+                "sign": -1, "ratio": 30.0, "doi": 9300},
+               {"bucket": "22天+", "legs": 4, "dn": 8000, "up": 200,
+                "sign": -1, "ratio": 40.0, "doi": 8200}]
+    idx = _facts_html({"exp_split": sp_same, "exp_conflict": False})
+    assert "全部同向" in idx, "同向时必须额外标注 —— 这是更强的信号"
+    assert "0-2天" not in idx, "index 不该再列各桶明细"
+
+    idx2 = _facts_html({"exp_split": sp_same, "exp_conflict": True})
+    assert "各到期方向不一致" in idx2 and "别当强信号看" in idx2
+    assert "22天+" not in idx2
+
+    # 明细必须在品种研报的表里
+    detail = expiry_split_html(sp_same, lambda x: x)
+    assert "0-2天" in detail and "22天+" in detail
+    assert "30.0×" in detail and "40.0×" in detail
+    assert "开盘前就能算出来" in detail, "必须说明这是可执行闸门而非事后分层"
+    print("PASS test_index_shows_one_marker_detail_goes_to_instrument_report")

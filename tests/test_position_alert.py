@@ -465,8 +465,43 @@ def test_break_warning_is_not_wired_into_any_output():
     src = (root / "undertow" / "analyze" / "flow.py").read_text("utf-8")
     assert "没有预测力，不要上线" in src, "必须写明回测结论"
     assert "事后调参" in src, "必须写明「加距离过滤」属于事后调参"
-    # 不得被 cli / html 引用
+    # break_warning 本身（预测）不得被 cli/html 直接引用；
+    # migration_text（只做结构描述、不参与判定）可以 —— 这条界线不能模糊。
     for f in ("cli.py", "report/html.py"):
         txt = (root / "undertow" / f).read_text("utf-8")
-        assert "break_warning" not in txt, f"{f} 不得引用未通过回测的信号"
+        assert "break_warning" not in txt, f"{f} 不得直接引用未通过回测的预测信号"
+    # 描述必须自带回测结论，否则读者会当成预测
+    html = (root / "undertow" / "report" / "html.py").read_text("utf-8")
+    assert "这是结构描述，不是预测" in html
+    assert "只有 1 次" in html, "必须写明 30 次里只中 1 次"
+    # 且不得进入方向判定
+    flow = (root / "undertow" / "analyze" / "flow.py").read_text("utf-8")
+    assert "绝不参与方向判定，也不改置信度" in flow
     print("PASS test_break_warning_is_not_wired_into_any_output")
+
+
+def test_migration_text_describes_never_predicts():
+    """保护迁移只做结构描述，措辞必须跟着正负走。
+
+    用户 2026-08-29：「这句话太关键了…是最重要的描述，应该直接写在 index 里
+    标粗高亮。」—— 但它是描述不是预测：同样结构 30 次里只有 1 次真跌破墙。
+    """
+    from undertow.report.html import _facts_html
+
+    fx = {"migration": {"wall": 413.0, "inner_doi": -981, "at_doi": 38631,
+                        "next_line": 408.0, "next_doi": 38319,
+                        "iv_at": 1.0, "iv_beyond": 3.43, "gap": 2.43,
+                        "next_pct": -3.44, "wall_pct": -2.26}}
+    h = _facts_html(fx)
+    assert "保护正在向墙下迁移" in h
+    assert "408" in h and "-3.4%" in h, "必须给出下一档位置与距现价的幅度"
+    assert "涨得最急" in h
+    assert "这是结构描述，不是预测" in h and "只有 1 次" in h, \
+        "必须自带回测结论，否则读者会当成预测"
+
+    # 负数不得叫「加仓」—— SPY 2026-08-28 曾显示「加仓 -19,204 张」
+    fx2 = dict(fx)
+    fx2["migration"] = dict(fx["migration"], at_doi=-19204, inner_doi=0)
+    h2 = _facts_html(fx2)
+    assert "平掉 19,204 张" in h2 and "加仓 -19,204" not in h2
+    print("PASS test_migration_text_describes_never_predicts")

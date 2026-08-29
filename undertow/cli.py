@@ -325,6 +325,14 @@ def _flow_facts(fa, ga, ga_prev, snap_prev, snap_curr, spot: float, ref) -> dict
         out["exp_conflict"] = expiry_split_conflict(_sp)
         # 主力到期：由数据决定哪个到期日占大头，不预先划桶（用户 2026-08-29）
         out["dominant"] = dominant_expiry(ch, getattr(fa, "curr_date", None))
+        # 保护迁移的结构描述 —— 只陈述"钱从哪撤到哪、哪档涨价最急"，不做预测。
+        # 这是用户 2026-08-29 点名要置顶高亮的那段描述。
+        try:
+            from undertow.analyze.flow import migration_text
+            pw_ = getattr(ga, "put_wall", None) if ga is not None else None
+            out["migration"] = migration_text(fa, pw_, spot)
+        except Exception as e:
+            print(f"⚠️ 保护迁移描述失败：{type(e).__name__}: {e}", file=sys.stderr)
     # 持续墙：排除 <7 天到期后的承接/压制区 —— 这才是"跌到哪有人接"的答案。
     # 现行墙位会被 0DTE 劫持：2026-08-28 黄金 put 墙报 413，其 42,388 张里
     # 40,394 张（95%）当天到期，收盘即归零；排除后第一大是 400（≈金价 4416），

@@ -1907,3 +1907,43 @@ def break_warning(fa: "FlowAnalysis", wall: float | None,
         "inner_retreat": retreat,
         "inner_doi": inner_doi,
     }
+
+
+def migration_text(fa: "FlowAnalysis", wall: float | None,
+                   spot: float | None = None) -> dict | None:
+    """保护仓位迁移的【结构描述】—— 只陈述发生了什么，不预测会发生什么。
+
+    用户 2026-08-29：「这句话太关键了…既解释了极强看跌信号的原因，又描述了墙的
+    位置，还给出了可能点位，甚至跌幅。是最重要的描述，应该直接写在 index 里
+    标粗高亮。」
+
+    2026-08-28 黄金的样板：
+      420P 平仓 −1,661（IV −2.5pp）→ 413P 加仓 +39,664（IV +1.0pp）
+      → 408P 加仓 +38,319（IV +3.6pp，涨得最急）
+    当天 GLD 收 408.89。
+
+    ⚠️ 与 break_warning() 的分工，这条界线不能模糊：
+      · break_warning() 是【预测】墙会不会破 —— 回测 30 次触发只中 1 次，**不上线**；
+      · 本函数只做【描述】—— 陈述"钱从哪撤到哪、哪一档涨价最急"，
+        这是可核对的事实，不是对未来的断言。
+      所以它可以进报告，但**绝不参与方向判定，也不改置信度**。
+    """
+    w = break_warning(fa, wall, "P")
+    if not w:
+        return None
+    inner = [c for c in fa.changes if c.kind == "P" and wall < c.strike <= wall * 1.04]
+    at = [c for c in fa.changes if c.kind == "P" and abs(c.strike - wall) < 0.51]
+    inner_doi = sum(c.d_oi for c in inner)
+    at_doi = sum(c.d_oi for c in at)
+    nxt = w.get("next_line")
+    return {
+        "wall": wall,
+        "inner_doi": inner_doi,                     # 墙上方（更贴身）的净变化
+        "at_doi": at_doi,                           # 墙上的净变化
+        "next_line": nxt,
+        "next_doi": w.get("next_line_doi", 0),
+        "iv_at": w.get("iv_at"), "iv_beyond": w.get("iv_beyond"),
+        "gap": w.get("gap"),
+        "next_pct": ((nxt / spot - 1) * 100 if (nxt and spot) else None),
+        "wall_pct": ((wall / spot - 1) * 100 if spot else None),
+    }

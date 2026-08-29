@@ -1545,6 +1545,39 @@ def _facts_html(fx: dict) -> str:
     # 到期一致性：index 上只给【一个标记】，四个桶的明细留给品种研报
     # （用户 2026-08-29：「index 可以不用拆开这么多到期桶，如果全部同向可以
     #   额外标注一下。我觉得合并已经很有价值了。品种内部研报可以再拆开」）
+    # 🔻 保护迁移 —— 用户 2026-08-29 点名要置顶高亮的那段描述：
+    #    「既解释了极强看跌信号的原因，又描述了墙的位置，还给出了可能点位，甚至跌幅」
+    #    ⚠️ 它是【结构描述】不是预测：同样的结构 30 次里只有 1 次真跌破了墙。
+    mg = fx.get("migration")
+    if mg and mg.get("next_line"):
+        # 措辞跟着正负走：负数不能叫"加仓"（SPY 2026-08-28 曾显示"加仓 -19,204 张"）
+        def _act(v):
+            v = v or 0
+            return (f"加仓 {v:+,.0f} 张" if v > 0 else
+                    (f"平掉 {abs(v):,.0f} 张" if v < 0 else "没动"))
+        inner = mg.get("inner_doi") or 0
+        parts = []
+        if inner < 0:
+            parts.append(f'墙<b>上方</b>（更贴身）{_act(inner)}')
+        parts.append(f'<b>{mg["wall"]:g}</b>（墙上）{_act(mg.get("at_doi"))}，'
+                     f'IV {mg.get("iv_at", 0):+.1f}pp')
+        parts.append(f'<b style="font-size:14px">{mg["next_line"]:g}</b>'
+                     f'（{mg.get("next_pct", 0):+.1f}%）{_act(mg.get("next_doi"))}，'
+                     f'<b>IV {mg.get("iv_beyond", 0):+.1f}pp —— 涨得最急</b>')
+        rows.append(
+            '<div style="margin:6px 0;padding:7px 9px;border-left:3px solid #cf222e;'
+            'background:#fff5f5;line-height:1.8">'
+            '<b style="color:#cf222e;font-size:13.5px">🔻 保护正在向墙下迁移</b>'
+            f'<span style="color:#6e7781">（下方比墙上多涨 '
+            f'{mg.get("gap", 0):+.1f}pp）</span><br>'
+            + '　→　'.join(parts) +
+            '<br><span style="color:#6e7781;font-size:11.5px">'
+            '钱从贴身保护撤出、堆到更低的行权价，且更低那档涨价更急 —— '
+            '这是市场在给「跌破」定价，不只是在墙上防守。<br>'
+            '⚠️ <b>这是结构描述，不是预测</b>：同样的结构历史上出现 30 次，'
+            '当日真跌破墙的只有 1 次。它解释「为什么看跌」，不承诺「会跌到哪」。'
+            '</span></div>')
+
     # 主力到期：谁占了当天增仓的大头 —— 由数据决定，不由固定分桶决定
     dom = fx.get("dominant")
     if dom:

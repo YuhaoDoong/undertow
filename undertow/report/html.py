@@ -1625,10 +1625,23 @@ def render_index_html(items: list[dict], asof: str, *, family_notes=None) -> str
             # 字符串不等会把它误判成方向冲突。
             _sgn = lambda t: 1 if "偏多" in t else (-1 if "偏空" in t else 0)
             split = bool(nb and mb and _sgn(nb) * _sgn(mb) < 0)
+            # ⚠️ **带上分数**。白银 2026-08-28 就栽在这：近端 −0.7 差 0.1 没够到
+            # −0.8 的门槛，被显示成"中性"，于是 split=False、分层 pill 也不出现，
+            # 用户只看到一个"偏多"。可它的实际构成是：看跌 1 票全来自 Flow，
+            # 看涨 3 票全来自 Macro，Gamma 内部抵消 —— 那天白银 −4.38%。
+            # 门槛本身是拍的，−0.7 与 0.0 都叫"中性"却是两回事，必须让人看见数字。
+            ns, ms = it.get("near_score"), it.get("mid_score")
+            _f = lambda v: f"({v:+.1f})" if isinstance(v, (int, float)) else ""
+            # 分数已明确偏向、但没够到门槛 → 单独标出来，别让它悄悄变成"中性"
+            near_edge = (isinstance(ns, (int, float)) and _sgn(nb) == 0
+                         and abs(ns) >= 0.5)
+            edge_note = (f'　<b style="color:#bf8700">近端实为'
+                         f'{"偏空" if ns < 0 else "偏多"}倾向，仅差 '
+                         f'{abs(abs(ns) - 0.8):.1f} 未过门槛</b>' if near_edge else "")
             layer_pill = (f'<span class="pill" style="background:'
-                          f'{"#bf8700" if split else "#57606a"};color:#fff">'
-                          f'近 {_esc(nb or "—")} / 中 {_esc(mb or "—")}'
-                          f'{" ⚠分歧" if split else ""}</span>')
+                          f'{"#bf8700" if (split or near_edge) else "#57606a"};color:#fff">'
+                          f'近 {_esc(nb or "—")}{_f(ns)} / 中 {_esc(mb or "—")}{_f(ms)}'
+                          f'{" ⚠分歧" if split else ""}</span>{edge_note}')
         # 结论行去模板化：原来八个品种全是「不做空 · 长线拿住」，改为直接摆事实。
         verdict_div = _facts_html(it.get("facts") or {})
         # 六组互不同源的指标，各一枚小标签（用户 2026-08-29 要求）
@@ -1641,11 +1654,16 @@ def render_index_html(items: list[dict], asof: str, *, family_notes=None) -> str
         cards.append(
             f'<a class="card" style="display:block;text-decoration:none;color:inherit" href="{_esc(fn)}">'
             f'<h1 style="font-size:17px">{_esc(name)}</h1>'
-            + (f'<span class="badge" style="background:#bf8700">'
-               f'中期{_esc(mb)}｜近端{_esc(nb)}</span>'
-               if split else
-               f'<span class="badge" style="background:{color}">{_esc(bias)}</span>')
-            + f'<span class="pill">可信度 {_esc(conf)}</span>{vt}{sig_pill}{os_pill}'
+            # 每个品种都写出近端和中期，哪怕一样也分开写（用户 2026-08-29）。
+            # 只给一个综合字，正是"近端偏空、中期偏多"被压成"偏多"的来源；
+            # TLT/SPY/IWM 此前就因为两层同向而只显示一个"偏多"。
+            + (f'<span class="badge" style="background:'
+               f'{"#bf8700" if (split or near_edge) else color}">'
+               f'近端 {_esc(nb or "—")}{_f(ns)} ｜ 中期 {_esc(mb or "—")}{_f(ms)}'
+               f'{" ⚠分歧" if split else ""}</span>'
+               f'<span class="pill" style="background:{color};color:#fff">'
+               f'综合 {_esc(bias)}</span>')
+            + f'<span class="pill">可信度 {_esc(conf)}</span>{vt}{sig_pill}{os_pill}{edge_note}'
             f'{labels_div}'
             f'{verdict_div}'
             f'{summary_div}'
@@ -1670,8 +1688,51 @@ def render_index_html(items: list[dict], asof: str, *, family_notes=None) -> str
         f'<body><div class="wrap"><div class="card"><h1>大宗商品综合研报</h1>'
         f'<div class="sub">{_esc(asof)} · 各品种摘要 + 强信号告警 · 点击进入详情</div></div>'
         f'{alert_block}{fam_block}{"".join(cards)}'
+        + _horizon_legend() +
         '<div class="foot">undertow · 规则化情景工具，非投资建议 · 纯标准库生成</div></div></body></html>'
     )
+
+
+def _horizon_legend() -> str:
+    """index 底部图例：近端/中期到底怎么分的、分数门槛在哪。
+
+    用户 2026-08-29：「现在中期和近端的定义，你写在 index 最后面，搞个图例。
+    每个品种都要写出中期和近端，哪怕一样也要区分写」
+    """
+    return (
+        '<div class="card" style="background:#f6f8fa">'
+        '<h2 style="margin:0 0 6px;font-size:15px">📖 图例：近端 / 中期怎么分的</h2>'
+        '<table style="width:100%;border-collapse:collapse;font-size:12.5px">'
+        '<tr style="background:#fff"><th style="text-align:left;padding:5px 8px">层</th>'
+        '<th style="text-align:left;padding:5px 8px">由哪些指标投票</th>'
+        '<th style="text-align:left;padding:5px 8px">数据频率</th>'
+        '<th style="text-align:left;padding:5px 8px">对谁最重要</th></tr>'
+        '<tr><td style="padding:5px 8px"><b>近端</b></td>'
+        '<td style="padding:5px 8px">🧱 结构（墙位/伽马）＋ 💰 增仓（当日资金流）</td>'
+        '<td style="padding:5px 8px">日频</td>'
+        '<td style="padding:5px 8px">短线、高杠杆期权 —— <b>账户小的时候主战场在这里</b></td></tr>'
+        '<tr><td style="padding:5px 8px"><b>中期</b></td>'
+        '<td style="padding:5px 8px">🏦 大资金（CFTC 持仓）＋ 🌍 宏观（利率/美元）</td>'
+        '<td style="padding:5px 8px">周频 / 月频</td>'
+        '<td style="padding:5px 8px">底仓、远期期权</td></tr>'
+        '</table>'
+        '<div class="sub" style="margin-top:8px"><b>分数门槛</b>（两层各自算，'
+        '正数看多、负数看空）：'
+        '<code>≥+2.0 偏多</code>　<code>≥+0.8 偏多(弱)</code>　'
+        '<code>−0.8 ~ +0.8 中性</code>　<code>≤−0.8 偏空(弱)</code>　'
+        '<code>≤−2.0 偏空</code>　'
+        '两侧都有强票且净分小 → <code>分歧(双向)</code></div>'
+        '<div class="sub" style="margin-top:6px">'
+        '「综合」是两层合起来投票的结果，<b>不是两层的平均</b>；'
+        '近端与中期方向相反时标 ⚠分歧，此时按你自己的持仓周期择一为主。<br>'
+        '分数就在括号里 —— <b>门槛是拍的，−0.7 和 0.0 都叫「中性」却是两回事</b>，'
+        '所以贴着门槛（|分|≥0.5 却仍判中性）时会单独标出来。</div>'
+        '<div class="sub" style="margin-top:6px;color:#9a6700">'
+        '⚠️ <b>这个划分是按【数据更新频率】分的，不是按【结论对未来多少天有效】分的。</b>'
+        '近端层里混着当日到期和 45 天后到期的仓位；中期层的 COT 是上周五的持仓。'
+        '所以「近端」≈「日频数据得出的结论」，不等于「只对明天有效」。'
+        '真正按时域重新定义是待办事项。</div>'
+        '</div>')
 
 
 # ————————————————————————————————————————————————————————— 实盘持仓评价

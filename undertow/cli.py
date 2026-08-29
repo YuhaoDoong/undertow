@@ -1499,6 +1499,8 @@ def cmd_report(args) -> int:
                       "near_bias": getattr(o, "near_bias", ""),
                       "mid_bias": getattr(o, "mid_bias", ""),
                       "trade_date": td, "today": today.isoformat(),
+                      "near_score": getattr(o, "near_score", None),
+                      "mid_score": getattr(o, "mid_score", None),
                       "facts": _fx | {"bias": o.bias}, "spot": o.spot,
                       "labels": _lb, "scores": _sc}
                      for _, o, fn, ss, v, sr, td, _fx, _lb, _sc in written]

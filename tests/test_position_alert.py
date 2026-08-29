@@ -333,3 +333,32 @@ def test_index_shows_one_marker_detail_goes_to_instrument_report():
     assert "30.0×" in detail and "40.0×" in detail
     assert "开盘前就能算出来" in detail, "必须说明这是可执行闸门而非事后分层"
     print("PASS test_index_shows_one_marker_detail_goes_to_instrument_report")
+
+
+def test_every_card_shows_both_horizons_with_scores():
+    """每个品种都要写出近端和中期，哪怕两层同向也要分开写。
+
+    用户 2026-08-29：白银近端 -0.7 差 0.1 没够到 -0.8 门槛 → 显示"中性"，
+    且因为两层不冲突，连分层都不显示，只剩一个"偏多"。可它的实际构成是
+    看跌 1 票全来自 Flow、看涨 3 票全来自 Macro。那天白银 -4.38%。
+    """
+    from undertow.report.html import render_index_html
+
+    items = [
+        # 两层同向：以前只显示一个"偏多"
+        {"name": "TLT", "fn": "t.html", "bias": "偏多", "conf": "高",
+         "near_bias": "偏多(弱)", "mid_bias": "偏多", "near_score": 0.8, "mid_score": 3.9},
+        # 贴着门槛的"中性"：必须标出来
+        {"name": "SLV", "fn": "s.html", "bias": "偏多", "conf": "中",
+         "near_bias": "中性", "mid_bias": "偏多", "near_score": -0.7, "mid_score": 3.1},
+    ]
+    h = render_index_html(items, "2026-08-28")
+    assert h.count("近端") >= 2 and h.count("中期") >= 2, "每张卡都要分开写两层"
+    assert "(+0.8)" in h and "(+3.9)" in h, "必须带分数 —— 门槛是拍的"
+    assert "(-0.7)" in h
+    assert "仅差 0.1 未过门槛" in h, "贴着门槛的中性必须单独标注"
+    # 底部图例
+    assert "图例：近端 / 中期怎么分的" in h
+    assert "CFTC" in h and "日频" in h
+    assert "按【数据更新频率】分的" in h, "必须承认这不是按预测时域分的"
+    print("PASS test_every_card_shows_both_horizons_with_scores")

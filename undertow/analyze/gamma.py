@@ -324,3 +324,52 @@ def structure_delta(prev: "GammaAnalysis", curr: "GammaAnalysis",
     if prev.put_wall_oi > 0 and curr.put_wall_oi > 0:
         wall("P", prev.put_wall, prev.put_wall_oi, curr.put_wall, curr.put_wall_oi)
     return out
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 持续墙位 —— 排除临近到期后剩下的支撑/阻力（2026-08-29，用户追问引出）
+# ═══════════════════════════════════════════════════════════════════════════
+PERSIST_MIN_DTE = 7      # 至少还有 7 天才算"持续"；更短的下周就不在了
+
+
+def persistent_walls(snap, today, *, min_dte: int = PERSIST_MIN_DTE,
+                     max_dte: int = 60, band: float = 0.15) -> dict:
+    """排除临近到期后的 put/call 墙 —— 这才是「跌到哪有人接」的答案。
+
+    **为什么必须分开报**（用户 2026-08-29：「他给了位置，我们能给吗？」）：
+    2026-08-28 我们报的 put 墙是 GLD 413（≈金价 4560），可它 42,388 张里有
+    **40,394 张（95%）是当天到期的** —— 当天收盘就归零，它是当日的 pin，
+    不是下周的承接区。
+    排除 ≤7 天后重算，第一大 put 墙是 GLD 400（≈金价 4416，OI 59,563），
+    **正是外部分析者当天给出的「该承接区 建短线多头」位置**。
+    数据我们一直有，只是被 0DTE 盖住了。
+
+    ⚠️ 两种墙都有用，别互相替代：
+      · 当日 pin（≤2天）    → 只对今天的日内有意义，收盘即失效
+      · 持续墙（≥7天）      → 波段的承接/压制区，做价差组合看这个
+    """
+    lo, hi = snap.spot * (1 - band), snap.spot * (1 + band)
+    put_agg: dict = {}
+    call_agg: dict = {}
+    for c in snap.contracts:
+        if not c.open_interest or not (lo <= c.strike <= hi):
+            continue
+        d = (c.expiry - today).days
+        if not (min_dte <= d <= max_dte):
+            continue
+        tgt = put_agg if c.kind == "P" else call_agg
+        tgt[c.strike] = tgt.get(c.strike, 0) + c.open_interest
+
+    def _top(agg, n=3):
+        return [{"strike": k, "oi": v} for k, v in
+                sorted(agg.items(), key=lambda x: -x[1])[:n]]
+    pw = _top(put_agg)
+    cw = _top(call_agg)
+    return {
+        "min_dte": min_dte, "max_dte": max_dte,
+        "put_wall": pw[0]["strike"] if pw else None,
+        "put_wall_oi": pw[0]["oi"] if pw else 0,
+        "call_wall": cw[0]["strike"] if cw else None,
+        "call_wall_oi": cw[0]["oi"] if cw else 0,
+        "put_top": pw, "call_top": cw,
+    }

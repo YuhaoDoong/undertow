@@ -1491,6 +1491,24 @@ def _facts_html(fx: dict) -> str:
     if wall:
         rows.append("🧱 " + "　｜　".join(wall))
 
+    # 持续墙：排除临近到期后的承接/压制区。上面那行的墙可能被 0DTE 劫持 ——
+    # 当日到期的墙收盘即归零，它是当天的 pin，不是下周的承接区。
+    pw = fx.get("persist") or {}
+    if pw.get("put_wall") or pw.get("call_wall"):
+        bits = []
+        if pw.get("put_wall"):
+            bits.append(f'<span style="color:#1a7f37">下方承接 '
+                        f'<b>{pw["put_wall"]:g}</b> {_n(pw["put_wall_oi"])} 张</span>')
+        if pw.get("call_wall"):
+            bits.append(f'<span style="color:#cf222e">上方压制 '
+                        f'<b>{pw["call_wall"]:g}</b> {_n(pw["call_wall_oi"])} 张</span>')
+        same_p = pw.get("put_wall") == fx.get("put_wall")
+        note = ("" if same_p else
+                '　<b style="color:#bf8700">⚠️ 与上面的墙不同 —— '
+                '上面那个含临近到期，收盘即失效</b>')
+        rows.append(f'⏳ <b>{pw.get("min_dte", 7)} 天以上才算数</b>（波段用）：'
+                    + "　｜　".join(bits) + note)
+
     # ⚠️ 报 call/put 张数比会误导 —— 白银 2026-08-28 的教训：index 写
     # 「call 是 put 的 2.2 倍」看着像看涨，可那批 call（69C/67C）全是【卖方压制】，
     # 卖上方 call 是看跌动作。当天白银 -4.38%。所以主行必须按【买卖方】分侧，

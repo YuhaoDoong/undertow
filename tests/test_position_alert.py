@@ -411,3 +411,44 @@ def test_dominant_expiry_is_data_driven_not_hardcoded():
               L(D(2026, 9, 18), 1000, "bearish"), L(D(2026, 9, 25), 1000, "bearish")]
     assert dominant_expiry(spread, ref) is None, "力量分散时必须说「没有主力」"
     print("PASS test_dominant_expiry_is_data_driven_not_hardcoded")
+
+
+def test_persistent_walls_exclude_expiring_pins():
+    """持续墙必须排除临近到期 —— 当日到期的墙收盘即归零，不是承接区。
+
+    用户 2026-08-29 追问「他给了位置，我们能给吗？」引出：
+    2026-08-28 我们报的黄金 put 墙是 GLD 413，其 42,388 张里 40,394 张（95%）
+    是当天到期的。排除 ≤7 天后第一大是 GLD 400（≈金价 4416），
+    正是外部分析者当天给的「该承接区 建短线多头」位置 —— 数据一直有，被 0DTE 盖住了。
+    """
+    from dataclasses import dataclass
+    from datetime import date as D
+    from undertow.analyze.gamma import persistent_walls
+
+    @dataclass
+    class C:
+        expiry: D
+        strike: float
+        kind: str
+        open_interest: int
+
+    @dataclass
+    class S:
+        spot: float
+        contracts: list
+
+    today = D(2026, 8, 27)
+    snap = S(422.5, [
+        C(D(2026, 8, 28), 413, "P", 40000),   # 次日到期的巨墙 —— 收盘就没了
+        C(D(2026, 9, 18), 400, "P", 20000),   # 22 天后 —— 真正的承接区
+        C(D(2026, 10, 16), 400, "P", 30000),  # 50 天后
+        C(D(2026, 9, 18), 430, "C", 25000),
+    ])
+    w = persistent_walls(snap, today)
+    assert w["put_wall"] == 400, "413 是次日到期的 pin，不该被当成承接区"
+    assert w["put_wall_oi"] == 50000, "同行权价的多个到期要合并"
+    assert w["call_wall"] == 430
+    # 全部都是临近到期时，应当给不出持续墙而不是硬挑一个
+    only_near = S(422.5, [C(D(2026, 8, 28), 413, "P", 40000)])
+    assert persistent_walls(only_near, today)["put_wall"] is None
+    print("PASS test_persistent_walls_exclude_expiring_pins")

@@ -325,6 +325,15 @@ def _flow_facts(fa, ga, ga_prev, snap_prev, snap_curr, spot: float, ref) -> dict
         out["exp_conflict"] = expiry_split_conflict(_sp)
         # 主力到期：由数据决定哪个到期日占大头，不预先划桶（用户 2026-08-29）
         out["dominant"] = dominant_expiry(ch, getattr(fa, "curr_date", None))
+    # 持续墙：排除 <7 天到期后的承接/压制区 —— 这才是"跌到哪有人接"的答案。
+    # 现行墙位会被 0DTE 劫持：2026-08-28 黄金 put 墙报 413，其 42,388 张里
+    # 40,394 张（95%）当天到期，收盘即归零；排除后第一大是 400（≈金价 4416），
+    # 正是外部分析者当天给的「该承接区 建短线多头」位置。
+    try:
+        from undertow.analyze.gamma import persistent_walls
+        out["persist"] = persistent_walls(snap_curr, ref)
+    except Exception as e:
+        print(f"⚠️ 持续墙计算失败：{type(e).__name__}: {e}", file=sys.stderr)
         # 最大的几笔新建仓（含 Delta，供判断是尾部险还是贴身防御）
         big = sorted([x for x in ch if x.d_oi > 0], key=lambda x: -x.d_oi)[:3]
         out["big_legs"] = [{

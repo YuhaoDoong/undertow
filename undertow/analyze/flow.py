@@ -521,6 +521,36 @@ def concentration_stats(fa: "FlowAnalysis") -> dict:
     }
 
 
+def _dte_structure(fa: "FlowAnalysis") -> dict:
+    """开火当日增仓的【到期结构】：押注的时间跨度有多短。
+
+    只记录，不参与任何判定（见 probe_strong_signal 里的说明）。
+    """
+    adds = [c for c in fa.changes if c.d_oi > 0]
+    tot = sum(c.d_oi for c in adds)
+    if not tot:
+        return {"dte_wavg": None, "dte_share_le2": None, "dte_share_le7": None,
+                "dte_top1": None}
+    try:
+        ref = date.fromisoformat(fa.curr_date) if getattr(fa, "curr_date", None) else None
+    except (ValueError, TypeError):
+        ref = None
+    if ref is None:
+        return {"dte_wavg": None, "dte_share_le2": None, "dte_share_le7": None,
+                "dte_top1": None}
+    dtes = [((c.expiry - ref).days, c.d_oi) for c in adds]
+    top = max(adds, key=lambda c: c.d_oi)
+    return {
+        # 按张数加权的平均剩余到期天数
+        "dte_wavg": round(sum(d * n for d, n in dtes) / tot, 2),
+        # ≤2 天 / ≤7 天到期的增仓占比 —— 短到期占比高 = 押的是急涨急跌
+        "dte_share_le2": round(sum(n for d, n in dtes if 0 <= d <= 2) / tot, 3),
+        "dte_share_le7": round(sum(n for d, n in dtes if 0 <= d <= 7) / tot, 3),
+        # 最大一笔的剩余到期天数
+        "dte_top1": (top.expiry - ref).days,
+    }
+
+
 def probe_strong_signal(fa: "FlowAnalysis") -> dict:
     """台账用：强信号各分量的原始数值 + 逐条闸门通过情况。**不下结论。**
 
@@ -571,6 +601,15 @@ def probe_strong_signal(fa: "FlowAnalysis") -> dict:
         "d_spot_pct": round(vs.d_spot_pct, 3) if vs else None,
         "d_atm_pp": round(vs.d_atm_pp, 3) if vs else None,
         "d_skew25_pp": round(vs.d_skew25_pp, 3) if vs else None,
+        # —— 到期结构（预先注册的假设，2026-08-28 黄金之后加）——————————
+        # 假设：期权的到期日直接告诉你这笔押注的时间跨度，所以**信号的有效
+        # 前瞻窗口应当由它自己的到期结构决定**，不是全局固定 5 日。
+        # 由来：8/28 黄金 413P/408P 是【次日到期】的 7.8 万张，押的就是 1 天；
+        # 用 5 日窗口评估会把这种锐利信号稀释掉。
+        # ⚠️ 现在【只记不用】：台账里 1 日窗口 60%(12/20, p=0.50) 看着比 5 日的
+        # 33% 好，但 10 日也是 60% —— 这种起伏正是噪音。四个窗口里挑最好的
+        # 就是多重比较。攒够样本再按本字段分组检验，不得事后挑窗口。
+        **_dte_structure(fa),
     }
     for direction in ("看涨", "看跌"):
         up_side = direction == "看涨"

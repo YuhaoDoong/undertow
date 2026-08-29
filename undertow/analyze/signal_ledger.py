@@ -164,6 +164,12 @@ def record(key: str, *, on_date: str, prev_date: str | None, spot: float,
         "oi_build_ratio": probe.get("oi_build_ratio"),
         "d_spot_pct": probe.get("d_spot_pct"), "d_atm_pp": probe.get("d_atm_pp"),
         "d_skew25_pp": probe.get("d_skew25_pp"),
+        # 到期结构（预先注册假设：短到期押注 → 短前瞻窗口才对得上；只记不用，
+        # 见 flow.probe_strong_signal 的说明。2026-08-28 黄金之后加）
+        "dte_wavg": probe.get("dte_wavg"),
+        "dte_share_le2": probe.get("dte_share_le2"),
+        "dte_share_le7": probe.get("dte_share_le7"),
+        "dte_top1": probe.get("dte_top1"),
         # —— 三条核心闸门的【连续值】：没有它们就无法校准 3×/4×/3,000 这三个阈值 ——
         "bull_pressure_ratio": bull.get("pressure_ratio"),
         "bear_pressure_ratio": bear.get("pressure_ratio"),

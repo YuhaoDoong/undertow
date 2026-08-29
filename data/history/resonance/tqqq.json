@@ -49,5 +49,22 @@
   "forward_5d": null,
   "forward_10d": null,
   "forward_20d": null
+ },
+ {
+  "instrument": "tqqq",
+  "date": "2026-08-29",
+  "spot": 29491.75,
+  "state": "仅结构",
+  "struct_bias": "偏空(弱)",
+  "band": "中性",
+  "regime": "牛",
+  "stretch": -0.3544552234621065,
+  "stretch_pctile": 0.392,
+  "drawdown": -5.650479448213992,
+  "dd_pctile": 0.316,
+  "combo_pctile": 0.354,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
  }
 ]

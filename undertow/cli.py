@@ -305,12 +305,24 @@ def _flow_facts(fa, ga, ga_prev, snap_prev, snap_curr, spot: float, ref) -> dict
         ch = fa.changes
         out["call_add"] = sum(x.d_oi for x in ch if x.kind == "C" and x.d_oi > 0)
         out["put_add"] = sum(x.d_oi for x in ch if x.kind == "P" and x.d_oi > 0)
+        # ⚠️ 只报 call/put 张数比会【误导】：白银 2026-08-28 就是活例子——
+        # index 写「call 是 put 的 2.2 倍」看着像看涨，可那批 call（69C/67C，
+        # 纯净度 0.95+）全是【卖方压制】，卖上方 call 是看跌动作。当天白银 -4.38%。
+        # 必须按买卖方判定归类：买put/卖call = 看跌侧，买call/卖put = 看涨侧。
+        # 用 flow 已有的 bias（bearish/bullish/neutral）而不是匹配 judgment 文案——
+        # judgment 有「买方保护」「买方轻微保护」「买方保护(新建·主动方未知)」等多种
+        # 变体，字符串匹配必漏。bias 本来就是给聚合用的粗方向。
+        out["bear_add"] = sum(x.d_oi for x in ch if x.d_oi > 0 and x.bias == "bearish")
+        out["bull_add"] = sum(x.d_oi for x in ch if x.d_oi > 0 and x.bias == "bullish")
         # 最大的几笔新建仓（含 Delta，供判断是尾部险还是贴身防御）
         big = sorted([x for x in ch if x.d_oi > 0], key=lambda x: -x.d_oi)[:3]
         out["big_legs"] = [{
             "expiry": x.expiry.isoformat()[5:], "strike": x.strike, "kind": x.kind,
             "d_oi": x.d_oi, "delta": x.delta,
-            "dte": (x.expiry - ref).days,   # 从今天算还有几天到期
+            # ⚠️ 参照点必须是【快照描述的交易日】，不是今天：这批 OI 变化发生在
+            # 那一天，"还剩几天到期" 只有相对那天才有意义。用 today 在数据过期时
+            # 会算出「-1天后到期」（2026-08-29 实际出现过）。
+            "dte": (x.expiry - ref).days,
             "pct": (x.strike / spot - 1) * 100 if spot else 0.0,
         } for x in big]
     return out
@@ -1334,7 +1346,8 @@ def cmd_report(args) -> int:
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
             try:
-                _facts = _flow_facts(fa, ga, ga_prev, prev, curr, curr.spot, today)
+                _facts = _flow_facts(fa, ga, ga_prev, prev, curr, curr.spot,
+                                     date.fromisoformat(curr_date_s) if curr_date_s else today)
             except Exception as e:   # 出错要出声，不能静默变空卡片
                 print(f"⚠️ {inst.key} 索引事实块生成失败：{type(e).__name__}: {e}",
                       file=sys.stderr)
@@ -1373,7 +1386,7 @@ def cmd_report(args) -> int:
                       "near_bias": getattr(o, "near_bias", ""),
                       "mid_bias": getattr(o, "mid_bias", ""),
                       "trade_date": td, "today": today.isoformat(),
-                      "facts": _fx, "spot": o.spot}
+                      "facts": _fx | {"bias": o.bias}, "spot": o.spot}
                      for _, o, fn, ss, v, sr, td, _fx in written]
         index_html = render_index_html(idx_items, today.isoformat())
         index_path = reports_dir / f"index_{today.isoformat()}.html"

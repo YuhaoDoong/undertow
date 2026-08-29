@@ -1482,15 +1482,35 @@ def _facts_html(fx: dict) -> str:
     if wall:
         rows.append("🧱 " + "　｜　".join(wall))
 
+    # ⚠️ 报 call/put 张数比会误导 —— 白银 2026-08-28 的教训：index 写
+    # 「call 是 put 的 2.2 倍」看着像看涨，可那批 call（69C/67C）全是【卖方压制】，
+    # 卖上方 call 是看跌动作。当天白银 -4.38%。所以主行必须按【买卖方】分侧，
+    # call/put 张数只作为括号里的补充。
+    be, bu = fx.get("bear_add"), fx.get("bull_add")
     ca, pa = fx.get("call_add"), fx.get("put_add")
-    if ca is not None and pa is not None and (ca or pa):
-        if pa > ca * 1.3:
-            who = f"put 是 call 的 {pa / max(ca, 1):.1f} 倍"
-        elif ca > pa * 1.3:
-            who = f"call 是 put 的 {ca / max(pa, 1):.1f} 倍"
+    if be is not None and bu is not None and (be or bu):
+        if be > bu * 1.3:
+            who = f"<b>看跌侧是看涨侧的 {be / max(bu, 1):.1f} 倍</b>"
+        elif bu > be * 1.3:
+            who = f"<b>看涨侧是看跌侧的 {bu / max(be, 1):.1f} 倍</b>"
         else:
-            who = "两边差不多"
-        rows.append(f"📊 昨天新建仓：PUT +{_n(pa)} 张 vs CALL +{_n(ca)} 张（{who}）")
+            who = "两边势均力敌"
+        raw = (f"；张数上 call +{_n(ca)} / put +{_n(pa)}"
+               if ca is not None and pa is not None else "")
+        rows.append(f"📊 昨天新建仓（按买卖方分侧）：看跌 +{_n(be)} 张 vs "
+                    f"看涨 +{_n(bu)} 张（{who}{raw}）")
+        rows.append('<span style="color:#57606a;font-size:11.5px">'
+                    '　　看跌侧＝买 put ＋ 卖 call；看涨侧＝买 call ＋ 卖 put</span>')
+        # 与综合结论相反时【自己说出来】。用户 2026-08-27 的核心抱怨就是
+        # 「指标之间互相打架」——藏起来不会让矛盾消失，只会让人自己撞上。
+        # 白银 2026-08-28 正是这样：综合写「偏多」，持仓流是看跌 2.4 倍，当天 -4.38%。
+        bias = fx.get("bias", "")
+        lean = 1 if bu > be * 1.3 else (-1 if be > bu * 1.3 else 0)
+        bsign = 1 if "偏多" in bias else (-1 if "偏空" in bias else 0)
+        if lean and bsign and lean != bsign:
+            rows.append(f'<span style="color:#bf8700;font-weight:700">'
+                        f'　　⚠️ 这与综合结论「{_esc(bias)}」方向相反 —— '
+                        f'综合是多层投票，持仓流只是其中近端一层，冲突时以你的持仓周期为准</span>')
 
     legs = fx.get("big_legs") or []
     if legs:
@@ -1501,8 +1521,22 @@ def _facts_html(fx: dict) -> str:
             # 还是买张彩票防黑天鹅的关键，不能只报张数。
             # ⚠️ 判据必须是 Delta 不是离现价的%：同样 -2%，今天到期的 Delta 近 0，
             #    一个月后到期的可能有 0.3。用%会把两者混为一谈。
-            tag = "彩票" if d < 0.10 else ("半仓" if d < 0.30 else "实打实")
             days = g.get("dte")
+            # ⚠️ 2026-08-28 黄金的教训：我把 413P/408P（次日到期、Δ0.10/Δ0.04、
+            # 共 7.8 万张、IV 被买涨 +3.63pp）标成「彩票」，说它几乎没方向暴露。
+            # 次日 GLD -3.24%，收 408.89，正好打穿 408。判断反了：
+            #   · 长到期 + 低 Δ  = 真尾部险，防黑天鹅，方向信息弱
+            #   · 短到期 + 低 Δ + 大量新开仓 = 只有【立刻】大跌/大涨才值钱，
+            #     方向信息最强。用只适用于长到期的判据去贴短到期，
+            #     会把最强的信号贴成最弱的。
+            if days is not None and days <= 2 and d < 0.15:
+                tag = "⚠️赌急跌" if g["kind"] == "P" else "⚠️赌急涨"
+            elif d < 0.10:
+                tag = "远期尾部险"
+            elif d < 0.30:
+                tag = "半仓"
+            else:
+                tag = "实打实"
             when = "今日到期" if days == 0 else (f"{days}天后到期" if days is not None else "")
             parts.append(f'<b>{g["strike"]:g}{g["kind"]}</b> +{_n(g["d_oi"])}'
                          f'（{g["pct"]:+.0f}%·{when}·Δ{d:.2f}·{tag}）')

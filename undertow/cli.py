@@ -1389,8 +1389,20 @@ def cmd_report(args) -> int:
                                                        weighted_score as _st_w,
                                                        near_weighted as _st_near)
                 _sts = _st_collect(outlook, fa=fa, stretch=stretch_read)
+                # 波动压缩（观察项，不进综合分 —— 区间跨 0，样本不足）
+                from undertow.analyze.squeeze import assess as _sq_assess
+                _ivh = [r.atm_iv_pp for r in (getattr(vr, "history", None) or [])
+                        if getattr(r, "atm_iv_pp", None)] if vr is not None else []
+                _cv = getattr(getattr(fa, "vol", None), "curr", None)
+                _sq = _sq_assess(
+                    iv_history=_ivh or None,
+                    iv_now=getattr(_cv, "atm_iv_pp", None) if _cv else None,
+                    highs=(tech_series.highs if tech_series else None),
+                    lows=(tech_series.lows if tech_series else None),
+                    closes=(tech_series.closes if tech_series else None))
                 _scores = {"legacy": getattr(outlook, "bias_score", None),
-                           "weighted": _st_w(_sts)[0], "near": _st_near(_sts)}
+                           "weighted": _st_w(_sts)[0], "near": _st_near(_sts),
+                           "squeeze": _sq}
                 from undertow.analyze.indicators import render_section as _ind_sec
                 from undertow.report.html import _esc as _e
                 _indicators_html = _ind_sec(_labels, _e)

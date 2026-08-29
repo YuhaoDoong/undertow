@@ -179,6 +179,10 @@ def render_pills(labels: list[Label], esc, *, scores: dict | None = None) -> str
             f'margin:2px 4px 2px 0;padding:1px 7px;border-radius:9px;font-size:11.5px;'
             f'border:1px solid {l.color}44;background:{l.color}12;color:{l.color}">'
             f'{l.icon} {esc(l.name)} <b>{esc(l.reading)}</b></span>')
+    sq_pill = ""
+    if scores and scores.get("squeeze") is not None:
+        from undertow.analyze.squeeze import render_pill as _sq_pill
+        sq_pill = _sq_pill(scores["squeeze"], esc)
     sc = ""
     if scores:
         old, new = scores.get("legacy"), scores.get("weighted")
@@ -196,7 +200,7 @@ def render_pills(labels: list[Label], esc, *, scores: dict | None = None) -> str
             sc = ('<div style="margin-top:4px;font-size:12px">📐 ' + '　｜　'.join(parts) +
                   '<span style="color:#6e7781;font-size:11px">'
                   '　（两把不同的尺子，别直接比大小）</span></div>')
-    return ('<div style="margin-top:6px">' + "".join(ps) + sc +
+    return ('<div style="margin-top:6px">' + "".join(ps) + sq_pill + sc +
             '<div style="font-size:11px;color:#6e7781;margin-top:2px">'
             '六组互不同源的证据（同源的已合并，如 ⚡强信号与「增仓」共线，不重复计票）'
             '</div></div>')

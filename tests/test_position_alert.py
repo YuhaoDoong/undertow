@@ -195,3 +195,31 @@ def test_strength_saturates_not_linear():
     assert _log_sat(20.0, 1.3, 20.0) == 1.0
     assert _log_sat(53.5, 1.3, 20.0) == 1.0, "超过上限必须饱和，不能继续放大"
     print("PASS test_strength_saturates_not_linear")
+
+
+def test_squeeze_is_observation_only_never_direction():
+    """波动压缩只说「可能要变天」，绝不说「往哪边变」。
+
+    区间跨 0（[-5,+44]pp / [-6,+41]pp），样本不足以下结论，
+    所以它不得进综合分、不得产生方向票。
+    """
+    from undertow.analyze.squeeze import assess, Squeeze
+    import undertow.analyze.squeeze as SQ
+    # 模块里不能有任何方向词的输出接口
+    src = (Path(__file__).resolve().parents[1] / "undertow" / "analyze"
+           / "squeeze.py").read_text("utf-8")
+    assert "不参与任何方向判定" in src and "不进综合分" in src
+    for bad in ("看涨", "看跌", "偏多", "偏空"):
+        assert f'"{bad}"' not in src, f"压缩模块不得输出方向词 {bad}"
+    # 区间收敛那一维实测 -9pp，明确不纳入
+    assert "不纳入" in src, "10/60 日区间收敛实测无效，必须写明已排除"
+    # 两维都算不出来时必须 ok=False，不许用单腿硬撑
+    assert assess(iv_history=None, iv_now=None, highs=None, lows=None,
+                  closes=None) == Squeeze()
+    # 双低才算 tight
+    r = assess(iv_history=[20.0] * 50, iv_now=10.0,
+               highs=[10 + i * 0.01 for i in range(70)],
+               lows=[9.9 + i * 0.01 for i in range(70)],
+               closes=[9.95 + i * 0.01 for i in range(70)])
+    assert r.ok and r.iv_pctile is not None
+    print("PASS test_squeeze_is_observation_only_never_direction")

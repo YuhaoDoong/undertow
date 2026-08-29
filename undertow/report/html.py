@@ -1449,6 +1449,13 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
     )
 
 
+def _near_color(ns) -> str:
+    """badge 底色跟【近端】走 —— 综合已不显示，颜色不该再由它决定。"""
+    if not isinstance(ns, (int, float)):
+        return "#6e7781"
+    return "#1a7f37" if ns >= 0.8 else ("#cf222e" if ns <= -0.8 else "#6e7781")
+
+
 def _facts_html(fx: dict) -> str:
     """索引卡的【事实块】：墙在哪、比昨天厚了还是薄了、昨天新建仓 call/put 谁多、最大几笔在哪。
 
@@ -1506,13 +1513,16 @@ def _facts_html(fx: dict) -> str:
         # 与综合结论相反时【自己说出来】。用户 2026-08-27 的核心抱怨就是
         # 「指标之间互相打架」——藏起来不会让矛盾消失，只会让人自己撞上。
         # 白银 2026-08-28 正是这样：综合写「偏多」，持仓流是看跌 2.4 倍，当天 -4.38%。
-        bias = fx.get("bias", "")
+        # ⚠️ 比对对象必须是【中期】，不是综合、也不是近端：
+        #   · 和近端比是同义反复 —— 增仓本来就是近端的组成部分；
+        #   · 综合已从索引页移除（它就是把两层压成一个字的那个东西）。
+        mid = fx.get("mid_bias", "")
         lean = 1 if bu > be * 1.3 else (-1 if be > bu * 1.3 else 0)
-        bsign = 1 if "偏多" in bias else (-1 if "偏空" in bias else 0)
-        if lean and bsign and lean != bsign:
+        msign = 1 if "偏多" in mid else (-1 if "偏空" in mid else 0)
+        if lean and msign and lean != msign:
             rows.append(f'<span style="color:#bf8700;font-weight:700">'
-                        f'　　⚠️ 这与综合结论「{_esc(bias)}」方向相反 —— '
-                        f'综合是多层投票，持仓流只是其中近端一层，冲突时以你的持仓周期为准</span>')
+                        f'　　⚠️ 这与中期结论「{_esc(mid)}」方向相反 —— '
+                        f'短线资金和中期持仓不同步，按你自己的持仓周期择一为主</span>')
 
     # 到期一致性：index 上只给【一个标记】，四个桶的明细留给品种研报
     # （用户 2026-08-29：「index 可以不用拆开这么多到期桶，如果全部同向可以
@@ -1657,12 +1667,15 @@ def render_index_html(items: list[dict], asof: str, *, family_notes=None) -> str
             # 每个品种都写出近端和中期，哪怕一样也分开写（用户 2026-08-29）。
             # 只给一个综合字，正是"近端偏空、中期偏多"被压成"偏多"的来源；
             # TLT/SPY/IWM 此前就因为两层同向而只显示一个"偏多"。
+            # ⚠️ 不再显示「综合」——用户 2026-08-29：「你的综合偏多就算了吧，
+            # 这个 label 干嘛用呢？有近端和中期了」。综合正是把两层压成一个字的
+            # 那个东西：白银近端 −0.7 看跌、中期 +3.1 看涨，合成出来一个"偏多"，
+            # 而它那天 −4.38%。两层摊开，读者自己按持仓周期取舍。
+            # （综合分仍在内部用于 verdict/策略层，只是不再上索引页。）
             + (f'<span class="badge" style="background:'
-               f'{"#bf8700" if (split or near_edge) else color}">'
+               f'{"#bf8700" if (split or near_edge) else _near_color(ns)}">'
                f'近端 {_esc(nb or "—")}{_f(ns)} ｜ 中期 {_esc(mb or "—")}{_f(ms)}'
-               f'{" ⚠分歧" if split else ""}</span>'
-               f'<span class="pill" style="background:{color};color:#fff">'
-               f'综合 {_esc(bias)}</span>')
+               f'{" ⚠分歧" if split else ""}</span>')
             + f'<span class="pill">可信度 {_esc(conf)}</span>{vt}{sig_pill}{os_pill}{edge_note}'
             f'{labels_div}'
             f'{verdict_div}'

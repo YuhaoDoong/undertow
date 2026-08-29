@@ -354,6 +354,9 @@ def test_every_card_shows_both_horizons_with_scores():
     ]
     h = render_index_html(items, "2026-08-28")
     assert h.count("近端") >= 2 and h.count("中期") >= 2, "每张卡都要分开写两层"
+    # 「综合」不再上索引页：它就是把两层压成一个字的那个东西
+    # （用户 2026-08-29：「你的综合偏多就算了吧，有近端和中期了」）
+    assert "综合 偏" not in h, "索引页不得再显示综合结论"
     assert "(+0.8)" in h and "(+3.9)" in h, "必须带分数 —— 门槛是拍的"
     assert "(-0.7)" in h
     assert "仅差 0.1 未过门槛" in h, "贴着门槛的中性必须单独标注"

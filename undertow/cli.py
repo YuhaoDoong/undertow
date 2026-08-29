@@ -1501,7 +1501,8 @@ def cmd_report(args) -> int:
                       "trade_date": td, "today": today.isoformat(),
                       "near_score": getattr(o, "near_score", None),
                       "mid_score": getattr(o, "mid_score", None),
-                      "facts": _fx | {"bias": o.bias}, "spot": o.spot,
+                      "facts": _fx | {"bias": o.bias, "mid_bias": o.mid_bias},
+                      "spot": o.spot,
                       "labels": _lb, "scores": _sc}
                      for _, o, fn, ss, v, sr, td, _fx, _lb, _sc in written]
         # 同族一致性：金银同向、QQQ/TQQQ 同向 —— 不一致时并排摆出来（用户 2026-08-29）
@@ -1549,7 +1550,11 @@ def cmd_report(args) -> int:
             else:
                 flag = f"  ⚡{ss.level}{ss.direction}"
         vh = f"  · {v.headline}" if v and getattr(v, "ok", False) else ""
-        print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence}){flag}{vh}  → {reports_dir / fn}")
+        # 与索引页一致：不报综合，只报近端/中期两层（用户 2026-08-29）
+        _nb = (o.near_bias or "—")
+        _mb = (o.mid_bias or "—")
+        print(f"  {inst.key:7s} 近{_nb:9s}中{_mb:9s}(可信度{o.confidence})"
+              f"{flag}{vh}  → {reports_dir / fn}")
     if index_path:
         print(f"  索引页 → {index_path}")
 

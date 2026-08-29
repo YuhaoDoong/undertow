@@ -166,6 +166,10 @@ def test_indicator_families_are_non_overlapping_sources():
     assert "53.5×" in pills, "强度必须显示 —— 53.5× 与 1.4× 不能看起来一样"
     sec = render_section(labs, lambda x: x)
     assert "同一套压力数" in sec, "必须声明 ⚡强信号与增仓共线、不重复计票"
+    # ⚠️ 不得把六组说成六份独立证据 —— 结构与增仓同出一份快照（存量 vs 增量），
+    # 波动率面又参与了增仓的买卖方推断。2026-08-29 收紧了这处表述。
+    assert "并非六份互相独立" in sec, "必须点明六组不是互相独立的证据"
+    assert "同一份快照" in sec
     assert "固定" in sec and "0.8 票" in sec, "必须写明权重不随强度变化这个已知缺陷"
     print("PASS test_indicator_families_are_non_overlapping_sources")
 

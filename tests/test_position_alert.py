@@ -452,3 +452,21 @@ def test_persistent_walls_exclude_expiring_pins():
     only_near = S(422.5, [C(D(2026, 8, 28), 413, "P", 40000)])
     assert persistent_walls(only_near, today)["put_wall"] is None
     print("PASS test_persistent_walls_exclude_expiring_pins")
+
+
+def test_break_warning_is_not_wired_into_any_output():
+    """破墙预警回测无效，不得接入任何判定或展示。
+
+    2026-08-29 实测：138 个品种日触发 30 次 → 跌破 1 次（3%）；
+    未触发 108 次 → 跌破 1 次（1%）。二项 p=1.0，两组无差别。
+    8/28 黄金那次 next_line=408、次日实际收 408.89，看着准，是运气。
+    """
+    root = Path(__file__).resolve().parents[1]
+    src = (root / "undertow" / "analyze" / "flow.py").read_text("utf-8")
+    assert "没有预测力，不要上线" in src, "必须写明回测结论"
+    assert "事后调参" in src, "必须写明「加距离过滤」属于事后调参"
+    # 不得被 cli / html 引用
+    for f in ("cli.py", "report/html.py"):
+        txt = (root / "undertow" / f).read_text("utf-8")
+        assert "break_warning" not in txt, f"{f} 不得引用未通过回测的信号"
+    print("PASS test_break_warning_is_not_wired_into_any_output")

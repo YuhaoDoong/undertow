@@ -1809,3 +1809,101 @@ def expiry_split_html(rows: list[dict], esc) -> str:
         '故只用来降置信、不否决方向。<br>'
         '⭐ 与「大波动日 vs 横盘日」不同：<b>各桶是否同向在开盘前就能算出来</b>，'
         '不是事后分层，所以它是可执行的。</div>')
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 破墙预警 —— 保护仓位向墙下迁移（2026-08-29，用户追问「破墙前有没有信号」）
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# 2026-08-28 黄金给出的样板（GLD 当日收 408.89，跌破 413 这道 put 墙）：
+#   420P（-0.6%，最贴身）  −975/−686 张   IV −0.45/−2.49pp   买方【了结】
+#   413P（-2.3%，就是墙）  +39,664 张     IV +1.01pp         买方保护
+#   408P（-3.4%，墙下方）  +38,319 张     IV +3.63pp         买方保护 ← 次日收在这
+#
+# 三件事同时发生才算数：
+#   ① 墙【下方】有显著买方增仓；
+#   ② 墙下方的相对 IV 涨得比墙上【更急】—— 这是核心。若只是在墙上防守，
+#      下方不该涨价更快；下方涨更快 = 市场在给「跌破」定价；
+#   ③ 墙【上方】的保护在撤（减仓或 IV 回落）—— 贴身保险不再需要，
+#      因为防线已经整体下移。
+#
+# ⚠️⚠️ 回测结论：**这个信号没有预测力，不要上线**（2026-08-29 实测）
+#   138 个品种日里触发 30 次 → 当日收盘跌破墙 1 次（3%）；
+#   未触发 108 次 → 跌破 1 次（1%）。二项 p = 1.0000，两组没有差别。
+#   8/28 黄金那次（next_line=408，次日实际收 408.89）看着很准，**是运气**。
+#
+#   查到的两个原因，都不是调参能救的：
+#   1. 触发日里墙大多离现价 2~18%（如 8/11 WTI 墙 110、收 127.61，差 18%），
+#      "跌破"本来就不在议程上 —— 墙下方 put 涨价只是正常的尾部保险需求。
+#   2. 整个样本 146 天里只有 2 次真的跌破 put 墙（1.4%），
+#      基础发生率太低，根本无从验证。
+#
+#   ⚠️ 「加一个『墙必须离现价 5% 以内』的过滤就好了」是**事后调参** ——
+#      那个条件是看着失败案例反推出来的，必须用新样本重新验证才算数。
+#      在那之前，本函数只保留代码与观察记录，不接入任何判定与展示。
+#
+# 阈值全部未校准（没有样本），只作提示、不参与方向判定。
+BREAK_BELOW_BAND = 0.06     # 墙下方多远算"下一道防线"
+BREAK_ABOVE_BAND = 0.04     # 墙上方多远算"贴身保护"
+BREAK_MIN_DOI = 2_000       # 下方增仓的最小规模
+BREAK_IV_GAP = 0.5          # 下方相对 IV 需比墙上高出多少 pp
+
+
+def break_warning(fa: "FlowAnalysis", wall: float | None,
+                  kind: str = "P") -> dict | None:
+    """墙是否正在被"提前定价跌破"。kind='P' 看下方支撑，'C' 看上方阻力。
+
+    返回 None 表示没有这个信号（不是"墙很稳"，只是没读到迁移迹象）。
+    """
+    if not wall or not fa.changes:
+        return None
+    below_lo = wall * (1 - BREAK_BELOW_BAND)
+    above_hi = wall * (1 + BREAK_ABOVE_BAND)
+    if kind == "C":                      # call 墙镜像：关注墙【上方】的新建仓
+        below_lo, above_hi = wall * (1 + BREAK_BELOW_BAND), wall * (1 - BREAK_ABOVE_BAND)
+
+    def _pick(f):
+        return [c for c in fa.changes if c.kind == kind and f(c.strike)]
+
+    if kind == "P":
+        beyond = _pick(lambda k: below_lo <= k < wall - 0.01)
+        at = _pick(lambda k: abs(k - wall) < 0.51)
+        inner = _pick(lambda k: wall + 0.01 < k <= above_hi)
+    else:
+        beyond = _pick(lambda k: wall + 0.01 < k <= below_lo)
+        at = _pick(lambda k: abs(k - wall) < 0.51)
+        inner = _pick(lambda k: above_hi <= k < wall - 0.01)
+
+    add_beyond = sum(c.d_oi for c in beyond if c.d_oi > 0 and c.bias == "bearish"
+                     ) if kind == "P" else sum(
+        c.d_oi for c in beyond if c.d_oi > 0 and c.bias == "bullish")
+    if add_beyond < BREAK_MIN_DOI:
+        return None
+
+    def _wiv(legs):
+        """按 |ΔOI| 加权的相对 IV 变化（只算有前日 IV 可比的腿）。"""
+        rows = [(abs(c.d_oi), c.adj_iv_pp) for c in legs if c.prev_iv > 0 and c.d_oi]
+        w = sum(x for x, _ in rows)
+        return (sum(x * y for x, y in rows) / w) if w else None
+
+    iv_beyond, iv_at = _wiv(beyond), _wiv(at)
+    if iv_beyond is None or iv_at is None:
+        return None
+    gap = iv_beyond - iv_at
+    if gap < BREAK_IV_GAP:
+        return None                      # 下方没有涨得更急 → 只是在墙上防守
+
+    inner_doi = sum(c.d_oi for c in inner)
+    inner_iv = _wiv(inner)
+    retreat = bool(inner_doi < 0 or (inner_iv is not None and inner_iv < 0))
+    top = max(beyond, key=lambda c: c.d_oi, default=None)
+    return {
+        "wall": wall, "kind": kind,
+        "add_beyond": add_beyond,
+        "iv_beyond": round(iv_beyond, 2), "iv_at": round(iv_at, 2),
+        "gap": round(gap, 2),
+        "next_line": (top.strike if top else None),
+        "next_line_doi": (top.d_oi if top else 0),
+        "inner_retreat": retreat,
+        "inner_doi": inner_doi,
+    }

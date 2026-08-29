@@ -518,3 +518,26 @@ def test_wall_structure_covers_both_shapes():
     h3 = _facts_html(spy)
     assert "平掉 19,204 张" in h3 and "加 -19,204" not in h3
     print("PASS test_wall_structure_covers_both_shapes")
+
+
+def test_report_section_order_and_summary_source():
+    """研报板块顺序按用户 2026-08-29 指定，且综合研判与索引页同源。
+
+    「详细研报里，综合研判更新一下。可以就是 index 里的。然后紧跟的就是期权关键
+      点位，这个应该放在最前面。然后是大白话速读，然后是增仓的拆分。」
+    此前顺序把「关键位点」排到第 7 位，而它恰恰最该先看；
+    且研报里的「当日决策研判」与 index 上摆的事实完全脱节 —— 同一份数据两套说法。
+    """
+    src = (Path(__file__).resolve().parents[1] / "undertow" / "report"
+           / "html.py").read_text("utf-8")
+    # ① 关键点位必须排在 verdict / 指标说明 / 大白话 之前
+    i_lv = src.index("① 期权关键点位")
+    i_sum = src.index("f'{summary_html}'")
+    i_tldr = src.index("f'{tldr_html}'")
+    i_exp = src.index("expiry_html2}</div>")
+    assert i_lv < i_sum < i_tldr < i_exp, "板块顺序：关键点位→综合研判→大白话→到期拆分"
+    # ② 综合研判卡必须复用 index 的两个渲染件，不另起一套
+    card = src[src.index("def render_summary_card"):src.index("def render_index_html")]
+    assert "render_pills" in card and "_facts_html" in card, \
+        "综合研判必须与索引页同源，不得另写一套说法"
+    print("PASS test_report_section_order_and_summary_source")

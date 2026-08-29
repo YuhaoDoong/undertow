@@ -1395,7 +1395,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        fib_html: str = "", strong_html: str = "", struct_html: str = "",
                        verdict_html: str = "", tech_html: str = "",
                        stretch_read=None, vintage_html: str = "",
-                       indicators_html: str = "") -> str:
+                       indicators_html: str = "",
+                       expiry_html2: str = "", summary_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -1417,14 +1418,21 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
     )
     body = (
         f'{strong_html}'
-        f'{struct_html}'
+        # ── 板块顺序（用户 2026-08-29 指定）────────────────────────────
+        #   ① 期权关键点位  ② 综合研判  ③ 大白话速读  ④ 增仓按到期拆开
+        #   先看"墙在哪"，再看"怎么判"，然后是人话，最后才是拆解。
+        #   此前顺序是 结构读数→决策研判→到期拆开→指标说明→大白话→…→关键位点，
+        #   关键位点排到第 7 位，而它恰恰是最该先看的东西。
+        f'<div class="card"><h2>① 期权关键点位（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
+        f'<div class="chart">{price_svg}</div>'
+        f'<div class="chart">{oi_svg}</div></div>'
+        f'{summary_html}'
         f'{verdict_html}'
         + (f'<div class="card">{indicators_html}</div>' if indicators_html else "") +
         f'{tldr_html}'
+        + (f'<div class="card">{expiry_html2}</div>' if expiry_html2 else "") +
+        f'{struct_html}'
         f'{events_html}'
-        f'<div class="card"><h2>关键位点（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
-        f'<div class="chart">{price_svg}</div>'
-        f'<div class="chart">{oi_svg}</div></div>'
         # 紧跟价格图：先看价在哪，再看它离自己的常态有多远
         f'{tech_html}'
         f'{flow_html}'
@@ -1654,6 +1662,38 @@ def _facts_html(fx: dict) -> str:
         return ""
     return ('<div style="margin-top:7px;font-size:12.5px;line-height:1.75;color:#24292f">'
             + "<br>".join(rows) + "</div>")
+
+
+def render_summary_card(it: dict) -> str:
+    """研报顶部的「综合研判」卡片 —— 与 index 卡片同源同内容。
+
+    用户 2026-08-29：「详细研报里，综合研判更新一下。可以就是 index 里的。」
+    此前研报里的「当日决策研判」是 verdict 的四问（不做空/别追/短线/长线），
+    与 index 上摆的事实（近端/中期分层、六组 label、墙形态、增仓分侧）完全脱节 ——
+    同一份数据两套说法，正是用户反复抱怨的"指标互相打架"的观感来源。
+    """
+    nb, mb = it.get("near_bias", ""), it.get("mid_bias", "")
+    ns, ms = it.get("near_score"), it.get("mid_score")
+    _f = lambda v: f"({v:+.1f})" if isinstance(v, (int, float)) else ""
+    _sgn = lambda t: 1 if "偏多" in t else (-1 if "偏空" in t else 0)
+    split = bool(nb and mb and _sgn(nb) * _sgn(mb) < 0)
+    near_edge = (isinstance(ns, (int, float)) and _sgn(nb) == 0 and abs(ns) >= 0.5)
+    edge = (f'　<b style="color:#bf8700">近端实为{"偏空" if ns < 0 else "偏多"}倾向，'
+            f'仅差 {abs(abs(ns) - 0.8):.1f} 未过门槛</b>' if near_edge else "")
+    labels_div = ""
+    if it.get("labels"):
+        from undertow.analyze.indicators import render_pills as _pills
+        labels_div = _pills(it["labels"], _esc, scores=it.get("scores"))
+    return (
+        '<div class="card">'
+        '<h2>② 综合研判（与索引页同源）</h2>'
+        f'<span class="badge" style="background:'
+        f'{"#bf8700" if (split or near_edge) else _near_color(ns)}">'
+        f'近端 {_esc(nb or "—")}{_f(ns)} ｜ 中期 {_esc(mb or "—")}{_f(ms)}'
+        f'{" ⚠分歧" if split else ""}</span>{edge}'
+        f'{labels_div}'
+        f'{_facts_html(it.get("facts") or {})}'
+        '</div>')
 
 
 def render_index_html(items: list[dict], asof: str, *, family_notes=None) -> str:

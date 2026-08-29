@@ -1454,10 +1454,23 @@ def cmd_report(args) -> int:
                 # 到期分桶明细：index 上只留一个标记，明细在品种研报里
                 from undertow.analyze.flow import (expiry_split as _exp_sp,
                                                    expiry_split_html as _exp_html)
-                _indicators_html = _exp_html(_exp_sp(fa), _e) + _indicators_html
+                _expiry_html = _exp_html(_exp_sp(fa), _e)
+                # 研报顶部的综合研判卡：与 index 卡片同源同内容
+                from undertow.report.html import render_summary_card as _sum_card
+                _summary_html = _sum_card({
+                    "near_bias": outlook.near_bias, "mid_bias": outlook.mid_bias,
+                    "near_score": getattr(outlook, "near_score", None),
+                    "mid_score": getattr(outlook, "mid_score", None),
+                    "labels": _labels, "scores": _scores,
+                    "facts": (_flow_facts(fa, ga, ga_prev, prev, curr, curr.spot,
+                                          date.fromisoformat(curr_date_s)
+                                          if curr_date_s else today)
+                              | {"bias": outlook.bias, "mid_bias": outlook.mid_bias}),
+                })
             except Exception as e:      # 指标分组失败要出声，不能静默少一栏
                 print(f"⚠️ {inst.key} 指标分组失败：{type(e).__name__}: {e}", file=sys.stderr)
                 _labels, _indicators_html, _scores = [], "", {}
+                _expiry_html = _summary_html = ""
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,
                                       strategy_html,
@@ -1470,7 +1483,9 @@ def cmd_report(args) -> int:
                                           prev_date or "", curr_date_s or "", today.isoformat()),
                                       verdict_html=verdict_html,
                                       tech_html=tech_html, stretch_read=stretch_read,
-                                      indicators_html=_indicators_html)
+                                      indicators_html=_indicators_html,
+                                      expiry_html2=_expiry_html,
+                                      summary_html=_summary_html)
             # ⚠️ 文件名用【可交易日】（= 快照日期），不是生成日期。
             # 时点约定：快照 D 于 D 凌晨捕获，OI 是 D−1 收盘的 OCC 结算，
             # diff 描述交易日 D−1，**D 开盘才可执行** —— D 就是这份研报的身份。

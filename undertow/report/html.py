@@ -1618,7 +1618,7 @@ def render_index_html(items: list[dict], asof: str, *, family_notes=None) -> str
         labels_div = ""
         if it.get("labels"):
             from undertow.analyze.indicators import render_pills as _pills
-            labels_div = _pills(it["labels"], _esc)
+            labels_div = _pills(it["labels"], _esc, scores=it.get("scores"))
         summary_div = (f'<div class="sub" style="margin-top:4px;line-height:1.5">{_esc(summary)}</div>'
                        if summary else "")
         cards.append(

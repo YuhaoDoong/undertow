@@ -168,3 +168,30 @@ def test_indicator_families_are_non_overlapping_sources():
     assert "同一套压力数" in sec, "必须声明 ⚡强信号与增仓共线、不重复计票"
     assert "固定" in sec and "0.8 票" in sec, "必须写明权重不随强度变化这个已知缺陷"
     print("PASS test_indicator_families_are_non_overlapping_sources")
+
+
+def test_strength_scaling_is_off_by_default():
+    """强度缩放默认关闭 —— 回测不支持它，打开就是拿一天的结果拟合。
+
+    2026-08-29 回测（138 样本 / 35 日聚类）：
+      高强度组 vs 低强度组命中率差 +2.5pp / 0.0pp / -1.2pp，几乎无区分度；
+      「按强度加权」减「只用方向」中位 +3.1pp，95% 区间 [-3.7pp, +9.7pp] 跨 0；
+      压力比≥20× 的 11 个饱和样本命中 6/11=55%，反低于全体 64.3%。
+    """
+    from undertow.analyze import strength as S
+    assert S.USE_STRENGTH is False, "强度缩放未经验证，不得默认开启"
+    # 唯一通过日聚类 bootstrap 的是 flow，它该拿最高权重
+    assert S.GROUP_W["flow"] == max(S.GROUP_W.values()), \
+        "flow 是唯一验证有效的一层（64.3%，区间下界 54.5%），权重必须最高"
+    assert S.GROUP_W["vol"] < S.GROUP_W["flow"], "波动率面区间跨 50%，权重须低于 flow"
+    print("PASS test_strength_scaling_is_off_by_default")
+
+
+def test_strength_saturates_not_linear():
+    """比值型强度必须饱和：53.5× 不该是 5.3× 的十倍话语权。"""
+    from undertow.analyze.strength import _log_sat
+    assert _log_sat(1.3, 1.3, 20.0) == 0.0
+    assert 0.2 < _log_sat(3.0, 1.3, 20.0) < 0.4
+    assert _log_sat(20.0, 1.3, 20.0) == 1.0
+    assert _log_sat(53.5, 1.3, 20.0) == 1.0, "超过上限必须饱和，不能继续放大"
+    print("PASS test_strength_saturates_not_linear")

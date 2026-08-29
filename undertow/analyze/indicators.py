@@ -141,8 +141,8 @@ def build(outlook, fa=None, stretch=None) -> list[Label]:
     return out
 
 
-def render_pills(labels: list[Label], esc) -> str:
-    """index 卡片上的一行小标签。"""
+def render_pills(labels: list[Label], esc, *, scores: dict | None = None) -> str:
+    """index 卡片上的一行小标签 + 两套评分并列。"""
     if not labels:
         return ""
     ps = []
@@ -152,7 +152,24 @@ def render_pills(labels: list[Label], esc) -> str:
             f'margin:2px 4px 2px 0;padding:1px 7px;border-radius:9px;font-size:11.5px;'
             f'border:1px solid {l.color}44;background:{l.color}12;color:{l.color}">'
             f'{l.icon} {esc(l.name)} <b>{esc(l.reading)}</b></span>')
-    return ('<div style="margin-top:6px">' + "".join(ps) +
+    sc = ""
+    if scores:
+        old, new = scores.get("legacy"), scores.get("weighted")
+        near = scores.get("near")
+        def _c(v):
+            return "#1a7f37" if v > 0.15 else ("#cf222e" if v < -0.15 else "#6e7781")
+        parts = []
+        if old is not None:
+            parts.append(f'现行综合 <b>{old:+.1f}</b>')
+        if new is not None:
+            parts.append(f'<span style="color:{_c(new)}">按验证权重 <b>{new:+.2f}</b></span>')
+        if near is not None:
+            parts.append(f'<span style="color:{_c(near)}">仅近端 <b>{near:+.2f}</b></span>')
+        if parts:
+            sc = ('<div style="margin-top:4px;font-size:12px">📐 ' + '　｜　'.join(parts) +
+                  '<span style="color:#6e7781;font-size:11px">'
+                  '　（两把不同的尺子，别直接比大小）</span></div>')
+    return ('<div style="margin-top:6px">' + "".join(ps) + sc +
             '<div style="font-size:11px;color:#6e7781;margin-top:2px">'
             '六组互不同源的证据（同源的已合并，如 ⚡强信号与「增仓」共线，不重复计票）'
             '</div></div>')

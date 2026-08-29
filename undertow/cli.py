@@ -1385,12 +1385,18 @@ def cmd_report(args) -> int:
             # 指标分组要在渲染之前算好：品种研报里也有「指标说明」栏目
             try:
                 _labels = _build_labels(outlook, fa=fa, stretch=stretch_read)
+                from undertow.analyze.strength import (collect as _st_collect,
+                                                       weighted_score as _st_w,
+                                                       near_weighted as _st_near)
+                _sts = _st_collect(outlook, fa=fa, stretch=stretch_read)
+                _scores = {"legacy": getattr(outlook, "bias_score", None),
+                           "weighted": _st_w(_sts)[0], "near": _st_near(_sts)}
                 from undertow.analyze.indicators import render_section as _ind_sec
                 from undertow.report.html import _esc as _e
                 _indicators_html = _ind_sec(_labels, _e)
             except Exception as e:      # 指标分组失败要出声，不能静默少一栏
                 print(f"⚠️ {inst.key} 指标分组失败：{type(e).__name__}: {e}", file=sys.stderr)
-                _labels, _indicators_html = [], ""
+                _labels, _indicators_html, _scores = [], "", {}
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,
                                       strategy_html,
@@ -1421,7 +1427,7 @@ def cmd_report(args) -> int:
                       file=sys.stderr)
                 _facts = {}
             written.append((inst, outlook, fn, strong_sig, verdict, stretch_read,
-                            curr_date_s or "", _facts, _labels))
+                            curr_date_s or "", _facts, _labels, _scores))
         except Exception as e:
             failed.append(inst.key)
             print(f"[警告] {inst.key} 研判报告失败: {e}", file=sys.stderr)
@@ -1441,7 +1447,7 @@ def cmd_report(args) -> int:
         return 1
 
     if args.json:
-        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _, _, _, _, _, _, _ in written],
+        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _, _, _, _, _, _, _, _ in written],
                          ensure_ascii=False, indent=2, default=str))
         return 0
 
@@ -1455,11 +1461,11 @@ def cmd_report(args) -> int:
                       "mid_bias": getattr(o, "mid_bias", ""),
                       "trade_date": td, "today": today.isoformat(),
                       "facts": _fx | {"bias": o.bias}, "spot": o.spot,
-                      "labels": _lb}
-                     for _, o, fn, ss, v, sr, td, _fx, _lb in written]
+                      "labels": _lb, "scores": _sc}
+                     for _, o, fn, ss, v, sr, td, _fx, _lb, _sc in written]
         # 同族一致性：金银同向、QQQ/TQQQ 同向 —— 不一致时并排摆出来（用户 2026-08-29）
         _views = {}
-        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb in written:
+        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb, _sc in written:
             _stale = bool(_td2 and _td2 < today.isoformat())
             _views[_inst.key] = {
                 "near": _o.near_bias or "", "mid": _o.mid_bias or "", "bias": _o.bias,
@@ -1479,7 +1485,7 @@ def cmd_report(args) -> int:
     _hd = max((w[6] for w in written if w[6]), default="") or today.isoformat()
     _gen = f"（生成于 {today}）" if _hd != today.isoformat() else ""
     print(f"已生成综合研判报告 · 可交易日 {_hd}{_gen}:")
-    for inst, o, fn, ss, v, _sr, _td, _fx, _lb in written:
+    for inst, o, fn, ss, v, _sr, _td, _fx, _lb, _sc in written:
         # 低置信 / 已过期 的强信号在摘要里也必须降级，不能和可执行告警长得一样。
         # ⚠️ 报告横幅、索引页、CLI 摘要**三处口径必须同步** —— 2026-08-28 实测：
         # SPY 的 ⚡强看涨 在报告里已正确标注"本告警已过期"，CLI 摘要却仍是满格 ⚡，
@@ -1515,7 +1521,7 @@ def cmd_report(args) -> int:
     #    研报是入公开库的，账户持仓不能出现在里面。
     try:
         _sig_by_sym = {}
-        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb in written:
+        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb, _sc in written:
             if _ss is not None and not (_td2 and _td2 < today.isoformat()):
                 _sig_by_sym[_inst.options.symbol.upper()] = _ss
         if _sig_by_sym:

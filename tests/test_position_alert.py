@@ -266,3 +266,41 @@ def test_spread_bias_refuses_complex_structures():
     ratio = {"AAA260918C70000": 1, "AAA260918C75000": -2}
     assert position_bias(ratio)["AAA"] in (0, -1)
     print("PASS test_spread_bias_refuses_complex_structures")
+
+
+def test_expiry_buckets_split_and_conflict():
+    """到期桶必须能拆开看，方向打架时要降置信。
+
+    用户 2026-08-29 追问「近月、远月是区分开的吗」引出：
+    逐腿判定确实按 (到期,行权价,C/P) 分开算，但最终 pressure 是 45 天内
+    所有到期【加总】的 —— 0DTE 的赌明天和 30 天后的中期保护被压成一个数。
+    实测 8/28 八品种里 5 个方向打架。
+    """
+    from undertow.analyze.flow import (_split_by_dte, _dte_dirs_conflict,
+                                       DTE_BUCKETS)
+    from dataclasses import dataclass
+    from datetime import date as D
+
+    @dataclass
+    class L:
+        expiry: D
+        d_oi: int
+        bias: str
+
+    ref = "2026-08-28"
+    # 近月看跌、远月看涨 → 必须判为打架
+    legs = [L(D(2026, 8, 29), 9000, "bearish"), L(D(2026, 8, 29), 500, "bullish"),
+            L(D(2026, 9, 25), 8000, "bullish"), L(D(2026, 9, 25), 400, "bearish")]
+    rows = _split_by_dte(legs, ref)
+    assert len(rows) == 2, "0-2天 与 22天+ 两个桶"
+    assert rows[0]["sign"] == -1 and rows[1]["sign"] == 1
+    assert _dte_dirs_conflict(rows) is True, "近月看跌+远月看涨必须判为打架"
+
+    # 全部同向 → 不算打架
+    same = [L(D(2026, 8, 29), 9000, "bearish"), L(D(2026, 9, 25), 8000, "bearish")]
+    assert _dte_dirs_conflict(_split_by_dte(same, ref)) is False
+
+    # 缺日期时不得瞎猜
+    assert _split_by_dte(legs, "") == []
+    assert _split_by_dte([], ref) == []
+    print("PASS test_expiry_buckets_split_and_conflict")

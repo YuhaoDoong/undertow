@@ -1514,6 +1514,20 @@ def _facts_html(fx: dict) -> str:
                         f'　　⚠️ 这与综合结论「{_esc(bias)}」方向相反 —— '
                         f'综合是多层投票，持仓流只是其中近端一层，冲突时以你的持仓周期为准</span>')
 
+    # 到期分桶：加总的方向读数会掩盖结构，摆出来让人自己看
+    sp = fx.get("exp_split") or []
+    if sp:
+        cells = []
+        for b in sp:
+            col = "#cf222e" if b["sign"] < 0 else ("#1a7f37" if b["sign"] > 0 else "#6e7781")
+            word = "看跌" if b["sign"] < 0 else ("看涨" if b["sign"] > 0 else "平")
+            cells.append(f'<span style="color:{col}">{_esc(b["bucket"])} '
+                         f'<b>{word} {b["ratio"]:.0f}×</b>'
+                         f'<span style="color:#6e7781">({_n(b["doi"])})</span></span>')
+        warn = ('　<b style="color:#bf8700">⚠️ 各到期方向不一致，加总读数不可信</b>'
+                if fx.get("exp_conflict") else "")
+        rows.append("📆 按到期拆开：" + "　｜　".join(cells) + warn)
+
     legs = fx.get("big_legs") or []
     if legs:
         parts = []

@@ -521,6 +521,80 @@ def concentration_stats(fa: "FlowAnalysis") -> dict:
     }
 
 
+DTE_BUCKETS = ((0, 2, "0-2天"), (3, 7, "3-7天"), (8, 21, "8-21天"), (22, 999, "22天+"))
+
+
+def _split_by_dte(changes: list, curr_date: str | None) -> list[dict]:
+    """底层：直接吃 changes 列表，不依赖 FlowAnalysis 对象。"""
+    if not changes or not curr_date:
+        return []
+    try:
+        ref = date.fromisoformat(curr_date)
+    except (ValueError, TypeError):
+        return []
+    out = []
+    for lo, hi, name in DTE_BUCKETS:
+        legs = [c for c in changes if lo <= (c.expiry - ref).days <= hi]
+        if not legs:
+            continue
+        dn = sum(abs(c.d_oi) for c in legs if c.bias == "bearish")
+        up = sum(abs(c.d_oi) for c in legs if c.bias == "bullish")
+        if not (dn or up):
+            continue
+        out.append({"bucket": name, "legs": len(legs), "dn": dn, "up": up,
+                    "sign": -1 if dn > up else (1 if up > dn else 0),
+                    "ratio": round(max(dn, up) / max(min(dn, up), 1), 1),
+                    "doi": sum(abs(c.d_oi) for c in legs)})
+    return out
+
+
+def _dte_dirs_conflict(rows: list[dict]) -> bool:
+    signs = {r["sign"] for r in rows if r["sign"] and r["doi"] >= MOVE_MIN_DOI}
+    return len(signs) > 1
+
+
+def expiry_split(fa: "FlowAnalysis") -> list[dict]:
+    """按剩余到期分桶的方向读数 —— 加总会掩盖结构，必须能拆开看。
+
+    起因（用户 2026-08-29 追问「近月、远月是区分开的吗」）：
+    逐腿判定确实严格按 (到期, 行权价, C/P) 分开算 —— IV 偏斜斜率每个到期
+    自己拟合、相对化基准按到期分组。**但最终的 upside/downside_pressure
+    是把 45 天内所有到期加总成一个数**。
+
+    0DTE 的深度价外 put（赌明天）和 30 天后的 put（中期保护）含义完全不同，
+    加总后就分不出来了。2026-08-28 黄金恰好四个桶同向（24.2×/19.6×/12.0×/14.6×），
+    所以没出事；但近月看跌、远月看涨的日子，加总会把矛盾抹平。
+
+    ⚠️ 本函数只做拆分展示，**不改变任何判定** —— pressure 仍是加总值。
+    """
+    if not fa.changes or not fa.curr_date:
+        return []
+    try:
+        ref = date.fromisoformat(fa.curr_date)
+    except (ValueError, TypeError):
+        return []
+    out = []
+    for lo, hi, name in DTE_BUCKETS:
+        legs = [c for c in fa.changes if lo <= (c.expiry - ref).days <= hi]
+        if not legs:
+            continue
+        dn = sum(abs(c.d_oi) for c in legs if c.bias == "bearish")
+        up = sum(abs(c.d_oi) for c in legs if c.bias == "bullish")
+        if not (dn or up):
+            continue
+        sign = -1 if dn > up else (1 if up > dn else 0)
+        ratio = max(dn, up) / max(min(dn, up), 1)
+        out.append({"bucket": name, "legs": len(legs), "dn": dn, "up": up,
+                    "sign": sign, "ratio": round(ratio, 1),
+                    "doi": sum(abs(c.d_oi) for c in legs)})
+    return out
+
+
+def expiry_split_conflict(rows: list[dict]) -> bool:
+    """各到期桶方向是否打架 —— 打架时加总的方向读数不可信。"""
+    return _dte_dirs_conflict(rows)
+
+
 def _dte_structure(fa: "FlowAnalysis") -> dict:
     """开火当日增仓的【到期结构】：押注的时间跨度有多短。
 
@@ -1484,6 +1558,28 @@ def analyze_flow(
         call = _decide(up_pressure=upside, dn_pressure=downside, net_delta=_nd,
                        has_prev=True, oi_changed=bool(changes),
                        trade_date=curr_date or "", today="", dte_share_le2=_sh2)
+        # 到期桶方向打架 → 标低置信。pressure 是 45 天内加总的，各到期方向不一致时
+        # 它只是把矛盾抹平（用户 2026-08-29 追问「近月远月区分开了吗」引出）。
+        # ⚠️ 与「大波动日 vs 横盘日」不同：桶是否同向在 D 开盘前就能算，
+        #    是【可执行】的闸门，不是事后分层。
+        # 实测 127 样本：同向 67.4%（日聚类区间 [54.5%,80.0%]，下界>50%）
+        #                打架 53.1%（[41.8%,63.9%]，跨 50%）
+        #                差值中位 +14.7pp，但区间 [-2.2,+31.3] 跨 0 —— 样本不足，
+        #                故只降置信、不否决方向。
+        # ⚠️ 直接在 changes 上算，不构造临时 FlowAnalysis —— 上一版那么写缺必填字段、
+        # 异常被 except 裸吞，白银明明四桶打架却什么都没出现（自查发现，
+        # 和本项目反复栽的静默失败是同一类）。
+        _sp_rows = _split_by_dte(changes, curr_date)
+        if _sp_rows and _dte_dirs_conflict(_sp_rows) and not call.abstain:
+            import dataclasses as _dc
+            call = _dc.replace(
+                call, low_confidence=True,
+                reasons=list(call.reasons) + [
+                    "各到期桶方向不一致（"
+                    + "、".join(f"{r['bucket']}{'看跌' if r['sign'] < 0 else '看涨'}"
+                                f"{r['ratio']:.0f}×" for r in _sp_rows if r["sign"])
+                    + "）—— 加总的方向读数只是把矛盾抹平"])
+
         if call.abstain:
             tilt = f"方向不明（{call.reasons[0]}）{cnote}"
         elif call.direction == "偏空":

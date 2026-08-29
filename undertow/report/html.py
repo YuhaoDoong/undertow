@@ -1394,7 +1394,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        vol_analysis_html: str = "", expiry_html: str = "",
                        fib_html: str = "", strong_html: str = "", struct_html: str = "",
                        verdict_html: str = "", tech_html: str = "",
-                       stretch_read=None, vintage_html: str = "") -> str:
+                       stretch_read=None, vintage_html: str = "",
+                       indicators_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -1418,6 +1419,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'{strong_html}'
         f'{struct_html}'
         f'{verdict_html}'
+        + (f'<div class="card">{indicators_html}</div>' if indicators_html else "") +
         f'{tldr_html}'
         f'{events_html}'
         f'<div class="card"><h2>关键位点（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
@@ -1612,6 +1614,11 @@ def render_index_html(items: list[dict], asof: str, *, family_notes=None) -> str
                           f'{" ⚠分歧" if split else ""}</span>')
         # 结论行去模板化：原来八个品种全是「不做空 · 长线拿住」，改为直接摆事实。
         verdict_div = _facts_html(it.get("facts") or {})
+        # 六组互不同源的指标，各一枚小标签（用户 2026-08-29 要求）
+        labels_div = ""
+        if it.get("labels"):
+            from undertow.analyze.indicators import render_pills as _pills
+            labels_div = _pills(it["labels"], _esc)
         summary_div = (f'<div class="sub" style="margin-top:4px;line-height:1.5">{_esc(summary)}</div>'
                        if summary else "")
         cards.append(
@@ -1622,6 +1629,7 @@ def render_index_html(items: list[dict], asof: str, *, family_notes=None) -> str
                if split else
                f'<span class="badge" style="background:{color}">{_esc(bias)}</span>')
             + f'<span class="pill">可信度 {_esc(conf)}</span>{vt}{sig_pill}{os_pill}'
+            f'{labels_div}'
             f'{verdict_div}'
             f'{summary_div}'
             f'</a>'

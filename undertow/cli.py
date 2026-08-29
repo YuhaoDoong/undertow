@@ -50,6 +50,7 @@ from undertow.analyze.backtest import run_backtest
 from undertow.report import markdown as report_mod
 from undertow.report import viz
 from undertow.analyze.family import check as _family_check
+from undertow.analyze.indicators import build as _build_labels
 from undertow.report.html import (render_report_html, render_index_html,
                           render_flow_section, render_macro_section, render_events_section,
                           render_tldr_section, render_strategy_section,
@@ -1381,6 +1382,15 @@ def cmd_report(args) -> int:
                 verdict_html = render_verdict_section(verdict, inst.display_name)
             except Exception as e:
                 print(f"[提示] {inst.key} 决策研判跳过: {e}", file=sys.stderr)
+            # 指标分组要在渲染之前算好：品种研报里也有「指标说明」栏目
+            try:
+                _labels = _build_labels(outlook, fa=fa, stretch=stretch_read)
+                from undertow.analyze.indicators import render_section as _ind_sec
+                from undertow.report.html import _esc as _e
+                _indicators_html = _ind_sec(_labels, _e)
+            except Exception as e:      # 指标分组失败要出声，不能静默少一栏
+                print(f"⚠️ {inst.key} 指标分组失败：{type(e).__name__}: {e}", file=sys.stderr)
+                _labels, _indicators_html = [], ""
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,
                                       strategy_html,
@@ -1392,7 +1402,8 @@ def cmd_report(args) -> int:
                                       vintage_html=render_vintage_banner(
                                           prev_date or "", curr_date_s or "", today.isoformat()),
                                       verdict_html=verdict_html,
-                                      tech_html=tech_html, stretch_read=stretch_read)
+                                      tech_html=tech_html, stretch_read=stretch_read,
+                                      indicators_html=_indicators_html)
             # ⚠️ 文件名用【可交易日】（= 快照日期），不是生成日期。
             # 时点约定：快照 D 于 D 凌晨捕获，OI 是 D−1 收盘的 OCC 结算，
             # diff 描述交易日 D−1，**D 开盘才可执行** —— D 就是这份研报的身份。
@@ -1410,7 +1421,7 @@ def cmd_report(args) -> int:
                       file=sys.stderr)
                 _facts = {}
             written.append((inst, outlook, fn, strong_sig, verdict, stretch_read,
-                            curr_date_s or "", _facts))
+                            curr_date_s or "", _facts, _labels))
         except Exception as e:
             failed.append(inst.key)
             print(f"[警告] {inst.key} 研判报告失败: {e}", file=sys.stderr)
@@ -1430,7 +1441,7 @@ def cmd_report(args) -> int:
         return 1
 
     if args.json:
-        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _, _, _, _, _, _ in written],
+        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _, _, _, _, _, _, _ in written],
                          ensure_ascii=False, indent=2, default=str))
         return 0
 
@@ -1443,11 +1454,12 @@ def cmd_report(args) -> int:
                       "near_bias": getattr(o, "near_bias", ""),
                       "mid_bias": getattr(o, "mid_bias", ""),
                       "trade_date": td, "today": today.isoformat(),
-                      "facts": _fx | {"bias": o.bias}, "spot": o.spot}
-                     for _, o, fn, ss, v, sr, td, _fx in written]
+                      "facts": _fx | {"bias": o.bias}, "spot": o.spot,
+                      "labels": _lb}
+                     for _, o, fn, ss, v, sr, td, _fx, _lb in written]
         # 同族一致性：金银同向、QQQ/TQQQ 同向 —— 不一致时并排摆出来（用户 2026-08-29）
         _views = {}
-        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx in written:
+        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb in written:
             _stale = bool(_td2 and _td2 < today.isoformat())
             _views[_inst.key] = {
                 "near": _o.near_bias or "", "mid": _o.mid_bias or "", "bias": _o.bias,
@@ -1467,7 +1479,7 @@ def cmd_report(args) -> int:
     _hd = max((w[6] for w in written if w[6]), default="") or today.isoformat()
     _gen = f"（生成于 {today}）" if _hd != today.isoformat() else ""
     print(f"已生成综合研判报告 · 可交易日 {_hd}{_gen}:")
-    for inst, o, fn, ss, v, _sr, _td, _fx in written:
+    for inst, o, fn, ss, v, _sr, _td, _fx, _lb in written:
         # 低置信 / 已过期 的强信号在摘要里也必须降级，不能和可执行告警长得一样。
         # ⚠️ 报告横幅、索引页、CLI 摘要**三处口径必须同步** —— 2026-08-28 实测：
         # SPY 的 ⚡强看涨 在报告里已正确标注"本告警已过期"，CLI 摘要却仍是满格 ⚡，
@@ -1503,7 +1515,7 @@ def cmd_report(args) -> int:
     #    研报是入公开库的，账户持仓不能出现在里面。
     try:
         _sig_by_sym = {}
-        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx in written:
+        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb in written:
             if _ss is not None and not (_td2 and _td2 < today.isoformat()):
                 _sig_by_sym[_inst.options.symbol.upper()] = _ss
         if _sig_by_sym:

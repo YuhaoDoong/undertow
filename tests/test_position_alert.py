@@ -151,3 +151,20 @@ def test_replay_truncates_future_prices():
         "技术面序列必须在【所有来源汇合之后】统一截断"
     assert "series_done = _truncate_before(series_done, today)" in src
     print("PASS test_replay_truncates_future_prices")
+
+
+def test_indicator_families_are_non_overlapping_sources():
+    """六组指标必须按【数据是否同源】分，同源的不得算两票。"""
+    from undertow.analyze.indicators import FAMILIES, Label, render_pills, render_section
+    assert set(FAMILIES) == {"struct", "flow", "vol", "price", "cot", "macro"}
+    # 每组都得有：图标、短名、数据源、大白话
+    for k, v in FAMILIES.items():
+        assert len(v) == 4 and all(v), f"{k} 家族定义不完整"
+        assert len(v[3]) > 20, f"{k} 缺大白话说明"
+    labs = [Label("flow", "💰", "增仓", -1, "看跌侧 53.5×", "加权增仓", "近端")]
+    pills = render_pills(labs, lambda x: x)
+    assert "53.5×" in pills, "强度必须显示 —— 53.5× 与 1.4× 不能看起来一样"
+    sec = render_section(labs, lambda x: x)
+    assert "同一套压力数" in sec, "必须声明 ⚡强信号与增仓共线、不重复计票"
+    assert "固定" in sec and "0.8 票" in sec, "必须写明权重不随强度变化这个已知缺陷"
+    print("PASS test_indicator_families_are_non_overlapping_sources")

@@ -640,6 +640,24 @@ def _prev_weekday(d: date) -> date:
     return d
 
 
+def _truncate_before(series, day: date):
+    """把价格序列掐到【严格早于 day】—— 回放时防止吃到未来价格。
+
+    与 _drop_incomplete_bar 的分工：那个管"当日盘中未完成的半根 K"，
+    这个管"回放时序列比 as-of 长出来的一整段"。两者都要，缺一不可。
+    """
+    if series is None or not getattr(series, "dates", None):
+        return series
+    n = sum(1 for d in series.dates if d < day)
+    if n == len(series.dates):
+        return series
+    from undertow.core.models import PriceSeries as _PS
+    return _PS(symbol=series.symbol,
+               dates=series.dates[:n], closes=series.closes[:n],
+               highs=series.highs[:n] if series.highs else [],
+               lows=series.lows[:n] if series.lows else [])
+
+
 def _drop_incomplete_bar(series, today: date):
     """剔掉尾部那根【当日未完成】的盘中 bar，再喂给任何窗口型指标。
 
@@ -1025,6 +1043,18 @@ def cmd_report(args) -> int:
                         ratio = real_price / curr.spot
                 except Exception as e:
                     print(f"[提示] {inst.key} 真实期货价获取失败，回退静态乘数: {e}", file=sys.stderr)
+            # ⚠️ 回放必须掐断未来价格 —— 否则整份重放都不可信。
+            # 研报在【可交易日 D 的开盘前】生成，那时能看到的最后一根完整日线是 D−1。
+            # _drop_incomplete_bar 只剔"≥today 的最后一根"，实时跑时刚好对（today 那根
+            # 是盘中未完成的）；但回放时序列早已长到 today 之后，只剔一根会留下 today
+            # 当天的收盘价 —— 那是当时还不存在的信息。
+            # 2026-08-29 实测：回放 8/28 的黄金，因为吃进了 8/28 当天 −3.24% 的收盘价，
+            # 超买超卖从当时真实的"偏超买 78%"变成"中性 57%"，直接改写了结论。
+            if replay and real_series is not None and real_series.dates:
+                real_series, real_price = _truncate_before(real_series, today), None
+                if real_series.closes:
+                    real_price = real_series.closes[-1]
+                    ratio = (real_price / curr.spot) if curr.spot > 0 else None
             mult = ratio if ratio is not None else inst.options.approx_commodity_multiplier
 
             # 观察日 = 链交易日（快照日前一工作日）：报告的期权结构是"昨收快照"，
@@ -1195,6 +1225,14 @@ def cmd_report(args) -> int:
                 except Exception as e:
                     print(f"[提示] {inst.key} 长桥 K 线不可用（{type(e).__name__}），"
                           f"技术面退回原价格源", file=sys.stderr)
+            # ⚠️ 统一出口截断：回放时未来价格可能从【多个入口】渗入 ——
+            # real_series 已在上面掐过，但长桥 K 线这一支是"谁更新用谁"，
+            # 回放时它正好把未来数据又接了回来（2026-08-29 实测：截断后分位
+            # 仍是被 8/28 收盘价污染的 57%）。所以在所有来源汇合之后再掐一次。
+            if replay:
+                tech_series = _truncate_before(tech_series, today)
+                series_done = _truncate_before(series_done, today)
+
             plan = build_strategy(outlook, vol=fa.vol, series=series_done,
                                   struct_history=struct_hist or None)
             strategy_html = render_strategy_section(plan, timeline_svg=timeline_svg)

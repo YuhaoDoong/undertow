@@ -135,3 +135,19 @@ def test_report_filename_uses_tradable_day_not_generation_day():
     assert "今天（" in src and "没有新数据" in src, \
         "数据非当日时必须明说，否则看着像当日研报"
     print("PASS test_report_filename_uses_tradable_day_not_generation_day")
+
+
+def test_replay_truncates_future_prices():
+    """回放必须掐断未来价格 —— 否则整份重放不可信。
+
+    2026-08-29 实测：回放 8/28 的黄金，吃进了 8/28 当天 -3.24% 的收盘价，
+    超买超卖从当时真实的「偏超买 78%」变成「中性 57%」，直接改写了结论。
+    未来数据从两个入口渗入：real_series，以及"谁更新用谁"的长桥 K 线。
+    """
+    src = (Path(__file__).resolve().parents[1] / "undertow" / "cli.py").read_text("utf-8")
+    assert "def _truncate_before(" in src, "缺少按 as-of 截断价格序列的函数"
+    # 出口处必须统一再截一次：长桥 K 线那一支会把未来数据接回来
+    assert "tech_series = _truncate_before(tech_series, today)" in src, \
+        "技术面序列必须在【所有来源汇合之后】统一截断"
+    assert "series_done = _truncate_before(series_done, today)" in src
+    print("PASS test_replay_truncates_future_prices")

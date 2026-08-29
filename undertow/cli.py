@@ -1355,7 +1355,13 @@ def cmd_report(args) -> int:
                                           prev_date or "", curr_date_s or "", today.isoformat()),
                                       verdict_html=verdict_html,
                                       tech_html=tech_html, stretch_read=stretch_read)
-            fn = f"{inst.key}_{today.isoformat()}.html"
+            # ⚠️ 文件名用【可交易日】（= 快照日期），不是生成日期。
+            # 时点约定：快照 D 于 D 凌晨捕获，OI 是 D−1 收盘的 OCC 结算，
+            # diff 描述交易日 D−1，**D 开盘才可执行** —— D 就是这份研报的身份。
+            # 工作日两者相同看不出来；周末/数据延迟时就错位：2026-08-29（周六）
+            # 生成的报告装着描述 8/27 的数据，却被命名成 gold_2026-08-29.html
+            # （用户 2026-08-29 指出）。研报的名字必须回答"这份东西哪天能用"。
+            fn = f"{inst.key}_{curr_date_s or today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
             try:
@@ -1411,13 +1417,18 @@ def cmd_report(args) -> int:
                 "signal_level": (_ss.level if (_ss and not _stale) else ""),
             }
         idx_family = _family_check(_views)
-        index_html = render_index_html(idx_items, today.isoformat(),
-                                       family_notes=idx_family)
-        index_path = reports_dir / f"index_{today.isoformat()}.html"
+        # 索引页同理：用各品种里最新的可交易日，不用生成日期
+        _idx_day = max((w[6] for w in written if w[6]), default="") or today.isoformat()
+        index_html = render_index_html(idx_items, _idx_day, family_notes=idx_family)
+        index_path = reports_dir / f"index_{_idx_day}.html"
         _archive_existing(index_path)
         index_path.write_text(index_html, encoding="utf-8")
 
-    print(f"已生成综合研判报告（{today}）:")
+    # 标题写【可交易日】不写生成日期 —— 否则周六生成的报告写着 2026-08-29，
+    # 装的却是 8/28 可交易的数据（用户 2026-08-29 指出的同一个坑）。
+    _hd = max((w[6] for w in written if w[6]), default="") or today.isoformat()
+    _gen = f"（生成于 {today}）" if _hd != today.isoformat() else ""
+    print(f"已生成综合研判报告 · 可交易日 {_hd}{_gen}:")
     for inst, o, fn, ss, v, _sr, _td, _fx in written:
         # 低置信 / 已过期 的强信号在摘要里也必须降级，不能和可执行告警长得一样。
         # ⚠️ 报告横幅、索引页、CLI 摘要**三处口径必须同步** —— 2026-08-28 实测：
@@ -1436,6 +1447,16 @@ def cmd_report(args) -> int:
         print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence}){flag}{vh}  → {reports_dir / fn}")
     if index_path:
         print(f"  索引页 → {index_path}")
+
+    # 数据是不是"今天的"，必须说清楚 —— 否则周末生成的报告看着像当日研报。
+    _days = sorted({w[6] for w in written if w[6]})
+    _tstr = today.isoformat()
+    if _days and all(d < _tstr for d in _days):
+        print(f"\n📅 今天（{_tstr}）没有新数据：最新快照止于 {_days[-1]}，"
+              f"上面这批研报的可交易日是 {_days[-1]}，不是今天。")
+        print("   下一份新研报要等新快照落地（OCC 隔夜结算 → 次日凌晨抓取）。")
+    elif len(_days) > 1:
+        print(f"\n📅 ⚠️ 各品种数据不同龄：{', '.join(_days)} —— 混龄比较需谨慎。")
 
     # —— 持仓 × 信号冲突告警 ——————————————————————————————————————
     # 用户 2026-08-28 的直接批评：那天黄金亮 ⚡极强看跌（53.5×），他手上持白银多头，

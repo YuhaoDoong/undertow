@@ -119,3 +119,19 @@ def test_family_same_direction_is_silent():
     assert check({"gold": {"near": "偏多"}, "silver": {"near": "偏多(弱)"}}) == []
     assert check({"qqq": {"near": "偏空"}, "tqqq": {"near": "偏空(弱)"}}) == []
     print("PASS test_family_same_direction_is_silent")
+
+
+def test_report_filename_uses_tradable_day_not_generation_day():
+    """研报文件名必须回答「这份东西哪天能用」，不是「哪天生成的」。
+
+    2026-08-29（周六）生成的报告装着描述 8/27 交易日的数据、可交易日是 8/28，
+    却被命名成 gold_2026-08-29.html —— 工作日两者相同看不出来，周末就错位。
+    """
+    src = (Path(__file__).resolve().parents[1] / "undertow" / "cli.py").read_text("utf-8")
+    assert 'fn = f"{inst.key}_{curr_date_s or today.isoformat()}.html"' in src, \
+        "研报文件名须用快照日期（可交易日），不得用 today"
+    assert 'index_path = reports_dir / f"index_{_idx_day}.html"' in src, \
+        "索引页同理"
+    assert "今天（" in src and "没有新数据" in src, \
+        "数据非当日时必须明说，否则看着像当日研报"
+    print("PASS test_report_filename_uses_tradable_day_not_generation_day")

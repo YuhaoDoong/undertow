@@ -694,3 +694,28 @@ def test_band_crossing_strike_uses_prev_oi_baseline():
     row = next((c for c in fa.changes if c.strike == 113.0), None)
     if row is not None:   # ΔOI=+250 若低于门槛整行被滤掉，同样正确
         assert row.d_oi == 250 and "新建" not in row.judgment
+
+
+def test_short_dated_net_delta_loses_veto():
+    """短到期主导时，净有效 Delta 不得把方向打成低置信。
+
+    2026-08-28 黄金的教训：推断口径 53.49× 指向偏空，净 Delta +2,993 指向偏多，
+    两口径反向 → 低置信 → 我没当回事、没预警。次日 GLD -3.24%，收 408.89，
+    正好打穿那批被忽略的 408P（次日到期、Δ0.04、3.8 万张）。
+    根子：Delta 是局部线性近似，对"到期前大幅跳跃"系统性失效。
+    """
+    from undertow.analyze.direction import decide
+
+    # 长到期为主 → 净 Delta 反向仍应降级为低置信（原行为保留）
+    long_dated = decide(up_pressure=100.0, dn_pressure=5348.6, net_delta=2992.6,
+                        dte_share_le2=0.10)
+    assert long_dated.low_confidence is True
+    assert long_dated.direction == "偏空"
+
+    # 短到期主导（69.4% ≤2天，正是当天黄金的值）→ 不得降级
+    short_dated = decide(up_pressure=100.0, dn_pressure=5348.6, net_delta=2992.6,
+                         dte_share_le2=0.694)
+    assert short_dated.low_confidence is False, "短到期主导时净 Delta 不该有降级权"
+    assert short_dated.direction == "偏空"
+    assert any("局部近似" in r for r in short_dated.reasons), "必须说明为何不采信净 Delta"
+    print("PASS test_short_dated_net_delta_loses_veto")

@@ -36,7 +36,10 @@ from dataclasses import dataclass, field
 # 无数据：没有可比的前一日快照，或 ΔOI 全零（OCC 未结算）
 
 # —— 统计性弃权（**未校准**，见模块 docstring 的实测表）——
-MIN_RATIO = 1.3          # 压力比低于此 → 方向不明。沿用既有口径，未校准
+MIN_RATIO = 1.3
+# ≤2 天到期的增仓占比超过此值 = 当日押注由短到期主导，净有效 Delta 失去反证资格。
+# 门槛取 0.5（过半）而非拟合值 —— 没有样本可校准，只能取一个不偏不倚的分界。
+SHORT_DATED_SHARE = 0.5          # 压力比低于此 → 方向不明。沿用既有口径，未校准
 UNCALIBRATED_NOTE = ("阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 "
                      "Wilson 95% 区间下界超过 50%")
 
@@ -79,7 +82,8 @@ def decide(*, up_pressure: float, dn_pressure: float,
            net_delta: float | None = None,
            has_prev: bool = True, oi_changed: bool = True,
            trade_date: str = "", today: str = "",
-           shadow_soft: bool = True) -> DirectionCall:
+           shadow_soft: bool = True,
+           dte_share_le2: float | None = None) -> DirectionCall:
     """裁决方向或弃权。
 
     弃权分两类，输出里必须能区分：
@@ -120,7 +124,27 @@ def decide(*, up_pressure: float, dn_pressure: float,
 
     # 两口径反向 → 弃权。pressure 是【推断】（按 IV 判主动方），
     # 净有效 Delta 是【观测】（纯算术）。两者反向时我们并不知道哪个对。
-    if net_delta is not None and net_delta != 0:
+    # ⚠️ 净有效 Delta 在【短到期主导】的日子里不可用作反证 —— 2026-08-28 黄金的教训。
+    #
+    # 那天推断口径 53.49× 指向偏空，净 Delta +2,993 指向偏多，两口径反向 →
+    # 信号被打成"低置信"，于是我在对话里没把它当回事、也没预警。次日 GLD -3.24%，
+    # 收 408.89，正好打穿那批被忽略的 408P。
+    #
+    # 为什么净 Delta 会反：那 7.8 万张 put 是【次日到期、Δ0.04/0.10】的，
+    # 按 Delta 加权几乎不计分；而 call 端张数只有 35,235 却带 Δ0.50，全额计分。
+    # 根子在 Delta 是【局部线性近似】，对"到期前大幅跳跃"系统性失效：
+    # 0DTE 的 408P 此刻 Δ0.04，真跌 3% 就变 Δ1.0，赔率几十倍。
+    # 用 Delta 衡量这种押注，等于用尺子量爆炸。
+    #
+    # 所以：当 ≤2 天到期的增仓占比超过阈值时，净 Delta 失去"把方向打成低置信"
+    # 的资格，只作为提示保留。这不是调参凑结果，是这个指标的适用边界。
+    if (dte_share_le2 is not None and dte_share_le2 >= SHORT_DATED_SHARE
+            and net_delta is not None and net_delta != 0
+            and ("偏多" if net_delta > 0 else "偏空") != d):
+        R.append(f"净有效 Delta {net_delta:+,.0f} 指向反向，但 {dte_share_le2:.0%} 的增仓"
+                 f"在 2 天内到期 —— Delta 是局部近似，对到期前大幅跳跃系统性失效，"
+                 f"此处不作为反证（见 direction.py 说明）")
+    elif net_delta is not None and net_delta != 0:
         obs = "偏多" if net_delta > 0 else "偏空"
         if obs != d:
             rs = [f"两个口径反向：推断口径（加权增仓 {ratio:.2f}×）指向{d}，"

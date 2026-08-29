@@ -1412,12 +1412,72 @@ def cmd_report(args) -> int:
         print(f"  {inst.key:7s} {o.bias:8s}(可信度{o.confidence}){flag}{vh}  → {reports_dir / fn}")
     if index_path:
         print(f"  索引页 → {index_path}")
+
+    # —— 持仓 × 信号冲突告警 ——————————————————————————————————————
+    # 用户 2026-08-28 的直接批评：那天黄金亮 ⚡极强看跌（53.5×），他手上持白银多头，
+    # 金银相关 0.89 —— 信号没被提、相反结论没被质疑、持仓没被告警。次日 SLV -4.38%。
+    # ⚠️ 结果只上终端 + 通知 + data/account/（已 gitignore），**绝不进 HTML**：
+    #    研报是入公开库的，账户持仓不能出现在里面。
+    try:
+        _sig_by_sym = {}
+        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx in written:
+            if _ss is not None and not (_td2 and _td2 < today.isoformat()):
+                _sig_by_sym[_inst.options.symbol.upper()] = _ss
+        if _sig_by_sym:
+            _alert_position_conflicts(_sig_by_sym, today.isoformat())
+    except Exception as e:      # 告警失败要出声，不能静默变"没有冲突"
+        print(f"⚠️ 持仓冲突检查失败：{type(e).__name__}: {e}", file=sys.stderr)
+
     if failed:
         print(f"[部分失败] {', '.join(failed)} 未生成——退出码置 1，避免自动化误提交残缺报告集",
               file=sys.stderr)
         return 1
     print(f"\n用浏览器打开即可（macOS: open '{reports_dir / written[0][2]}'）")
     return 0
+
+
+def _alert_position_conflicts(signals: dict, today: str) -> None:
+    """有持仓的品种（或与之高相关的品种）出现反向强信号 → 告警。
+
+    ⚠️ 只上终端 + 系统通知 + data/account/（已 gitignore）。研报 HTML 入公开库，
+    账户持仓绝不能写进去。取不到持仓时静默跳过是【可以的】——那是"没连账户"，
+    不是"没有冲突"；但取到了却检查失败必须出声（调用方已接住并打印）。
+    """
+    from undertow.analyze.position_alert import check_conflicts, render, unparsed
+    from undertow.collect import longbridge_account as lb
+    from undertow.collect import longbridge_quote as lq
+    if not lq.available():
+        return
+    try:
+        positions = lb.fetch_positions()
+    except Exception:
+        return          # 没连上账户 ≠ 没有冲突，但也无从检查
+    held = {p.symbol: int(p.quantity) for p in positions if p.quantity}
+    if not held:
+        return
+    # 解析失败必须出声 —— 解析不出来会让持仓被当成不存在，告警静默消失。
+    # 2026-08-29 实测就栽在这：真实代码带 .US 后缀，四条腿一条都没解析出来。
+    bad = unparsed(held)
+    if bad:
+        print(f"⚠️ {len(bad)} 条持仓代码无法解析，冲突检查会漏掉它们："
+              f"{', '.join(bad[:4])}", file=sys.stderr)
+    conflicts = check_conflicts(held, signals)
+    if not conflicts:
+        return
+    txt = render(conflicts)
+    print("\n" + txt)
+    out = pathlib.Path("data/account/live")
+    out.mkdir(parents=True, exist_ok=True)
+    (out / f"{today}_conflict.md").write_text(
+        f"# 持仓 × 信号冲突 {today}\n\n{txt}\n", encoding="utf-8")
+    head = conflicts[0]
+    try:
+        subprocess.run(["/usr/bin/osascript", "-e",
+                        f'display notification "{head.headline()[:180]}" '
+                        f'with title "⚠️ 持仓与信号方向冲突" sound name "Glass"'],
+                       check=False, capture_output=True, timeout=10)
+    except Exception:
+        pass
 
 
 def _gamma_jsonable(inst, ga) -> dict:

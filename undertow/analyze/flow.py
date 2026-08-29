@@ -1469,9 +1469,21 @@ def analyze_flow(
         # 否则反事实样本作废、这层永远无法校准。
         from undertow.analyze.direction import decide as _decide
         _nd = round(sum(c.d_oi * c.delta for c in changes), 1)
+        # 短到期占比：净 Delta 在短到期主导时失去反证资格（见 direction.py 的说明，
+        # 2026-08-28 黄金：53.49× 的看跌被 +2,993 的净 Delta 打成低置信，次日 -3.24%）
+        _adds = [c for c in changes if c.d_oi > 0]
+        _tot = sum(c.d_oi for c in _adds)
+        _sh2 = None
+        if _tot and curr_date:
+            try:
+                _ref = date.fromisoformat(curr_date)
+                _sh2 = sum(c.d_oi for c in _adds
+                           if 0 <= (c.expiry - _ref).days <= 2) / _tot
+            except (ValueError, TypeError):
+                _sh2 = None
         call = _decide(up_pressure=upside, dn_pressure=downside, net_delta=_nd,
                        has_prev=True, oi_changed=bool(changes),
-                       trade_date=curr_date or "", today="")
+                       trade_date=curr_date or "", today="", dte_share_le2=_sh2)
         if call.abstain:
             tilt = f"方向不明（{call.reasons[0]}）{cnote}"
         elif call.direction == "偏空":

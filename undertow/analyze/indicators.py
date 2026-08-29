@@ -25,6 +25,33 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+# 分层回测结论（2026-08-29，138 样本 / 日聚类 bootstrap / 前瞻 1 日 / 局部去趋势）。
+# 门槛按【各品种自身】|日涨跌| 的 70 分位定，不用统一的 1.5% —— 原油日常波动
+# 本就比黄金大，一刀切会把原油的横盘算成大波动。
+#
+# 起因（用户 2026-08-29）：「横盘的日期和大涨大跌的日期要区分。横盘的时候，
+# 指标乱是正常的。」—— 这个改进直接救活了两个此前被误判为无效的指标：
+# 波动率面混在一起测只有 52.1%，分层后大波动日 72.7%、横盘 41.3%，
+# 等于把两个相反的东西平均掉了。
+REGIME: dict[str, tuple[str, str]] = {
+    # key → (大波动日表现, 横盘日表现)
+    "flow":  ("63.9% [50.0,77.4]", "64.5% [53.9,74.6]"),
+    "vol":   ("72.7% [55.2,88.6]", "41.3% [28.8,54.5]"),
+    "price": ("73.5% [57.1,87.9]", "53.7% [40.6,66.2]"),
+}
+# 每组在什么行情下可信 —— 直接写给用户看，别让他自己去猜
+WHEN_TRUST: dict[str, str] = {
+    "flow":  "✅ 全天候。大波动日 63.9%、横盘 64.5%，不挑行情，是目前唯一"
+             "整体也站得住的一层。",
+    "vol":   "⚠️ 只在关键节点可信。大波动日 72.7%（区间下界 55.2%），"
+             "横盘日 41.3% —— 横盘时它不只是没用，是【反向】的，别看。",
+    "price": "⚠️ 关键节点更可信。大波动日 73.5%，横盘日 53.7%（贴着抛硬币）。",
+    "struct": "未单独回测（离散投票，无连续强度可测）。",
+    "cot":   "未回测：周频数据，现在拉到的是最新值而非当时的值，"
+             "拿它回测就是 lookahead。",
+    "macro": "未回测：同上，月频。",
+}
+
 # 家族定义：key → (图标, 短名, 数据源一句话, 大白话"它在说什么")
 FAMILIES: dict[str, tuple[str, str, str, str]] = {
     "struct": ("🧱", "结构", "期权链当前 OI 分布（静态）",
@@ -195,6 +222,8 @@ def render_section(labels: list[Label], esc) -> str:
             f'<b style="color:{l.color}">{esc(l.reading)}</b></td>'
             f'<td style="padding:7px 8px;vertical-align:top;font-size:12.5px;'
             f'line-height:1.6">{esc(plain)}<br>'
+            f'<b style="font-size:11.5px">何时可信：</b>'
+            f'<span style="font-size:11.5px">{esc(WHEN_TRUST.get(l.key, ""))}</span><br>'
             f'<span style="color:#6e7781;font-size:11.5px">数据源：{esc(src)}'
             f'{("　｜　本次依据：" + esc(l.detail)) if l.detail else ""}</span></td>'
             f'</tr>')
@@ -212,4 +241,7 @@ def render_section(labels: list[Label], esc) -> str:
         '<div class="sub" style="margin-top:6px">'
         '⚠️ 各组权重目前是<b>固定</b>的，不随读数强弱变化 —— '
         '「增仓 53.5×」和「增仓 1.4×」在综合投票里同样只值 0.8 票。'
-        '这是已知缺陷，强度只在本表和上面的小标签里看得到。</div>')
+        '这是已知缺陷，强度只在本表和上面的小标签里看得到。<br>'
+        '📊 「何时可信」来自 2026-08-29 的分层回测：138 个样本、日聚类 bootstrap、'
+        '前瞻 1 日、局部去趋势；大波动门槛取各品种自身 |日涨跌| 的 70 分位。'
+        '样本只覆盖 2026-06-25~08-28 两个月、主力是金银油，结论谈不上牢固。</div>')

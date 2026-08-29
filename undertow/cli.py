@@ -318,10 +318,13 @@ def _flow_facts(fa, ga, ga_prev, snap_prev, snap_curr, spot: float, ref) -> dict
         out["bull_add"] = sum(x.d_oi for x in ch if x.d_oi > 0 and x.bias == "bullish")
         # 按剩余到期分桶：pressure 是 45 天内加总的，加总会掩盖"近月看跌、
         # 远月看涨"这类结构（用户 2026-08-29 追问）
-        from undertow.analyze.flow import expiry_split, expiry_split_conflict
+        from undertow.analyze.flow import (expiry_split, expiry_split_conflict,
+                                            dominant_expiry)
         _sp = expiry_split(fa)
         out["exp_split"] = _sp
         out["exp_conflict"] = expiry_split_conflict(_sp)
+        # 主力到期：由数据决定哪个到期日占大头，不预先划桶（用户 2026-08-29）
+        out["dominant"] = dominant_expiry(ch, getattr(fa, "curr_date", None))
         # 最大的几笔新建仓（含 Delta，供判断是尾部险还是贴身防御）
         big = sorted([x for x in ch if x.d_oi > 0], key=lambda x: -x.d_oi)[:3]
         out["big_legs"] = [{

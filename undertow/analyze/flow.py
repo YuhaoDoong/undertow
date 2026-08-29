@@ -524,6 +524,49 @@ def concentration_stats(fa: "FlowAnalysis") -> dict:
 DTE_BUCKETS = ((0, 2, "0-2天"), (3, 7, "3-7天"), (8, 21, "8-21天"), (22, 999, "22天+"))
 
 
+def dominant_expiry(changes: list, curr_date: str | None,
+                    *, share: float = 0.40) -> dict | None:
+    """哪一个【到期日】是当天的主力 —— 由数据决定，不由我预先划定。
+
+    用户 2026-08-29：「我们虽然这次主力是当日到期，但是要注意的是，我们不应该
+    硬性划定日期。应该是当日到期的出现剧烈增仓，所以主力才是当日到期。
+    如果当日增仓不变，就不该是当日到期的为主力。」
+
+    做法：按【真实到期日】（不是人为分的桶）聚合 |ΔOI|，占比最高者若超过 share
+    就算主力；否则返回 None（当天没有单一主力，力量是分散的）。
+
+    share=0.40 是拍的：没有样本可校准，取一个"接近半数"的分界。
+    """
+    if not changes or not curr_date:
+        return None
+    try:
+        ref = date.fromisoformat(curr_date)
+    except (ValueError, TypeError):
+        return None
+    agg: dict = {}
+    for c in changes:
+        a = agg.setdefault(c.expiry, {"doi": 0, "dn": 0, "up": 0, "legs": 0})
+        a["doi"] += abs(c.d_oi)
+        a["legs"] += 1
+        if c.bias == "bearish":
+            a["dn"] += abs(c.d_oi)
+        elif c.bias == "bullish":
+            a["up"] += abs(c.d_oi)
+    total = sum(v["doi"] for v in agg.values())
+    if not total:
+        return None
+    exp, v = max(agg.items(), key=lambda kv: kv[1]["doi"])
+    frac = v["doi"] / total
+    if frac < share:
+        return None                     # 没有单一主力：力量分散在多个到期上
+    dn, up = v["dn"], v["up"]
+    return {"expiry": exp.isoformat(), "dte": (exp - ref).days,
+            "doi": v["doi"], "share": round(frac, 3), "legs": v["legs"],
+            "dn": dn, "up": up,
+            "sign": -1 if dn > up else (1 if up > dn else 0),
+            "ratio": round(max(dn, up) / max(min(dn, up), 1), 1)}
+
+
 def _split_by_dte(changes: list, curr_date: str | None) -> list[dict]:
     """底层：直接吃 changes 列表，不依赖 FlowAnalysis 对象。"""
     if not changes or not curr_date:
@@ -541,7 +584,19 @@ def _split_by_dte(changes: list, curr_date: str | None) -> list[dict]:
         up = sum(abs(c.d_oi) for c in legs if c.bias == "bullish")
         if not (dn or up):
             continue
+        # ⚠️ 拆开「买 put」与「卖 call」：都算看跌侧，但买 put 是花钱押跌、
+        # 卖 call 是收权利金做压制。2026-08-28 黄金 22天+ 桶合并报「看跌 14.6×」，
+        # 拆开却是买 put 仅 312 张、卖 call 3,774 张 —— 合并会让人以为远月也在押跌，
+        # 而外部分析者当天的结论正是「10 月端没有规模相当的主动买 put」。（用户指出）
         out.append({"bucket": name, "legs": len(legs), "dn": dn, "up": up,
+                    "buy_put": sum(abs(c.d_oi) for c in legs
+                                   if c.kind == "P" and c.bias == "bearish"),
+                    "sell_call": sum(abs(c.d_oi) for c in legs
+                                     if c.kind == "C" and c.bias == "bearish"),
+                    "buy_call": sum(abs(c.d_oi) for c in legs
+                                    if c.kind == "C" and c.bias == "bullish"),
+                    "sell_put": sum(abs(c.d_oi) for c in legs
+                                    if c.kind == "P" and c.bias == "bullish"),
                     "sign": -1 if dn > up else (1 if up > dn else 0),
                     "ratio": round(max(dn, up) / max(min(dn, up), 1), 1),
                     "doi": sum(abs(c.d_oi) for c in legs)})
@@ -585,6 +640,14 @@ def expiry_split(fa: "FlowAnalysis") -> list[dict]:
         sign = -1 if dn > up else (1 if up > dn else 0)
         ratio = max(dn, up) / max(min(dn, up), 1)
         out.append({"bucket": name, "legs": len(legs), "dn": dn, "up": up,
+                    "buy_put": sum(abs(c.d_oi) for c in legs
+                                   if c.kind == "P" and c.bias == "bearish"),
+                    "sell_call": sum(abs(c.d_oi) for c in legs
+                                     if c.kind == "C" and c.bias == "bearish"),
+                    "buy_call": sum(abs(c.d_oi) for c in legs
+                                    if c.kind == "C" and c.bias == "bullish"),
+                    "sell_put": sum(abs(c.d_oi) for c in legs
+                                    if c.kind == "P" and c.bias == "bullish"),
                     "sign": sign, "ratio": round(ratio, 1),
                     "doi": sum(abs(c.d_oi) for c in legs)})
     return out
@@ -1699,8 +1762,14 @@ def expiry_split_html(rows: list[dict], esc) -> str:
             f'<tr><td style="padding:5px 8px">{esc(b["bucket"])}</td>'
             f'<td style="padding:5px 8px;text-align:right">{b["legs"]}</td>'
             f'<td style="padding:5px 8px;text-align:right">{b["doi"]:,}</td>'
-            f'<td style="padding:5px 8px;text-align:right;color:#cf222e">{b["dn"]:,}</td>'
-            f'<td style="padding:5px 8px;text-align:right;color:#1a7f37">{b["up"]:,}</td>'
+            f'<td style="padding:5px 8px;text-align:right;color:#cf222e">'
+            f'<b>{b.get("buy_put", 0):,}</b></td>'
+            f'<td style="padding:5px 8px;text-align:right;color:#cf222e">'
+            f'{b.get("sell_call", 0):,}</td>'
+            f'<td style="padding:5px 8px;text-align:right;color:#1a7f37">'
+            f'<b>{b.get("buy_call", 0):,}</b></td>'
+            f'<td style="padding:5px 8px;text-align:right;color:#1a7f37">'
+            f'{b.get("sell_put", 0):,}</td>'
             f'<td style="padding:5px 8px;font-weight:700;color:{col}">'
             f'{word} {b["ratio"]:.1f}×</td></tr>')
     head = ('<b style="color:#bf8700">⚠️ 各到期方向不一致</b> —— '
@@ -1716,14 +1785,25 @@ def expiry_split_html(rows: list[dict], esc) -> str:
         '<th style="text-align:left;padding:5px 8px">剩余到期</th>'
         '<th style="text-align:right;padding:5px 8px">腿数</th>'
         '<th style="text-align:right;padding:5px 8px">|ΔOI|</th>'
-        '<th style="text-align:right;padding:5px 8px">看跌</th>'
-        '<th style="text-align:right;padding:5px 8px">看涨</th>'
+        '<th style="text-align:right;padding:5px 8px">买put<br>'
+        '<small style="font-weight:400">花钱押跌</small></th>'
+        '<th style="text-align:right;padding:5px 8px">卖call<br>'
+        '<small style="font-weight:400">收钱压制</small></th>'
+        '<th style="text-align:right;padding:5px 8px">买call<br>'
+        '<small style="font-weight:400">花钱押涨</small></th>'
+        '<th style="text-align:right;padding:5px 8px">卖put<br>'
+        '<small style="font-weight:400">收钱托底</small></th>'
         '<th style="text-align:left;padding:5px 8px">该桶倾向</th></tr>'
         + "".join(trs) + '</table>'
         '<div class="sub" style="margin-top:6px">'
         '为什么要拆：加权增仓（上面那个倍数）是把 <b>45 天内所有到期加总</b>算的。'
         '0DTE 的深度价外 put 是「赌明天」，30 天后的 put 是「中期保护」，'
         '含义完全不同，加总后就分不出来了。<br>'
+        '<b>四列分开看</b>：买 put／买 call 是<b>花钱</b>押方向，'
+        '卖 call／卖 put 是<b>收权利金</b>做压制或托底 —— 都记在同一侧，'
+        '但前者才是主动押注。2026-08-28 黄金 22天+ 桶合并显示「看跌 14.6×」，'
+        '拆开却是买 put 仅 312 张、卖 call 3,774 张，而外部分析者当天的结论正是'
+        '「10 月端没有规模相当的主动买 put」。<br>'
         '实测 127 个样本：各桶同向时命中 67.4%（日聚类 95% 区间 [54.5%, 80.0%]），'
         '打架时 53.1%（区间跨 50%）。差值中位 +14.7pp 但区间跨 0，样本不足以下结论，'
         '故只用来降置信、不否决方向。<br>'

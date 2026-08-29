@@ -1527,6 +1527,20 @@ def _facts_html(fx: dict) -> str:
     # 到期一致性：index 上只给【一个标记】，四个桶的明细留给品种研报
     # （用户 2026-08-29：「index 可以不用拆开这么多到期桶，如果全部同向可以
     #   额外标注一下。我觉得合并已经很有价值了。品种内部研报可以再拆开」）
+    # 主力到期：谁占了当天增仓的大头 —— 由数据决定，不由固定分桶决定
+    dom = fx.get("dominant")
+    if dom:
+        when = ("当日到期" if dom["dte"] == 0 else
+                ("次日到期" if dom["dte"] == 1 else f'{dom["dte"]}天后到期'))
+        w = "看跌" if dom["sign"] < 0 else ("看涨" if dom["sign"] > 0 else "两边平")
+        col = "#cf222e" if dom["sign"] < 0 else ("#1a7f37" if dom["sign"] > 0 else "#6e7781")
+        rows.append(f'🎯 <b>主力集中在 {_esc(dom["expiry"])}</b>（{when}），'
+                    f'占当天增仓 <b>{dom["share"]*100:.0f}%</b>　'
+                    f'<b style="color:{col}">{w} {dom["ratio"]:.1f}×</b>')
+    elif fx.get("exp_split"):
+        rows.append('<span style="color:#6e7781">🎯 无单一主力到期 —— '
+                    '增仓分散在多个到期上</span>')
+
     sp = fx.get("exp_split") or []
     if sp and len([b for b in sp if b["sign"]]) >= 2:
         if fx.get("exp_conflict"):

@@ -286,11 +286,13 @@ def test_expiry_buckets_split_and_conflict():
         expiry: D
         d_oi: int
         bias: str
+        kind: str = "P"          # 买put/卖call 要分开统计，必须带 C/P
 
     ref = "2026-08-28"
     # 近月看跌、远月看涨 → 必须判为打架
     legs = [L(D(2026, 8, 29), 9000, "bearish"), L(D(2026, 8, 29), 500, "bullish"),
-            L(D(2026, 9, 25), 8000, "bullish"), L(D(2026, 9, 25), 400, "bearish")]
+            L(D(2026, 9, 25), 8000, "bullish", "C"),
+            L(D(2026, 9, 25), 400, "bearish", "C")]
     rows = _split_by_dte(legs, ref)
     assert len(rows) == 2, "0-2天 与 22天+ 两个桶"
     assert rows[0]["sign"] == -1 and rows[1]["sign"] == 1
@@ -299,6 +301,13 @@ def test_expiry_buckets_split_and_conflict():
     # 全部同向 → 不算打架
     same = [L(D(2026, 8, 29), 9000, "bearish"), L(D(2026, 9, 25), 8000, "bearish")]
     assert _dte_dirs_conflict(_split_by_dte(same, ref)) is False
+
+    # 买 put 与 卖 call 必须分开统计 —— 两者都算看跌侧，含义却完全不同
+    mixed = [L(D(2026, 9, 25), 312, "bearish", "P"),
+             L(D(2026, 9, 25), 3774, "bearish", "C")]
+    r = _split_by_dte(mixed, ref)[0]
+    assert r["buy_put"] == 312 and r["sell_call"] == 3774, \
+        "合并成一个「看跌 12×」会让人以为远月也在押跌，实际只有 312 张花钱押跌"
 
     # 缺日期时不得瞎猜
     assert _split_by_dte(legs, "") == []
@@ -365,3 +374,40 @@ def test_every_card_shows_both_horizons_with_scores():
     assert "CFTC" in h and "日频" in h
     assert "按【数据更新频率】分的" in h, "必须承认这不是按预测时域分的"
     print("PASS test_every_card_shows_both_horizons_with_scores")
+
+
+def test_dominant_expiry_is_data_driven_not_hardcoded():
+    """主力到期由数据决定，不预先划桶。
+
+    用户 2026-08-29：「我们不应该硬性划定日期。应该是当日到期的出现剧烈增仓，
+    所以主力才是当日到期。如果当日增仓不变，就不该是当日到期的为主力。」
+    """
+    from dataclasses import dataclass
+    from datetime import date as D
+    from undertow.analyze.flow import dominant_expiry
+
+    @dataclass
+    class L:
+        expiry: D
+        d_oi: int
+        bias: str
+        kind: str = "P"
+
+    ref = "2026-08-28"
+    # 当日到期占大头 → 主力就是当日
+    heavy_today = [L(D(2026, 8, 28), 9000, "bearish"),
+                   L(D(2026, 9, 25), 500, "bearish")]
+    d = dominant_expiry(heavy_today, ref)
+    assert d and d["dte"] == 0 and d["share"] > 0.9
+
+    # 同样有当日到期的腿，但量很小 → 主力不该是当日
+    light_today = [L(D(2026, 8, 28), 300, "bearish"),
+                   L(D(2026, 9, 25), 9000, "bearish")]
+    d2 = dominant_expiry(light_today, ref)
+    assert d2 and d2["dte"] != 0, "当日增仓不大时，主力不该被判成当日到期"
+
+    # 分散在多个到期 → 没有单一主力，不许硬挑一个
+    spread = [L(D(2026, 8, 28), 1000, "bearish"), L(D(2026, 9, 4), 1000, "bearish"),
+              L(D(2026, 9, 18), 1000, "bearish"), L(D(2026, 9, 25), 1000, "bearish")]
+    assert dominant_expiry(spread, ref) is None, "力量分散时必须说「没有主力」"
+    print("PASS test_dominant_expiry_is_data_driven_not_hardcoded")

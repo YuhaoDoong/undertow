@@ -90,7 +90,10 @@ for k in KEYS:
             print(f"{k:<7}{tag:<8} 天数不足")
             continue
         nd, n, lo, mid, hi = res
-        v = "✅ 站得住" if lo > 0.5 else ("⚠️ 贴边" if hi > 0.5 and mid > 0.5 else "❌ 不成立")
+        # 同上：聚类数 <50 一律只能算探索性，不得写"站得住"
+        v = ("✅ 站得住" if (lo > 0.5 and nd >= 50)
+             else (f"⚠️ 探索性({nd}簇<50)" if lo > 0.5
+                   else ("⚠️ 贴边" if hi > 0.5 and mid > 0.5 else "❌ 不成立")))
         print(f"{k:<7}{tag:<8}{nd:>5}{n:>6}{mid*100:>8.1f}%   "
               f"[{lo*100:>5.1f}%, {hi*100:>5.1f}%]   {v}")
     print()

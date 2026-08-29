@@ -13,7 +13,10 @@
     10/60 日区间收敛  −9pp  ❌ 不成立，故【不纳入】
     三重同时           44% vs 29%  +15pp（n=18）
 
-⚠️ 日聚类 bootstrap 的 95% 区间【跨 0】，样本不足以下结论。
+⚠️ 两重保留，缺一不可：
+   1. 日聚类 bootstrap 的 95% 区间【跨 0】，且只有约 40 个日期聚类（<50）；
+   2. 上面那些分位是按【整个回测区间】排序算的，含未来信息 ——
+      属事后描述，不是盘前可复现的预测回测（codex 2026-08-29 P1-5）。
    所以本模块只输出观察标记，**不参与任何方向判定、不进综合分**。
    它说的是"可能要变天"，从不说"往哪边变" —— 方向仍归增仓层。
 """
@@ -21,6 +24,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+# ⚠️ 这两个阈值是【拍的，未经校准】（codex 2026-08-29 P1 指出）。
+# 回测里的 45% 是"各【单项】最低三分之一"的数字，不是下面这个 AND 规则的胜率 ——
+# 精确布尔规则本身从未单独回测过。所以：
+#   · 阈值只用来点亮一个观察标记，不参与任何判定；
+#   · 用户可见文案里【不得出现具体胜率】，那会让人以为它被验证过。
 IV_TIGHT = 0.35        # ATM IV 处于自身历史分位 ≤ 此值 = 被压
 ATR_TIGHT = 0.85       # ATR5/ATR60 ≤ 此值 = 短期波幅收缩
 
@@ -51,14 +59,16 @@ def _tr(highs, lows, closes) -> list[float]:
             for i in range(1, len(closes))]
 
 
-def assess(*, iv_history: list[float] | None, iv_now: float | None,
+def assess(*, iv_pctile: float | None,
            highs: list[float] | None, lows: list[float] | None,
            closes: list[float] | None) -> Squeeze:
-    """两个维度都算不出来就返回 ok=False —— 不猜、不用单腿硬撑。"""
-    iv_p = None
-    if iv_history and iv_now is not None and len(iv_history) >= 30:
-        below = sum(1 for v in iv_history if v < iv_now)
-        iv_p = below / len(iv_history)
+    """两个维度都算不出来就返回 ok=False —— 不猜、不用单腿硬撑。
+
+    iv_pctile：ATM IV 在自身历史里的分位（0~1），由 volregime 算好后传入。
+    上一版让本函数自己从 VolRegime.history 算 —— 那个字段根本不存在，
+    于是 tight 在生产里永远是 False（codex 2026-08-29 P1）。
+    """
+    iv_p = iv_pctile if (iv_pctile is not None and 0.0 <= iv_pctile <= 1.0) else None
     atr_r = None
     if closes and highs and lows and len(closes) >= 61:
         tr = _tr(highs, lows, closes)
@@ -76,7 +86,8 @@ def assess(*, iv_history: list[float] | None, iv_now: float | None,
         bits.append(f"近5日波幅是60日均值的 {atr_r*100:.0f}%")
     note = "；".join(bits)
     if tight:
-        note += " → 两项都被压到低位，历史上这种日子次日大波动占 45%（基准 30%）"
+        # ⚠️ 不写具体胜率：这个 AND 规则没被单独回测过（见文件头说明）。
+        note += "　→ 两项都被压到低位（阈值未校准，仅作观察，不构成判断）"
     return Squeeze(ok=True, iv_pctile=iv_p, atr_ratio=atr_r, tight=tight, note=note)
 
 

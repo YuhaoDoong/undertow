@@ -259,12 +259,15 @@ def test_session_hooks_leaves_a_trace_every_wakeup():
     txt = src.read_text(encoding="utf-8")
     assert "hb()" in txt, "缺少心跳函数"
     # 每条静默跳过路径都要有 hb
-    for must in ("周末，不跑", "今日已出，跳过", "撞锁，跳过",
+    for must in ("今日已出，跳过", "撞锁，跳过",
                  "无持仓，跳过", "今日无🔴事件，跳过",
                  "live 失败", "已出体检", "已出复核", "已出简报"):
         assert must in txt, f"心跳缺路径：{must}"
     # 窗口外只 touch 心跳文件，不灌日志（5 分钟一次会把日志刷爆）
     assert ".session_alive" in txt, "窗口外缺存活心跳文件"
+    # 周末也走 .session_alive 而非写日志行：5 分钟轮询一天会灌 288 行
+    assert 'ET_DOW >= 6 )); then : > "$LOG_DIR/.session_alive"' in txt, \
+        "周末必须只 touch 心跳文件，不灌日志"
     # 日志只记决策不记持仓内容 —— 它会入库
     assert "$LOG_DIR/session_" in txt or 'LOG="$LOG_DIR' in txt
     print("PASS test_session_hooks_leaves_a_trace_every_wakeup")
@@ -277,11 +280,13 @@ def test_session_plist_uses_polling_not_dense_calendar():
     判窗口，天生适合轮询。这条测试防止以后被改回 StartCalendarInterval。
     """
     import plistlib
-    f = (pathlib.Path.home() / "Library/LaunchAgents"
+    # ⚠️ 必须测【仓库里】的模板，不是本机安装副本。
+    # codex 2026-08-29 P2：上一版只测 ~/Library，不存在就 skip，
+    # 结果我改了本机副本、提交说明宣称改完了，仓库里的 plist 却原封不动
+    # 带着 15 个日历时点 —— 换台机器装上就是坏的，而测试全绿。
+    f = (pathlib.Path(__file__).resolve().parents[1] / "scripts" / "launchd"
          / "com.yuhaodoong.undertow.session.plist")
-    if not f.exists():
-        print("SKIP test_session_plist_uses_polling（本机未安装该 launchd 任务）")
-        return
+    assert f.exists(), "仓库里必须有 session 的 plist 模板"
     d = plistlib.loads(f.read_bytes())
     assert "StartInterval" in d, "session 任务必须用 StartInterval 轮询"
     assert d["StartInterval"] <= 300, "轮询间隔须 ≤300s，否则可能整个窗口都错过"

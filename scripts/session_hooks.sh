@@ -45,7 +45,9 @@ hb() {  # $1=一句话结果
     "$(TZ=America/New_York date +%H:%M:%S)" "$ET_DOW" "$1" >> "$LOG"
 }
 
-if (( ET_DOW >= 6 )); then hb "周末，不跑"; exit 0; fi
+# 周末也只 touch 心跳文件：5 分钟轮询下写日志一天要灌 288 行
+# （codex 2026-08-29 P2）。存活与否看 .session_alive 的 mtime 就够。
+if (( ET_DOW >= 6 )); then : > "$LOG_DIR/.session_alive"; exit 0; fi
 
 notify() {  # $1=标题 $2=正文
   /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Glass\"" 2>/dev/null || true

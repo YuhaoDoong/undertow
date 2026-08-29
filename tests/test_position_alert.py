@@ -218,12 +218,51 @@ def test_squeeze_is_observation_only_never_direction():
     # 区间收敛那一维实测 -9pp，明确不纳入
     assert "不纳入" in src, "10/60 日区间收敛实测无效，必须写明已排除"
     # 两维都算不出来时必须 ok=False，不许用单腿硬撑
-    assert assess(iv_history=None, iv_now=None, highs=None, lows=None,
-                  closes=None) == Squeeze()
-    # 双低才算 tight
-    r = assess(iv_history=[20.0] * 50, iv_now=10.0,
-               highs=[10 + i * 0.01 for i in range(70)],
-               lows=[9.9 + i * 0.01 for i in range(70)],
-               closes=[9.95 + i * 0.01 for i in range(70)])
-    assert r.ok and r.iv_pctile is not None
+    assert assess(iv_pctile=None, highs=None, lows=None, closes=None) == Squeeze()
+    # 双低才算 tight。⚠️ iv_pctile 由 volregime 传入 —— 上一版让本函数自己从
+    # VolRegime.history 算，那个字段根本不存在，tight 在生产里永远是 False。
+    # 前 60 根波幅宽、最后 5 根收窄 —— 这才是"压缩"，等差序列的 ATR 恒定测不出来
+    C = [10.0] * 70
+    H = [c + (0.5 if i < 65 else 0.05) for i, c in enumerate(C)]
+    L = [c - (0.5 if i < 65 else 0.05) for i, c in enumerate(C)]
+    r = assess(iv_pctile=0.20, highs=H, lows=L, closes=C)
+    assert r.ok and r.iv_pctile == 0.20
+    assert r.tight is True, "IV 分位 20% + 波幅收缩，必须能点亮 tight"
+    # 未验证的规则不得对用户宣称胜率
+    assert "45%" not in r.note and "%" not in r.note.split("→")[-1], \
+        "AND 规则未单独回测，文案里不得出现具体胜率"
     print("PASS test_squeeze_is_observation_only_never_direction")
+
+
+def test_spread_bias_refuses_complex_structures():
+    """复杂结构必须返回「不知道」，不得强行定性。
+
+    codex 2026-08-29 P0：上一版丢掉到期日、只要单腿方向抵消就按
+    「最小买入行权价 vs 最大卖出行权价」定性，会把铁鹰误判成看跌、
+    把日历价差任意定向。方向判错会漏掉真实风险告警或制造假告警。
+    """
+    from undertow.analyze.position_alert import position_bias
+
+    # ✅ 认得出来的：标准垂直价差
+    assert position_bias({"AAA260918C70000": 1, "AAA260918C73000": -1})["AAA"] == 1
+    assert position_bias({"AAA260918C73000": 1, "AAA260918C70000": -1})["AAA"] == -1
+    assert position_bias({"AAA260918P73000": 1, "AAA260918P70000": -1})["AAA"] == -1
+
+    # ❌ 必须说「不知道」的：
+    # 日历价差（同行权价、不同到期）
+    assert position_bias({"AAA260918C70000": 1, "AAA261016C70000": -1})["AAA"] == 0
+    # 铁鹰（call + put 四条腿）
+    condor = {"AAA260918C75000": -1, "AAA260918C80000": 1,
+              "AAA260918P65000": -1, "AAA260918P60000": 1}
+    assert position_bias(condor)["AAA"] == 0
+    # 蝶式（三腿）
+    fly = {"AAA260918C70000": 1, "AAA260918C75000": -2, "AAA260918C80000": 1}
+    assert position_bias(fly)["AAA"] == 0
+    # 跨式（同行权价 call+put 同向）—— 单腿方向不抵消，走不到 _spread_bias，
+    # 但结果也不该是一个自信的方向
+    straddle = {"AAA260918C70000": 1, "AAA260918P70000": 1}
+    assert position_bias(straddle)["AAA"] in (0, -1), "跨式无方向，不得判成看涨"
+    # 比例价差（张数不等）
+    ratio = {"AAA260918C70000": 1, "AAA260918C75000": -2}
+    assert position_bias(ratio)["AAA"] in (0, -1)
+    print("PASS test_spread_bias_refuses_complex_structures")

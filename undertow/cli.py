@@ -450,7 +450,7 @@ def cmd_flow(args) -> int:
                     print(f"[提示] {inst.key} 期权数据与上一交易日逐行相同（休市重复），跳过落盘",
                           file=sys.stderr)
 
-            stored = store.latest_two("options", sym)
+            stored = store.latest_two("options", sym, on_or_before=today if replay else None)
             if stored:
                 curr_date, curr_payload = stored[-1]
                 curr = snapshot_from_payload(curr_payload, inst.key, sym)
@@ -609,9 +609,14 @@ def _save_snapshot_dedup(store, inst, sym, payload, today):
     return store.save("options", sym, payload, on_date=today), False
 
 
-def _load_curr_prev_snapshot(store, source, inst, today, *, no_cache, no_snapshot):
+def _load_curr_prev_snapshot(store, source, inst, today, *, no_cache, no_snapshot,
+                             replay: bool = False):
     """取当前+上一份期权快照。今日未落盘则按需落盘（除非 --no-snapshot）。
-    返回 (curr_snap, prev_snap|None, prev_date|None, curr_date_str)。"""
+    返回 (curr_snap, prev_snap|None, prev_date|None, curr_date_str)。
+
+    replay=True 时：只读 today 及之前的快照，且**禁止实时抓取兜底** ——
+    历史那天没有快照就该明确失败，不能拿今天的链冒充（codex 2026-08-29 P0）。
+    """
     sym = inst.options.symbol
     if not no_snapshot and store.load("options", sym, today) is None:
         payload = source.fetch_raw(inst, use_cache=not no_cache)
@@ -619,7 +624,7 @@ def _load_curr_prev_snapshot(store, source, inst, today, *, no_cache, no_snapsho
         if skipped:
             print(f"[提示] {inst.key} 期权数据与上一交易日逐行相同（休市重复），跳过落盘",
                   file=sys.stderr)
-    stored = store.latest_two("options", sym)
+    stored = store.latest_two("options", sym, on_or_before=today if replay else None)
     if stored:
         curr_d, curr_payload = stored[-1]
         curr = snapshot_from_payload(curr_payload, inst.key, sym)
@@ -629,6 +634,10 @@ def _load_curr_prev_snapshot(store, source, inst, today, *, no_cache, no_snapsho
             prev = snapshot_from_payload(prev_payload, inst.key, sym)
             prev_date = prev_d.isoformat()
         return curr, prev, prev_date, curr_d.isoformat()
+    if replay:
+        raise FileNotFoundError(
+            f"{inst.key} 在 {today} 及之前没有已落盘的期权快照 —— "
+            f"回放不得用当前实时链冒充历史")
     payload = source.fetch_raw(inst, use_cache=not no_cache)
     return snapshot_from_payload(payload, inst.key, sym), None, None, today.isoformat()
 
@@ -1032,7 +1041,8 @@ def cmd_report(args) -> int:
             signals = generate_signals(an)
 
             curr, prev, prev_date, curr_date_s = _load_curr_prev_snapshot(
-                store, opt_src, inst, today, no_cache=args.no_cache, no_snapshot=args.no_snapshot)
+                store, opt_src, inst, today, no_cache=args.no_cache,
+                no_snapshot=args.no_snapshot, replay=bool(replay))
 
             # —— 真实商品期货价：用【当日实时比值】= 期货价/ETF价 换算所有位点（免乘数漂移）——
             real_series, real_price, real_asof, ratio = None, None, "", None
@@ -1104,7 +1114,8 @@ def cmd_report(args) -> int:
             strong_sig = detect_strong_signal(
                 fa, outlook_bias=(getattr(outlook, "near_bias", "") or outlook.bias),
                 mid_bias=getattr(outlook, "mid_bias", ""))
-            _persist_signal_probe(inst.key, fa, strong_sig, outlook.bias)
+            if not replay:      # ⚠️ 回放绝不得写正式台账（codex 2026-08-29 P0）
+                _persist_signal_probe(inst.key, fa, strong_sig, outlook.bias)
             _stale = ("" if (curr_date_s or "") >= today.isoformat() else
                       f"它描述 {prev_date} 交易日，本该在 {curr_date_s} 开盘交易，今天已是 {today}")
             strong_html = render_strong_signal_banner(strong_sig, inst.display_name, _stale)
@@ -1270,7 +1281,8 @@ def cmd_report(args) -> int:
                         struct_notes.append(driver)
                 except Exception:
                     pass
-            trend = _score_trend(inst.key, today.isoformat(), outlook.bias_score)
+            trend = ("" if replay
+                     else _score_trend(inst.key, today.isoformat(), outlook.bias_score))
             tldr_html = render_tldr_section(plain_summary_blocks(
                 outlook, day_chg_pct=day_chg, vol_verdict=vv,
                 flow_tilt=tilt, flow_moves=moves, counter_notes=counters,
@@ -1294,10 +1306,13 @@ def cmd_report(args) -> int:
                     vol_svg = viz.vol_history_svg(
                         iv_ser, title=f"波动率指数 {inst.vol_index} 近1年（年化 IV，pp）",
                         mean_ref=mean_ref)
-                    px_ser = px_src.fetch_series(inst, use_cache=not args.no_cache)
-                    _persist_vrp(inst.key, assess_vrp_history(
-                        iv_series=iv_ser, px_dates=px_ser.dates, px_closes=px_ser.closes,
-                        index_name=inst.vol_index))
+                    # ⚠️ 回放绝不得写正式台账（codex 2026-08-29 P0：实测跑一次
+                    # --as-of 就改写了 outlook_scores.json 与 5 个 resonance/*.json）
+                    if not replay:
+                        px_ser = px_src.fetch_series(inst, use_cache=not args.no_cache)
+                        _persist_vrp(inst.key, assess_vrp_history(
+                            iv_series=iv_ser, px_dates=px_ser.dates,
+                            px_closes=px_ser.closes, index_name=inst.vol_index))
                 except Exception as ve:
                     print(f"[提示] {inst.key} 波动率历史跳过: {type(ve).__name__}: {ve}",
                           file=sys.stderr)
@@ -1369,9 +1384,10 @@ def cmd_report(args) -> int:
                         cross=cross_read, asof=tech_asof, src=tech_src,
                         today=today.isoformat(), h4=h4_read)
                     # 落盘当日联合状态——共振能不能用只能靠自己攒数据回答
-                    _persist_resonance(snapshot_row(
-                        inst.key, today.isoformat(), res_read, stretch_read,
-                        spot=(real_price if real_price else ga.spot)))
+                    if not replay:
+                        _persist_resonance(snapshot_row(
+                            inst.key, today.isoformat(), res_read, stretch_read,
+                            spot=(real_price if real_price else ga.spot)))
             except Exception as e:
                 print(f"[提示] {inst.key} 技术面跳过: {e}", file=sys.stderr)
             # —— 当日决策研判：规则化合成 近中分层＋资金流＋强信号＋盈亏比闸门（无 LLM）——
@@ -1391,12 +1407,13 @@ def cmd_report(args) -> int:
                 _sts = _st_collect(outlook, fa=fa, stretch=stretch_read)
                 # 波动压缩（观察项，不进综合分 —— 区间跨 0，样本不足）
                 from undertow.analyze.squeeze import assess as _sq_assess
-                _ivh = [r.atm_iv_pp for r in (getattr(vr, "history", None) or [])
-                        if getattr(r, "atm_iv_pp", None)] if vr is not None else []
-                _cv = getattr(getattr(fa, "vol", None), "curr", None)
+                # ⚠️ VolRegime 没有 history 字段 —— 上一版从它取历史，_ivh 恒为空，
+                # tight 在生产里【永远触发不了】（codex 2026-08-29 P1）。
+                # 它本来就有算好的 iv_pct（IV 在自身历史里的分位），直接用。
                 _sq = _sq_assess(
-                    iv_history=_ivh or None,
-                    iv_now=getattr(_cv, "atm_iv_pp", None) if _cv else None,
+                    iv_pctile=(getattr(vr, "iv_pct", None) / 100.0
+                               if vr is not None and getattr(vr, "iv_pct", None) is not None
+                               else None),
                     highs=(tech_series.highs if tech_series else None),
                     lows=(tech_series.lows if tech_series else None),
                     closes=(tech_series.closes if tech_series else None))
@@ -1496,6 +1513,14 @@ def cmd_report(args) -> int:
     # 装的却是 8/28 可交易的数据（用户 2026-08-29 指出的同一个坑）。
     _hd = max((w[6] for w in written if w[6]), default="") or today.isoformat()
     _gen = f"（生成于 {today}）" if _hd != today.isoformat() else ""
+    if replay:
+        print("⚠️ 回放模式的已知限制（codex 2026-08-29 P0-2）：")
+        print("   只有【期权快照】与【日线价格】按 as-of 截断了。")
+        print("   COT 持仓、FRED 宏观、波动率指数、事件日历、4H 技术面")
+        print("   仍取【当前值】—— 没有历史 vintage 可用。")
+        print("   → 🏦大资金 / 🌍宏观 两层、以及事件雷达，在回放里含未来信息，不可信。")
+        print("   → 💰增仓 / 🧱结构 / 🌊波动 / 📈价格 四层是干净的。")
+        print()
     print(f"已生成综合研判报告 · 可交易日 {_hd}{_gen}:")
     for inst, o, fn, ss, v, _sr, _td, _fx, _lb, _sc in written:
         # 低置信 / 已过期 的强信号在摘要里也必须降级，不能和可执行告警长得一样。
@@ -1536,7 +1561,8 @@ def cmd_report(args) -> int:
         for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb, _sc in written:
             if _ss is not None and not (_td2 and _td2 < today.isoformat()):
                 _sig_by_sym[_inst.options.symbol.upper()] = _ss
-        if _sig_by_sym:
+        if _sig_by_sym and not replay:
+            # 回放不查持仓：那是"当时"的持仓未知，拿今天的仓位比历史信号毫无意义
             _alert_position_conflicts(_sig_by_sym, today.isoformat())
     except Exception as e:      # 告警失败要出声，不能静默变"没有冲突"
         print(f"⚠️ 持仓冲突检查失败：{type(e).__name__}: {e}", file=sys.stderr)
@@ -1560,11 +1586,26 @@ def _alert_position_conflicts(signals: dict, today: str) -> None:
     from undertow.collect import longbridge_account as lb
     from undertow.collect import longbridge_quote as lq
     if not lq.available():
+        print("⚠️ 持仓冲突检查未能执行：找不到 longbridge CLI —— "
+              "这【不是】「没有冲突」，是「没查成」", file=sys.stderr)
         return
     try:
         positions = lb.fetch_positions()
-    except Exception:
-        return          # 没连上账户 ≠ 没有冲突，但也无从检查
+    except Exception as e:
+        # ⚠️ 「没连上账户」必须与「没有冲突」可区分（codex 2026-08-29）：
+        # 静默返回时，真实告警系统失效的那天，用户看到的仍是"什么都没发生"。
+        print(f"⚠️ 持仓冲突检查未能执行：读取账户失败（{type(e).__name__}）——"
+              f"这【不是】「没有冲突」，是「没查成」", file=sys.stderr)
+        try:
+            out = pathlib.Path("data/account/live")
+            out.mkdir(parents=True, exist_ok=True)
+            (out / f"{today}_conflict.md").write_text(
+                f"# 持仓 × 信号冲突 {today}\n\n"
+                f"⚠️ **未能执行检查**：读取账户失败（{type(e).__name__}: {e}）。\n"
+                f"这不是「没有冲突」，是「没查成」。\n", encoding="utf-8")
+        except Exception:
+            pass
+        return
     held = {p.symbol: int(p.quantity) for p in positions if p.quantity}
     if not held:
         return
@@ -2676,8 +2717,10 @@ def build_parser() -> argparse.ArgumentParser:
     pr.add_argument("--json", action="store_true", help="输出 outlook 结构化 JSON")
     pr.add_argument("--status-file", help="机器可读状态 JSON（同 snapshot）")
     pr.add_argument("--as-of", metavar="YYYY-MM-DD",
-                    help="回放历史某天的研报（用当时的数据，复盘验证用）。"
-                         "产物写入 data/reports/replay/，不覆盖当日归档")
+                    help="回放历史某天的研报（复盘验证用）。产物写 data/reports/replay/，"
+                         "不写任何台账。⚠️ 只有期权快照与日线价格能按 as-of 截断；"
+                         "COT/宏观/波动率指数/事件日历/4H 仍是当前值，"
+                         "带这些层的结论在回放里不可信")
     pr.set_defaults(func=cmd_report)
 
     pl = sub.add_parser("list", help="列出已配置品种")

@@ -16,7 +16,13 @@ MIN_N = 50
 
 
 def detrend(rows):
-    """减掉每个品种自己的样本均值 —— 局部去趋势。"""
+    """减掉每个品种在【整个回测区间】的平均收益。
+
+    ⚠️ 这【不是】项目铁律里说的"局部去趋势"，也含未来信息：
+    某一天的调整量用到了它之后的收益（codex 2026-08-29 P1）。
+    作为"同一品种内部横向比较"的粗糙基准尚可，但不得据此声称已按铁律去趋势。
+    真正的做法是滚动的、只用过去可见的漂移；样本攒够后应当换掉。
+    """
     m = defaultdict(list)
     for r in rows:
         m[r["inst"]].append(r["ret"])
@@ -83,7 +89,7 @@ print(f"品种分布：" + "、".join(f"{k}×{v}" for k, v in sorted(
 print()
 
 print("=" * 78)
-print("① 单指标：方向命中率（去趋势后，收益符号 vs 指标符号）")
+print("① 单指标：方向命中率（原始计数，不下结论 —— 见第⑤节日聚类）")
 print("=" * 78)
 print(f"{'指标':<8}{'样本':>6}{'命中':>6}{'命中率':>9}{'Wilson下界':>12}  结论")
 print("-" * 78)
@@ -96,9 +102,13 @@ for k in KEYS:
     hit = sum(1 for r in sub if r[k] * r["adj"] > 0)
     n = len(sub)
     lo = wilson_lo(hit, n)
-    verdict = ("✅ 可下结论" if (n >= MIN_N and lo > 0.5)
-               else f"❌ 样本不足(需 n≥{MIN_N} 且下界>50%)")
-    print(f"{k:<8}{n:>6}{hit:>6}{hit/n*100:>8.1f}%{lo*100:>11.1f}%  {verdict}")
+    # ⚠️ Wilson 区间假设样本独立，但跨品种同日高度相关（金银 0.89、
+    # QQQ/TQQQ 0.99）—— 这里的 n 是【品种日】不是独立单位，下界必然过于乐观。
+    # 所以本节【不下任何结论】，只报原始数字；判定统一交给第⑤节的日聚类 bootstrap。
+    # （codex 2026-08-29 P1：拿 138 个品种日凑 n≥50，等于一边承认相关、
+    #   一边按独立计数。）
+    print(f"{k:<8}{n:>6}{hit:>6}{hit/n*100:>8.1f}%{lo*100:>11.1f}%  "
+          f"（Wilson 假设独立，此处仅供参考，判定见第⑤节）")
 
 print()
 print("=" * 78)
@@ -140,7 +150,7 @@ for k in KEYS:
 
 print()
 print("=" * 78)
-print("④ 加权综合分 vs 等权（用户要问的：按强度加权是否更好）")
+print("④ 用强度 vs 只用方向（等权，避免 GROUP_W 带来的循环论证）")
 print("=" * 78)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from undertow.analyze.strength import GROUP_W  # noqa: E402
@@ -150,8 +160,8 @@ if len(both) < 20:
 else:
     w_hit = e_hit = 0
     for r in both:
-        w = sum(r[k] * GROUP_W[k] for k in KEYS)          # 强度加权
-        e = sum((1 if r[k] > 0 else -1) * GROUP_W[k] for k in KEYS)  # 只用方向
+        w = sum(r[k] for k in KEYS)                       # 用强度（等权）
+        e = sum((1 if r[k] > 0 else -1) for k in KEYS)     # 只用方向（等权）
         w_hit += (w * r["adj"] > 0)
         e_hit += (e * r["adj"] > 0)
     n = len(both)
@@ -202,12 +212,23 @@ for k in KEYS:
         print(f"{k:<8} 天数太少")
         continue
     nd, lo, mid, hi = res
-    verdict = "✅ 区间下界 >50%，可下结论" if lo > 0.5 else "❌ 区间跨过 50%，仍不能下结论"
+    # ⚠️ 闸门必须【同时】看聚类数：承认跨品种同日相关之后，有效独立单位
+    # 就是日期聚类而不是品种日。35 < 50，拿 138 个品种日凑 n≥50 等于
+    # 一边承认相关、一边按独立计数（codex 2026-08-29 P1）。
+    verdict = ("✅ 区间下界 >50% 且聚类数≥50" if (lo > 0.5 and nd >= 50)
+               else (f"⚠️ 区间下界 >50% 但只有 {nd} 个日期聚类（<50），仍属探索性"
+                     if lo > 0.5 else "❌ 区间跨过 50%，不能下结论"))
     print(f"{k:<8}{nd:>9}{mid*100:>10.1f}%   [{lo*100:>5.1f}%, {hi*100:>5.1f}%]   {verdict}")
 
 print()
-print("⑥ 同样方法检验「强度加权 vs 只用方向」")
+print("⑥ 同样方法检验「用强度 vs 只用方向」")
 print("-" * 78)
+print("⚠️ 这里【必须用等权】。用 GROUP_W 会构成循环论证 —— 那套权重本身是看着")
+print("   这批数据的命中结果定的，再拿同一批数据去检验它，必然显得更好。")
+print("   实测：把 GROUP_W 从 {flow1.0,struct0.6,vol0.6,price0.8} 改成")
+print("   {flow1.0,struct0.5,vol0.3,price0.7} 后，本节结论就从 +3.1pp(区间跨0)")
+print("   变成 +12.6pp(区间不跨0) —— 同一批数据，换个权重就换个结论。")
+print()
 by_day = defaultdict(list)
 for r in rows:
     if all(r.get(k) is not None for k in KEYS):
@@ -220,8 +241,9 @@ for _ in range(4000):
     for d in pick:
         for r in by_day[d]:
             tot += 1
-            w += (sum(r[k] * GROUP_W[k] for k in KEYS) * r["adj"] > 0)
-            e += (sum((1 if r[k] > 0 else -1) * GROUP_W[k] for k in KEYS) * r["adj"] > 0)
+            # 等权：唯一不受"权重是怎么选出来的"影响的比法
+            w += (sum(r[k] for k in KEYS) * r["adj"] > 0)
+            e += (sum((1 if r[k] > 0 else -1) for k in KEYS) * r["adj"] > 0)
     if tot:
         diffs.append((w - e) / tot * 100)
 diffs.sort()

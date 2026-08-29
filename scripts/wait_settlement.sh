@@ -32,7 +32,7 @@ try:
     from undertow.core.config import load_config
     from undertow.cli import snapshot_from_payload
     cfg, src, store = load_config(), CboeOptionsSource(), SnapshotStore()
-    n = 0
+    ready = checked = failed = 0
     for key, inst in cfg.instruments.items():
         if inst.options is None:
             continue
@@ -43,11 +43,17 @@ try:
             if not latest or latest[1] is None:
                 continue
             prev = snapshot_from_payload(latest[1], key, sym)
+            checked += 1
             if oi_change_total(prev, curr) > 0:
-                n += 1
+                ready += 1
         except Exception:
-            pass          # 单品种失败不影响整体判断，下一轮再试
-    print(n)
+            failed += 1
+    # ⚠️ 全挂 ≠ 尚未结算。上一版把单品种异常裸吞、只回 n，
+    # 于是"网络全断"和"结算没到"在日志里长得一模一样（codex 2026-08-29 P1）。
+    if checked == 0 or failed > checked:
+        print(f"ERR:检查失败 {failed} 个 / 成功 {checked} 个")
+    else:
+        print(ready)
 except Exception as e:
     print(f"ERR:{type(e).__name__}")
 PYEOF

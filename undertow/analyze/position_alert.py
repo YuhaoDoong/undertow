@@ -82,7 +82,9 @@ def position_bias(held: dict[str, int]) -> dict[str, int]:
        记全，漏一个就等于没告警，而告警缺失正是这个模块存在的原因。
     """
     agg: dict[str, int] = {}
-    legs: dict[str, list[tuple[str, float, int]]] = {}   # 标的 → [(C/P, 行权, 数量)]
+    # 标的 → [(到期, C/P, 行权, 数量)]。**到期必须带上** —— 丢了它就分不出
+    # 日历价差与垂直价差（codex 2026-08-29 P0）。
+    legs: dict[str, list[tuple[str, str, float, int]]] = {}
     for sym, qty in held.items():
         p = parse_symbol(sym)
         if p is None:
@@ -90,7 +92,8 @@ def position_bias(held: dict[str, int]) -> dict[str, int]:
         und, kind = p
         agg[und] = agg.get(und, 0) + leg_bias(sym, qty) * abs(int(qty))
         m = _OCC.match(sym.strip().upper())
-        legs.setdefault(und, []).append((kind, float(m.group(4)), int(qty)))
+        legs.setdefault(und, []).append(
+            (m.group(2), kind, float(m.group(4)), int(qty)))
 
     out: dict[str, int] = {}
     for und, v in agg.items():
@@ -101,21 +104,42 @@ def position_bias(held: dict[str, int]) -> dict[str, int]:
     return out
 
 
-def _spread_bias(legs: list[tuple[str, float, int]]) -> int:
-    """张数抵消时按行权价定方向：买的腿相对卖的腿在哪一侧。"""
-    for kind in ("C", "P"):
-        same = [(k, strike, q) for k, strike, q in legs if k == kind]
-        buys = [s for k, s, q in same if q > 0]
-        sells = [s for k, s, q in same if q < 0]
-        if not buys or not sells:
-            continue
-        lo_buy, hi_sell = min(buys), max(sells)
-        if kind == "C":
-            # 买低卖高 = 牛市看涨价差；买高卖低 = 熊市看涨价差
-            return 1 if lo_buy < hi_sell else -1
-        # put：买高卖低 = 熊市看跌价差；买低卖高 = 牛市看跌价差（收权利金，看涨）
-        return -1 if max(buys) > min(sells) else 1
-    return 0
+def _spread_bias(legs: list[tuple[str, str, float, int]]) -> int:
+    """张数抵消时按行权价定方向 —— **只认最简单那一种结构**。
+
+    ⚠️ 只处理「同到期、同 C/P、恰好两腿、张数绝对值相等、一买一卖」的
+    垂直价差。其余一律返回 0（未知），由调用方报出来。
+
+    codex 2026-08-29 P0：上一版丢掉到期日、只要单腿方向抵消就按
+    「最小买入行权价 vs 最大卖出行权价」强行定性，会误判：
+      · 同行权价的日历价差 → 被任意判成看涨或看跌
+      · 铁鹰 → 只看 call 部分，通常误判成看跌
+      · 蝶式 → 误判成单向价差
+      · 跨式/宽跨式/比例价差 → 张数聚合本就不成立
+      · 同标的多组独立价差 → 跨组配腿
+    方向判错会漏掉真实风险告警，或制造假告警 —— 两者都比"说不知道"更糟。
+    """
+    # 按 (到期, C/P) 分组，只有恰好一组、恰好两腿时才敢下结论
+    groups: dict[tuple[str, str], list[tuple[float, int]]] = {}
+    for exp, kind, strike, q in legs:
+        groups.setdefault((exp, kind), []).append((strike, q))
+    if len(groups) != 1:
+        return 0                      # 跨到期或跨 C/P（铁鹰、日历、跨式…）
+    (exp, kind), rows = next(iter(groups.items()))
+    if len(rows) != 2:
+        return 0                      # 三腿以上（蝶式、比例…）
+    (s1, q1), (s2, q2) = rows
+    if q1 * q2 >= 0 or abs(q1) != abs(q2):
+        return 0                      # 不是一买一卖、或张数不等
+    buy_strike = s1 if q1 > 0 else s2
+    sell_strike = s2 if q1 > 0 else s1
+    if buy_strike == sell_strike:
+        return 0                      # 同行权价（日历价差已被上面拦掉，双保险）
+    if kind == "C":
+        # 买低卖高 = 牛市看涨价差；买高卖低 = 熊市看涨价差
+        return 1 if buy_strike < sell_strike else -1
+    # put：买高卖低 = 熊市看跌价差；买低卖高 = 牛市看跌价差（收权利金，看涨）
+    return -1 if buy_strike > sell_strike else 1
 
 
 @dataclass(frozen=True)
@@ -134,7 +158,7 @@ class Conflict:
         return self.source != self.underlying
 
     def headline(self) -> str:
-        who = (f"{self.source}（与你持仓的 {self.underlying} 相关 {self.corr:.2f}）"
+        who = (f"{self.source}（与你持仓的 {self.underlying} 相关约 {self.corr:.2f}·粗估）"
                if self.cross else self.underlying)
         return (f"⚠️ 你持有 {self.underlying} {self.holding}，"
                 f"而 {who} 出现 ⚡{self.level}{self.signal}信号（{self.ratio:.1f}×）")

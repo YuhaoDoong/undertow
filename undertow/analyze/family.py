@@ -18,6 +18,10 @@ from dataclasses import dataclass
 
 # 同族对：(A, B, 日收益相关量级)。只用于【是否并排提示】，不参与任何计算。
 # 相关值是量级估计，不是精确统计量 —— 用它排序和过滤，不用它做推断。
+# ⚠️ 这些相关系数是【粗估的量级】，不是算出来的统计量（codex 2026-08-29 P2）。
+# 它们只用于「是否并排提示」的开关与排序，不参与任何计算。
+# 展示时必须写成"约 0.89（粗估）"，别让人当成正式统计值。
+CORR_IS_ESTIMATE = True
 FAMILIES: list[tuple[str, str, float]] = [
     ("qqq", "tqqq", 0.99),   # 同一标的的 3 倍杠杆 ETF，方向相反基本等于有 bug
     ("gold", "silver", 0.89),
@@ -44,7 +48,7 @@ class FamilyNote:
     severity: int    # 越大越该看
 
     def headline(self) -> str:
-        return (f"{self.a} 与 {self.b}（相关 {self.corr:.2f}）{self.kind}："
+        return (f"{self.a} 与 {self.b}（相关约 {self.corr:.2f}·粗估）{self.kind}："
                 f"{self.a} {self.a_txt} ／ {self.b} {self.b_txt}")
 
 
@@ -99,7 +103,7 @@ def render_html(notes: list[FamilyNote], esc) -> str:
         items.append(
             f'<div style="margin:5px 0;font-size:12.5px;line-height:1.6">'
             f'<b>{esc(n.a)} ↔ {esc(n.b)}</b> '
-            f'<span style="color:#57606a">（相关 {n.corr:.2f}）</span> '
+            f'<span style="color:#57606a">（相关约 {n.corr:.2f}·粗估）</span> '
             f'<b style="color:#bf8700">{esc(n.kind)}</b><br>'
             f'　{esc(n.a)}：{esc(n.a_txt)}　／　{esc(n.b)}：{esc(n.b_txt)}</div>')
     return (

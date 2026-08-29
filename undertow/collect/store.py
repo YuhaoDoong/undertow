@@ -134,7 +134,16 @@ class SnapshotStore:
             return None
         return ds[-1], self.load(kind, symbol, ds[-1])
 
-    def latest_two(self, kind: str, symbol: str) -> list[tuple[date, Any]]:
-        """最近两日的 (日期, payload)，按日期升序。可能 0/1/2 个。"""
-        ds = self.dates(kind, symbol)[-2:]
+    def latest_two(self, kind: str, symbol: str,
+                   on_or_before: date | None = None) -> list[tuple[date, Any]]:
+        """最近两日的 (日期, payload)，按日期升序。可能 0/1/2 个。
+
+        on_or_before：只看该日期【及之前】的快照 —— 回放必须传，否则会读到未来。
+        codex 2026-08-29 P0：原实现永远取最新两份，回放 2026-08-20 会拿
+        8/27+8/28 的快照冒充当天数据，整份历史报告被改写。
+        """
+        ds = self.dates(kind, symbol)
+        if on_or_before is not None:
+            ds = [d for d in ds if d <= on_or_before]
+        ds = ds[-2:]
         return [(d, self.load(kind, symbol, d)) for d in ds]

@@ -1728,7 +1728,12 @@ def render_index_html(items: list[dict], asof: str, *, family_notes=None) -> str
             f'⚡ {_esc(it["name"])} 近端新建仓一边倒 {arrow} {_esc(ss.level)}{_esc(ss.direction)}</div>'
             f'<div class="sub" style="margin-top:3px">'
             f'{"看跌" if not up else "看涨"}方向的新建仓是反方向的 {ss.pressure_ratio}× · '
-            f'贴近现价那几档买盘/卖盘 {ss.wing_ratio}×{_esc(div)}</div></a>'
+            f'贴近现价那几档买盘/卖盘 {ss.wing_ratio}×{_esc(div)}<br>'
+            f'<span style="color:#6e7781;font-size:11px">'
+            f'⚠️ 倍数受分母影响很大：2026-08-12 黄金看跌量 250,241 / 看涨 694 = 360.8×，'
+            f'而 8/28 看跌 116,492 / 看涨 2,178 = 53.5× —— '
+            f'8/12 的绝对量更大，倍数却高 6.7 倍。看倍数也要看绝对量。'
+            f'</span></div></a>'
         )
 
     cards = []

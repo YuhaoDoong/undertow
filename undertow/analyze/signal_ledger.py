@@ -162,6 +162,9 @@ def record(key: str, *, on_date: str, prev_date: str | None, spot: float,
         "net_delta_total": probe.get("net_delta_total"),
         "net_call_doi": probe.get("net_call_doi"), "net_put_doi": probe.get("net_put_doi"),
         "oi_build_ratio": probe.get("oi_build_ratio"),
+        # 预注册假设（2026-08-30）：分母越大信号越可信？只记不用，等样本
+        "reverse_abs": probe.get("reverse_abs"),
+        "forward_abs": probe.get("forward_abs"),
         "d_spot_pct": probe.get("d_spot_pct"), "d_atm_pp": probe.get("d_atm_pp"),
         "d_skew25_pp": probe.get("d_skew25_pp"),
         # 到期结构（预先注册假设：短到期押注 → 短前瞻窗口才对得上；只记不用，

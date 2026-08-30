@@ -146,10 +146,19 @@ def build(outlook, fa=None, stretch=None) -> list[Label]:
             nd = getattr(fa, "net_delta_total", None)
             nd_txt = f"；净有效 Delta {nd:+,.0f}" if nd is not None else ""
             icon, name, _s, _p = FAMILIES["flow"]
-            out.append(Label("flow", icon, name, sign,
-                             f"{'看涨' if sign>0 else '看跌'}侧 {ratio:.1f}×",
-                             f"加权增仓 看涨 {up:,.0f} / 看跌 {dn:,.0f}{nd_txt}",
-                             _HORIZON["flow"]))
+            # ⚠️ 比值必须带绝对量（用户 2026-08-30 追问 360.8× 时暴露）：
+            # 2026-08-12 黄金 看跌 250,241 / 看涨 694 → 360.8×；
+            # 2026-08-28 黄金 看跌 116,492 / 看涨 2,178 → 53.5×。
+            # 8/12 的看跌绝对量【是 8/28 的两倍多】，比值却高 6.7 倍 ——
+            # 差别全在分母。**只报比值会让人以为 360.8× 比 53.5× 强得多。**
+            lo_side = min(up, dn)
+            thin = lo_side < 1000        # 分母过小 → 比值失真
+            out.append(Label(
+                "flow", icon, name, sign,
+                f"{'看涨' if sign>0 else '看跌'}侧 {max(up,dn):,.0f} vs "
+                f"{lo_side:,.0f}（{ratio:.1f}×{'，分母过小·比值失真' if thin else ''}）",
+                f"加权增仓 看涨 {up:,.0f} / 看跌 {dn:,.0f}{nd_txt}",
+                _HORIZON["flow"]))
 
         # ③ 波动率面：ATM IV + 25Δ skew，与 OI 无关的独立证据
         vs = getattr(fa, "vol", None)

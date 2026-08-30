@@ -43,6 +43,34 @@ def wilson_lo(k, n, z=1.96):
     return (ph + z*z/(2*n) - z*math.sqrt(ph*(1-ph)/n + z*z/(4*n*n))) / d
 
 
+def rolling_adj(rows, window=60, min_past=20):
+    """局部去趋势：减掉【信号日之前】window 天的滚动漂移，窗口不足则剔除。
+
+    ⚠️ codex 2026-08-29 P1-5：用整个区间的品种均值去趋势，等于让当天的调整量
+    用到它之后的收益 —— 既是 lookahead，也把不同 regime 混在一起。
+    **不补零**：补零等于假装漂移为 0，会把趋势期的样本悄悄算成"中性"。
+    """
+    from collections import defaultdict
+    import sys as _s
+    by = defaultdict(list)
+    for r in rows:
+        by[r["inst"]].append(r)
+    out, dropped = [], 0
+    for k, rs in by.items():
+        rs.sort(key=lambda x: x["date"])
+        for i, r in enumerate(rs):
+            past = rs[max(0, i - window):i]
+            if len(past) < min_past:
+                dropped += 1
+                continue
+            r["adj"] = r["ret"] - sum(x["ret"] for x in past) / len(past)
+            out.append(r)
+    if dropped:
+        print(f"[去趋势] 剔除 {dropped} 个前置窗口不足 {min_past} 天的样本（不补零）",
+              file=_s.stderr)
+    return out
+
+
 cfg, store = load_config(), SnapshotStore()
 rows = []
 for key, inst in cfg.instruments.items():
@@ -88,12 +116,7 @@ for key, inst in cfg.instruments.items():
                      "agree": not expiry_split_conflict(sp),
                      "buckets": len(sp)})
 
-m = defaultdict(list)
-for r in rows:
-    m[r["inst"]].append(r["ret"])
-avg = {k: sum(v)/len(v) for k, v in m.items()}
-for r in rows:
-    r["adj"] = r["ret"] - avg[r["inst"]]
+rows = rolling_adj(rows)
 
 n_agree = sum(1 for r in rows if r["agree"])
 print(f"样本 {len(rows)}：各到期桶【同向】 {n_agree} 个 / 【打架】 {len(rows)-n_agree} 个")
@@ -192,6 +215,7 @@ print(f"\n同向减打架的命中率差：中位 {diffs[len(diffs)//2]:+.1f}pp�
 print("✅ 区间不跨 0 —— 同向确实更准" if diffs[100] > 0
       else "❌ 区间跨 0 —— 样本不足以下结论")
 print()
-print("⚠️ 无论结论如何，这个闸门的价值在于【盘前可算】：")
-print("   不同于「大波动日 vs 横盘日」那种事后分层，桶是否同向在 D 开盘前就知道，")
-print("   所以它是可执行的 —— 打架时该降低方向置信度，或转区间策略（铁鹰）。")
+print("⚠️ 表述纪律（codex 2026-08-29 P1-6）：")
+print("   ✅ 可以说：这个分层【盘前可算】，不同于「大波动日 vs 横盘日」那种事后分层。")
+print("   ❌ 不可以说：「打架时应降低置信度 / 转铁鹰」—— 增量价值区间跨 0，未证实。")
+print("   在新样本验证前，它只是【描述性分层】，不构成任何策略切换建议。")

@@ -323,6 +323,8 @@ def _flow_facts(fa, ga, ga_prev, snap_prev, snap_curr, spot: float, ref) -> dict
         _sp = expiry_split(fa)
         out["exp_split"] = _sp
         out["exp_conflict"] = expiry_split_conflict(_sp)
+        from undertow.analyze.flow import dte_agreement as _dte_agree
+        out["exp_agreement"] = _dte_agree(_sp)   # agree/conflict/insufficient 三态
         # 主力到期：由数据决定哪个到期日占大头，不预先划桶（用户 2026-08-29）
         out["dominant"] = dominant_expiry(ch, getattr(fa, "curr_date", None))
         # 保护迁移的结构描述 —— 只陈述"钱从哪撤到哪、哪档涨价最急"，不做预测。

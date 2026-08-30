@@ -328,13 +328,25 @@ def test_index_shows_one_marker_detail_goes_to_instrument_report():
                 "sign": -1, "ratio": 30.0, "doi": 9300},
                {"bucket": "22天+", "legs": 4, "dn": 8000, "up": 200,
                 "sign": -1, "ratio": 40.0, "doi": 8200}]
-    idx = _facts_html({"exp_split": sp_same, "exp_conflict": False})
+    idx = _facts_html({"exp_split": sp_same, "exp_conflict": False,
+                       "exp_agreement": "agree"})
     assert "全部同向" in idx, "同向时必须额外标注 —— 这是更强的信号"
     assert "0-2天" not in idx, "index 不该再列各桶明细"
 
-    idx2 = _facts_html({"exp_split": sp_same, "exp_conflict": True})
+    idx2 = _facts_html({"exp_split": sp_same, "exp_conflict": True,
+                        "exp_agreement": "conflict"})
     assert "各到期方向不一致" in idx2 and "别当强信号看" in idx2
     assert "22天+" not in idx2
+
+    # ⚠️ 三态：只有一个有效桶时不得说成「全曲线共识」（codex 2026-08-29 P1-4）
+    from undertow.analyze.flow import dte_agreement
+    one = [{"bucket": "0-2天", "sign": -1, "doi": 9300, "ratio": 30.0,
+            "legs": 5, "dn": 9000, "up": 300}]
+    assert dte_agreement(one) == "insufficient", "单桶不构成一致性判断"
+    assert dte_agreement([]) == "insufficient"
+    assert dte_agreement(sp_same) == "agree"
+    idx3 = _facts_html({"exp_split": one, "exp_agreement": "insufficient"})
+    assert "有效到期桶不足" in idx3 and "全部同向" not in idx3
 
     # 明细必须在品种研报的表里
     detail = expiry_split_html(sp_same, lambda x: x)

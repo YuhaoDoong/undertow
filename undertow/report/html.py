@@ -1510,10 +1510,16 @@ def _facts_html(fx: dict) -> str:
         if pw.get("call_wall"):
             bits.append(f'<span style="color:#cf222e">上方压制 '
                         f'<b>{pw["call_wall"]:g}</b> {_n(pw["call_wall_oi"])} 张</span>')
-        same_p = pw.get("put_wall") == fx.get("put_wall")
-        note = ("" if same_p else
-                '　<b style="color:#bf8700">⚠️ 与上面的墙不同 —— '
-                '上面那个含临近到期，收盘即失效</b>')
+        # ⚠️ 两侧都要比。上一版只比 put：若 put 相同而 call 墙因 0DTE 改变，
+        # 页面不会警告（codex 2026-08-29 P1-8）。
+        diff = []
+        if pw.get("put_wall") is not None and pw["put_wall"] != fx.get("put_wall"):
+            diff.append("下方")
+        if pw.get("call_wall") is not None and pw["call_wall"] != fx.get("call_wall"):
+            diff.append("上方")
+        note = ("" if not diff else
+                f'　<b style="color:#bf8700">⚠️ {"、".join(diff)}与上面的墙不同 —— '
+                f'上面那个含临近到期，收盘即失效</b>')
         rows.append(f'⏳ <b>{pw.get("min_dte", 7)} 天以上才算数</b>（波段用）：'
                     + "　｜　".join(bits) + note)
 
@@ -1599,16 +1605,24 @@ def _facts_html(fx: dict) -> str:
                 ("次日到期" if dom["dte"] == 1 else f'{dom["dte"]}天后到期'))
         w = "看跌" if dom["sign"] < 0 else ("看涨" if dom["sign"] > 0 else "两边平")
         col = "#cf222e" if dom["sign"] < 0 else ("#1a7f37" if dom["sign"] > 0 else "#6e7781")
-        rows.append(f'🎯 <b>主力集中在 {_esc(dom["expiry"])}</b>（{when}），'
-                    f'占当天增仓 <b>{dom["share"]*100:.0f}%</b>　'
-                    f'<b style="color:{col}">{w} {dom["ratio"]:.1f}×</b>')
+        cut = dom.get("cut") or 0
+        cut_txt = (f'　<span style="color:#6e7781">（同期该到期还减仓 {cut:,} 张）</span>'
+                   if cut else "")
+        rows.append(f'🎯 <b>新增仓位最集中在 {_esc(dom["expiry"])}</b>（{when}），'
+                    f'占当天<b>新增</b> <b>{dom["share"]*100:.0f}%</b>'
+                    f'<span style="color:#6e7781;font-size:11px">（40% 门槛未校准）</span>'
+                    f'　<b style="color:{col}">{w} {dom["ratio"]:.1f}×</b>{cut_txt}')
     elif fx.get("exp_split"):
         rows.append('<span style="color:#6e7781">🎯 无单一主力到期 —— '
                     '增仓分散在多个到期上</span>')
 
     sp = fx.get("exp_split") or []
-    if sp and len([b for b in sp if b["sign"]]) >= 2:
-        if fx.get("exp_conflict"):
+    agree = fx.get("exp_agreement")          # agree / conflict / insufficient
+    if agree == "insufficient":
+        rows.append('<span style="color:#6e7781">📆 有效到期桶不足，'
+                    '无法判断跨到期一致性</span>')
+    elif sp and agree:
+        if agree == "conflict":
             rows.append('<b style="color:#bf8700">📆 各到期方向不一致</b>'
                         '<span style="color:#6e7781">'
                         ' —— 上面这个合并读数是把矛盾抹平后的结果，别当强信号看'

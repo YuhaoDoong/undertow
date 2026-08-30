@@ -15,21 +15,35 @@ KEYS = ("flow", "vol", "price")
 MIN_N = 50
 
 
-def detrend(rows):
-    """减掉每个品种在【整个回测区间】的平均收益。
+def detrend(rows, window=60):
+    """局部去趋势：减掉【信号日之前】window 个交易日的滚动漂移。
 
-    ⚠️ 这【不是】项目铁律里说的"局部去趋势"，也含未来信息：
-    某一天的调整量用到了它之后的收益（codex 2026-08-29 P1）。
-    作为"同一品种内部横向比较"的粗糙基准尚可，但不得据此声称已按铁律去趋势。
-    真正的做法是滚动的、只用过去可见的漂移；样本攒够后应当换掉。
+    ⚠️ codex 2026-08-29 P1-5：上一版减的是该品种在【整个回测区间】的均值 ——
+    某一天的调整量用到了它之后的收益，既是 lookahead，也把不同 regime 混在一起，
+    正是 AGENTS.md 明令禁止的做法。
+
+    窗口不足的样本 adj=None，由调用方剔除，**不补零**
+    （补零等于假装漂移为 0，会把趋势期的样本悄悄算成"中性"）。
     """
-    m = defaultdict(list)
+    from collections import defaultdict as _dd
+    by = _dd(list)
     for r in rows:
-        m[r["inst"]].append(r["ret"])
-    avg = {k: sum(v) / len(v) for k, v in m.items()}
-    for r in rows:
-        r["adj"] = r["ret"] - avg[r["inst"]]
-    return rows
+        by[r["inst"]].append(r)
+    dropped = 0
+    for k, rs in by.items():
+        rs.sort(key=lambda x: x["date"])
+        for i, r in enumerate(rs):
+            past = rs[max(0, i - window):i]          # 严格早于当天
+            if len(past) < 20:                       # 窗口太短不做估计
+                r["adj"] = None
+                dropped += 1
+                continue
+            drift = sum(x["ret"] for x in past) / len(past)
+            r["adj"] = r["ret"] - drift
+    if dropped:
+        print(f"[去趋势] {dropped} 个样本因前置窗口不足 20 天而剔除（不补零）",
+              file=__import__("sys").stderr)
+    return [r for r in rows if r.get("adj") is not None]
 
 
 def thin(rows, gap=1):

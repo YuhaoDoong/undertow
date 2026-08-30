@@ -39,8 +39,39 @@ def binom_p(k, n, p=0.5):
                             for i in range(k, n + 1)))
 
 
+def fisher_exact(a, b, c, d):
+    """2x2 Fisher 精确检验（双尾）—— 纯标准库。
+
+    表：  [[a, b],   a=触发且跌破  b=触发未跌破
+          [c, d]]   c=未触发且跌破 d=未触发未跌破
+
+    ⚠️ codex 2026-08-29 P1-3：上一版对两组各做 p=0.5 的二项检验，
+    那检验的是「该组跌破率是否 ≠50%」，**根本不能回答「两组是否有差异」**，
+    更不能由 p=1.0 推出「两组没有差别」。
+    """
+    n = a + b + c + d
+    if n == 0:
+        return 1.0
+
+    def _p(x):
+        y = a + b - x
+        z = a + c - x
+        w = d - (a - x)
+        if min(x, y, z, w) < 0:
+            return 0.0
+        return (math.comb(a + b, x) * math.comb(c + d, a + c - x)
+                / math.comb(n, a + c))
+    obs = _p(a)
+    lo, hi = max(0, a + c - (c + d)), min(a + b, a + c)
+    return min(1.0, sum(_p(x) for x in range(lo, hi + 1)
+                        if _p(x) <= obs * (1 + 1e-9)))
+
+
 cfg, store = load_config(), SnapshotStore()
 rows, fails = [], defaultdict(int)
+# ⚠️ 逐品种记账：静默丢弃会让最终数字看不出哪些品种/日期被系统性排除
+# （codex 2026-08-29 P1-9）
+tally = defaultdict(lambda: {"pairs": 0, "no_px": 0, "gap": 0, "err": 0, "ok": 0})
 for key, inst in cfg.instruments.items():
     if inst.options is None:
         continue
@@ -56,7 +87,14 @@ for key, inst in cfg.instruments.items():
     for i in range(1, len(ds)):
         dp, dc = ds[i - 1], ds[i]
         cs = str(dc)
+        tally[key]["pairs"] += 1
+        # ⚠️ 存档列表相邻 ≠ 交易日相邻。中间缺快照时，diff 会把多日变化
+        # 当成 D−1 单日变化（codex P1-9）。>4 天视为跨周末以外的缺口。
+        if (dc - dp).days > 4:
+            tally[key]["gap"] += 1
+            continue
         if cs not in px:
+            tally[key]["no_px"] += 1
             continue
         pp, cp = store.load("options", sym, dp), store.load("options", sym, dc)
         if pp is None or cp is None:
@@ -72,6 +110,7 @@ for key, inst in cfg.instruments.items():
                                today=obs, horizon_days=45)
         except Exception as e:
             fails[type(e).__name__] += 1
+            tally[key]["err"] += 1
             continue
         wall = ga.put_wall
         if not wall or wall <= 0:
@@ -89,23 +128,51 @@ for key, inst in cfg.instruments.items():
             "to_next": ((close / w["next_line"] - 1) * 100
                         if (w and w.get("next_line")) else None),
         })
+for k, v in rows and [] or []:
+    pass
+for r in rows:
+    tally[r["inst"]]["ok"] += 1
+print("逐品种记账（预期对数 / 成功 / 缺行情 / 日期缺口 / 分析失败）：")
+bad = []
+for k in sorted(tally):
+    v = tally[k]
+    print(f"  {k:<8} {v['pairs']:>4} / {v['ok']:>4} / {v['no_px']:>3} / "
+          f"{v['gap']:>3} / {v['err']:>3}")
+    if v["pairs"] and not v["ok"]:
+        bad.append(k)
 if fails:
-    print("失败：" + "、".join(f"{k}×{v}" for k, v in fails.items()), file=sys.stderr)
+    print("失败类型：" + "、".join(f"{k}×{v}" for k, v in fails.items()), file=sys.stderr)
+if bad:
+    print(f"❌ 整品种失败：{bad}", file=sys.stderr)
+    sys.exit(1)
+print()
 
 n_fire = sum(1 for r in rows if r["fired"])
 print(f"样本 {len(rows)}（有 put 墙的品种日）　信号触发 {n_fire} 次\n")
 print("=" * 72)
 print("① 触发 vs 未触发：当日收盘跌破 put 墙的比例")
 print("=" * 72)
-print(f"{'分组':<12}{'样本':>6}{'跌破':>6}{'跌破率':>9}{'二项p':>10}")
+print(f"{'分组':<12}{'样本':>6}{'跌破':>6}{'跌破率':>9}")
 print("-" * 72)
+cnt = {}
 for tag, sel in (("信号触发", True), ("未触发", False)):
     sub = [r for r in rows if r["fired"] is sel]
     if not sub:
         continue
     b = sum(1 for r in sub if r["broke"])
+    cnt[sel] = (b, len(sub) - b)
     print(f"{tag:<12}{len(sub):>6}{b:>6}{b/len(sub)*100:>8.0f}%"
-          f"{binom_p(b, len(sub)):>10.4f}")
+          f"{'':>10}")
+if True in cnt and False in cnt:
+    a, bb = cnt[True]
+    c, d = cnt[False]
+    p = fisher_exact(a, bb, c, d)
+    print()
+    print(f"两组差异的 Fisher 精确检验（双尾）p = {p:.4f}")
+    print("⚠️ 正确的结论表述：" +
+          ("没有证据表明触发组的跌破率与未触发组不同（**不是**「两组没有差别」——"
+           "样本极稀疏，检验功效近乎为零）" if p >= 0.05
+           else "两组跌破率存在差异"))
 
 print()
 print("=" * 72)

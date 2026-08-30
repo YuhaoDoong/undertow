@@ -532,10 +532,11 @@ def dominant_expiry(changes: list, curr_date: str | None,
     硬性划定日期。应该是当日到期的出现剧烈增仓，所以主力才是当日到期。
     如果当日增仓不变，就不该是当日到期的为主力。」
 
-    做法：按【真实到期日】（不是人为分的桶）聚合 |ΔOI|，占比最高者若超过 share
-    就算主力；否则返回 None（当天没有单一主力，力量是分散的）。
+    做法：按【真实到期日】（不是人为分的桶）聚合【新增仓位】，
+    占比最高者达到（>=）share 就算主力；否则返回 None（当天没有单一主力）。
 
-    share=0.40 是拍的：没有样本可校准，取一个"接近半数"的分界。
+    ⚠️ share=0.40 是拍的、**未经校准**，页面上必须同步标注这一点
+    （codex 2026-08-29 P2-11：文档原写"超过 40%"、代码是 >=，口径也不一致）。
     """
     if not changes or not curr_date:
         return None
@@ -543,15 +544,21 @@ def dominant_expiry(changes: list, curr_date: str | None,
         ref = date.fromisoformat(curr_date)
     except (ValueError, TypeError):
         return None
+    # ⚠️ 只聚合【新增】仓位（d_oi > 0）。上一版用 abs(d_oi)，平仓与撤退也会
+    # 被算成"主力"，而页面写的是"占当天增仓" —— 名实不符（codex 2026-08-29 P1-10）。
+    # 减仓单独统计并一并返回，让读者自己看，但不参与主力判定。
     agg: dict = {}
     for c in changes:
-        a = agg.setdefault(c.expiry, {"doi": 0, "dn": 0, "up": 0, "legs": 0})
-        a["doi"] += abs(c.d_oi)
+        a = agg.setdefault(c.expiry, {"doi": 0, "cut": 0, "dn": 0, "up": 0, "legs": 0})
         a["legs"] += 1
-        if c.bias == "bearish":
-            a["dn"] += abs(c.d_oi)
-        elif c.bias == "bullish":
-            a["up"] += abs(c.d_oi)
+        if c.d_oi > 0:
+            a["doi"] += c.d_oi
+            if c.bias == "bearish":
+                a["dn"] += c.d_oi
+            elif c.bias == "bullish":
+                a["up"] += c.d_oi
+        elif c.d_oi < 0:
+            a["cut"] += -c.d_oi
     total = sum(v["doi"] for v in agg.values())
     if not total:
         return None
@@ -561,7 +568,8 @@ def dominant_expiry(changes: list, curr_date: str | None,
         return None                     # 没有单一主力：力量分散在多个到期上
     dn, up = v["dn"], v["up"]
     return {"expiry": exp.isoformat(), "dte": (exp - ref).days,
-            "doi": v["doi"], "share": round(frac, 3), "legs": v["legs"],
+            "doi": v["doi"], "cut": v["cut"],       # cut = 该到期的减仓量，供对照
+            "share": round(frac, 3), "legs": v["legs"],
             "dn": dn, "up": up,
             "sign": -1 if dn > up else (1 if up > dn else 0),
             "ratio": round(max(dn, up) / max(min(dn, up), 1), 1)}
@@ -603,9 +611,25 @@ def _split_by_dte(changes: list, curr_date: str | None) -> list[dict]:
     return out
 
 
+def dte_agreement(rows: list[dict]) -> str:
+    """到期桶方向的三态判定：agree / conflict / insufficient。
+
+    ⚠️ codex 2026-08-29 P1-4：上一版只有二元的 conflict —— 只有一个有效桶、
+    甚至一个方向都没有时也会返回 False，于是被当成「各到期方向一致、全曲线共识」。
+    回测里那个 67.4% 因此并不一定是在检验真正的跨到期一致性。
+
+    有效桶 = |ΔOI| ≥ MOVE_MIN_DOI 且方向非零。至少要两个才谈得上一致或冲突。
+    """
+    signs = [r["sign"] for r in rows
+             if r["sign"] and r["doi"] >= MOVE_MIN_DOI]
+    if len(signs) < 2:
+        return "insufficient"
+    return "agree" if len(set(signs)) == 1 else "conflict"
+
+
 def _dte_dirs_conflict(rows: list[dict]) -> bool:
-    signs = {r["sign"] for r in rows if r["sign"] and r["doi"] >= MOVE_MIN_DOI}
-    return len(signs) > 1
+    """仅当【确实存在方向相反的有效桶】时为真（保留给旧调用点）。"""
+    return dte_agreement(rows) == "conflict"
 
 
 def expiry_split(fa: "FlowAnalysis") -> list[dict]:
@@ -654,7 +678,11 @@ def expiry_split(fa: "FlowAnalysis") -> list[dict]:
 
 
 def expiry_split_conflict(rows: list[dict]) -> bool:
-    """各到期桶方向是否打架 —— 打架时加总的方向读数不可信。"""
+    """各到期桶方向是否打架 —— 打架时加总的方向读数不可信。
+
+    ⚠️ 注意这是二元返回：False 既可能是"一致"也可能是"有效桶不足"。
+    需要区分三态时请直接用 dte_agreement()。
+    """
     return _dte_dirs_conflict(rows)
 
 
@@ -1621,19 +1649,21 @@ def analyze_flow(
         call = _decide(up_pressure=upside, dn_pressure=downside, net_delta=_nd,
                        has_prev=True, oi_changed=bool(changes),
                        trade_date=curr_date or "", today="", dte_share_le2=_sh2)
-        # 到期桶方向打架 → 标低置信。pressure 是 45 天内加总的，各到期方向不一致时
-        # 它只是把矛盾抹平（用户 2026-08-29 追问「近月远月区分开了吗」引出）。
-        # ⚠️ 与「大波动日 vs 横盘日」不同：桶是否同向在 D 开盘前就能算，
-        #    是【可执行】的闸门，不是事后分层。
-        # 实测 127 样本：同向 67.4%（日聚类区间 [54.5%,80.0%]，下界>50%）
-        #                打架 53.1%（[41.8%,63.9%]，跨 50%）
-        #                差值中位 +14.7pp，但区间 [-2.2,+31.3] 跨 0 —— 样本不足，
-        #                故只降置信、不否决方向。
+        # 到期桶方向【确实相反】时标低置信：pressure 是 45 天内加总的，
+        # 各到期方向不一致时它只是把矛盾抹平（用户 2026-08-29 追问引出）。
+        #
+        # ⚠️ 依据强度要说清（codex 2026-08-29 P1-6）：
+        #   实测 127 样本：同向 67.4%（日聚类区间 [54.5%,80.0%]）、
+        #   打架 53.1%（[41.8%,63.9%]），但**差值区间 [-2.2,+31.3] 跨 0**
+        #   —— 增量价值未被证实。
+        #   这里降置信是【保守选择】（矛盾时少说话），不是因为回测支持它。
+        #   绝不据此给出"转铁鹰"之类的策略切换建议。
+        # ⚠️ 用三态判定：只有一个有效桶时不算"同向"，也不该降置信（P1-4）。
         # ⚠️ 直接在 changes 上算，不构造临时 FlowAnalysis —— 上一版那么写缺必填字段、
         # 异常被 except 裸吞，白银明明四桶打架却什么都没出现（自查发现，
         # 和本项目反复栽的静默失败是同一类）。
         _sp_rows = _split_by_dte(changes, curr_date)
-        if _sp_rows and _dte_dirs_conflict(_sp_rows) and not call.abstain:
+        if _sp_rows and dte_agreement(_sp_rows) == "conflict" and not call.abstain:
             import dataclasses as _dc
             call = _dc.replace(
                 call, low_confidence=True,

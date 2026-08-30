@@ -39,6 +39,34 @@ def wilson_lo(k, n, z=1.96):
             - z * math.sqrt(ph * (1 - ph) / n + z * z / (4 * n * n))) / d
 
 
+def rolling_adj(rows, window=60, min_past=20):
+    """局部去趋势：减掉【信号日之前】window 天的滚动漂移，窗口不足则剔除。
+
+    ⚠️ codex 2026-08-29 P1-5：用整个区间的品种均值去趋势，等于让当天的调整量
+    用到它之后的收益 —— 既是 lookahead，也把不同 regime 混在一起。
+    **不补零**：补零等于假装漂移为 0，会把趋势期的样本悄悄算成"中性"。
+    """
+    from collections import defaultdict
+    import sys as _s
+    by = defaultdict(list)
+    for r in rows:
+        by[r["inst"]].append(r)
+    out, dropped = [], 0
+    for k, rs in by.items():
+        rs.sort(key=lambda x: x["date"])
+        for i, r in enumerate(rs):
+            past = rs[max(0, i - window):i]
+            if len(past) < min_past:
+                dropped += 1
+                continue
+            r["adj"] = r["ret"] - sum(x["ret"] for x in past) / len(past)
+            out.append(r)
+    if dropped:
+        print(f"[去趋势] 剔除 {dropped} 个前置窗口不足 {min_past} 天的样本（不补零）",
+              file=_s.stderr)
+    return out
+
+
 insts = sorted({r["inst"] for r in ROWS})
 tested = []
 print("单品种时序检验（增仓层方向 vs 当日去趋势收益）")
@@ -50,8 +78,10 @@ for k in insts:
          and r.get("flow") is not None and abs(r["flow"]) > 1e-9]
     if len(g) < 10:
         continue
-    avg = sum(r["ret"] for r in g) / len(g)
-    hit = sum(1 for r in g if r["flow"] * (r["ret"] - avg) > 0)
+    g = rolling_adj(g)                    # 只用信号日之前的滚动漂移
+    if len(g) < 10:
+        continue
+    hit = sum(1 for r in g if r["flow"] * r["adj"] > 0)
     n = len(g)
     p, lo = binom_p(hit, n), wilson_lo(hit, n)
     tested.append((k, hit, n, p))

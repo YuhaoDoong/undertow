@@ -16,7 +16,7 @@
 	<key>StandardOutPath</key>
 	<string>/Users/yhdong/Trading/data/logs/lbintraday.out</string>
 	<key>StartInterval</key>
-	<integer>1800</integer>
+	<integer>900</integer>
 	<key>WorkingDirectory</key>
 	<string>/Users/yhdong/Trading</string>
 </dict>

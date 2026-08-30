@@ -1702,7 +1702,8 @@ def render_summary_card(it: dict) -> str:
         '</div>')
 
 
-def render_index_html(items: list[dict], asof: str, *, family_notes=None) -> str:
+def render_index_html(items: list[dict], asof: str, *, family_notes=None,
+                      ratio_html: str = "") -> str:
     """多品种综合研报（每品种一句话摘要 + 强信号置顶），非仅链接。
 
     items=[{name, fn, bias, conf, summary, signal}]，signal 为 StrongSignal|None。
@@ -1831,7 +1832,7 @@ def render_index_html(items: list[dict], asof: str, *, family_notes=None) -> str
         f'<body><div class="wrap"><div class="card"><h1>大宗商品综合研报</h1>'
         f'<div class="sub">{_esc(asof)} · 各品种摘要 + 强信号告警 · 点击进入详情</div></div>'
         f'{alert_block}{fam_block}{"".join(cards)}'
-        + _horizon_legend() +
+        + ratio_html + _horizon_legend() +
         '<div class="foot">undertow · 规则化情景工具，非投资建议 · 纯标准库生成</div></div></body></html>'
     )
 

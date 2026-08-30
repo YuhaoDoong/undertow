@@ -1529,6 +1529,55 @@ def cmd_report(args) -> int:
                          ensure_ascii=False, indent=2, default=str))
         return 0
 
+    # —— 品种对比值观察（只记录，不判定；用户 2026-08-30「顺手就记了」）——
+    _ratio_rows = []
+    try:
+        from undertow.analyze.ratio_watch import build as _rw_build, save as _rw_save
+        _snaps, _futs, _etfs, _mults = {}, {}, {}, {}
+        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb, _sc in written:
+            k = _inst.key
+            _cs = _td2 or today.isoformat()
+            _p = store.load("options", _inst.options.symbol, date.fromisoformat(_cs))
+            if _p is not None:
+                _snaps[k] = snapshot_from_payload(_p, k, _inst.options.symbol)
+            # ⚠️ ETF 价必须用【当日收盘】，不能用快照的 spot ——
+            # 后者是抓取时刻（盘前）的延迟报价，与期货收盘不同时点，
+            # 算出来的换算比会错位（2026-08-30 首版就混了：
+            # num_etf 取 422.54 而当日实际收 408.89）。
+        # 期货价与换算比区间：用近 25 日的比值范围，不用单点
+        from undertow.collect.longbridge_kline import fetch_series as _lbk
+        for k, _inst in [(i.key, i) for i, *_ in written]:
+            if _inst.commodity is None:
+                continue
+            try:
+                _fs = fut_src.fetch_series(_inst.commodity.symbol,
+                                           use_cache=not args.no_cache)
+                _es = _lbk(f"{_inst.options.symbol}.US", period="day", count=60)
+                _em = {str(d): c for d, c in zip(_es.dates, _es.closes)}
+                _cs2 = _td2 or today.isoformat()
+                if _cs2 in _em:
+                    _etfs[k] = _em[_cs2]          # 当日 ETF 收盘
+                _rs = [c / _em[str(d)] for d, c in zip(_fs.dates, _fs.closes)
+                       if str(d) in _em and _em[str(d)]]
+                if _rs:
+                    _rs = sorted(_rs[-25:])
+                    _mults[k] = (_rs[0], _rs[-1])
+                    _futs[k] = _fs.closes[-1]
+            except Exception:
+                pass
+        _ratio_rows = _rw_build(today, _snaps, _futs, _etfs, _mults)
+        n = _rw_save(_ratio_rows)
+        for r in _ratio_rows:
+            if r.ratio is not None:
+                _in = ("区间内" if r.inside else
+                       (f"区间外 {r.dist_pct:+.1f}%" if r.dist_pct is not None else "—"))
+                print(f"  📐 {r.pair} {r.ratio:.2f}"
+                      + (f"　墙隐含 {r.implied_lo:.1f}~{r.implied_hi:.1f}（{_in}）"
+                         if r.implied_lo else "　（墙位缺失，只记比值）"))
+    except Exception as e:      # 观察项失败不阻断，但必须出声
+        print(f"⚠️ 比值观察失败：{type(e).__name__}: {e}", file=sys.stderr)
+
+
     index_path = None
     if len(written) > 1:
         idx_items = [{"name": o.display_name, "fn": fn, "bias": o.bias,
@@ -1554,9 +1603,16 @@ def cmd_report(args) -> int:
                 "signal_level": (_ss.level if (_ss and not _stale) else ""),
             }
         idx_family = _family_check(_views)
+
         # 索引页同理：用各品种里最新的可交易日，不用生成日期
         _idx_day = max((w[6] for w in written if w[6]), default="") or today.isoformat()
-        index_html = render_index_html(idx_items, _idx_day, family_notes=idx_family)
+        _ratio_html = ""
+        if _ratio_rows:
+            from undertow.analyze.ratio_watch import render as _rw_render
+            from undertow.report.html import _esc as _e2
+            _ratio_html = _rw_render(_ratio_rows, _e2)
+        index_html = render_index_html(idx_items, _idx_day, family_notes=idx_family,
+                                       ratio_html=_ratio_html)
         index_path = reports_dir / f"index_{_idx_day}.html"
         _archive_existing(index_path)
         index_path.write_text(index_html, encoding="utf-8")

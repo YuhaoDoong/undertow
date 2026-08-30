@@ -593,3 +593,49 @@ def test_no_paid_author_content_in_public_paths():
                 hits.append(str(f.relative_to(root)))
     assert not hits, f"公开路径含付费作者内容：{hits}"
     print("PASS test_no_paid_author_content_in_public_paths")
+
+
+def test_ratio_watch_records_only_never_judges():
+    """比值观察只记录，不参与任何判定，且必须同时记下当日换算比。"""
+    from datetime import date as D
+    from undertow.analyze import ratio_watch as RW
+    from dataclasses import dataclass
+
+    @dataclass
+    class C:
+        expiry: D
+        strike: float
+        kind: str
+        open_interest: int
+
+    @dataclass
+    class S:
+        spot: float
+        contracts: list
+
+    today = D(2026, 8, 27)
+    snaps = {
+        "gold": S(408.9, [C(D(2026, 9, 18), 400, "P", 107234),
+                          C(D(2026, 8, 28), 413, "P", 40394)]),   # 次日到期的不算
+        "silver": S(60.0, [C(D(2026, 9, 18), 60, "P", 128440)]),
+    }
+    rows = RW.build(D(2026, 8, 28), snaps,
+                    futs={"gold": 4529.9, "silver": 67.786},
+                    etfs={"gold": 408.89, "silver": 60.02},
+                    mult_range={"gold": (10.835, 11.079),
+                                "silver": (1.0954, 1.1294)})
+    r = rows[0]
+    assert r.ratio == round(4529.9 / 67.786, 3)
+    assert r.num_wall == 400 and r.den_wall == 60, "0DTE/次日到期的墙不得入选"
+    assert r.implied_lo and r.implied_hi and r.implied_lo < r.implied_hi
+    assert r.inside is True
+    # 换算比必须逐日记下 —— 它会变，不记的话日后复算对不上
+    assert r.num_mult and r.den_mult
+
+    # 模块内不得出现方向词或判定接口
+    src = (Path(__file__).resolve().parents[1] / "undertow" / "analyze"
+           / "ratio_watch.py").read_text("utf-8")
+    for bad in ("偏多", "偏空", "看涨", "看跌", "买入", "卖出"):
+        assert bad not in src, f"比值观察不得输出方向词：{bad}"
+    assert "只记录，不判定" in src
+    print("PASS test_ratio_watch_records_only_never_judges")

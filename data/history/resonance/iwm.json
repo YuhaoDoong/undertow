@@ -32,5 +32,22 @@
   "forward_5d": null,
   "forward_10d": null,
   "forward_20d": null
+ },
+ {
+  "instrument": "iwm",
+  "date": "2026-08-31",
+  "spot": 296.15,
+  "state": "仅超卖",
+  "struct_bias": "中性",
+  "band": "强超卖",
+  "regime": "牛",
+  "stretch": -1.6330192098586855,
+  "stretch_pctile": 0.044,
+  "drawdown": -3.417905038057282,
+  "dd_pctile": 0.092,
+  "combo_pctile": 0.068,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
  }
 ]

@@ -128,6 +128,34 @@ def render_gamma(ga: GammaAnalysis, display_name: str) -> str:
              f"（看跌OI {ga.total_put_oi:,} / 看涨OI {ga.total_call_oi:,}）")
     L.append("")
 
+    # 到期分层（近端置顶）——混算墙会造出实盘不存在的位置，先说清楚墙属于哪一层
+    layers = getattr(ga, "layers", None)
+    if layers:
+        L.append("### 按到期分层（主墙位取近端 ≤14天）")
+        L.append(f"| 到期层 | put 墙（支撑） | call 墙（阻力） | 该层持仓 |")
+        L.append("|---|---|---|---|")
+        for key, lab in (("near", "**近端 ≤14天** ←主口径"), ("mid", "中端 15-45天"),
+                         ("far", "远端 >45天（仅背景）")):
+            Lr = layers.get(key)
+            if Lr is None:
+                continue
+            pw = f"{Lr.put_wall:.1f}（{Lr.put_wall_oi:,}）" if Lr.put_wall_oi > 0 else "—"
+            cw = f"{Lr.call_wall:.1f}（{Lr.call_wall_oi:,}）" if Lr.call_wall_oi > 0 else "—"
+            L.append(f"| {lab} | {pw} | {cw} | C {Lr.total_call_oi:,} / P {Lr.total_put_oi:,} |")
+        try:
+            from undertow.analyze.gamma import wall_agreement
+            for side, lab in (("put", "put 墙"), ("call", "call 墙")):
+                ok, txt = wall_agreement(layers, side)
+                L.append(f"- {'✅' if ok else '⚠️'} {lab}：{txt}")
+        except Exception:
+            pass
+        if ga.blended_put_wall_oi > 0:
+            L.append(f"- 对照：旧 45 天混算口径给 put 墙 {ga.blended_put_wall:.1f}"
+                     f"（{ga.blended_put_wall_oi:,}）· call 墙 {ga.blended_call_wall:.1f}"
+                     f"（{ga.blended_call_wall_oi:,}）。混算把明天到期和 45 天后到期等权相加，"
+                     f"与近端不一致时说明那是加总产物，实盘那里没有那么厚的墙。")
+        L.append("")
+
     # 关键位点
     L.append("### 关键位点（吸附/pin 候选）")
     call_top = ga.call_walls_top or ([(ga.call_wall, ga.call_wall_oi)] if ga.call_wall_oi > 0 else [])

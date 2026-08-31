@@ -1396,7 +1396,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        verdict_html: str = "", tech_html: str = "",
                        stretch_read=None, vintage_html: str = "",
                        indicators_html: str = "",
-                       expiry_html2: str = "", summary_html: str = "") -> str:
+                       expiry_html2: str = "", summary_html: str = "",
+                       layers_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -1418,12 +1419,16 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
     )
     body = (
         f'{strong_html}'
-        # ── 板块顺序（用户 2026-08-29 指定）────────────────────────────
-        #   ① 期权关键点位  ② 综合研判  ③ 大白话速读  ④ 增仓按到期拆开
+        # ── 板块顺序（用户 2026-08-29 指定，2026-08-31 在最前面插入分层）──────
+        #   ① 期权结构按到期分层  ② 期权关键点位  ③ 综合研判  ④ 大白话  ⑤ 增仓按到期拆开
         #   先看"墙在哪"，再看"怎么判"，然后是人话，最后才是拆解。
         #   此前顺序是 结构读数→决策研判→到期拆开→指标说明→大白话→…→关键位点，
         #   关键位点排到第 7 位，而它恰恰是最该先看的东西。
-        f'<div class="card"><h2>① 期权关键点位（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
+        #   2026-08-31 追加分层卡片置于最顶：关键位点表里的墙来自混算口径，
+        #   而混算会造出实盘不存在的墙（见 render_wall_layers_section），
+        #   所以必须先让人看到"这墙属于哪个到期层"，再看汇总表。
+        f'{layers_html}'
+        f'<div class="card"><h2>② 期权关键点位（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
         f'<div class="chart">{price_svg}</div>'
         f'<div class="chart">{oi_svg}</div></div>'
         f'{summary_html}'
@@ -2011,4 +2016,130 @@ def render_account_html(review, assets=None, health=None) -> str:
         '<title>实盘持仓评价</title><style>' + _CSS + '</style></head>'
         '<body><div class="wrap">' + "".join(cards) +
         '<div class="foot">undertow · 实盘理论复盘，只读、非投资建议 · 本地私有未入 git</div></div></body></html>'
+    )
+
+
+_WALL_LAYER_ORDER = (("near", "近端 ≤14天", 1, 14), ("mid", "中端 15-45天", 15, 45),
+                     ("far", "远端 >45天", 46, 3650))
+
+
+def render_wall_layers_section(ga, ladder=None, bands=None, agree=None,
+                               conv=None, unit: str = "", etf_symbol: str = "") -> str:
+    """期权结构按到期分层 —— 近端置顶。
+
+    起因（用户 2026-08-31）：「期权结构是不是可以分几页，短期近端的期权感觉可以单独拿出来」
+    查下去发现不只是排版问题，是口径错：analyze_gamma 把 horizon 内所有到期等权加总，
+    同日 GLD 混算 put 墙 400 在近端(405)/中端(350) 任何一层都不是最大值，是加总产物；
+    SLV 混算说支撑 55(-8.9%)，本周实际在 60(-0.7%)，照混算读会以为下方有 8.9% 缓冲。
+    """
+    layers = getattr(ga, "layers", None)
+    if not layers:
+        return ""
+    u = _esc(unit)
+    sym = _esc(etf_symbol)
+
+    def _p(v):
+        return f"{(conv(v) if conv else v):.1f}{u}"
+
+    def _etf(raw):
+        return (f' <span style="color:#0969da;font-weight:600">{sym}{raw:.1f}</span>'
+                if conv is not None else "")
+
+    rows = []
+    for i, (key, lab, _lo, _hi) in enumerate(_WALL_LAYER_ORDER):
+        L = layers.get(key)
+        if L is None:
+            continue
+        is_main = (key == "near")
+        cw = (f'<b style="color:{_FLOW_COLOR["bearish"]}">{_p(L.call_wall)}</b>{_etf(L.call_wall)}'
+              f' <span class="sub">({L.call_wall_oi:,})</span>') if L.call_wall_oi > 0 else '<span class="sub">—</span>'
+        pw = (f'<b style="color:{_FLOW_COLOR["bullish"]}">{_p(L.put_wall)}</b>{_etf(L.put_wall)}'
+              f' <span class="sub">({L.put_wall_oi:,})</span>') if L.put_wall_oi > 0 else '<span class="sub">—</span>'
+        tag = ('<span class="pill" style="background:#1a7f371a;color:#1a7f37">主口径</span>'
+               if is_main else ('<span class="pill" style="background:#8250df1a;color:#8250df">持仓层</span>'
+                                if key == "mid" else
+                                '<span class="pill" style="background:#57606a1a;color:#57606a">仅背景</span>'))
+        style = ('background:#1a7f370d;font-weight:600' if is_main else
+                 ('color:#57606a' if key == "far" else ''))
+        rows.append(
+            f'<tr style="{style}"><td>{_esc(lab)} {tag}</td><td>{pw}</td><td>{cw}</td>'
+            f'<td class="sub">C {L.total_call_oi:,} / P {L.total_put_oi:,}</td></tr>')
+
+    agree_html = ""
+    if agree:
+        bits = []
+        for side, label in (("put", "put 墙"), ("call", "call 墙")):
+            ok, txt = agree.get(side, (False, ""))
+            icon = "✅" if ok else "⚠️"
+            color = "#1a7f37" if ok else "#bc4c00"
+            bits.append(f'<div style="margin:3px 0"><b style="color:{color}">{icon} {label}</b>'
+                        f' <span class="sub">{_esc(txt)}</span></div>')
+        agree_html = ('<div style="margin:10px 0;padding:8px 10px;background:#f6f8fa;'
+                      'border-radius:6px">' + "".join(bits) + '</div>')
+
+    ladder_html = ""
+    if ladder:
+        lr = []
+        tot_oi = sum(x.oi for x in ladder)
+        tot_exp = sum(x.expiring for x in ladder)
+        for st in ladder:
+            bar = '█' * max(1, int(st.share * 60))
+            # 当日到期部分今晚就消失，画成空心段 —— 明天这一档只剩实心的部分
+            solid = '█' * max(0, int((st.share * (1 - st.expiring_share)) * 60))
+            hollow = '░' * max(0, len(bar) - len(solid))
+            exp_note = (f' <span style="color:#bc4c00">今日到期 {st.expiring:,}'
+                        f'（{st.expiring_share:.0%}）</span>' if st.expiring else "")
+            gap = (f'<div class="sub" style="color:#bc4c00;padding-left:16px">'
+                   f'〰 往下 {st.gap_after:.1f}% 无有效支撑</div>' if st.gap_after else "")
+            lr.append(f'<div style="font-family:ui-monospace,monospace;font-size:13px">'
+                      f'{_p(st.strike)}{_etf(st.strike)} '
+                      f'<span class="sub">{st.dist_pct:+.1f}%</span> '
+                      f'{st.oi:,} <span class="sub">({st.share:.0%})</span> '
+                      f'<span style="color:#0969da">{solid}</span>'
+                      f'<span style="color:#bc4c00">{hollow}</span>{exp_note}</div>{gap}')
+        decay = ""
+        if tot_exp:
+            decay = (f'<div class="sub" style="margin-top:6px;color:#bc4c00">'
+                     f'⚠️ 阶梯合计 {tot_oi:,} 张，其中 <b>{tot_exp:,} 张（{tot_exp / tot_oi:.0%}）'
+                     f'今日到期</b>，收盘后这部分支撑消失（图中空心段）。'
+                     f'明天的下方支撑要按 {tot_oi - tot_exp:,} 张读。</div>')
+        ladder_html = ('<div style="margin-top:12px"><b>近端下方支撑阶梯（≤14天到期）</b>'
+                       '<div class="sub">逐档列出价格往下走会碰到什么；真空区 = 一旦跌破上一档，'
+                       '到下一档之间没有东西挡。实心=明天还在，空心=今日到期、今晚消失。</div>'
+                       '<div style="margin-top:6px">' + "".join(lr) + '</div>' + decay + '</div>')
+
+    bands_html = ""
+    if bands and bands.get("total"):
+        bb = []
+        for x in bands["bands"]:
+            w = max(2, int(x["share"] * 100))
+            bb.append(f'<div style="display:flex;align-items:center;gap:8px;margin:2px 0">'
+                      f'<span class="sub" style="width:80px">{_esc(x["label"])}</span>'
+                      f'<span style="display:inline-block;height:12px;width:{w * 2}px;'
+                      f'background:#0969da;border-radius:2px"></span>'
+                      f'<span class="sub">{x["share"]:.0%}（{x["oi"]:,}）</span></div>')
+        bands_html = ('<div style="margin-top:12px"><b>支撑堆在哪</b>'
+                      '<div class="sub">近端下方持仓按跌幅分区。堆在脚下 = 阶梯式，'
+                      '堆在深渊 = 中间没东西接。</div>'
+                      '<div style="margin-top:6px">' + "".join(bb) + '</div></div>')
+
+    basis = _esc(getattr(ga, "wall_basis", "") or "")
+    bl = ""
+    if getattr(ga, "blended_put_wall_oi", 0) > 0:
+        bl = (f'<div class="sub" style="margin-top:8px">对照：旧的 45 天混算口径给 '
+              f'put 墙 {_p(ga.blended_put_wall)}（{ga.blended_put_wall_oi:,}）· '
+              f'call 墙 {_p(ga.blended_call_wall)}（{ga.blended_call_wall_oi:,}）。'
+              f'混算把明天到期和 45 天后到期等权相加，若与上表近端不一致，说明它给的是'
+              f'各层加总出来的位置，实盘那里并没有那么厚的墙。</div>')
+
+    return (
+        '<div class="card"><h2>① 期权结构 · 按到期分层（近端置顶）</h2>'
+        f'<div class="sub">主墙位取<b>近端 ≤14天</b>（{basis}）—— 方向判断问的是"这周会不会破位"，'
+        '跨月加总的墙答不了这个问题。中端是多数持仓所在，远端只作背景，不参与本周判断。</div>'
+        '<table style="margin-top:8px"><tr><th>到期层</th><th>put 墙（下方支撑）</th>'
+        '<th>call 墙（上方阻力）</th><th>该层持仓</th></tr>'
+        + "".join(rows) + '</table>'
+        + agree_html + ladder_html + bands_html + bl
+        + '<div class="sub" style="margin-top:10px">墙 = 该层该侧 OI 最大的行权价（现价 ±15% 内）。'
+          'OI 是持仓不是方向，厚墙只说明"很多人在这有仓"，不等于价格一定停在那。</div></div>'
     )

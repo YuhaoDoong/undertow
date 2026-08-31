@@ -545,12 +545,25 @@ def test_report_section_order_and_summary_source():
     """
     src = (Path(__file__).resolve().parents[1] / "undertow" / "report"
            / "html.py").read_text("utf-8")
-    # ① 关键点位必须排在 verdict / 指标说明 / 大白话 之前
-    i_lv = src.index("① 期权关键点位")
+    # 2026-08-31：关键点位表里的墙来自 analyze_gamma 的跨到期加总，而混算会造出
+    # 实盘不存在的墙（同日 GLD put 墙混算 400，近端 405 / 中端 350，任何一层都不是
+    # 400）。所以在它之前又插了一张按到期分层的卡 —— 先看"墙属于哪个到期层"，
+    # 再看汇总表。原断言"① 关键点位必须最前"的意图（它不能被埋到第 7 位）保留，
+    # 只是最前面换成了它的分层版本。
+    i_layer = src.index("f'{layers_html}'")
+    # 用 h2 标签锚定，不能用纯文字 —— 板块顺序注释里也写了同样的标题，
+    # src.index 会命中注释而不是真正的渲染位置（本测试自己踩过）。
+    i_lv = src.index("<h2>② 期权关键点位")
     i_sum = src.index("f'{summary_html}'")
     i_tldr = src.index("f'{tldr_html}'")
     i_exp = src.index("expiry_html2}</div>")
-    assert i_lv < i_sum < i_tldr < i_exp, "板块顺序：关键点位→综合研判→大白话→到期拆分"
+    assert i_layer < i_lv < i_sum < i_tldr < i_exp, \
+        "板块顺序：到期分层→关键点位→综合研判→大白话→到期拆分"
+    # 分层卡必须真的按到期切开并给出跨层一致性，否则它只是把混算换个地方摆
+    gsrc = (Path(__file__).resolve().parents[1] / "undertow" / "analyze"
+            / "gamma.py").read_text("utf-8")
+    assert "def layered_walls" in gsrc and "def wall_agreement" in gsrc
+    assert "blended_put_wall" in gsrc, "必须保留混算值供对账，但不得用于判断"
     # ② 综合研判卡必须复用 index 的两个渲染件，不另起一套
     card = src[src.index("def render_summary_card"):src.index("def render_index_html")]
     assert "render_pills" in card and "_facts_html" in card, \

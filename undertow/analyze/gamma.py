@@ -67,6 +67,16 @@ class GammaAnalysis:
 
     strike_rows: list[StrikeRow] = field(default_factory=list)
 
+    # 到期分层墙位（见 layered_walls 的注释）。call_wall/put_wall 主字段取【近端】，
+    # 因为方向投票问的是"这周会不会破位"，跨月加总的墙答不了这个问题。
+    # blended_* 保留 45 天混算值，仅供与历史报告对账，不参与任何判断。
+    layers: dict = field(default_factory=dict)
+    wall_basis: str = ""
+    blended_call_wall: float = 0.0
+    blended_call_wall_oi: int = 0
+    blended_put_wall: float = 0.0
+    blended_put_wall_oi: int = 0
+
     def to_commodity(self, etf_price: float | None) -> float | None:
         if etf_price is None or self.multiplier is None:
             return None
@@ -183,11 +193,31 @@ def analyze_gamma(
     wall_lo = spot * (1 - WALL_BAND)
     call_strikes = [(s, v[0]) for s, v in by_strike.items() if spot <= s <= wall_hi and v[0] > 0]
     put_strikes = [(s, v[1]) for s, v in by_strike.items() if wall_lo <= s <= spot and v[1] > 0]
-    call_wall, call_wall_oi = max(call_strikes, key=lambda x: x[1]) if call_strikes else (spot, 0)
-    put_wall, put_wall_oi = max(put_strikes, key=lambda x: x[1]) if put_strikes else (spot, 0)
-    # 带内前三大墙（OI 降序）——并列展示，避免单一最大值随 spot 微动而跳变
-    call_walls_top = sorted(call_strikes, key=lambda x: -x[1])[:3]
-    put_walls_top = sorted(put_strikes, key=lambda x: -x[1])[:3]
+    bl_call_wall, bl_call_oi = max(call_strikes, key=lambda x: x[1]) if call_strikes else (spot, 0)
+    bl_put_wall, bl_put_oi = max(put_strikes, key=lambda x: x[1]) if put_strikes else (spot, 0)
+
+    # ── 主墙位取【近端 ≤14天】，逐层退化 ──
+    # 混算口径（bl_*）把明天到期和 45 天后到期等权加总，会造出实盘不存在的墙：
+    # 2026-08-31 SLV 混算说支撑 55(-8.9%)，近端实际 60(-0.7%)。方向投票用它会读反。
+    layers = layered_walls(snap, today, spot)
+    _order = [layers["near"], layers["mid"]]
+
+    def _pick(side: str):
+        for L in _order:
+            oi = L.call_wall_oi if side == "call" else L.put_wall_oi
+            if oi > 0:
+                w = L.call_wall if side == "call" else L.put_wall
+                top = L.call_walls_top if side == "call" else L.put_walls_top
+                return w, oi, top, L.label
+        bw = bl_call_wall if side == "call" else bl_put_wall
+        bo = bl_call_oi if side == "call" else bl_put_oi
+        bt = (sorted(call_strikes, key=lambda x: -x[1])[:3] if side == "call"
+              else sorted(put_strikes, key=lambda x: -x[1])[:3])
+        return bw, bo, bt, "近/中端均无仓·退 45 天混算"
+
+    call_wall, call_wall_oi, call_walls_top, _cb = _pick("call")
+    put_wall, put_wall_oi, put_walls_top, _pb = _pick("put")
+    wall_basis = _cb if _cb == _pb else f"call:{_cb}｜put:{_pb}"
 
     net_gex = sum(gex_by_strike.values())
     if net_gex > 0:
@@ -240,6 +270,12 @@ def analyze_gamma(
         net_gex=net_gex,
         gex_regime=regime,
         zero_gamma=zero_gamma,
+        layers=layers,
+        wall_basis=wall_basis,
+        blended_call_wall=bl_call_wall,
+        blended_call_wall_oi=bl_call_oi,
+        blended_put_wall=bl_put_wall,
+        blended_put_wall_oi=bl_put_oi,
         call_wall=call_wall,
         call_wall_oi=call_wall_oi,
         put_wall=put_wall,
@@ -388,3 +424,199 @@ def persistent_walls(snap, today, *, min_dte: int = PERSIST_MIN_DTE,
         "call_wall_oi": cw[0]["oi"] if cw else 0,
         "put_top": pw, "call_top": cw,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 到期分层墙位
+#
+# 【为什么必须分层】analyze_gamma 的 by_strike 把 horizon_days 内所有到期的 OI
+# 直接累加，一张明天到期的 OI 和一张 45 天后到期的 OI 权重完全相同。后果实测：
+#   2026-08-31 GLD 盘前 407.53
+#     混算(45天)  put 墙 400 (29,846)
+#     近端 ≤14天  put 墙 405 ( 6,994)   ← 本周真正挡价格的
+#     中端 15-45  put 墙 350 (27,358)
+#   400 在任何单层里都不是最大值——它是三层加总后才冒出来的"假墙"。
+#   同日 SLV 更严重：混算说支撑在 55(-8.9%)，近端实际在 60(-0.7%)，
+#   照混算读会以为下方有 8.9% 缓冲，实际支撑就在脚下。
+#
+# 分层后还能读出一个混算永远给不出的信息：**跨层一致性**。
+# 同日 GLD call 墙三层都是 430 → 真共识位；put 墙三层各不相同 → 加总产物。
+# ─────────────────────────────────────────────────────────────────────────────
+
+WALL_LAYERS: tuple[tuple[str, str, int, int], ...] = (
+    ("near", "近端 ≤14天",   1,   14),    # 交易层：本周进出场、破位判断
+    ("mid",  "中端 15-45天", 15,  45),    # 布局层：多数持仓所在
+    ("far",  "远端 >45天",   46, 3650),   # 背景层：机构长期布局，不参与本周判断
+)
+WALL_SAME_TOL = 0.012   # 两层墙位相对差 ≤1.2% 视为同一位置（容忍行权价档距）
+
+
+@dataclass(frozen=True)
+class WallLayer:
+    key: str
+    label: str
+    lo_dte: int
+    hi_dte: int
+    call_wall: float
+    call_wall_oi: int
+    put_wall: float
+    put_wall_oi: int
+    call_walls_top: list[tuple[float, int]]
+    put_walls_top: list[tuple[float, int]]
+    total_call_oi: int
+    total_put_oi: int
+    n_strikes: int
+
+    @property
+    def empty(self) -> bool:
+        return self.call_wall_oi == 0 and self.put_wall_oi == 0
+
+
+def _layer_walls(snap, today: date, spot: float, lo: int, hi: int,
+                 key: str, label: str) -> WallLayer:
+    """单层内独立求墙——不跨层加总，这是与 analyze_gamma 的唯一实质差别。"""
+    by_strike: dict[float, list[int]] = {}
+    tc = tp = 0
+    wall_hi, wall_lo = spot * (1 + WALL_BAND), spot * (1 - WALL_BAND)
+    for c in snap.with_oi():
+        d = (c.expiry - today).days
+        if not (lo <= d <= hi):
+            continue
+        slot = by_strike.setdefault(c.strike, [0, 0])
+        if c.is_call:
+            slot[0] += c.open_interest
+            tc += c.open_interest
+        else:
+            slot[1] += c.open_interest
+            tp += c.open_interest
+    cs = [(s, v[0]) for s, v in by_strike.items() if spot <= s <= wall_hi and v[0] > 0]
+    ps = [(s, v[1]) for s, v in by_strike.items() if wall_lo <= s <= spot and v[1] > 0]
+    cw, cwo = max(cs, key=lambda x: x[1]) if cs else (spot, 0)
+    pw, pwo = max(ps, key=lambda x: x[1]) if ps else (spot, 0)
+    return WallLayer(
+        key=key, label=label, lo_dte=lo, hi_dte=hi,
+        call_wall=cw, call_wall_oi=cwo, put_wall=pw, put_wall_oi=pwo,
+        call_walls_top=sorted(cs, key=lambda x: -x[1])[:3],
+        put_walls_top=sorted(ps, key=lambda x: -x[1])[:3],
+        total_call_oi=tc, total_put_oi=tp, n_strikes=len(by_strike),
+    )
+
+
+def layered_walls(snap, today: date, spot: float) -> dict[str, WallLayer]:
+    return {k: _layer_walls(snap, today, spot, lo, hi, k, lab)
+            for k, lab, lo, hi in WALL_LAYERS}
+
+
+def wall_agreement(layers: dict[str, WallLayer], side: str) -> tuple[bool, str]:
+    """近端与中端是否指向同一位置 —— 一致 = 真共识位，不一致 = 混算会造假墙的地方。
+
+    只判 near vs mid：这两层是交易相关的（本周进出场 + 持仓所在）。far(>45天) 是机构
+    长期布局，与本周价格无因果关系，给它否决权会把真共识误报成分歧 —— 实测 2026-08-31
+    GLD call 近/中端都是 430、far 在 460，若三层同判就会把 430 这个真阻力抹掉。
+    far 仅作为附注呈现，不参与 agree 判定。
+    """
+    def _w(L):
+        return (L.call_wall if side == "call" else L.put_wall,
+                L.call_wall_oi if side == "call" else L.put_wall_oi)
+    n_w, n_oi = _w(layers["near"])
+    m_w, m_oi = _w(layers["mid"])
+    f_w, f_oi = _w(layers["far"])
+    far_note = f"；远端在 {f_w:g}" if f_oi > 0 else ""
+    if n_oi == 0 or m_oi == 0:
+        which = "近端" if n_oi == 0 else "中端"
+        return False, f"{which}该侧无仓，无法判定一致性{far_note}"
+    if n_w > 0 and abs(m_w - n_w) / n_w <= WALL_SAME_TOL:
+        return True, f"近/中端一致于 {n_w:g} · 真共识位{far_note}"
+    return False, (f"近端 {n_w:g} vs 中端 {m_w:g} 不一致 · 混算会在两者之间造出假墙"
+                   f"{far_note}")
+
+
+@dataclass(frozen=True)
+class LadderStep:
+    strike: float
+    oi: int
+    share: float          # 占该层该侧总 OI 的比例
+    dist_pct: float       # 相对现价，支撑为负、阻力为正
+    gap_after: float = 0.0  # 与下一档之间的真空跨度(%)，0=紧邻
+    # 该档里【当日到期】的 OI。报告以 obs_day(=快照日前一工作日) 计时，好让 0DTE 不被
+    # 当成已过期剔除（当天它们仍在交易），代价是当日到期也被算进"近端支撑"——而它们
+    # 今天收盘就消失。2026-08-31 SLV 的看跌增仓 12,072 张里 7,749 张是当日到期，
+    # 不拆开看会把一个当天就蒸发的结构读成持续压力。
+    expiring: int = 0
+
+    @property
+    def expiring_share(self) -> float:
+        return self.expiring / self.oi if self.oi else 0.0
+
+
+def support_ladder(snap, today: date, spot: float, *, side: str = "put",
+                   max_dte: int = 14, min_dte: int = 1,
+                   min_share: float = 0.03, gap_pct: float = 2.0,
+                   expiring_on: date | None = None) -> list[LadderStep]:
+    """近端支撑/阻力阶梯 + 真空区。
+
+    回答的是"价格往下(上)走，一路上有没有东西挡"，混算墙位给不出这个 ——
+    2026-08-31 GLD 近端支撑 407/405/404/402/400/396 六档间距 0.2~0.6%，
+    但 396→370 之间是 6.3% 真空：守住 396 很厚，破了 396 比白银滑得还快。
+    只有逐档列出来才看得见这种"厚一段、然后断崖"的结构。
+
+    min_share: 低于此占比的档位视为挡不住，不计入阶梯（但计入真空跨度）。
+    gap_pct:   相邻两档间距超过此值即标注为真空区。
+    """
+    want_call = side == "call"
+    agg: dict[float, int] = {}
+    exp: dict[float, int] = {}
+    for c in snap.with_oi():
+        if c.is_call != want_call:
+            continue
+        d = (c.expiry - today).days
+        if not (min_dte <= d <= max_dte):
+            continue
+        if want_call and c.strike <= spot:
+            continue
+        if not want_call and c.strike >= spot:
+            continue
+        agg[c.strike] = agg.get(c.strike, 0) + c.open_interest
+        if expiring_on is not None and c.expiry == expiring_on:
+            exp[c.strike] = exp.get(c.strike, 0) + c.open_interest
+    total = sum(agg.values())
+    if total <= 0:
+        return []
+    # 支撑从高到低（离现价由近及远）；阻力从低到高
+    ordered = sorted(agg.items(), key=lambda x: -x[0] if not want_call else x[0])
+    keep = [(k, v) for k, v in ordered if v / total >= min_share]
+    out: list[LadderStep] = []
+    for i, (k, v) in enumerate(keep):
+        gap = 0.0
+        if i + 1 < len(keep):
+            nxt = keep[i + 1][0]
+            g = abs(nxt - k) / k * 100
+            if g >= gap_pct:
+                gap = g
+        out.append(LadderStep(strike=k, oi=v, share=v / total,
+                              dist_pct=(k / spot - 1) * 100, gap_after=gap,
+                              expiring=exp.get(k, 0)))
+    return out
+
+
+def ladder_bands(snap, today: date, spot: float, *, max_dte: int = 14) -> dict:
+    """近端下方支撑按跌幅分区的密度 —— 用来一眼看出"支撑堆在脚下还是堆在深渊"。
+
+    2026-08-31 实测：GLD 0~-5% 占下方 70%，SLV 只占 30%、44% 堆在 -10% 以下。
+    这就是"黄金阶梯式支撑、白银支撑稀疏"的量化形式。
+    """
+    agg: dict[float, int] = {}
+    for c in snap.with_oi():
+        if c.is_call or c.strike >= spot:
+            continue
+        if not (1 <= (c.expiry - today).days <= max_dte):
+            continue
+        agg[c.strike] = agg.get(c.strike, 0) + c.open_interest
+    total = sum(agg.values())
+    if total <= 0:
+        return {"total": 0, "bands": []}
+    bands = []
+    for lo, hi, lab in ((0, 5, "0~-5%"), (5, 10, "-5~-10%"), (10, 100, "-10% 以下")):
+        v = sum(x for k, x in agg.items() if lo <= (1 - k / spot) * 100 < hi)
+        bands.append({"label": lab, "oi": v, "share": v / total})
+    return {"total": total, "bands": bands, "max_dte": max_dte}

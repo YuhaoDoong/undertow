@@ -248,11 +248,21 @@ def _gamma_vote(ga: GammaAnalysis) -> list[FactorVote]:
         down_room = (ga.spot - ga.put_wall) / ga.spot
         diff = up_room - down_room
         sign = 1 if diff > 0.02 else (-1 if diff < -0.02 else 0)
+        # ⚠️ 2026-08-31 回测：该因子在任何口径下都没有预测力。
+        #   旧 45 天混算 + 差值±2%   54%（38/70）
+        #   新 近端≤14天 + 差值±2%   49%（41/83）
+        #   新 近端≤14天 + 比值1.5   49%（37/75）
+        #   基准(无脑做多) 51%，43 个日期簇、四个变体 binomial p 全 = 1.000。
+        # 墙位口径已按用户 2026-08-31 决定改用近端（显示层确实更正确：混算会造出
+        # 实盘不存在的墙），但换口径并没有让这个因子变准 —— 它本来就不准。
+        # weight 保持 0.6 未动：降权会改变综合评分，属用户决定，不由这里擅自改。
         out.append(FactorVote(
             layer="Gamma", factor="墙位空间", direction=_DIR_CN[sign], sign=sign,
-            weight=round(0.6 * (1 if sign else 0), 2), reliability="中",
+            weight=round(0.6 * (1 if sign else 0), 2), reliability="低·未通过回测",
             detail=(f"上行至 call 墙 {ga.call_wall:.1f} 空间 {up_room*100:+.1f}%、"
-                    f"下行至 put 墙 {ga.put_wall:.1f} 空间 {down_room*100:+.1f}%。"),
+                    f"下行至 put 墙 {ga.put_wall:.1f} 空间 {down_room*100:+.1f}%（近端 ≤14天 口径）。"
+                    f"⚠️ 该因子回测命中 49%（近端）/ 54%（混算），基准 51%，"
+                    f"43 个日期簇 p=1.000 —— 与掷硬币无异，看看即可，别当依据。"),
         ))
     # Put/Call OI 比极端 → 反指（情绪过度）
     pcr = ga.put_call_ratio

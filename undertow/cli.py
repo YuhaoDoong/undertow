@@ -33,7 +33,8 @@ from undertow.collect.cboe_vol import CboeVolSource
 from undertow.analyze.vrp_history import assess_vrp_history, render_markdown as vrp_md
 from undertow.analyze.positioning import analyze
 from undertow.analyze.signals import generate_signals, net_bias
-from undertow.analyze.gamma import analyze_gamma, structure_delta
+from undertow.analyze.gamma import (analyze_gamma, structure_delta,
+                                   support_ladder, ladder_bands, wall_agreement)
 from undertow.analyze.flow import _live as _flow_live
 from undertow.analyze.flow import (analyze_flow, counter_signals,
                                    flip_driver_summary, structural_moves,
@@ -52,6 +53,7 @@ from undertow.report import viz
 from undertow.analyze.family import check as _family_check
 from undertow.analyze.indicators import build as _build_labels
 from undertow.report.html import (render_report_html, render_index_html,
+                          render_wall_layers_section,
                           render_flow_section, render_macro_section, render_events_section,
                           render_tldr_section, render_strategy_section,
                           render_concentration_html, render_vol_regime_section,
@@ -1355,6 +1357,26 @@ def cmd_report(args) -> int:
             strategy_html = (render_strategy_hub(strategy_props) + strategy_html
                              + render_credit_spread_section(cs_plan)
                              + render_condor_section(condor_plan))
+            # —— 期权结构按到期分层（近端置顶）——
+            # 主报告的墙来自 analyze_gamma 的跨到期加总，会造出实盘不存在的位置；
+            # 这一节把它拆回近/中/远三层，并标出近端与中端是否指向同一位置。
+            layers_html = ""
+            try:
+                # expiring_on = 快照日 = 今天的交易日：obs_day 计时会把当日到期算进
+                # 近端支撑，但它们今晚就消失，必须在阶梯上标出来。
+                _texp = date.fromisoformat(curr_date_s) if curr_date_s else today
+                _lad = support_ladder(curr, obs_day, curr.spot, expiring_on=_texp)
+                _bands = ladder_bands(curr, obs_day, curr.spot)
+                _agree = {sd: wall_agreement(ga.layers, sd) for sd in ("put", "call")}
+                layers_html = render_wall_layers_section(
+                    ga, ladder=_lad, bands=_bands, agree=_agree,
+                    conv=(ga.to_commodity if ratio is not None else None),
+                    unit="", etf_symbol=inst.options.symbol)
+            except Exception as e:
+                # 分层失败要出声：主墙位已改用近端口径，这一节缺失会让读者
+                # 无从判断墙属于哪个到期层。
+                print(f"⚠️ {inst.key} 期权结构分层失败：{type(e).__name__}: {e}", file=sys.stderr)
+
             # —— 近周到期阶梯：逐周五/月度独立墙位+买卖方（短线定到期价差用）——
             expiry_html = ""
             try:
@@ -1487,7 +1509,8 @@ def cmd_report(args) -> int:
                                       tech_html=tech_html, stretch_read=stretch_read,
                                       indicators_html=_indicators_html,
                                       expiry_html2=_expiry_html,
-                                      summary_html=_summary_html)
+                                      summary_html=_summary_html,
+                                      layers_html=layers_html)
             # ⚠️ 文件名用【可交易日】（= 快照日期），不是生成日期。
             # 时点约定：快照 D 于 D 凌晨捕获，OI 是 D−1 收盘的 OCC 结算，
             # diff 描述交易日 D−1，**D 开盘才可执行** —— D 就是这份研报的身份。

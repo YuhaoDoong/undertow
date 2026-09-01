@@ -500,7 +500,9 @@ def test_wall_zones_report_facts_not_conclusions():
     等于把一个回测 30 次只中 1 次、已决定不上线的预测器换名上线。
     末尾写「不是预测」抵不掉正文措辞与视觉分量。
     """
-    from undertow.report.html import _facts_html
+    # 2026-08-31：该块从 index 的 _facts_html 移到品种报告的 render_wall_zones
+    # （用户：「index 里现在信息太过复杂」）。测试意图不变 —— 只是换了承载位置。
+    from undertow.report.html import render_wall_zones
     from undertow.analyze import flow as F
     import inspect
 
@@ -513,7 +515,13 @@ def test_wall_zones_report_facts_not_conclusions():
         "below": {"buy_put": 46236, "sell_put": 0, "iv": 3.43,
                   "doi": 46955, "strikes": [406.0, 408.0]},
         "iv_gap_below_minus_at": 2.43}}
-    h = _facts_html(fx)
+    h = render_wall_zones(fx["migration"])
+    # 且必须真的挂在品种报告上，不能只是定义了没人调用
+    _src = (Path(__file__).resolve().parents[1] / "undertow" / "report"
+            / "html.py").read_text("utf-8")
+    assert "render_wall_zones(migration or {})" in _src, "必须接进资金流一节"
+    _cli = (Path(__file__).resolve().parents[1] / "undertow" / "cli.py").read_text("utf-8")
+    assert "migration=_mig" in _cli, "cli 必须把 migration 传进去"
     # 事实要在
     assert "413" in h and "38,497" in h and "46,236" in h
     assert "IV +3.4pp" in h and "+2.4pp" in h
@@ -553,12 +561,14 @@ def test_report_section_order_and_summary_source():
     i_layer = src.index("f'{layers_html}'")
     # 用 h2 标签锚定，不能用纯文字 —— 板块顺序注释里也写了同样的标题，
     # src.index 会命中注释而不是真正的渲染位置（本测试自己踩过）。
-    i_lv = src.index("<h2>② 期权关键点位")
+    i_cw = src.index("f'{credit_wall_html}'")
+    i_lv = src.index("<h2>③ 期权关键点位")
     i_sum = src.index("f'{summary_html}'")
     i_tldr = src.index("f'{tldr_html}'")
     i_exp = src.index("expiry_html2}</div>")
-    assert i_layer < i_lv < i_sum < i_tldr < i_exp, \
-        "板块顺序：到期分层→关键点位→综合研判→大白话→到期拆分"
+    # 卖方价差紧跟分层卡：它直接拿那张卡的墙位下单（用户 2026-08-31）
+    assert i_layer < i_cw < i_lv < i_sum < i_tldr < i_exp, \
+        "板块顺序：到期分层→卖方价差→关键点位→综合研判→大白话→到期拆分"
     # 分层卡必须真的按到期切开并给出跨层一致性，否则它只是把混算换个地方摆
     gsrc = (Path(__file__).resolve().parents[1] / "undertow" / "analyze"
             / "gamma.py").read_text("utf-8")

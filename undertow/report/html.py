@@ -530,11 +530,12 @@ def render_vol_analysis_section(vr, vol_svg: str = "") -> str:
     return "".join(parts)
 
 
-def render_flow_section(fa) -> str:
+def render_flow_section(fa, migration: dict | None = None) -> str:
     """期权资金流买卖方卡片。两份快照→买卖方表；仅一份→单快照异常活跃。"""
     if fa is None:
         return ""
-    head = '<h2>期权资金流 / 持仓异动（买方 vs 卖方）</h2>'
+    head = ('<h2>期权资金流 / 持仓异动（买方 vs 卖方）</h2>'
+            + render_wall_zones(migration or {}))
     tilt = f'<div class="sub">净倾向：<b>{_esc(fa.flow_tilt)}</b></div>'
     # 裁决的【全部】理由 + 未校准标记必须落到用户眼前。
     # 旧版只渲染 reasons[0]，而"未经校准"提示常在 reasons[1] —— 于是
@@ -1456,7 +1457,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        expiry_html2: str = "", summary_html: str = "",
                        layers_html: str = "", gate_html: str = "",
                        cost_html: str = "", backmonth_html: str = "",
-                       ratio_html: str = "") -> str:
+                       ratio_html: str = "", credit_wall_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -1495,7 +1496,10 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         #   而混算会造出实盘不存在的墙（见 render_wall_layers_section），
         #   所以必须先让人看到"这墙属于哪个到期层"，再看汇总表。
         f'{layers_html}'
-        f'<div class="card"><h2>② 期权关键点位（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
+        # 卖方价差紧跟期权结构 —— 它直接拿上面那张卡的墙位下单（用户 2026-08-31
+        # 「在研报里加上我们刚做的模块，就在期权结构下面」）
+        f'{credit_wall_html}'
+        f'<div class="card"><h2>③ 期权关键点位（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
         f'<div class="chart">{price_svg}</div>'
         f'<div class="chart">{oi_svg}</div></div>'
         f'{summary_html}'
@@ -1615,8 +1619,7 @@ def _facts_html(fx: dict) -> str:
                if ca is not None and pa is not None else "")
         rows.append(f"📊 昨天新建仓（按买卖方分侧）：看跌 +{_n(be)} 张 vs "
                     f"看涨 +{_n(bu)} 张（{who}{raw}）")
-        rows.append('<span style="color:#57606a;font-size:11.5px">'
-                    '　　看跌侧＝买 put ＋ 卖 call；看涨侧＝买 call ＋ 卖 put</span>')
+        # 「看跌侧＝买put＋卖call」的定义已在页尾图例里，此处不重复（精简）
         # 与综合结论相反时【自己说出来】。用户 2026-08-27 的核心抱怨就是
         # 「指标之间互相打架」——藏起来不会让矛盾消失，只会让人自己撞上。
         # 白银 2026-08-28 正是这样：综合写「偏多」，持仓流是看跌 2.4 倍，当天 -4.38%。
@@ -1638,40 +1641,30 @@ def _facts_html(fx: dict) -> str:
     #    上一版在这里输出「保护向墙下搬家 / 在给跌破定价 / 下一道防线」+ 红色高亮，
     #    用的还是那个回测 30 次只中 1 次、已决定不上线的预测器的门槛 ——
     #    换个名字上线而已。现在不分类、不预测、不用方向色。
-    mg = fx.get("migration")
-    if mg and (mg.get("at") or mg.get("below")):
-        def _z(name, z, extra=""):
-            if not z or not z.get("doi"):
-                return ""
-            bits = []
-            if z.get("buy_put"):
-                bits.append(f'买 put {z["buy_put"]:+,}')
-            if z.get("sell_put"):
-                bits.append(f'卖 put {z["sell_put"]:+,}')
-            iv = z.get("iv")
-            ivs = f'，IV {iv:+.1f}pp' if isinstance(iv, (int, float)) else ""
-            ks = (f'　<span style="color:#6e7781">'
-                  f'{"、".join(f"{k:g}" for k in z["strikes"])}</span>'
-                  if z.get("strikes") else "")
-            return (f'<div>{name}{extra}：' + '　'.join(bits) + ivs + ks + '</div>')
-        wp = mg.get("wall_pct")
-        gap = mg.get("iv_gap_below_minus_at")
-        rows.append(
-            '<div style="margin:6px 0;padding:7px 9px;border-left:3px solid #57606a;'
-            'background:#f6f8fa;line-height:1.7">'
-            '<b style="font-size:13px">🧱 put 墙附近三个区域的读数</b>'
-            '<span style="color:#6e7781;font-size:11.5px">（原始事实，不含判断）</span>'
-            + _z("墙上方（更贴身）", mg.get("above"))
-            + _z(f'<b>{mg["wall"]:g}</b>（墙上）',
-                 mg.get("at"), f'{f"，{wp:+.1f}%" if wp is not None else ""}')
-            + _z("墙下方", mg.get("below"))
-            + (f'<div style="color:#6e7781;font-size:11.5px">'
-               f'墙下方与墙上的 IV 变化之差：{gap:+.1f}pp</div>'
-               if gap is not None else "")
-            + '<div style="color:#6e7781;font-size:11.5px">'
-              '⚠️ 这里不做任何判断。把它读成「要跌破了」是**过度解读** —— '
-              '按同类结构做的预测器回测 30 次只中 1 次，已决定不上线。'
-              '</div></div>')
+    # 🧱 put 墙附近三区域读数已移出 index（用户 2026-08-31：「index 里现在信息
+    # 太过复杂，稍微精简一点」）。它自己的文案就写着「这里不做任何判断」——
+    # 纯研究性内容不该占索引页的位置，改由品种报告的资金流一节承载。
+    # fx["migration"] 仍会算出并传下来，只是不在这里渲染。
+
+    # 💵 卖方价差候选：index 只给一行最优腿位，明细在品种报告
+    # （用户 2026-08-31：「在研报里加上我们刚做的模块」+「index 精简一点」）
+    cw = fx.get("credit_wall")
+    if cw:
+        bits = []
+        for tier, lab, col in (("conservative", "稳健", "#1a7f37"),
+                               ("aggressive", "激进", "#cf222e")):
+            d = cw.get(tier)
+            if not d:
+                continue
+            bits.append(f'<span style="color:{col}"><b>{lab}</b> '
+                        f'卖{d["sell"]:g}/买{d["buy"]:g}{d["kind"]} '
+                        f'{d["expiry"]}（{d["dte"]}天）收 ${d["credit"]:.0f} '
+                        f'占用 ${d["occ"]:.0f} 缓冲 {d["buffer"]:.1f}%</span>')
+        if bits:
+            rows.append('💵 <b>卖方价差候选</b>　' + '　｜　'.join(bits))
+    elif fx.get("credit_wall_blocked"):
+        rows.append(f'<span style="color:#6e7781">💵 卖方价差：'
+                    f'{_esc(fx["credit_wall_blocked"])}</span>')
 
     # 主力到期：谁占了当天增仓的大头 —— 由数据决定，不由固定分桶决定
     dom = fx.get("dominant")
@@ -2408,3 +2401,150 @@ def render_ratio_spreads(rs, conv=None, unit: str = "", etf_symbol: str = "") ->
         '2026-08-31 零假设检验（随机打乱 ΔOI 后重跑）显示纯 ΔOI 口径的真实/随机比只有 '
         '1.0~1.5x（TQQQ 是 1.0x，等于全是巧合）；加成交量确认后升到 2.9~6.2x。'
         '即便如此仍有残余噪音（QQQ 随机基线约 4.5 个），条目数不多时才可信。</div></div>')
+
+
+def render_credit_wall(verdicts: dict, spot: float = 0.0, conv=None,
+                       unit: str = "", etf_symbol: str = "",
+                       buying_power: float | None = None) -> str:
+    """墙位卖方价差候选（analyze/credit_wall）—— 紧跟期权结构，因为它直接用墙位下单。
+
+    用户 2026-08-31：「事实证明破墙很难，我们根据墙进行卖方价差，胜率应该很高。」
+    回测证实，但要三道闸门：极强信号(≥5×)、加总墙够厚(≥10%)、同到期二次确认。
+
+    仓位不作为筛选条件（用户同日：「如果因为仓位选择了更差的交易，反而得不偿失」）：
+    三档全列，占用标出来，选哪档由人定。
+    """
+    from undertow.analyze.credit_wall import RISK_TIERS, OFFSET_TRADEOFF
+    if not verdicts:
+        return ""
+    sym = _esc(etf_symbol)
+
+    def _p(v):
+        return f"{(conv(v) if conv else v):.1f}{_esc(unit)}"
+
+    blocks = []
+    any_ok = False
+    for key in ("conservative", "balanced", "aggressive"):
+        v = verdicts.get(key)
+        if v is None:
+            continue
+        t = RISK_TIERS[key]
+        col = {"conservative": "#1a7f37", "balanced": "#8250df",
+               "aggressive": "#cf222e"}[key]
+        ev = (f'<span class="sub">实测 {t["n"]} 笔 · 胜率 {t["win_rate"]:.0%} · '
+              f'破墙 {t["break_rate"]:.0%} · 单笔 {t["per_trade_pct"]:+.2f}% · '
+              f'年化 {t["annual_pct"]:+.0f}% · 占用中位 ${t["median_occupancy"]:.0f}</span>')
+        cfg = (f'<span class="sub">卖腿{"墙内" if t["offset"] < 0 else "墙外"}'
+               f'{abs(t["offset"]) * 100:.0f}% · 宽 {t["width"] * 100:.1f}% · '
+               f'{t["dte"][0]}~{t["dte"][1]} 天</span>')
+        if not v.ok:
+            blocks.append(
+                f'<div style="border-left:3px solid #d0d7de;padding-left:10px;margin:10px 0">'
+                f'<div style="font-weight:700;color:#57606a">{_esc(t["label"])}档 ⛔ 无候选</div>'
+                f'{cfg}<div class="sub">{_esc(v.reason)}</div></div>')
+            continue
+        any_ok = True
+        rows = []
+        for sp in v.spreads[:3]:
+            afford = ("" if buying_power is None else
+                      ('<span style="color:#1a7f37">✓可下</span>'
+                       if sp.occupancy <= buying_power
+                       else f'<span style="color:#bc4c00">需${sp.occupancy:.0f}</span>'))
+            rows.append(
+                f'<tr><td><b>卖 {_p(sp.sell_strike)}{sp.kind}</b> / 买 {_p(sp.buy_strike)}{sp.kind}'
+                + (f' <span style="color:#0969da">{sym}{sp.sell_strike:g}/{sp.buy_strike:g}</span>'
+                   if conv else "")
+                + f'</td><td class="sub">{sp.expiry}<br>{sp.dte}天</td>'
+                f'<td class="r">+${sp.credit:.0f}</td>'
+                f'<td class="r">${sp.occupancy:.0f}</td>'
+                f'<td class="r">{sp.roi * 100:.0f}%</td>'
+                f'<td class="r">{sp.buffer_pct:.1f}%</td>'
+                f'<td class="r">-${sp.max_loss:.0f}</td>'
+                f'<td>{afford}</td></tr>')
+        blocks.append(
+            f'<div style="border-left:3px solid {col};padding-left:10px;margin:12px 0">'
+            f'<div style="font-weight:700;color:{col}">{_esc(t["label"])}档</div>'
+            f'{cfg}<br>{ev}'
+            f'<div class="sub" style="margin:4px 0">{_esc(t["note"])}</div>'
+            '<table style="margin-top:6px"><tr><th>腿位</th><th>到期</th><th>收权利金</th>'
+            '<th>占用</th><th>ROI</th><th>缓冲</th><th>最大亏</th><th></th></tr>'
+            + "".join(rows) + '</table></div>')
+
+    trade = "".join(
+        f'<tr><td>{"墙内" if o < 0 else ("墙上" if o == 0 else "墙外")}'
+        f'{abs(o) * 100:.0f}%</td><td class="r">{cw:.0%}</td><td class="r">{br:.0%}</td>'
+        f'<td class="r">{wr:.0%}</td><td class="r">{pt:+.2f}%</td>'
+        f'<td class="r">{an:+.0f}%</td></tr>'
+        for o, cw, br, wr, pt, an in OFFSET_TRADEOFF)
+
+    head = ("✅ 今日有卖方价差候选" if any_ok else "⛔ 今日无卖方价差候选")
+    return (
+        '<div class="card"><h2>② 墙位卖方价差 · 候选腿位</h2>'
+        f'<div style="font-size:15px;margin:6px 0"><b>{head}</b></div>'
+        '<div class="sub" style="line-height:1.7">三道闸门：极强信号（压力比 ≥5×）、'
+        '近端加总墙厚度 ≥10%、该到期自己的墙落在同一位置且 ≥20%。'
+        '中等信号(2~5×)的亏损笔达 -1250/-499/-260，是极强信号(最惨 -24)的 50 倍，'
+        '所以第一道闸门不能松。</div>'
+        + "".join(blocks) +
+        '<div style="margin-top:14px"><b>卖腿位置的权衡</b>'
+        '<div class="sub">权利金和风险是同一枚硬币 —— 这张表是「不能一味卖近」的凭证</div>'
+        '<table style="margin-top:6px"><tr><th>卖腿位置</th><th>权利金/宽度</th>'
+        '<th>破墙率</th><th>胜率</th><th>单笔</th><th>年化</th></tr>'
+        + trade + '</table></div>'
+        '<div class="sub" style="margin-top:10px;line-height:1.7">'
+        '⚠️ <b>提前平仓实测更差</b>：破墙率只有 5~35%，而平仓要双向吃点差，'
+        '不如让它到期作废（卖墙上：持有到期 +40% vs 赚50%平 +5%）。'
+        '这与「卖方收 50% 就跑」的通行说法相反，但数据如此。<br>'
+        '⚠️ 所有阈值在同一批数据（2026-06-25~08-31）上选出，多重比较风险实打实；'
+        '年化是「单笔 × 365/持有天数」的外推，未扣信号空窗期。'
+        '真实表现一定比表里的数字差。<br>'
+        '⚠️ 到期日若落在卖腿与买腿之间（如卖61/买60、标的收在 60.5），'
+        '卖腿被行权需接货、买腿保护不到，长桥规则是保证金不足即强平（不会负债），'
+        '但强平时机与价格不由你控制。</div></div>')
+
+
+def render_wall_zones(mg: dict) -> str:
+    """put 墙附近三个区域的原始读数 —— **只摆事实，不下结论**（codex 2026-08-29 P0）。
+
+    上一版在 index 里输出「保护向墙下搬家 / 在给跌破定价 / 下一道防线」+ 红色高亮，
+    用的还是那个回测 30 次只中 1 次、已决定不上线的预测器的门槛 —— 换个名字上线而已。
+    现在不分类、不预测、不用方向色。
+
+    2026-08-31 从 index 移到品种报告（用户：「index 里现在信息太过复杂」）：
+    它是研究性内容，不该占索引页的位置，但也不该消失。
+    """
+    if not mg or not (mg.get("at") or mg.get("below")):
+        return ""
+
+    def _z(name, z, extra=""):
+        if not z or not z.get("doi"):
+            return ""
+        bits = []
+        if z.get("buy_put"):
+            bits.append(f'买 put {z["buy_put"]:+,}')
+        if z.get("sell_put"):
+            bits.append(f'卖 put {z["sell_put"]:+,}')
+        iv = z.get("iv")
+        ivs = f'，IV {iv:+.1f}pp' if isinstance(iv, (int, float)) else ""
+        ks = (f'　<span style="color:#6e7781">'
+              f'{"、".join(f"{k:g}" for k in z["strikes"])}</span>'
+              if z.get("strikes") else "")
+        return f'<div style="margin:3px 0">{name}{extra}：' + '　'.join(bits) + ivs + ks + '</div>'
+
+    wp = mg.get("wall_pct")
+    gap = mg.get("iv_gap_below_minus_at")
+    return (
+        '<div style="margin:10px 0;padding:9px 11px;border-left:3px solid #57606a;'
+        'background:#f6f8fa;line-height:1.7">'
+        '<b style="font-size:13px">🧱 put 墙附近三个区域的读数</b>'
+        '<span style="color:#6e7781;font-size:11.5px">（原始事实，不含判断）</span>'
+        + _z("墙上方（更贴身）", mg.get("above"))
+        + _z(f'<b>{mg["wall"]:g}</b>（墙上）', mg.get("at"),
+             f'{f"，{wp:+.1f}%" if wp is not None else ""}')
+        + _z("墙下方", mg.get("below"))
+        + (f'<div style="color:#6e7781;font-size:11.5px">'
+           f'墙下方与墙上的 IV 变化之差：{gap:+.1f}pp</div>' if gap is not None else "")
+        + '<div style="color:#6e7781;font-size:11.5px">'
+          '⚠️ 这里不做任何判断。把它读成「要跌破了」是**过度解读** —— '
+          '按同类结构做的预测器回测 30 次只中 1 次，已决定不上线。'
+          '</div></div>')

@@ -36,6 +36,7 @@ from undertow.analyze.signals import generate_signals, net_bias
 from undertow.analyze.gamma import (analyze_gamma, structure_delta,
                                    support_ladder, ladder_bands, wall_agreement)
 from undertow.analyze.flow import _live as _flow_live
+from undertow.analyze.credit_wall import propose as cw_propose
 from undertow.analyze.backmonth import scan as backmonth_scan
 from undertow.analyze.cost_gate import candidates as cost_candidates
 from undertow.analyze.flow import (analyze_flow, counter_signals, tradeable_info, detect_ratio_spreads,
@@ -60,6 +61,7 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_cost_gate,
                           render_backmonth,
                           render_ratio_spreads,
+                          render_credit_wall,
                           render_flow_section, render_macro_section, render_events_section,
                           render_tldr_section, render_strategy_section,
                           render_concentration_html, render_vol_regime_section,
@@ -345,6 +347,27 @@ def _flow_facts(fa, ga, ga_prev, snap_prev, snap_curr, spot: float, ref) -> dict
             out["migration"] = wall_structure(fa, pw_, spot)
         except Exception as e:
             print(f"⚠️ 保护迁移描述失败：{type(e).__name__}: {e}", file=sys.stderr)
+        # 卖方价差候选：index 只带最优腿位，明细在品种报告
+        try:
+            from undertow.analyze.credit_wall import propose as _cwp
+            from undertow.analyze.flow import tradeable_info as _ti_fn
+            _t = _ti_fn(fa)
+            if _t.get("side") in ("看涨", "看跌") and ga is not None:
+                _cw = {}
+                for _tier in ("conservative", "aggressive"):
+                    _v = _cwp(snap_curr, ref, spot, _t["side"], _t["ratio"], tier=_tier)
+                    if _v.ok and _v.spreads:
+                        _s0 = _v.spreads[0]
+                        _cw[_tier] = {"sell": _s0.sell_strike, "buy": _s0.buy_strike,
+                                      "kind": _s0.kind, "expiry": _s0.expiry.isoformat(),
+                                      "dte": _s0.dte, "credit": _s0.credit,
+                                      "occ": _s0.occupancy, "buffer": _s0.buffer_pct}
+                    elif not _v.ok and _tier == "conservative":
+                        out["credit_wall_blocked"] = _v.reason[:80]
+                if _cw:
+                    out["credit_wall"] = _cw
+        except Exception as e:
+            print(f"⚠️ 卖方价差候选失败：{type(e).__name__}: {e}", file=sys.stderr)
     # 持续墙：排除 <7 天到期后的承接/压制区 —— 这才是"跌到哪有人接"的答案。
     # 现行墙位会被 0DTE 劫持：2026-08-28 黄金 put 墙报 413，其 42,388 张里
     # 40,394 张（95%）当天到期，收盘即归零；排除后第一大是 400（≈金价 4416），
@@ -1208,7 +1231,15 @@ def cmd_report(args) -> int:
                 percentile=an.categories["managed_money"].net_percentile,
                 title="投机资金 Managed Money 净持仓历史")
 
-            flow_html = render_flow_section(fa)
+            # migration（put 墙三区域读数）从 index 移到品种报告的资金流一节
+            # （用户 2026-08-31：index 太复杂）——研究性内容不占索引页，但不消失
+            _mig = None
+            try:
+                from undertow.analyze.flow import wall_structure as _ws
+                _mig = _ws(fa, getattr(ga, "put_wall", None), curr.spot)
+            except Exception as e:
+                print(f"⚠️ {inst.key} 墙区读数失败：{type(e).__name__}: {e}", file=sys.stderr)
+            flow_html = render_flow_section(fa, migration=_mig)
             macro_html = render_macro_section(ma)
             evs = upcoming(all_events, today=today, within_days=21, instrument=inst.key)
             events_html = render_events_section(evs, today)
@@ -1392,6 +1423,26 @@ def cmd_report(args) -> int:
             except Exception as e:
                 print(f"⚠️ {inst.key} 远月扫描失败：{type(e).__name__}: {e}", file=sys.stderr)
 
+            # —— 墙位卖方价差候选（analyze/credit_wall）——
+            credit_wall_html = ""
+            try:
+                if _ti and _ti.get("side") in ("看涨", "看跌"):
+                    _bp = None
+                    try:
+                        from undertow.collect.longbridge_account import fetch_assets
+                        _bp = fetch_assets().buy_power
+                    except Exception:
+                        pass
+                    _vs = {t: cw_propose(curr, obs_day, curr.spot, _ti["side"],
+                                         _ti["ratio"], tier=t)
+                           for t in ("conservative", "balanced", "aggressive")}
+                    credit_wall_html = render_credit_wall(
+                        _vs, spot=curr.spot,
+                        conv=(ga.to_commodity if ratio is not None else None),
+                        etf_symbol=inst.options.symbol, buying_power=_bp)
+            except Exception as e:
+                print(f"⚠️ {inst.key} 卖方价差失败：{type(e).__name__}: {e}", file=sys.stderr)
+
             # —— 成本闸门：预期波动 vs 回本门槛（见 cost_gate 模块注释）——
             cost_html = ""
             try:
@@ -1561,7 +1612,8 @@ def cmd_report(args) -> int:
                                       layers_html=layers_html,
                                       gate_html=gate_html, cost_html=cost_html,
                                       backmonth_html=backmonth_html,
-                                      ratio_html=ratio_html)
+                                      ratio_html=ratio_html,
+                                      credit_wall_html=credit_wall_html)
             # ⚠️ 文件名用【可交易日】（= 快照日期），不是生成日期。
             # 时点约定：快照 D 于 D 凌晨捕获，OI 是 D−1 收盘的 OCC 结算，
             # diff 描述交易日 D−1，**D 开盘才可执行** —— D 就是这份研报的身份。

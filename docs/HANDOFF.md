@@ -65,17 +65,24 @@ scripts/backtest_wall_spread.py  墙位价差回测，决策价=C[D−1]
 
 ## 5. 已知的坑（按严重度）
 
-**① 快照捕获时序未修（codex P0-1）**
-191 份快照里 21 份在 09:30 ET 后抓取、18 份已在收盘后，回测仍把它们当
-"D 开盘前已知"。**这意味着当前所有回测仍含前视**，包括新写的
-`backtest_wall_spread.py`。修法：`SnapshotStore` 暴露 `captured_at`，
-按捕获时刻定 `decision_session`（盘前→D，盘中/盘后→下一交易日）。
+**① 快照捕获时序 —— ✅ 已修（2026-09-01 晚）**
+`clock.capture_phase()` / `decision_session()` + `SnapshotStore.captured_at()`。
+盘前→当天、盘后/周末→下一交易日、**盘中→剔除**（调用方不得回退文件名日期）。
+193 份快照里 141 盘前 / 18 盘后 / 3 盘中 / 31 周末。
+`backtest_wall_spread.py` 已接入，SLV 剔除 5 份，成绩下降证实前视在虚增。
+⬜ **`signal_ledger` 尚未接入** —— 台账仍按文件名日期记 `date`，
+   下一步要在 `record()` 里存 `captured_at` 与 `decision_session`。
 
 **② 卖方价差参数与绩效全部作废（已停用）**
 不只绩效数字，`cap/band/width_pct/dte/sides/confirm` 同样出自污染网格。
 重开需三项全过：① 时序修好 ② 墙定义修好 ③ 新回测过日期簇置换检验。
 
-**③ band 缺陷贯穿全部核心墙位（codex P0-5）**
+**③ band 缺陷 —— 🟡 部分修（2026-09-01 晚）**
+已新增 `gamma.structural_walls()`（全范围 + 近端到期占比 ≥15%，判据不是距离）
+与 `gamma.local_pin()`（近价带内最大，明确不是墙）。
+实测：GLD put 330 的 ≤30 天占比仅 2%（长期对冲堆积）被正确滤掉；
+第一大结构 put 墙是 350 而非 band=5% 报的 400。
+⬜ **剩余**：
 `accum_wall`、`analyze_gamma` 主墙、`persistent_walls`、分层墙都是
 "在现价 ±band 内取最大 OI"——范围内总能找到一个，那不是墙。
 实测 SLV 真墙一直是 50（16~20 万张），band=5% 每天选出只有 3 万张的档位；

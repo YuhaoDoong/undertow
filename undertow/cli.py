@@ -789,10 +789,18 @@ def _archive_existing(path) -> None:
         return
     from datetime import datetime as _dt
     stamp = _dt.fromtimestamp(path.stat().st_mtime).strftime("%H%M")
-    backup = path.with_name(f"{path.stem}_r{stamp}{path.suffix}")
+    # 归档写进 archive/YYYY-MM/，不留在 reports/ 根目录。
+    # 2026-08-31 一天开发重跑十几次就堆了 90 个 _rXXXX 文件淹掉当日报告
+    # （用户当天：「全部整理一下」）。归档目录本来就是按月分的，
+    # 只是旧逻辑把新文件丢在了根目录。
+    import re as _re
+    m = _re.search(r"(\d{4}-\d{2})", path.stem)
+    adir = path.parent / "archive" / (m.group(1) if m else "misc")
+    adir.mkdir(parents=True, exist_ok=True)
+    backup = adir / f"{path.stem}_r{stamp}{path.suffix}"
     n = 1
     while backup.exists():   # 同一分钟内多次生成 → 追加序号
-        backup = path.with_name(f"{path.stem}_r{stamp}-{n}{path.suffix}")
+        backup = adir / f"{path.stem}_r{stamp}-{n}{path.suffix}"
         n += 1
     path.rename(backup)
 

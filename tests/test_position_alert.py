@@ -858,3 +858,61 @@ def test_ratio_spread_needs_two_dimensions():
     card = card[card.index("def render_ratio_spreads"):]
     assert "零假设检验" in card and "残余噪音" in card
     assert TAIL_MAX_DELTA <= 0.15
+
+
+def test_credit_wall_never_sells_itm():
+    """墙位卖方价差绝不能卖出【实值】腿 —— 那不是收权利金，是直接接货。
+
+    2026-08-31 实测的真实 bug：GLD 现价 407.23、put 墙 405，
+    激进档「墙内 2%」把目标推到 405×1.02=413.1，越过现价 6 美元，
+    模块给出「卖 413P」——一张深度实值 put。
+    卖腿必须虚值，且距现价至少 0.5%。
+    """
+    from datetime import date as _d
+    from undertow.analyze.credit_wall import (propose, RISK_TIERS, tier_params,
+                                              OFFSET_TRADEOFF, MIN_RATIO)
+    src = (Path(__file__).resolve().parents[1] / "undertow" / "analyze"
+           / "credit_wall.py").read_text("utf-8")
+    fn = src[src.index("def propose"):]
+    assert "spot * 1.001" in fn and "spot * 0.999" in fn, "必须把卖腿钳制在虚值一侧"
+    assert "无虚值腿可卖" in fn and "距现价不足 0.5%" in fn, "两道保护都要出声"
+
+    # 权利金与风险是同一枚硬币 —— 这张对照表是「不能一味卖近」的凭证
+    for i in range(len(OFFSET_TRADEOFF) - 1):
+        off_a, cw_a, br_a, *_ = OFFSET_TRADEOFF[i]
+        off_b, cw_b, br_b, *_ = OFFSET_TRADEOFF[i + 1]
+        assert off_a < off_b
+        assert cw_a >= cw_b, "卖得越近，credit/width 必须越高"
+        assert br_a >= br_b, "卖得越近，破墙率必须越高"
+
+    # 三档必须各自带回测证据，且激进档要标出爆仓风险
+    for k, t in RISK_TIERS.items():
+        for f in ("n", "win_rate", "break_rate", "per_trade_pct",
+                  "annual_pct", "median_occupancy", "worst_pct"):
+            assert f in t, f"{k} 缺 {f}"
+    assert RISK_TIERS["aggressive"]["win_rate"] < RISK_TIERS["conservative"]["win_rate"]
+    assert RISK_TIERS["aggressive"]["break_rate"] > RISK_TIERS["conservative"]["break_rate"]
+    assert "爆仓" in RISK_TIERS["aggressive"]["note"]
+    # 提前平仓的负面结论必须留在代码里，防止日后又"优化"成收50%就跑
+    assert "提前平仓实测【更差】" in src
+
+    class _C:
+        def __init__(s, k, st_, e, oi, bid=1.0, ask=1.1):
+            s.kind, s.strike, s.expiry, s.open_interest = k, st_, e, oi
+            s.bid, s.ask = bid, ask
+
+    exp = _d(2026, 9, 18)
+    obs = _d(2026, 8, 28)
+    cs = [_C("P", 405.0, exp, 50000), _C("P", 397.0, exp, 3000),
+          _C("P", 389.0, exp, 2000), _C("P", 413.0, exp, 100)]
+
+    class _S:
+        contracts = cs
+    v = propose(_S(), obs, 407.23, "看涨", 6.0, tier="aggressive")
+    for sp in v.spreads:
+        assert sp.sell_strike < 407.23, f"卖腿 {sp.sell_strike} 是实值，绝不允许"
+
+    # 中等信号必须被拒
+    assert not propose(_S(), obs, 407.23, "看涨", 3.0).ok
+    assert tier_params("conservative")["break_rate"] < 0.2
+    print("PASS test_credit_wall_never_sells_itm")

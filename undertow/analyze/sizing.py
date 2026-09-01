@@ -63,7 +63,13 @@ def kelly(win_rate: float, per_trade_pct: float, win_roi_pct: float) -> KellyRes
     win_roi = win_roi_pct / 100.0
     if q <= 0:
         return KellyResult(p, win_roi, 0.0, float("inf"), 1.0, 0.5, float("inf"))
-    lose_roi = abs((per_trade_pct / 100.0 - p * win_roi) / q)
+    # codex 2026-08-31 P1-9：原实现用 abs() 把不可能的输入静默修成合法亏损率。
+    # E = p·W − q·L 解出的 L 必须为正；为负说明「胜率+期望+赢时收益」三者矛盾
+    # （例如声称期望高于全赢），此时应拒绝而不是取绝对值蒙混过去。
+    raw = (p * win_roi - per_trade_pct / 100.0) / q
+    if raw <= 0:
+        return KellyResult(p, win_roi, 0.0, 0.0, 0.0, 0.0, -1.0)
+    lose_roi = raw
     if lose_roi <= 0:
         return KellyResult(p, win_roi, 0.0, float("inf"), 1.0, 0.5, float("inf"))
     b = win_roi / lose_roi
@@ -84,13 +90,28 @@ class SizeVerdict:
     reason: str
 
 
+# 1 组超过 Kelly 多少倍就必须拒绝。
+# codex 2026-08-31 P0-1：原实现里 max_over_kelly 只改文字不构成限制，
+# 即使 1 组是 Kelly 的 6 倍（顺向买方档实测 6.2 倍、连亏 3 次概率 45.65%）
+# 仍返回 ok=True，「不可分割」被当成了「可以向上取整」的理由 —— 那是鼓励超配。
+# 现在设硬上限：≤SOFT 照下并标注超配；SOFT~HARD 之间要显式 allow_over 才放行；
+# 超过 HARD 一律拒绝。留 allow_over 是因为用户 2026-08-31 的要求成立
+# （「因为仓位选择了更差的交易反而放大风险」），但那说的是不要为省钱去做
+# 负期望的廉价合约，不是任何倍数的超配都可以。
+OVER_KELLY_SOFT = 1.5
+OVER_KELLY_HARD = 3.0
+
+
 def size(net_assets: float, unit_occupancy: float, k: KellyResult,
          *, buying_power: float | None = None,
-         max_over_kelly: float = 1.5) -> SizeVerdict:
-    """给出该下几组。1 组已超 Kelly 时明说超了多少 —— 由人决定要不要下。
+         max_over_kelly: float = OVER_KELLY_SOFT,
+         hard_over_kelly: float = OVER_KELLY_HARD,
+         allow_over: bool = False) -> SizeVerdict:
+    """给出该下几组，并在超过 Kelly 上限时【拒绝】。
 
-    不静默把仓位压到 0：对小账户，「按 Kelly 缩小」常常等于「不能交易」，
-    而不交易就攒不到样本、也赚不到钱。这个取舍要显式交给人。
+    对小账户，「按 Kelly 缩小」常常等于「不能交易」，所以 1~1.5 倍超配照放行
+    并标注；但 3 倍以上必须拒绝 —— 那已经不是「最小单位不可分」的问题，
+    是这个策略对这个账户太大。
     """
     if not k.positive_edge:
         return SizeVerdict(False, 0, 0.0, unit_occupancy, 0.0, 0.0, 0.0,
@@ -113,15 +134,39 @@ def size(net_assets: float, unit_occupancy: float, k: KellyResult,
                            n * frac1 / k.kelly,
                            f"Kelly ${kd:.0f} → {n} 组（每组 ${unit_occupancy:.0f}）。"
                            f"盈亏比 {k.odds:.2f}、优势 {k.edge:+.2f}。")
-    # 1 组已超 Kelly：把超配倍数摆出来，不替人做决定
-    lvl = ("可接受" if over <= max_over_kelly else "明显超配")
+    # 1 组已超 Kelly
+    base = (f"Kelly 只允许 ${kd:.0f}，但 1 组要 ${unit_occupancy:.0f}"
+            f"（净资产 {frac1:.0%}，是 Kelly 的 {over:.1f} 倍）。{MIN_UNIT_NOTE}")
+    if over > hard_over_kelly:
+        return SizeVerdict(False, 0, kd, unit_occupancy, frac1, k.kelly, over,
+                           base + f" —— 超过 {hard_over_kelly:g} 倍硬上限，**不做**。"
+                                  f"这不是「最小单位不可分」的问题，是这个策略对这个"
+                                  f"账户太大：换更窄的价差、更小的标的，或等账户长大。")
+    if over > max_over_kelly and not allow_over:
+        return SizeVerdict(False, 0, kd, unit_occupancy, frac1, k.kelly, over,
+                           base + f" —— 超过 {max_over_kelly:g} 倍软上限。"
+                                  f"要下需显式确认（allow_over），"
+                                  f"否则按不做处理。")
     return SizeVerdict(True, 1, kd, unit_occupancy, frac1, k.kelly, over,
-                       f"Kelly 只允许 ${kd:.0f}，但 1 组要 ${unit_occupancy:.0f}"
-                       f"（净资产 {frac1:.0%}，是 Kelly 的 {over:.1f} 倍·{lvl}）。"
-                       f"{MIN_UNIT_NOTE} —— 要么按 1 组做并接受这个超配，要么不做。"
-                       f"把仓位压到 Kelly 以下的选项不存在。")
+                       base + f" —— 在 {max_over_kelly:g} 倍软上限内，可按 1 组做，"
+                              f"但要知道这是超配。")
 
 
-def ruin_probability(win_rate: float, n_full_loss_to_ruin: int) -> float:
-    """连续 n 次全损打光账户的概率上限（假设各次独立、每次都是最坏情形）。"""
-    return (1 - win_rate) ** max(1, n_full_loss_to_ruin)
+def consecutive_full_loss_prob(win_rate: float, n: int) -> float:
+    """【连续 n 次全损】的概率 —— 注意这【不是】破产概率，更不是它的上限。
+
+    codex 2026-08-31 P0-2：原名 ruin_probability 且报告标成「破产概率上限」，
+    这是错的，而且错在偏乐观的方向。(1−p)^n 只回答「接下来恰好连着 n 次全损」，
+    而真实破产还可以由以下路径达成，全都不在这个式子里：
+      · 非连续的亏损累积（赢几次小的、输几次大的）
+      · 部分亏损累积（价差常见的「只破一点」）
+      · 同日多品种相关信号一起亏（金银 0.89、QQQ/TQQQ 0.99）
+      · 手续费与点差的持续消耗
+      · 提前指派、到期强平带来的非模型损失
+    所以真实破产概率【高于】这个数。它只能当「最粗的连亏情景」参考。
+    """
+    return (1 - win_rate) ** max(1, n)
+
+
+# 旧名保留一个周期，避免调用点静默失配；行为与新名一致。
+ruin_probability = consecutive_full_loss_prob

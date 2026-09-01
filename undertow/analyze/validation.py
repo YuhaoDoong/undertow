@@ -78,11 +78,22 @@ class Validation:
         return self.p_value < 0.05
 
     @property
+    def cluster_corrected(self) -> bool:
+        """p 值是否按日期簇算过。打印 cluster_n 不等于用了簇推断
+        （codex 2026-08-31 P1-11）。"""
+        return bool(self.cluster_n) and "未做日期簇" not in self.caveat
+
+    @property
     def status(self) -> str:
         if self.n == 0:
             return "未验证"
-        if self.significant:
+        # codex 2026-08-31 P1-12：原实现只看原始 p<0.05 就标「已验证」，
+        # 于是 expected_move 的 raw p=0.048（同批数据第二次找模式、极端档 n=6、
+        # 未用簇推断）被显示成绿色已验证。凡未做簇修正的一律降级。
+        if self.significant and self.cluster_corrected:
             return "已验证"
+        if self.significant:
+            return "待簇修正"
         return "样本不足"
 
     @property
@@ -125,7 +136,10 @@ REGISTRY: dict[str, Validation] = {
         key="tradeable_gate", label="可交易信息闸门（压力比 ≥2×）",
         n=62, hits=40, p_value=0.044, baseline=0.50, cluster_n=30,
         note="放行组 62 笔 65%、顺向 +0.46%；拦掉组 29 笔 41%、顺向 -0.12%。Fisher p=0.044。",
-        caveat="共测 10 个阈值，Bonferroni 校正后 p=0.44 不再显著，待样本外验证"),
+        caveat="① 共测 10 个阈值，Bonferroni 校正后 p=0.44 不再显著；"
+               "② Fisher 检验把 91 个品种-日当独立观察，未做日期簇聚类 —— "
+               "登记簿里写了 cluster_n=30 但推断没用它（codex 2026-08-31 P1-11）；"
+               "③ 待样本外验证"),
     "wall_space_vote": Validation(
         key="wall_space_vote", label="Gamma 墙位空间投票",
         n=83, hits=41, p_value=1.000, baseline=0.51, cluster_n=43,
@@ -151,6 +165,31 @@ REGISTRY: dict[str, Validation] = {
              "GLD 2/0.7、SLV 4/1.1、QQQ 13/4.5、TQQQ 5/0.8。",
         caveat="只验证了「不是随机凑对」，【未】验证检出后是否有交易价值；"
                "QQQ 随机基线仍有 4.5 个，条目多时不可信"),
+    # codex 2026-08-31 P1-12：真正决定仓位的 credit_wall 与 Kelly 此前根本没登记，
+    # 违反本模块开头自己写的第 1 条规则。补登记，并如实写明未通过簇修正。
+    "credit_wall_conservative": Validation(
+        key="credit_wall_conservative", label="墙位卖方价差·稳健档",
+        n=38, hits=31, p_value=1.0, baseline=0.50, cluster_n=None,
+        note="墙外2%·宽2.0%·15~45天，持有到期。胜率 82%、单笔 +2.84%。",
+        caveat="① 38 笔不是 38 个独立样本：同一信号下多个到期共享方向/路径/事件，"
+               "有效 n 至多是独立信号日期数；② 未做日期簇聚类，p 值不可用（故填 1.0）；"
+               "③ 入场价用盘前快照 bid/ask，非开盘可成交价；④ 未模拟提前指派与到期强平；"
+               "⑤ 报告按年化排序取 spreads[0]，但统计是全候选均值（策略定义漂移）"),
+    "credit_wall_aggressive": Validation(
+        key="credit_wall_aggressive", label="墙位卖方价差·激进档",
+        n=60, hits=38, p_value=1.0, baseline=0.50, cluster_n=None,
+        note="墙内2%·宽2.5%·4~14天，持有到期。胜率 63%、单笔 +9.99%。",
+        caveat="同稳健档五条；另：平均亏损 7.1% 与最差 −105% 差距极大，"
+               "用平均值反解的 Kelly 忽略了真正决定账户生存的尾部"),
+    "kelly_sizing": Validation(
+        key="kelly_sizing", label="Kelly 仓位（由平均盈亏反解）",
+        kind="corr", n=0, hits=0, p_value=1.0, baseline=0.0, r=0.0,
+        effect="未验证：二项 Kelly 假设每次只有两个固定结果，"
+               "而实际分布是小赢/小亏/全损/指派尾部的混合",
+        note="f*=(p·b−q)/b，b 由平均盈利÷平均亏损得到。",
+        caveat="codex 2026-08-31 P1-9：正确做法是对逐笔收益分布直接最大化 "
+               "Σlog(1+f·r_i)，并按日期簇重采样、对参数不确定性折扣。"
+               "当前实现是粗近似，仅用于给出量级"),
     "expected_move": Validation(
         key="expected_move", label="可判定率预告波动幅度",
         kind="corr", n=66, hits=0, p_value=0.048, baseline=0.0,
@@ -172,9 +211,12 @@ def badge(key: str) -> str:
     v = REGISTRY.get(key)
     if v is None:
         return "⚠️ 未登记验证状态（不得作为交易依据）"
-    icon = {"已验证": "✅", "样本不足": "🟡", "未验证": "⚠️"}[v.status]
+    icon = {"已验证": "✅", "待簇修正": "🟠",
+            "样本不足": "🟡", "未验证": "⚠️"}.get(v.status, "⚠️")
     if v.kind == "corr":
-        icon = "✅" if v.significant else "🟡"
+        # 相关型同样要过簇修正才算已验证（codex 2026-08-31 P1-12）
+        icon = "✅" if (v.significant and v.cluster_corrected) else (
+            "🟠" if v.significant else "🟡")
     s = f"{icon} {v.status}：{v.summary()}"
     if v.caveat:
         s += f"　⚠️ {v.caveat}"

@@ -1386,13 +1386,16 @@ def render_validation_table() -> str:
         if v.kind == "corr":
             icon = "✅" if v.significant else "🟡"
             score = f"r={v.r:+.3f}"
-            extra = f"对照 r={v.r_control:+.3f}" if v.r_control is not None else ""
+            extra = (("原始 p 显著但未做簇修正　" if v.status == "待簇修正" else "")
+                     + (f"对照 r={v.r_control:+.3f}" if v.r_control is not None else ""))
         else:
-            icon = {"已验证": "✅", "样本不足": "🟡", "未验证": "⚠️"}[v.status]
+            icon = {"已验证": "✅", "待簇修正": "🟠",
+                    "样本不足": "🟡", "未验证": "⚠️"}.get(v.status, "⚠️")
             score = f"{v.hits}/{v.n} = {v.rate:.0%}"
             more = v.need_more
-            extra = ("已达显著" if v.significant else
-                     (f"还差 {more} 个样本" if more else "命中率贴近基准，难以证实"))
+            extra = ("已达显著" if v.status == "已验证" else
+                     ("原始 p 显著但未做簇修正" if v.status == "待簇修正" else
+                      (f"还差 {more} 个样本" if more else "命中率贴近基准，难以证实")))
         color = "#1a7f37" if v.significant else "#bc4c00"
         rows.append(
             f'<tr><td>{icon} {_esc(v.label)}</td>'
@@ -2527,9 +2530,12 @@ def render_credit_wall(verdicts: dict, spot: float = 0.0, conv=None,
         '固定百分比对小账户不是风险管理，是强制你去选负期望的廉价合约。'
         '期权价差 1 组是最小不可分单位，超过 Kelly 时只有「按 1 组做」或「不做」，'
         '没有第三个选项。<br>'
-        '⚠️ 到期日若落在卖腿与买腿之间（如卖61/买60、标的收在 60.5），'
-        '卖腿被行权需接货、买腿保护不到，长桥规则是保证金不足即强平（不会负债），'
-        '但强平时机与价格不由你控制。</div></div>')
+        '⚠️ <b>回测按「持有到期、用收盘价算内在价值」结算，实盘拿不到这个收益</b>'
+        '（codex 2026-08-31 P0-4）：美式期权卖方从卖出到到期随时可能被指派'
+        '（深度实值、除息前、借券困难时概率更高）；到期日若落在卖腿与买腿之间'
+        '（如卖61/买60、标的收在 60.5），卖腿被行权需接货、买腿保护不到，'
+        '$264 的账户会触发券商强平——而「强平」恰恰意味着到期 payoff 无法实现。'
+        '券商具体规则请自行向长桥确认，本工具不做断言。</div></div>')
 
 
 def render_wall_zones(mg: dict) -> str:

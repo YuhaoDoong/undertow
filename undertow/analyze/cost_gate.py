@@ -138,8 +138,16 @@ def judge(be: Breakeven, spot: float, decidable: float, *,
     em = expected_move(decidable)
     need = be.need_pct(spot, held_days, fee)
     margin = em.pct - need
-    ok = margin > 0
-    if ok:
+    # codex 2026-08-31 P0-5：原实现里 weak（n<10）只加一行文字，不阻止 ok=True，
+    # 报告照样打绿色✅「典型幅度够覆盖成本」。n=6 的条件均值不足以支撑
+    # 硬「做/不做」判定，且条件均值>门槛 ≠ 盈利概率>50% ≠ 期望为正。
+    # 样本不足时一律不给通过，文案改成「证据不足」。
+    ok = (margin > 0) and (not em.weak)
+    if em.weak:
+        t = (f"该可判定率档只有 {em.n} 笔样本，不足以做「做/不做」判定。"
+             f"参考量级：预期波动 {em.pct:.2f}%、回本门槛 {need:.2f}%"
+             f"（{'幅度够' if margin > 0 else '幅度不够'}，但证据不足以据此下单）。")
+    elif ok:
         t = (f"预期波动 {em.pct:.2f}% > 回本门槛 {need:.2f}%（余量 {margin:+.2f}pp）"
              f"—— 幅度上说得通。")
     else:
@@ -147,14 +155,16 @@ def judge(be: Breakeven, spot: float, decidable: float, *,
              f"—— 就算方向做对，这类日子的典型幅度也覆盖不了点差和时间损耗。")
     t += (f" 依据：可判定率落在 {em.band} 档（n={em.n}"
           + ("，样本过小，仅作量级参考" if em.weak else "")
-          + f"，该档 {em.p_over_1pct:.0%} 的日子波动超过 1%）。")
+          + f"，该档 {em.p_over_1pct:.0%} 的日子波动超过 1%）。"
+          f" ⚠️ 条件均值大于门槛 ≠ 盈利概率大于 50% ≠ 期望为正；"
+          f"Δ+θ 是一阶近似，忽略 gamma 与 IV 变化，近到期合约最不适用。")
     if be.theta_share > 0.25:
         t += (f" ⚠️ 这张每天损耗掉权利金的 {be.theta_share:.0%}，"
               f"拿不过夜（{be.dte} 天到期）。")
     return CostVerdict(ok=ok, exp_move=em, need_pct=need, margin=margin, text=t)
 
 
-def candidates(snap, spot: float, direction: str, today: date, *,
+def candidates(snap, spot: float, direction: str, execution_date: date, *,
                decidable: float, max_dte: int = 45, per_bucket: int = 2,
                fee: float = 3.20, held_days: float = 1.0) -> list[tuple]:
     """顺着信号方向，扫出几张典型合约并算回本门槛。
@@ -162,6 +172,10 @@ def candidates(snap, spot: float, direction: str, today: date, *,
     分三个到期桶（≤7 / 8~21 / 22~45 天）各取最接近平值的几张 —— 这样表里
     同时出现"近月便宜但 theta 高"和"远月贵但扛得住"，选择的代价一眼可见。
     用快照盘口（盘前已知），实际下单时点差可能不同。
+
+    ⚠️ execution_date 必须是【实际下单日】（快照日 D），不是 OI 所属日（D−1）。
+    传错会让 DTE 整体偏移一天：2026-08-31 实测，当日到期的合约会被算成 3 天
+    （codex 2026-08-31 P0-3）。
     """
     want_call = direction in ("看涨", "偏多", "bullish", "up")
     buckets = ((1, 7), (8, 21), (22, max_dte))
@@ -171,7 +185,7 @@ def candidates(snap, spot: float, direction: str, today: date, *,
         for c in snap.contracts:
             if c.is_call != want_call:
                 continue
-            d = (c.expiry - today).days
+            d = (c.expiry - execution_date).days
             if not (lo <= d <= hi):
                 continue
             if not (c.bid and c.ask and c.iv and c.iv > 0):
@@ -184,7 +198,7 @@ def candidates(snap, spot: float, direction: str, today: date, *,
         pool.sort(key=lambda x: x[0])
         for _, c in pool[:per_bucket]:
             be = breakeven(f"{snap.proxy_symbol}{c.expiry:%y%m%d}{c.kind}{c.strike:g}",
-                           spot, c.strike, c.expiry, c.kind, today,
+                           spot, c.strike, c.expiry, c.kind, execution_date,
                            c.bid, c.ask, c.iv)
             if be is None or abs(be.delta) < 0.05:
                 continue

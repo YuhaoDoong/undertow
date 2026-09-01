@@ -352,10 +352,13 @@ def _flow_facts(fa, ga, ga_prev, snap_prev, snap_curr, spot: float, ref) -> dict
             from undertow.analyze.credit_wall import propose as _cwp
             from undertow.analyze.flow import tradeable_info as _ti_fn
             _t = _ti_fn(fa)
+            # ref 是 OI 所属日；可执行日是快照日 = ref 的下一个工作日
+            _exec_ref = getattr(snap_curr, "asof_date", None) or _next_weekday(ref)
             if _t.get("side") in ("看涨", "看跌") and ga is not None:
                 _cw = {}
                 for _tier in ("conservative", "aggressive"):
-                    _v = _cwp(snap_curr, ref, spot, _t["side"], _t["ratio"], tier=_tier)
+                    _v = _cwp(snap_curr, ref, spot, _t["side"], _t["ratio"],
+                              tier=_tier, execution_date=_exec_ref)
                     if _v.ok and _v.spreads:
                         _s0 = _v.spreads[0]
                         _cw[_tier] = {"sell": _s0.sell_strike, "buy": _s0.buy_strike,
@@ -701,6 +704,14 @@ def _load_curr_prev_snapshot(store, source, inst, today, *, no_cache, no_snapsho
             f"回放不得用当前实时链冒充历史")
     payload = source.fetch_raw(inst, use_cache=not no_cache)
     return snapshot_from_payload(payload, inst.key, sym), None, None, today.isoformat()
+
+
+def _next_weekday(d: date) -> date:
+    """下一个工作日 —— OI 所属日 → 可执行日的换算（只跳周末）。"""
+    d = d + timedelta(days=1)
+    while d.weekday() >= 5:
+        d = d + timedelta(days=1)
+    return d
 
 
 def _prev_weekday(d: date) -> date:
@@ -1442,8 +1453,9 @@ def cmd_report(args) -> int:
                         _bp, _na = _a.buy_power, _a.net_assets
                     except Exception:
                         pass
+                    _ed = date.fromisoformat(curr_date_s) if curr_date_s else today
                     _vs = {t: cw_propose(curr, obs_day, curr.spot, _ti["side"],
-                                         _ti["ratio"], tier=t)
+                                         _ti["ratio"], tier=t, execution_date=_ed)
                            for t in ("conservative", "balanced", "aggressive")}
                     credit_wall_html = render_credit_wall(
                         _vs, spot=curr.spot,
@@ -1457,7 +1469,10 @@ def cmd_report(args) -> int:
             cost_html = ""
             try:
                 if _ti and _ti.get("side") in ("看涨", "看跌"):
-                    _cands = cost_candidates(curr, curr.spot, _ti["side"], obs_day,
+                    # 可执行日 = 快照日（不是 obs_day）：DTE 必须按下单日算
+                    _exec_day = (date.fromisoformat(curr_date_s)
+                                 if curr_date_s else today)
+                    _cands = cost_candidates(curr, curr.spot, _ti["side"], _exec_day,
                                              decidable=_ti["decidable"])
                     cost_html = render_cost_gate(
                         _cands, spot=curr.spot, side=_ti["side"],

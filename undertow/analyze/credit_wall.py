@@ -196,12 +196,20 @@ def tier_params(tier: str = DEFAULT_TIER) -> dict:
     return RISK_TIERS[tier]
 
 
-def propose(snap, obs: date, spot: float, direction: str, ratio: float,
-            tier: str = DEFAULT_TIER) -> Verdict:
+def propose(snap, oi_session: date, spot: float, direction: str, ratio: float,
+            tier: str = DEFAULT_TIER, *, execution_date: date | None = None) -> Verdict:
     """给出墙位卖方价差候选。三道闸门任一不过就不出候选，并说明卡在哪。
 
     direction: '看涨'/'看跌' —— 卖【逆向】侧：看涨卖 put 价差、看跌卖 call 价差。
+
+    ⚠️ 两个日期语义不同，混用会整体错一天（codex 2026-08-31 P0-3 实测）：
+      oi_session      = OI 所属交易日（= 快照日前一工作日）。用来【解释结构】：
+                        墙在哪、多厚 —— 那是 D−1 收盘的 OCC 结算。
+      execution_date  = 实际下单日（= 快照日 D）。用来【筛可交易合约、算 DTE】。
+    实测 2026-08-31（周一，obs=周五 8/28）：当天到期的合约按 obs 算成 3 天，
+    于是「4~14 天」的激进档窗口实际选进了 1~11 天的合约，含 0DTE。
     """
+    exec_day = execution_date or oi_session
     gates = {"ratio": ratio, "min_ratio": MIN_RATIO}
     if ratio < MIN_RATIO:
         return Verdict(False, (f"压力倍数 {ratio:.1f}× 未达 {MIN_RATIO:g}× —— "
@@ -213,7 +221,7 @@ def propose(snap, obs: date, spot: float, direction: str, ratio: float,
 
     kind = "P" if direction == "看涨" else "C"
     gates["side"] = kind
-    wk, woi, wshare = _walls_aggregate(snap, obs, kind, spot)
+    wk, woi, wshare = _walls_aggregate(snap, oi_session, kind, spot)
     gates.update({"wall_strike": wk, "wall_oi": woi, "wall_share": wshare,
                   "min_wall_share": MIN_WALL_SHARE})
     if wk is None or wshare < MIN_WALL_SHARE:
@@ -231,7 +239,7 @@ def propose(snap, obs: date, spot: float, direction: str, ratio: float,
     for c in snap.contracts:
         if c.kind != kind or not (c.bid and c.ask and c.bid > 0):
             continue
-        d = (c.expiry - obs).days
+        d = (c.expiry - exec_day).days     # ← 用执行日算 DTE，不是 OI 所属日
         if dte_lo <= d <= dte_hi:
             legs_by_exp.setdefault(c.expiry, []).append(c)
 
@@ -279,7 +287,7 @@ def propose(snap, obs: date, spot: float, direction: str, ratio: float,
         if credit <= 0 or width <= 0:
             continue
         out.append(WallSpread(
-            kind=kind, expiry=exp, dte=(exp - obs).days,
+            kind=kind, expiry=exp, dte=(exp - exec_day).days,
             sell_strike=sell.strike, buy_strike=buy.strike,
             credit=credit, width=width, occupancy=width - credit,
             wall_strike=wk, wall_share=wshare, exp_share=eshare,

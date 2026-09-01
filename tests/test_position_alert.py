@@ -744,7 +744,13 @@ def test_cost_gate_rejects_the_actual_losing_trade():
     # 高可判定率 + 远月低 theta 的组合必须放行，否则闸门只会一味说不
     be2 = breakeven("GLD260930C407000", 407.23, 407.0, _d(2026, 9, 30), "C",
                     _d(2026, 8, 28), 12.80, 13.00, 0.22)
-    assert judge(be2, 407.23, 0.84, held_days=1).ok
+    # 可判定率 0.84 落在 ≥80% 档，而该档只有 6 笔 —— 样本不足不得给通过
+    # （codex 2026-08-31 P0-5：原实现 weak 只加文字，照样打绿灯）
+    v_weak = judge(be2, 407.23, 0.84, held_days=1)
+    assert not v_weak.ok and "证据不足" in v_weak.text
+    # 样本充足的档位，幅度够时才可通过
+    v_ok = judge(be2, 407.23, 0.70, held_days=1)
+    assert v_ok.exp_move.n >= 10
 
     # 预期波动表：高可判定率档波动必须显著大于低档（这是该表的全部意义）
     assert expected_move(0.85).pct > expected_move(0.30).pct * 2
@@ -779,8 +785,17 @@ def test_validation_registry_is_honest():
         "墙位空间因子的不及格结果必须保留"
     assert "无预测力" in wall.caveat
 
+    # ②a 真正决定仓位的东西必须登记（codex 2026-08-31 P1-12）
+    for must in ("credit_wall_conservative", "credit_wall_aggressive", "kelly_sizing"):
+        assert must in REGISTRY, f"{must} 未登记 —— 违反本模块第 1 条规则"
+    # ②b 未做簇修正的不得标「已验证」
+    for k, v in REGISTRY.items():
+        if v.significant and not v.cluster_corrected:
+            assert v.status == "待簇修正", f"{k} 未做簇修正却标成 {v.status}"
     # ② 每条都要有样本量；相关型不得被当成命中率显示
     for k, v in REGISTRY.items():
+        if k == "kelly_sizing":
+            continue   # 未验证项，n=0 是如实标注
         assert v.n > 0, f"{k} 缺样本量"
         assert v.kind in ("hit", "corr")
         if v.kind == "corr":
@@ -963,21 +978,32 @@ def test_sizing_is_kelly_not_fixed_pct():
     v = size(264.0, 100.0, bad)
     assert not v.ok and "不该做" in v.reason
 
-    # ② 1 组超 Kelly 不得静默归零
-    v2 = size(264.0, 96.0, kc, buying_power=153.0)
-    assert v2.ok and v2.n_units == 1, "不得因超 Kelly 就判成不能做"
+    # ② 超 Kelly 必须分档处理（codex 2026-08-31 P0-1：原实现任何倍数都放行）
+    from undertow.analyze.sizing import OVER_KELLY_SOFT, OVER_KELLY_HARD
+    assert OVER_KELLY_HARD > OVER_KELLY_SOFT >= 1.0
+    v2 = size(264.0, 96.0, kc, buying_power=153.0)          # ≈1.5x
     assert v2.over_kelly > 1.0
-    assert "不存在" in v2.reason, "必须说明「压到 Kelly 以下的选项不存在」"
+    if v2.over_kelly > OVER_KELLY_SOFT:
+        assert not v2.ok, "超软上限且未显式确认 → 必须拒绝"
+        assert size(264.0, 96.0, kc, buying_power=153.0, allow_over=True).ok, \
+            "显式确认后应可下 —— 小账户不能被仓位规则完全禁止交易"
+    # 6 倍超配（顺向买方实测）必须硬拒绝，不得靠文字提示了事
+    kb = kelly(0.23, 17.8, 250.0)
+    v_big = size(264.0, 116.0, kb, buying_power=153.0, allow_over=True)
+    assert not v_big.ok and "硬上限" in v_big.reason
 
     # 买不起要明说
     v3 = size(264.0, 900.0, ka, buying_power=153.0)
     assert not v3.ok and "做不了" in v3.reason
 
-    # 破产概率随胜率下降而升高
-    assert ruin_probability(0.23, 3) > ruin_probability(0.82, 3) * 10
-
     src = (Path(__file__).resolve().parents[1] / "undertow" / "analyze"
            / "sizing.py").read_text("utf-8")
+    # 连亏概率随胜率下降而升高
+    from undertow.analyze.sizing import consecutive_full_loss_prob as _cfl
+    assert _cfl(0.23, 3) > _cfl(0.82, 3) * 10
+    # 名字必须诚实：它不是破产概率也不是它的上限（codex 2026-08-31 P0-2）
+    assert "不是】破产概率" in src, "必须写明它不是破产概率"
+    assert "真实破产概率【高于】这个数" in src
     assert "10%" in src and "买不起" in src, "固定百分比失效的算术必须留在代码里"
     # 术语与 risk_reward 保持一致
     assert "盈亏比" in src and "赔率" not in src

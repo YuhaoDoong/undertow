@@ -1455,7 +1455,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        indicators_html: str = "",
                        expiry_html2: str = "", summary_html: str = "",
                        layers_html: str = "", gate_html: str = "",
-                       cost_html: str = "") -> str:
+                       cost_html: str = "", backmonth_html: str = "",
+                       ratio_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -1516,6 +1517,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="card"><h2>情景推演（规则化 if-then，非点位预言）</h2>{_scenarios_html(o)}</div>'
         f'{strategy_html}'
         f'{fib_html}'
+        f'{ratio_html}'
+        f'{backmonth_html}'
         + render_validation_table() +
         f'<div class="card">{_caveats_html(o)}</div>'
     )
@@ -2316,3 +2319,92 @@ def render_cost_gate(rows, exp_move=None, spot: float = 0.0, side: str = "",
         '⚠️ 预期波动表是在同一批数据上的第二次找模式（先测倍数闸门、再测可判定率），'
         '多重比较风险仍在，需样本外验证。方向对了也可能因为幅度不够而亏，'
         '这张表只解决幅度，不解决方向。</div></div>')
+
+
+def render_backmonth(scan, spot: float = 0.0, conv=None, unit: str = "",
+                     etf_symbol: str = "") -> str:
+    """远月结构异动卡（playbook R16）。
+
+    【时间尺度隔离纪律】这张卡只作长期背景：不进综合分、不进日度方向研判、
+    不改任何近月位点。机构完全可以一边持有远月上行尾部、一边在近月做空 ——
+    两个时间尺度的仓位并存不矛盾。标注文字是硬要求，由测试锁住。
+    """
+    if scan is None or scan.empty:
+        return ""
+    sym = _esc(etf_symbol)
+    u = _esc(unit)
+
+    def _p(v):
+        return f"{(conv(v) if conv else v):.1f}{u}"
+
+    trs = []
+    for m in scan.moves:
+        g = "新建" if m.prev_oi == 0 else f"{m.growth * 100:,.0f}%"
+        col = "#cf222e" if m.kind == "C" else "#1a7f37"
+        tag = ('<span class="pill" style="background:#8250df1a;color:#8250df">'
+               '新布局</span>' if m.new_build else "")
+        trs.append(
+            f'<tr><td><b style="color:{col}">{_p(m.strike)}{m.kind}</b>'
+            + (f' <span style="color:#0969da">{sym}{m.strike:g}</span>' if conv else "")
+            + f'</td><td class="sub">{m.expiry} · {m.dte}天</td>'
+            f'<td class="r">{m.moneyness * 100:+.0f}%</td>'
+            f'<td class="r sub">{m.prev_oi:,}</td>'
+            f'<td class="r">{m.curr_oi:,}</td>'
+            f'<td class="r" style="font-weight:600">+{m.d_oi:,}</td>'
+            f'<td class="r">{g}</td><td>{_esc(m.label)} {tag}</td></tr>')
+    return (
+        '<div class="card" style="border-left:4px solid #8250df">'
+        '<h2>远月结构异动 · 月度级配置信号</h2>'
+        '<div style="margin:6px 0;padding:8px 10px;background:#8250df14;border-radius:6px">'
+        '<b style="color:#8250df">⚠️ 与本周方向无关。</b>'
+        '<span class="sub">这张卡不进综合分、不进当日方向研判、不改任何近月位点。'
+        '机构可以一边持有远月上行尾部、一边在近月做空——两个时间尺度的仓位并存不矛盾。'
+        '日度决策仍以近月结构 + 资金流为准。</span></div>'
+        f'<div class="sub" style="margin:8px 0">扫描 {scan.scanned:,} 个 &gt;45 天合约，'
+        f'触发 {len(scan.moves)} 条（门槛：单日 OI 增幅 ≥50% 且增量 ≥1,000 手，'
+        f'双门槛缺一不可）　·　<b>{_esc(scan.tilt)}</b></div>'
+        '<table><tr><th>合约</th><th>到期</th><th>距现价</th><th>昨 OI</th>'
+        '<th>今 OI</th><th>ΔOI</th><th>增幅</th><th>性质</th></tr>'
+        + "".join(trs) + '</table>'
+        '<div class="sub" style="margin-top:8px;line-height:1.7">'
+        '只读 OI 结构，不做买卖方判定：远月报价稀疏、深虚合约一个最小跳动即反推出'
+        '巨大 IV 变化，「OI↑+IV↓=卖方」那套机械判定在这里不可用（同 R15 的理由）。'
+        '所以这里只说「有人在这个位置堆了多少仓」，不说是买方还是卖方。</div></div>')
+
+
+def render_ratio_spreads(rs, conv=None, unit: str = "", etf_symbol: str = "") -> str:
+    """比例价差卡（playbook R15）—— 逐腿判定会把它读反的结构。"""
+    if not rs:
+        return ""
+    sym = _esc(etf_symbol)
+
+    def _p(v):
+        return f"{(conv(v) if conv else v):.1f}{_esc(unit)}"
+
+    items = []
+    for x in rs[:8]:
+        col = "#cf222e" if x.kind == "C" else "#1a7f37"
+        tail = ('<span class="pill" style="background:#bc4c001a;color:#bc4c00">'
+                '极端尾部</span>' if x.tail else "")
+        items.append(
+            f'<div style="border-left:3px solid {col};padding-left:10px;margin:8px 0">'
+            f'<div style="font-weight:600">{_esc(x.name)} · {x.expiry} {tail}</div>'
+            f'<div class="sub" style="line-height:1.7">买 {_p(x.near_strike)}'
+            + (f'<span style="color:#0969da">({sym}{x.near_strike:g})</span>' if conv else "")
+            + f' × {x.near_doi:,}　卖 {_p(x.far_strike)}'
+            + (f'<span style="color:#0969da">({sym}{x.far_strike:g})</span>' if conv else "")
+            + f' × {x.far_doi:,}</div>'
+            f'<div class="sub">{_esc(x.detail)}</div></div>')
+    return (
+        '<div class="card"><h2>比例价差（1:2）· 逐腿会读反的结构</h2>'
+        '<div class="sub" style="line-height:1.7">买一份近腿、卖两份远腿。它表达的是'
+        '<b>「走到某个位置为止」</b>，不是无限看涨/看跌——而逐腿判定会把卖出的'
+        '两份读成强烈反向压力，方向正好读反。深虚合约还有第二重问题：绝对价格极小，'
+        '一个最小跳动就反推出巨大 IV 变化，「OI↑+IV↓=卖方」在那里系统性失效，'
+        '只能读数量结构。</div>'
+        + "".join(items) +
+        '<div class="sub" style="margin-top:8px;line-height:1.7">'
+        '⚠️ 检出依据是 <b>ΔOI 与当日成交量同时配成 1:2</b>。只用 ΔOI 会大量捡到巧合：'
+        '2026-08-31 零假设检验（随机打乱 ΔOI 后重跑）显示纯 ΔOI 口径的真实/随机比只有 '
+        '1.0~1.5x（TQQQ 是 1.0x，等于全是巧合）；加成交量确认后升到 2.9~6.2x。'
+        '即便如此仍有残余噪音（QQQ 随机基线约 4.5 个），条目数不多时才可信。</div></div>')

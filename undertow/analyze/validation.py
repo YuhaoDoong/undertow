@@ -131,6 +131,26 @@ REGISTRY: dict[str, Validation] = {
         n=83, hits=41, p_value=1.000, baseline=0.51, cluster_n=43,
         note="近端口径 49%、混算口径 54%、基准（无脑做多）51%。四个变体 p 全为 1.000。",
         caveat="换到期口径、换阈值形式都试过，均无改善——该因子本身无预测力"),
+    "surface_gate": Validation(
+        key="surface_gate", label="固定Delta曲面闸门（逐腿与曲面矛盾即否决）",
+        n=66, hits=43, p_value=0.169, baseline=0.50,
+        note="2026-08-31 四口径对比（100 品种-日，≥2× 子集）："
+             "① 现状一刀切否决 65%/+0.44%　② 去掉闸门 60%/+0.31%　"
+             "③ 矛盾降半权 60%/+0.31%　④ 大单≥2000张豁免 64%/+0.37%。"
+             "放松闸门能把可判定率从 52% 提到 57%，但命中率与收益都变差 —— "
+             "被掐掉的不是被误伤的信号，是噪音。",
+        caveat="低可判定率是这套方法在诚实说「不知道」，不是待修的缺陷；"
+               "三种放松方案均已试过并更差，勿再改"),
+    "ratio_spread": Validation(
+        key="ratio_spread", label="比例价差检出（R15）",
+        kind="corr", n=4, hits=0, p_value=0.99, baseline=0.0,
+        r=0.0, r_control=None,
+        effect="信噪比（真实检出/随机基线）：纯ΔOI口径 1.0~1.5x（TQQQ 1.0x=全是巧合），"
+               "加当日成交量同步配对后 2.9~6.2x",
+        note="零假设检验：把 ΔOI 与 volume 在行权价之间随机打乱 20 次重跑。"
+             "GLD 2/0.7、SLV 4/1.1、QQQ 13/4.5、TQQQ 5/0.8。",
+        caveat="只验证了「不是随机凑对」，【未】验证检出后是否有交易价值；"
+               "QQQ 随机基线仍有 4.5 个，条目多时不可信"),
     "expected_move": Validation(
         key="expected_move", label="可判定率预告波动幅度",
         kind="corr", n=66, hits=0, p_value=0.048, baseline=0.0,

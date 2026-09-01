@@ -2158,3 +2158,117 @@ def tradeable_info(fa) -> dict:
                        f"{GATE_EVIDENCE['passed_hit']:.0%}、"
                        f"顺向 {GATE_EVIDENCE['passed_ret']:+.2f}%/笔。{warn}"),
             "evidence": GATE_EVIDENCE}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# R15 · 极端尾部只读结构，不读 IV
+#
+# 深虚合约（~1Δ）绝对价格极小：一个最小跳动即可反推出巨大的 IV 变化，叠加报价
+# 稀疏与曲面拟合误差，「OI↑ + IV↓ = 卖方」那套四象限判定在这里系统性失效。
+# 改看【数量配对结构】：
+#   · 1:1 等量 → 垂直/尾部价差（已由 detect_spreads 覆盖）
+#   · 1:2 倍量 → 比例价差（本函数）：买一份近腿、卖两份远腿
+#   · 跨行权价相对 IV 强弱 → 买入腿相对跑赢（作为佐证，不单独定性）
+#
+# 比例价差的方向含义与等量价差不同：买1卖2 的净卖出使它在标的温和上涨时获利，
+# 但远腿被突破后风险敞开 —— 所以它表达的是「看涨到某个位置为止」，
+# 不是无限看涨。逐腿判定会把它读成「大量卖 call = 强烈看跌」，正好读反。
+# ─────────────────────────────────────────────────────────────────────────────
+
+RATIO_MIN_SIZE = 300         # 近腿最小张数（滤掉零散单）
+RATIO_TOL = 0.25             # 倍数容差：1:2 允许 1:1.75 ~ 1:2.25
+RATIO_MAX_WIDTH_FRAC = 0.15  # 两腿行权价最大间距（相对近腿行权价）
+TAIL_MAX_DELTA = 0.12        # 「极端尾部」判定：|Δ| ≤ 此值时 IV 判定不可信
+
+# ⚠️ 只靠 ΔOI 配对会大量捡到巧合。2026-08-31 零假设检验（把 ΔOI 在行权价之间
+# 随机打乱 20 次，看还能"检出"多少）：
+#     GLD 真实 9 / 随机均值 6.2（1.5x）   SLV 12 / 9.4（1.3x）
+#     QQQ 56 / 42.5（1.3x）              TQQQ 8 / 7.8（1.0x）
+# 几百个行权价随机配对必然凑出大量 2:1，信噪比几乎为零。
+# 因此加第二个独立维度：真实的比例价差是【同时成交】的，所以当日 volume
+# 也应当配成 1:2。随机情况下 ΔOI 与 volume 同时满足 1:2 的概率极低。
+RATIO_VOL_TOL = 0.45         # volume 比的容差（成交含平仓，比 OI 松一档）
+RATIO_MIN_VOL = 100          # 两腿最小成交量——没有成交就谈不上"同时成交"
+
+
+@dataclass(frozen=True)
+class RatioSpread:
+    kind: str
+    expiry: date
+    near_strike: float       # 买入腿（近价，数量少）
+    far_strike: float        # 卖出腿（远价，数量多）
+    near_doi: int
+    far_doi: int
+    ratio: float             # far/near
+    near_delta: float
+    far_delta: float
+    tail: bool               # 两腿是否都在极端尾部（IV 判定不可信区）
+    detail: str
+
+    @property
+    def name(self) -> str:
+        d = "看涨" if self.kind == "C" else "看跌"
+        return f"{d}比例价差(买1卖{self.ratio:.1f})"
+
+
+def detect_ratio_spreads(changes: list[FlowChange], spot: float = 0.0
+                         ) -> list[RatioSpread]:
+    """检测 1:2 比例价差 —— 逐腿判定会把它读反的那种结构。
+
+    只认新建仓（两腿 d_oi > 0）、同到期、同 C/P、远腿数量约为近腿的两倍。
+    """
+    out: list[RatioSpread] = []
+    used: set = set()
+    for kind in ("C", "P"):
+        legs = [c for c in changes if c.kind == kind and c.d_oi >= RATIO_MIN_SIZE]
+        for near in sorted(legs, key=lambda x: -x.d_oi):
+            key = (near.expiry, near.strike, kind)
+            if key in used:
+                continue
+            mw = RATIO_MAX_WIDTH_FRAC * max(near.strike, 1e-9)
+            cands = []
+            for far in legs:
+                if far is near or (far.expiry, far.strike, kind) in used:
+                    continue
+                if far.expiry != near.expiry:
+                    continue
+                # 卖出腿必须更虚：call 行权价更高、put 更低
+                more_otm = (far.strike > near.strike) if kind == "C" else (far.strike < near.strike)
+                if not more_otm or abs(far.strike - near.strike) > mw:
+                    continue
+                r = far.d_oi / near.d_oi
+                if abs(r - 2.0) > RATIO_TOL:
+                    continue
+                # 第二维确认：当日成交量也要配成 1:2（见上方零假设检验）
+                nv, fv = near.curr_volume or 0, far.curr_volume or 0
+                if nv < RATIO_MIN_VOL or fv < RATIO_MIN_VOL:
+                    continue
+                if abs(fv / nv - 2.0) > RATIO_VOL_TOL:
+                    continue
+                cands.append((abs(r - 2.0) + abs(fv / nv - 2.0), far, r))
+            if not cands:
+                continue
+            _, far, r = min(cands, key=lambda x: x[0])
+            used.add(key)
+            used.add((far.expiry, far.strike, kind))
+            nd, fd = abs(near.delta or 0.0), abs(far.delta or 0.0)
+            tail = max(nd, fd) <= TAIL_MAX_DELTA
+            side = "上方" if kind == "C" else "下方"
+            out.append(RatioSpread(
+                kind=kind, expiry=near.expiry,
+                near_strike=near.strike, far_strike=far.strike,
+                near_doi=near.d_oi, far_doi=far.d_oi, ratio=r,
+                near_delta=near.delta or 0.0, far_delta=far.delta or 0.0,
+                tail=tail,
+                detail=(f"{near.strike:g}/{far.strike:g}{kind} 新增 "
+                        f"{near.d_oi:,} : {far.d_oi:,} ≈ 1:{r:.1f} —— "
+                        f"买一份 {near.strike:g}、卖两份 {far.strike:g} 的比例价差。"
+                        f"表达的是「{side}走到 {far.strike:g} 为止」，"
+                        f"不是无限{'看涨' if kind == 'C' else '看跌'}；"
+                        f"逐腿判定会把卖出的两份读成强烈反向压力，正好读反。"
+                        f"　成交量同步配对 {near.curr_volume:,}:{far.curr_volume:,}"
+                        f"（≈1:{(far.curr_volume / max(near.curr_volume, 1)):.1f}）——"
+                        f"两个维度同时成 1:2，才排除随机凑对。"
+                        + ("　⚠️ 两腿均在极端尾部（|Δ|≤%.2f），IV 判定本就不可信，"
+                           "此处只读数量结构。" % TAIL_MAX_DELTA if tail else ""))))
+    return out

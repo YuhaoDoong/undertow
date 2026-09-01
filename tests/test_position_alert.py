@@ -798,3 +798,63 @@ def test_validation_registry_is_honest():
     tbl = tbl[:tbl.index("\n\ndef ") if "\n\ndef " in tbl else len(tbl)]
     assert "Bonferroni" in tbl and "不等于可以照着下单" in tbl
     print("PASS test_validation_registry_is_honest")
+
+
+def test_backmonth_scale_isolation():
+    """远月结构异动必须与日度方向研判隔离（playbook R16 的时间尺度纪律）。
+
+    机构可以一边持有远月上行尾部、一边在近月做空 —— 2026-08-31 白银正是如此：
+    近月「⚡极强看跌 9.5×」，同日远月 call 新增 29,875 张 vs put 5,873。
+    若把远月并入近月压力，方向直接被污染。
+    """
+    from undertow.analyze import backmonth as bm
+    src_bm = (Path(__file__).resolve().parents[1] / "undertow" / "analyze"
+              / "backmonth.py").read_text("utf-8")
+    assert "不进综合分" in src_bm and "不改任何近月位点" in src_bm
+
+    # 扫描器不得被 flow/outlook 引用——一旦被引用就等于进了方向计算
+    for mod in ("flow.py", "outlook.py", "direction.py", "strategy.py"):
+        f = Path(__file__).resolve().parents[1] / "undertow" / "analyze" / mod
+        if f.exists():
+            assert "backmonth" not in f.read_text("utf-8"), \
+                f"{mod} 不得引用 backmonth —— 远月只作长期背景"
+
+    src = (Path(__file__).resolve().parents[1] / "undertow" / "report"
+           / "html.py").read_text("utf-8")
+    card = src[src.index("def render_backmonth"):]
+    card = card[:card.index("\n\ndef ") if "\n\ndef " in card else len(card)]
+    assert "与本周方向无关" in card, "卡片必须自带时间尺度标注"
+    assert "不进综合分" in card and "不改任何近月位点" in card
+
+    assert bm.BM_MIN_DTE >= 46, "远月起点必须与 gamma 的 far 层对齐"
+    assert bm.BM_MIN_GROWTH > 0 and bm.BM_MIN_DOI >= 1000, "双门槛缺一不可"
+
+
+def test_ratio_spread_needs_two_dimensions():
+    """比例价差必须靠 ΔOI + 成交量双维确认，否则全是随机凑对。
+
+    2026-08-31 零假设检验（随机打乱 ΔOI 后重跑）：
+      纯 ΔOI 口径 真实/随机 = GLD 1.5x、SLV 1.3x、QQQ 1.3x、TQQQ 1.0x
+      加成交量确认后           = GLD 2.9x、SLV 3.8x、QQQ 2.9x、TQQQ 6.2x
+    TQQQ 的 1.0x 意味着纯 ΔOI 检出的全部是巧合。
+    """
+    from undertow.analyze.flow import (detect_ratio_spreads, RATIO_VOL_TOL,
+                                       RATIO_MIN_VOL, TAIL_MAX_DELTA)
+    from undertow.analyze.validation import REGISTRY
+    src = (Path(__file__).resolve().parents[1] / "undertow" / "analyze"
+           / "flow.py").read_text("utf-8")
+    fn = src[src.index("def detect_ratio_spreads"):]
+    assert "curr_volume" in fn, "必须用成交量做第二维确认"
+    assert RATIO_VOL_TOL > 0 and RATIO_MIN_VOL > 0
+    # 零假设检验的结论必须留在代码里
+    assert "零假设" in src and "随机打乱" in src
+
+    v = REGISTRY["ratio_spread"]
+    assert "未" in v.caveat and "交易价值" in v.caveat, \
+        "必须写明只验证了非随机，未验证交易价值"
+
+    card = (Path(__file__).resolve().parents[1] / "undertow" / "report"
+            / "html.py").read_text("utf-8")
+    card = card[card.index("def render_ratio_spreads"):]
+    assert "零假设检验" in card and "残余噪音" in card
+    assert TAIL_MAX_DELTA <= 0.15

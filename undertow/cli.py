@@ -36,8 +36,9 @@ from undertow.analyze.signals import generate_signals, net_bias
 from undertow.analyze.gamma import (analyze_gamma, structure_delta,
                                    support_ladder, ladder_bands, wall_agreement)
 from undertow.analyze.flow import _live as _flow_live
+from undertow.analyze.backmonth import scan as backmonth_scan
 from undertow.analyze.cost_gate import candidates as cost_candidates
-from undertow.analyze.flow import (analyze_flow, counter_signals, tradeable_info,
+from undertow.analyze.flow import (analyze_flow, counter_signals, tradeable_info, detect_ratio_spreads,
                                    flip_driver_summary, structural_moves,
                                    detect_strong_signal, probe_strong_signal)
 from undertow.analyze.outlook import (build_outlook, macro_to_votes,
@@ -57,6 +58,8 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_wall_layers_section,
                           render_tradeable_gate,
                           render_cost_gate,
+                          render_backmonth,
+                          render_ratio_spreads,
                           render_flow_section, render_macro_section, render_events_section,
                           render_tldr_section, render_strategy_section,
                           render_concentration_html, render_vol_regime_section,
@@ -1368,6 +1371,27 @@ def cmd_report(args) -> int:
             except Exception as e:
                 print(f"⚠️ {inst.key} 可交易闸门失败：{type(e).__name__}: {e}", file=sys.stderr)
 
+            # —— 比例价差（playbook R15）：逐腿判定会读反的结构 ——
+            ratio_html = ""
+            try:
+                _rs = detect_ratio_spreads(fa.changes, curr.spot)
+                ratio_html = render_ratio_spreads(
+                    _rs, conv=(ga.to_commodity if ratio is not None else None),
+                    etf_symbol=inst.options.symbol)
+            except Exception as e:
+                print(f"⚠️ {inst.key} 比例价差检测失败：{type(e).__name__}: {e}", file=sys.stderr)
+
+            # —— 远月结构异动（playbook R16）：近月窗口的盲区，只作长期背景 ——
+            backmonth_html = ""
+            try:
+                _bm = backmonth_scan(prev, curr, obs_day, curr.spot)
+                backmonth_html = render_backmonth(
+                    _bm, spot=curr.spot,
+                    conv=(ga.to_commodity if ratio is not None else None),
+                    etf_symbol=inst.options.symbol)
+            except Exception as e:
+                print(f"⚠️ {inst.key} 远月扫描失败：{type(e).__name__}: {e}", file=sys.stderr)
+
             # —— 成本闸门：预期波动 vs 回本门槛（见 cost_gate 模块注释）——
             cost_html = ""
             try:
@@ -1535,7 +1559,9 @@ def cmd_report(args) -> int:
                                       expiry_html2=_expiry_html,
                                       summary_html=_summary_html,
                                       layers_html=layers_html,
-                                      gate_html=gate_html, cost_html=cost_html)
+                                      gate_html=gate_html, cost_html=cost_html,
+                                      backmonth_html=backmonth_html,
+                                      ratio_html=ratio_html)
             # ⚠️ 文件名用【可交易日】（= 快照日期），不是生成日期。
             # 时点约定：快照 D 于 D 凌晨捕获，OI 是 D−1 收盘的 OCC 结算，
             # diff 描述交易日 D−1，**D 开盘才可执行** —— D 就是这份研报的身份。

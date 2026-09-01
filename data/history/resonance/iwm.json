@@ -53,7 +53,7 @@
  {
   "instrument": "iwm",
   "date": "2026-09-01",
-  "spot": 292.32,
+  "spot": 292.9,
   "state": "仅超卖",
   "struct_bias": "中性",
   "band": "极超卖",

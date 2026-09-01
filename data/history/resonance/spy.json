@@ -53,7 +53,7 @@
  {
   "instrument": "spy",
   "date": "2026-09-01",
-  "spot": 762.57,
+  "spot": 763.345,
   "state": "无信号",
   "struct_bias": "中性",
   "band": "偏超卖",

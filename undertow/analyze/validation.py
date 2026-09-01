@@ -72,7 +72,11 @@ class Validation:
     effect: str = ""               # 相关型：效应的人话描述
 
     @property
-    def rate(self) -> float:
+    def rate(self) -> float | None:
+        # hits=None（「无法检验」类条目）返回 None，不得用 0.0 冒充命中率 ——
+        # 那会在报告里显示成「0%」，把「没测过」说成「测了，一次没中」。
+        if self.hits is None:
+            return None
         return self.hits / self.n if self.n else 0.0
 
     @property
@@ -105,6 +109,8 @@ class Validation:
 
     @property
     def need_more(self) -> int | None:
+        if self.hits is None:
+            return None
         return samples_to_significance(self.hits, self.n)
 
     def summary(self) -> str:
@@ -116,6 +122,11 @@ class Validation:
             if self.effect:
                 s += f" · {self.effect}"
             return s + (" · 已验证" if self.significant else " · 未达显著")
+        if self.status == "无法检验":
+            # 不访问 rate / need_more / baseline —— 这些在本类条目里全是 None。
+            # codex 2026-09-01 P0：只改 status 不改渲染路径，会让整份研报 TypeError。
+            return (f"n={self.n} · 无法检验（缺可用的零假设或前瞻收益），"
+                    f"详见 note 与复现入口")
         s = f"{self.hits}/{self.n} = {self.rate:.0%}（基准 {self.baseline:.0%}），p={self.p_value:.3f}"
         if self.cluster_n:
             s += f"，{self.cluster_n} 个日期簇"
@@ -167,7 +178,7 @@ REGISTRY: dict[str, Validation] = {
                "③ 待样本外验证"),
     "gate_net_effect": Validation(
         key="gate_net_effect", label="闸门净效果（开火 vs 被拦）",
-        n=36, hits=None, p_value=None, baseline=None, cluster_n=None,
+        n=79, hits=None, p_value=None, baseline=None, cluster_n=None,
         note="2026-09-01 首次检验。三条核心闸门（压力比/主翼比/净建仓规模）"
              "【从未被检验过】——检验需历史逐行权价 ΔOI，免费源拿不到，只能向前累积。"
              "唯一可做的是逆向价格闸门的双样本对比：\n"
@@ -179,23 +190,29 @@ REGISTRY: dict[str, Validation] = {
              "另按压力比≥10× 手工分组（各 18 条）："
              "D+0 开火 56%/+0.28% vs 被拦 56%/−0.14%；"
              "D+1 开火 50%/−0.42% vs 被拦 67%/+0.82%。\n"
-             "── 2026-09-01 逐条闸门检验（89 条压力比达标样本，去趋势）──\n"
-             "① 主翼比：wing_ok=True 42条 D+1 51%/+0.29% ；False 47条 D+1 69%/+0.79%\n"
-             "② 净建仓规模：scale_ok=True 89条，False 0条 —— 【89 次一次没拦过，是摆设】\n"
-             "③ 逆向价格：contra_ok=True 31条 D+1 48%/−0.23%；False 11条 D+1 60%/+1.69%\n"
+             "── 2026-09-01 逐条闸门检验（去趋势；复现入口 scripts/gate_analysis.py）──\n"
+             "样本 79 条（压力比达标且 drift_60d 可算；含 drift 缺失则 89 条，"
+             "但那 10 条无法去趋势、不进统计）。codex 独立复现确认："
+             "无任何一行两个方向同时 pressure_ok，不存在一行两记的重复计数。\n"
+             "① 主翼比：wing_ok=True 37条 D+1 51%/+0.29%；False 42条 D+1 69%/+0.79%\n"
+             "② 净建仓规模：scale_ok=True 79条，False 0条 —— 【一次没拦过，是摆设】\n"
+             "③ 逆向价格（前三条全过后）：contra_ok=True 27条 D+1 48%/−0.23%；False 10条 D+1 60%/+1.69%\n"
              "④ 合计：开火 27条 D+1 −0.23% vs 被拦 52条 D+1 +0.97%，"
-             "Welch t=−1.828（抽稀后 −1.716），主翼比单独置换 p=0.255。\n"
+             "Welch t=−1.828（抽稀后 −1.716），整体置换 p=0.071，主翼比单独置换 p=0.255。\n"
              "被拦掉的最好几条：07-24 wti +10.68%、08-02 wti +10.00%、07-10 wti +8.60%、"
              "08-19 silver +7.98% —— 多数被主翼比拦下。",
         caveat="⚠️ |t| 均未达 2、blocked_n 仅 8~10，按模块自身标准一条都不成立，"
                "【不构成「闸门有害」的结论】。但 h=2/3/5 三个窗口方向一致（被拦组更好），"
                "这个方向须持续监控，不得因不显著就当噪音丢弃。"
                "行动项（按确定性排序）：\n"
-               "  a) 净建仓规模闸门 89/89 全过 —— 这条【不需要显著性】就能断定是摆设，"
+               "  a) 净建仓规模闸门 79/79 全过、0 次拦截 —— 这条【不需要显著性】"
+               "     就能断定它在当前样本无增量作用（但不得用同一批数据调阈值后"
+               "     再宣称已优化，codex 2026-09-01 P1）；"
                "     要么调紧阈值要么删掉，别再算作『三道闸门』之一；\n"
                "  b) 报告应把【被闸门拦下的信号】也显示出来（标注未过闸门及卡在哪一条），"
                "     现在用户完全看不到它们，无从判断闸门是否误伤；\n"
-               "  c) 样本到 n≥50（开火组）时重跑本条；在那之前"
+               "  c) 复现入口：scripts/gate_analysis.py（支持 --thin/--dedupe-row/--exclude）；\n"
+               "  d) 样本到 n≥50（开火组）时重跑本条；在那之前"
                "     既不得以「闸门已验证」为由辩护，也不得据此拆闸门。"),
     "wall_space_vote": Validation(
         key="wall_space_vote", label="Gamma 墙位空间投票",

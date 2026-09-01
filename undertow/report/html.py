@@ -1388,6 +1388,12 @@ def render_validation_table() -> str:
             score = f"r={v.r:+.3f}"
             extra = (("原始 p 显著但未做簇修正　" if v.status == "待簇修正" else "")
                      + (f"对照 r={v.r_control:+.3f}" if v.r_control is not None else ""))
+        elif v.status == "无法检验":
+            # codex 2026-09-01 P0：这类条目 hits/p_value/baseline 全是 None。
+            # 不得走命中率分支 —— f"{None:.0%}" 会 TypeError 让整份研报崩掉，
+            # 而用 0 冒充又会把「没测过」显示成「测了，一次没中」。
+            icon, score = "⛔", f"n={v.n} · 未检验"
+            extra = "缺可用的零假设或前瞻收益，见 note 中的复现入口"
         else:
             icon = {"已验证": "✅", "待簇修正": "🟠",
                     "样本不足": "🟡", "未验证": "⚠️"}.get(v.status, "⚠️")
@@ -1397,10 +1403,11 @@ def render_validation_table() -> str:
                      ("原始 p 显著但未做簇修正" if v.status == "待簇修正" else
                       (f"还差 {more} 个样本" if more else "命中率贴近基准，难以证实")))
         color = "#1a7f37" if v.significant else "#bc4c00"
+        p_cell = "—" if v.p_value is None else f"{v.p_value:.3f}"
         rows.append(
             f'<tr><td>{icon} {_esc(v.label)}</td>'
             f'<td class="r">{score}</td>'
-            f'<td class="r">{v.p_value:.3f}</td>'
+            f'<td class="r">{p_cell}</td>'
             f'<td style="color:{color}">{_esc(extra)}</td>'
             f'<td class="sub">{_esc(v.caveat)}</td></tr>')
     return (

@@ -52,6 +52,7 @@ MIN_CREDIT_MULT = 3.0      # 权利金至少要是手续费(4腿)的几倍，否
 # 逐品种参数（2026-08-31 扫参数定下）。未列出的品种不出候选。
 PARAMS: dict[str, dict] = {
     "silver": {
+        # ⛔ 以下参数同样作废（污染网格挑出），保留仅为记录曾用值
         "cap": 9999, "confirm": 1, "band": 0.05, "width_pct": 0.03, "dte": (4, 11),
         "sides": ("P",),           # call 侧实测 ≈ 打平，暂不出
         # ⛔ 下面 6 个数作废（错位 spot），重算前不得引用
@@ -66,6 +67,7 @@ PARAMS: dict[str, dict] = {
     # 筛掉了低权利金的笔。配对比较（同 21 天）显示 band 大确实更好，
     # 但那是「墙离得远、缓冲厚」的效果，与样本期单边上涨无法分离。
     "gold": {
+        # ⛔ 同上作废
         "cap": 9999, "confirm": 3, "band": 0.05, "width_pct": 0.01, "dte": (4, 11),
         "sides": ("P",),           # call 侧 -$487，明确不出
         # ⛔ 同上作废
@@ -80,7 +82,15 @@ PARAMS: dict[str, dict] = {
 # 暂不激活。其余品种快照不足 5 份，无法回测。
 # 2026-08-31 用户定：先只激活白银。黄金的 band=5%/+564% 同样有筛选嫌疑
 # （被权利金门槛筛掉的笔全是低权利金的，剩下的自然好看），需单独查证后再开。
-ACTIVE = {"silver"}
+# ⛔ 2026-09-01 停用（codex P0）：此前只清空了 n/unbroken/roi/annual 等【绩效】数字，
+#    但 cap / band / width_pct / dte / sides / confirm 这些【策略参数】同样是用
+#    错位 snapshot.spot 的网格挑出来的，污染程度一样。只清绩效栏而留着参数继续
+#    出候选，等于换个说法照做同一笔交易。
+#    重开条件（三项全部满足）：
+#      ① 快照捕获时序修好（按 captured_at 定 decision_session，见 P0-1）
+#      ② 墙的定义修好（结构主墙 vs 局部 pin 分开，见 P0-5）
+#      ③ 用新回测重跑参数网格，且通过日期簇置换检验
+ACTIVE: set[str] = set()
 
 
 @dataclass(frozen=True)
@@ -163,13 +173,20 @@ def _fill(sell, buy, give: float = 0.25) -> float:
 
 
 def propose(snap, instrument: str, obs: date, execution_date: date,
-            spot: float | None = None) -> Verdict:
-    """给出该品种的墙位卖方价差候选。未激活的品种直接说明原因。"""
+            spot: float) -> Verdict:
+    """给出该品种的墙位卖方价差候选。未激活的品种直接说明原因。
+
+    ⚠️ spot 必填（codex 2026-09-01 P0）：原来允许回退 `snap.spot`，
+    而 46 个快照里 34 个的 spot 不是当天的价。调用方必须显式传入
+    决策时点已知的价格（真实日线 C[D−1] 或实时报价）。
+    """
     if instrument not in ACTIVE:
-        return Verdict(False, f"{instrument} 未激活：仅白银/黄金有足够快照完成参数实测"
-                              f"（QQQ 19 份、其余各 4 份，无法回测）。")
+        return Verdict(False,
+                       f"{instrument} 未激活。2026-09-01 起【全品种停用】："
+                       f"参数与绩效均出自用 snapshot.spot 当开仓价的污染回测，"
+                       f"且快照捕获时序、墙的定义两个前提都还没修好。"
+                       f"重开条件见模块内 ACTIVE 处的三项清单。")
     p = PARAMS[instrument]
-    spot = spot if spot is not None else snap.spot
     out: list[Candidate] = []
     wall_used = None
     for kind in p["sides"]:
@@ -213,8 +230,7 @@ def propose(snap, instrument: str, obs: date, execution_date: date,
     return Verdict(True,
                    f"墙 {wall_used:g}（≤{p['cap']} 天累计 OI 最大），"
                    f"卖在墙上、宽度 {p['width_pct']:.0%}、{p['dte'][0]}~{p['dte'][1]} 天。"
-                   f"实测 {p['n']} 笔未破墙 {p['unbroken']:.0%}、单笔 ROI {p['roi']:.1%}、"
-                   f"年化 {p['annual']:.0%}。",
+                   f"⚠️ 无可引用的实测绩效：原数字出自污染回测，已全部作废。",
                    wall_used, out, p)
 
 
@@ -237,8 +253,22 @@ def should_exit(kind: str, sell_strike: float, spot: float,
     adverse = (signal_side == "看涨") if kind == "C" else (signal_side == "看跌")
     if not adverse or signal_ratio < SIG_EXIT_RATIO:
         return False, f"信号 {signal_side or '无'} {signal_ratio:.1f}× 未达 {SIG_EXIT_RATIO:g}×"
+
+    # ⚠️ codex 2026-09-01 P0：原实现只看 |sell/spot − 1| 这个【无方向】的距离，
+    # 两头都错：
+    #   · 卖 60C、现价 59 —— 尚在安全侧（未破墙），却因距离 1.7% 被平掉；
+    #   · 卖 60P、现价 50 —— 已经深度破墙 16.7%，却因距离 >5% 拒绝平仓，
+    #     等于在风险最大的时候锁死出口。
+    # 正确顺序：先判有方向的破墙，再让距离只承担「尚在安全侧时别乱动」。
+    breached = (spot > sell_strike) if kind == "C" else (spot < sell_strike)
+    if breached:
+        gap = abs(spot / sell_strike - 1)
+        return True, (f"反向极强信号 {signal_ratio:.1f}× 且【已破卖腿】"
+                      f"（现价 {spot:g} vs 卖腿 {sell_strike:g}，越过 {gap:.1%}）→ 当天平仓")
+
     dist = abs(sell_strike / spot - 1)
     if dist > SIG_EXIT_DIST:
-        return False, (f"信号达标但价格距卖腿 {dist:.1%} > {SIG_EXIT_DIST:.0%}，"
+        return False, (f"信号达标但仍在安全侧且距卖腿 {dist:.1%} > {SIG_EXIT_DIST:.0%}，"
                        f"离得远，不必平")
-    return True, (f"反向极强信号 {signal_ratio:.1f}× 且价格距卖腿仅 {dist:.1%} → 当天平仓")
+    return True, (f"反向极强信号 {signal_ratio:.1f}×，虽未破墙但价格已逼近卖腿"
+                  f"（距 {dist:.1%}）→ 当天平仓")

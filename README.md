@@ -182,7 +182,9 @@ Each package contains a README describing its responsibilities. Dependencies flo
 
 ## Validation
 
-The offline suite currently contains 88 tests covering parsing, time alignment, expiry handling, positioning, gamma, flow, backtesting, scenario logic, and report generation.
+The offline suite currently contains 410 tests covering parsing, time alignment, expiry handling, positioning, gamma, flow, backtesting, scenario logic, report generation, the validation registry, and the wall-spread module.
+
+Every judgement that can influence a trading decision must be registered in `undertow/analyze/validation.py` with its sample size, hit count, and p-value. A registry entry may legitimately carry `p_value=None` with status `无法检验` ("cannot be tested") — for example the three core flow gates, whose calibration would require historical per-strike open-interest deltas that free data sources do not provide. Absence of a test is recorded as such rather than filled in with a placeholder.
 
 ```bash
 python3 -m pytest -q
@@ -198,6 +200,10 @@ The runtime itself has no third-party dependencies; `pytest` is only needed for 
 - Flow direction is inferred from changes in open interest and relative implied volatility, not from tick-level buyer/seller identification.
 - Option-chain history must be accumulated locally by running `snapshot`; public delayed endpoints do not provide a complete historical chain.
 - Backtests and confidence estimates describe the sampled history and can fail under new market regimes.
+- **Snapshot capture time is not yet part of the backtest clock.** Snapshot files are named by date, but capture time has varied: of 191 snapshots, 21 were taken after 09:30 ET and 18 after the close. Backtests still treat every snapshot as known before that day's open, so a look-ahead component remains. Fixing this requires deriving a decision session from `captured_at` rather than from the filename.
+- **"Wall" is currently defined as the maximum accumulated open interest inside a band around spot.** Because a maximum always exists inside any band, this can label a minor strike as a wall; widening the band instead surfaces far-dated LEAPS clusters. Both failure modes are live. The intended fix is to separate a structural wall (full range, absolute-size threshold) from a local pin (near-money band).
+- **The wall-anchored credit-spread strategy is disabled for all instruments** as of 2026-09-01. Its performance figures and its parameters both came from backtests that used the snapshot's own spot field as the entry price, which is unreliable for the reason above.
+- The sample period 2026-06-25 to 2026-09-01 was a broad uptrend (GLD +7.4%, SLV +9.7%, USO +26.8%). Nothing here has been validated in a falling market, and a null hypothesis of 50% is wrong for directional signals over such a period — random shorting hits only 39-40%.
 
 ## Agent integration
 

@@ -35,9 +35,33 @@ def test_put侧不再一刀切拒绝平仓():
 
 
 def test_call侧反向极强信号且贴近卖腿则平仓():
-    ok, _ = ws.should_exit("C", sell_strike=60.0, spot=59.0,
-                           signal_side="看涨", signal_ratio=35.0)
-    assert ok
+    """卖 60C、现价 59：尚未破墙但已逼近，仍应平（距离 1.7% ≤ 5%）。"""
+    ok, why = ws.should_exit("C", sell_strike=60.0, spot=59.0,
+                             signal_side="看涨", signal_ratio=35.0)
+    assert ok and "逼近" in why
+
+
+def test_已破卖腿必须平仓_哪怕距离超过阈值():
+    """codex 2026-09-01 P0：原实现在这里方向反了。
+
+    卖 60P、现价 50 —— 已深度破墙 16.7%，旧代码却因 |60/50−1|=20% > 5%
+    返回「离得远，不必平」，等于在风险最大时锁死出口。
+    """
+    ok, why = ws.should_exit("P", sell_strike=60.0, spot=50.0,
+                             signal_side="看跌", signal_ratio=35.0)
+    assert ok, why
+    assert "已破卖腿" in why
+
+    ok2, why2 = ws.should_exit("C", sell_strike=60.0, spot=72.0,
+                               signal_side="看涨", signal_ratio=35.0)
+    assert ok2 and "已破卖腿" in why2
+
+
+def test_安全侧且离得远才不平():
+    """距离条件只承担「尚在安全侧时别乱动」，不得用于拒绝已破墙的仓位。"""
+    ok, why = ws.should_exit("P", sell_strike=60.0, spot=100.0,
+                             signal_side="看跌", signal_ratio=35.0)
+    assert not ok and "安全侧" in why
 
 
 def test_信号方向不逆就不平():
@@ -101,13 +125,27 @@ def test_无合约时返回None而不是崩溃():
 # ── propose：激活闸门 ──────────────────────────────────────────────
 def test_未激活品种明确拒绝并说明原因():
     snap = FakeSnap([], 400.0)
-    v = ws.propose(snap, "gold", date(2026, 9, 1), date(2026, 9, 1))
+    v = ws.propose(snap, "gold", date(2026, 9, 1), date(2026, 9, 1), spot=400.0)
     assert not v.ok and "未激活" in v.reason
 
 
-def test_ACTIVE只含白银():
-    """2026-08-31 用户定：先只激活白银。黄金参数存疑未开。"""
-    assert ws.ACTIVE == {"silver"}
+def test_ACTIVE为空_全品种停用():
+    """2026-09-01（codex P0）：只清绩效数字、留着污染参数继续出候选，
+    等于换个说法照做同一笔交易。重开需满足模块内列出的三项条件。"""
+    assert ws.ACTIVE == set()
+
+
+def test_propose的spot必填():
+    """原来允许回退 snap.spot，而 74% 的快照 spot 不是当天的价。"""
+    import inspect
+    sig = inspect.signature(ws.propose)
+    assert sig.parameters["spot"].default is inspect.Parameter.empty
+
+
+def test_未激活时的理由不得格式化None():
+    snap = FakeSnap([], 60.0)
+    v = ws.propose(snap, "silver", date(2026, 9, 1), date(2026, 9, 1), spot=60.0)
+    assert not v.ok and "停用" in v.reason
 
 
 # ── PARAMS：作废标记不得被悄悄填回 ──────────────────────────────────

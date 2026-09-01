@@ -28,3 +28,33 @@ def test_每个注册条目的status都能算出来():
     """回归锁：任何条目字段为 None 都不得让 status 抛异常。"""
     for k, v in validation.REGISTRY.items():
         assert isinstance(v.status, str) and v.status, k
+
+
+# ── 渲染路径回归锁（codex 2026-09-01 P0）──────────────────────────────
+# 只测 status 不测渲染，是 402 测试全绿却让整份研报崩掉的原因。
+def test_无法检验条目不得让验证表崩溃():
+    from undertow.report import html
+    out = html.render_validation_table()
+    assert isinstance(out, str) and len(out) > 100
+    assert "未检验" in out
+
+
+def test_无法检验条目的badge不得报错():
+    from undertow.report import html
+    b = html._val_badge("gate_net_effect")
+    assert "读取失败" not in b, "badge 内部吞掉了异常"
+
+
+def test_每个条目的summary与badge都能渲染():
+    from undertow.report import html
+    for k, v in validation.REGISTRY.items():
+        assert isinstance(v.summary(), str), k
+        assert "读取失败" not in html._val_badge(k), k
+
+
+def test_rate为None时不得用0冒充():
+    """hits=None 返回 None，不能返回 0.0 —— 那会把「没测过」显示成「一次没中」。"""
+    v = validation.Validation(key="k", label="l", n=10, hits=None,
+                              p_value=None, baseline=None, note="")
+    assert v.rate is None
+    assert v.need_more is None

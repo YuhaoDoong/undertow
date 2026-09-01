@@ -36,6 +36,7 @@ from undertow.analyze.signals import generate_signals, net_bias
 from undertow.analyze.gamma import (analyze_gamma, structure_delta,
                                    support_ladder, ladder_bands, wall_agreement)
 from undertow.analyze.flow import _live as _flow_live
+from undertow.analyze.cost_gate import candidates as cost_candidates
 from undertow.analyze.flow import (analyze_flow, counter_signals, tradeable_info,
                                    flip_driver_summary, structural_moves,
                                    detect_strong_signal, probe_strong_signal)
@@ -55,6 +56,7 @@ from undertow.analyze.indicators import build as _build_labels
 from undertow.report.html import (render_report_html, render_index_html,
                           render_wall_layers_section,
                           render_tradeable_gate,
+                          render_cost_gate,
                           render_flow_section, render_macro_section, render_events_section,
                           render_tldr_section, render_strategy_section,
                           render_concentration_html, render_vol_regime_section,
@@ -1366,6 +1368,19 @@ def cmd_report(args) -> int:
             except Exception as e:
                 print(f"⚠️ {inst.key} 可交易闸门失败：{type(e).__name__}: {e}", file=sys.stderr)
 
+            # —— 成本闸门：预期波动 vs 回本门槛（见 cost_gate 模块注释）——
+            cost_html = ""
+            try:
+                if _ti and _ti.get("side") in ("看涨", "看跌"):
+                    _cands = cost_candidates(curr, curr.spot, _ti["side"], obs_day,
+                                             decidable=_ti["decidable"])
+                    cost_html = render_cost_gate(
+                        _cands, spot=curr.spot, side=_ti["side"],
+                        conv=(ga.to_commodity if ratio is not None else None),
+                        etf_symbol=inst.options.symbol)
+            except Exception as e:
+                print(f"⚠️ {inst.key} 成本闸门失败：{type(e).__name__}: {e}", file=sys.stderr)
+
             # —— 期权结构按到期分层（近端置顶）——
             # 主报告的墙来自 analyze_gamma 的跨到期加总，会造出实盘不存在的位置；
             # 这一节把它拆回近/中/远三层，并标出近端与中端是否指向同一位置。
@@ -1520,7 +1535,7 @@ def cmd_report(args) -> int:
                                       expiry_html2=_expiry_html,
                                       summary_html=_summary_html,
                                       layers_html=layers_html,
-                                      gate_html=gate_html)
+                                      gate_html=gate_html, cost_html=cost_html)
             # ⚠️ 文件名用【可交易日】（= 快照日期），不是生成日期。
             # 时点约定：快照 D 于 D 凌晨捕获，OI 是 D−1 收盘的 OCC 结算，
             # diff 描述交易日 D−1，**D 开盘才可执行** —— D 就是这份研报的身份。

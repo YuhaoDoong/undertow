@@ -1397,7 +1397,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        stretch_read=None, vintage_html: str = "",
                        indicators_html: str = "",
                        expiry_html2: str = "", summary_html: str = "",
-                       layers_html: str = "", gate_html: str = "") -> str:
+                       layers_html: str = "", gate_html: str = "",
+                       cost_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -1423,6 +1424,9 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         # 后面的「⚡极强看跌」会被当成可执行结论（用户 2026-08-31 的原话：
         # 「照着做交易的时候，你又说这其实是不准的」）。
         f'{gate_html}'
+        # 成本闸门紧跟可交易闸门：前者说今天有没有信息，后者说这信息值不值得下单。
+        # 用户 2026-08-31 那晚四笔方向基本都对却全亏，差的就是这张表。
+        f'{cost_html}'
         f'{strong_html}'
         # ── 板块顺序（用户 2026-08-29 指定，2026-08-31 在最前面插入分层）──────
         #   ① 期权结构按到期分层  ② 期权关键点位  ③ 综合研判  ④ 大白话  ⑤ 增仓按到期拆开
@@ -2190,3 +2194,67 @@ def render_tradeable_gate(ti, display_name: str = "") -> str:
             f'　·　倾向 {_esc(ti.get("side","—"))}</div>'
             f'<div class="sub" style="line-height:1.7">{_esc(ti.get("reason",""))}</div>'
             f'{eb}</div>')
+
+
+def render_cost_gate(rows, exp_move=None, spot: float = 0.0, side: str = "",
+                     conv=None, unit: str = "", etf_symbol: str = "") -> str:
+    """成本闸门：这天大概走多少 vs 这张要走多少才不亏，并排放。
+
+    起因（用户 2026-08-31 那晚四笔全亏，方向却基本都对）：
+      SLV 9/2 60P 需标的跌 1.9% 才回本，当天只跌 0.75% → 方向对也白做。
+      GLD 410C 持有 1 分钟割掉亏 11%，那 11% 就是点差本身。
+    只给方向不给这两个数，等于让人拿着对的判断去买错的合约。
+    """
+    if not rows:
+        return ""
+    em = exp_move or rows[0][1].exp_move
+    sym = _esc(etf_symbol)
+
+    def _p(v):
+        return f"{(conv(v) if conv else v):.1f}{_esc(unit)}"
+
+    trs = []
+    any_ok = False
+    for be, v in rows:
+        any_ok = any_ok or v.ok
+        c = "#1a7f37" if v.ok else "#bc4c00"
+        icon = "✅" if v.ok else "⛔"
+        theta_warn = (' <span style="color:#bc4c00">拿不过夜</span>'
+                      if be.theta_share > 0.25 else "")
+        trs.append(
+            f'<tr><td>{_p(be.strike)}{be.kind}'
+            + (f' <span style="color:#0969da">{sym}{be.strike:g}</span>' if conv else "")
+            + f'</td><td>{be.expiry:%m/%d}<span class="sub">（{be.dte}天）</span></td>'
+            f'<td class="r">${be.cost:,.0f}</td>'
+            f'<td class="r">{be.spread_pct:.0%}</td>'
+            f'<td class="r">{be.delta:+.2f}</td>'
+            f'<td class="r">{be.theta_share:.0%}{theta_warn}</td>'
+            f'<td class="r" style="color:{c};font-weight:600">{v.need_pct:.2f}%</td>'
+            f'<td style="color:{c}">{icon}</td></tr>')
+
+    head_c = "#1a7f37" if any_ok else "#bc4c00"
+    head_t = ("这天的典型幅度够覆盖成本" if any_ok
+              else "这天的典型幅度覆盖不了任何一张的成本")
+    weak = ('<span style="color:#bc4c00">（样本仅 %d 笔，只作量级参考）</span>' % em.n
+            if em.weak else f'（n={em.n}）')
+    return (
+        '<div class="card"><h2>成本闸门 · 这天能走多少 vs 这张要走多少</h2>'
+        f'<div style="font-size:15px;margin:6px 0;color:{head_c}"><b>{_esc(head_t)}</b></div>'
+        f'<div class="sub" style="line-height:1.8">'
+        f'<b>预期波动 {em.pct:.2f}%</b>　—— 可判定率落在 {_esc(em.band)} 档 {weak}，'
+        f'该档 {em.p_over_1pct:.0%} 的日子波动超过 1%。'
+        f'<br>可判定率预告的是<b>幅度</b>不是方向：实测 r=+0.243（对波动）'
+        f' vs r=+0.053（对命中率）—— 高低两组命中率一样（65% vs 66%），'
+        f'波动差一倍（0.55% vs 1.09%）。</div>'
+        '<table style="margin-top:10px"><tr><th>合约</th><th>到期</th><th>一张</th>'
+        '<th>点差</th><th>Δ</th><th>θ/权利金</th><th>回本需走</th><th></th></tr>'
+        + "".join(trs) + '</table>'
+        '<div class="sub" style="margin-top:8px;line-height:1.7">'
+        '回本需走 =（点差 + |θ|×持有天数 + 手续费/100）÷|Δ|÷现价，即标的要往'
+        f'{_esc(side) or "顺向"}走多少，这笔才刚好不亏。用快照盘口（盘前已知），'
+        '实际下单时点差可能不同。<br>'
+        '<b>θ/权利金</b> 是每天损耗掉的比例——超过 25% 的基本拿不过夜，'
+        '近月便宜的代价全在这一栏。<br>'
+        '⚠️ 预期波动表是在同一批数据上的第二次找模式（先测倍数闸门、再测可判定率），'
+        '多重比较风险仍在，需样本外验证。方向对了也可能因为幅度不够而亏，'
+        '这张表只解决幅度，不解决方向。</div></div>')

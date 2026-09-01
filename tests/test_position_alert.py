@@ -710,3 +710,44 @@ def test_tradeable_gate_and_evidence():
     assert t3["tradeable"] is True and t3["decidable"] < 0.30
     assert "可判定率" in t3["reason"], "可判定率过低必须在结论里出声"
     print("PASS test_tradeable_gate_and_evidence")
+
+
+def test_cost_gate_rejects_the_actual_losing_trade():
+    """成本闸门必须否掉用户 2026-08-31 真实亏损的那笔。
+
+    那晚四笔方向基本都对（SLV 60 破到 59.66、GLD 410C 两小时后涨到 0.89），
+    却全亏。SLV 9/2 到期 60P 买 0.75 卖 0.73：Δ≈-0.40、θ≈-0.16/天、点差 11%，
+    需标的跌 >1% 才回本，而当天只跌 0.75%。
+    闸门若放行这笔，就等于没解决问题 —— 这是本测试存在的唯一理由。
+    """
+    from datetime import date as _d
+    from undertow.analyze.cost_gate import (breakeven, judge, expected_move,
+                                            EXPECTED_MOVE_EVIDENCE)
+    be = breakeven("SLV260902P60000", 60.40, 60.0, _d(2026, 9, 2), "P",
+                   _d(2026, 8, 31), 0.71, 0.79, 0.37)
+    assert be is not None and be.delta < 0
+    v = judge(be, 60.40, 0.20, held_days=1)      # 当天可判定率实测 20%
+    assert not v.ok, "必须否掉这笔——方向对但幅度不够是它亏损的真正原因"
+    assert v.need_pct > v.exp_move.pct
+    assert "覆盖不了" in v.text
+
+    # 高可判定率 + 远月低 theta 的组合必须放行，否则闸门只会一味说不
+    be2 = breakeven("GLD260930C407000", 407.23, 407.0, _d(2026, 9, 30), "C",
+                    _d(2026, 8, 28), 12.80, 13.00, 0.22)
+    assert judge(be2, 407.23, 0.84, held_days=1).ok
+
+    # 预期波动表：高可判定率档波动必须显著大于低档（这是该表的全部意义）
+    assert expected_move(0.85).pct > expected_move(0.30).pct * 2
+    # 命中率相关性必须远低于波动相关性——即「预告幅度，不预告方向」
+    assert EXPECTED_MOVE_EVIDENCE["r_hit"] < EXPECTED_MOVE_EVIDENCE["r_move"] / 3
+
+    src = (Path(__file__).resolve().parents[1] / "undertow" / "report"
+           / "html.py").read_text("utf-8")
+    i_gate = src.index("f'{gate_html}'")
+    i_cost = src.index("f'{cost_html}'")
+    i_strong = src.index("f'{strong_html}'")
+    assert i_gate < i_cost < i_strong, "成本闸门须在可交易闸门之后、强信号之前"
+    fn = src[src.index("def render_cost_gate"):]
+    assert "多重比较" in fn, "多重比较风险必须写在报告里，不得只留在代码注释"
+    assert "不解决方向" in fn, "必须说明这张表只解决幅度"
+    print("PASS test_cost_gate_rejects_the_actual_losing_trade")

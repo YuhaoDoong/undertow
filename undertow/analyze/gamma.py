@@ -22,6 +22,14 @@ from undertow.analyze import blackscholes as bs
 CONTRACT_MULTIPLIER = 100  # 美式 ETF 期权每张 100 股
 DEFAULT_HORIZON_DAYS = 45   # 主分析聚焦近月（近月主导 gamma）
 DISPLAY_BAND = 0.10         # 展示 ±10% 现价附近的行权价
+# ⚠️ 2026-09-01 codex P0-5：band 方式有系统性缺陷 —— 带内【总能】找到一个最大值，
+#    于是较小的局部档位也会被叫作"墙"。实测 SLV 现价 58.5 时 band=5% 选出
+#    55(102,820)，而真正的 50 有 168,526 张、在 ±15% 之外够不着。
+#    正确拆分见本文件末尾的 structural_walls()（全范围 + 近端到期占比门槛）
+#    与 local_pin()（近价带内最大，明确不是墙）。
+#    ⬜ 待迁移：analyze_gamma / persistent_walls / layered_walls 仍用 band 方式，
+#       它们的输出进入方向投票、关键位表与策略目标。迁移会改变全报告口径，
+#       需先确认新口径在历史上的表现，故分两步走。
 WALL_BAND = 0.15            # OI 墙只在现价 ±15% 内找（远 OTM 的累积 OI 非吸附点）
 
 
@@ -620,3 +628,94 @@ def ladder_bands(snap, today: date, spot: float, *, max_dte: int = 14) -> dict:
         v = sum(x for k, x in agg.items() if lo <= (1 - k / spot) * 100 < hi)
         bands.append({"label": lab, "oi": v, "share": v / total})
     return {"total": total, "bands": bands, "max_dte": max_dte}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 结构主墙 vs 局部 pin —— codex 2026-09-01 P0-5
+# ═══════════════════════════════════════════════════════════════════════════
+# 【问题】本模块此前所有"墙"都是「在现价 ±band 内取 OI 最大」。band 内【总能】
+# 找到一个最大值，那不是墙，只是范围内碰巧最大的行权价。实测 2026-09-01：
+#     SLV 现价 58.5，band=5% 选出 55(102,820)，而真正的 50 有 168,526 张
+#     —— 差 1.6 倍，且 50 连 ±15% 都在范围外。
+# 【但不限范围也错】：全范围最大会选中 SLV call 100（距现价 +71%）这类
+#     LEAPS/彩票堆积，那里一周到期的报价是 0.00。
+#
+# 【判据不是距离，是近端到期占比】（2026-09-01 实测）：
+#     GLD put 330  ≤30天占 2%、136天单一到期占 57%  → 长期对冲堆积
+#     GLD put 400  ≤30天占 28%、到期分布均匀        → 真正的多到期承接区
+#     SLV put  30  >180天占 62%                     → 尾部保险
+# 长期堆积的 OI 集中在个别远月；真承接区在各到期上都有分布。
+#
+# 【两个概念必须分开命名，不得混用】：
+#     structural_walls() 全范围 + 近端占比门槛 → 客观描述 OI 堆在哪
+#     local_pin()        近价带内最大          → 短期钉住效应，【不是】墙
+# 策略层要"卖在墙上"时用前者，但还需自行检查权利金是否够（墙可能很远）。
+
+NEAR_DTE = 30              # "近端"的定义
+NEAR_SHARE_MIN = 0.15      # 近端 OI 占比门槛：低于此视为长期堆积，不算结构墙
+STRUCT_MIN_SHARE = 0.03    # 该档位至少要占同侧总 OI 的 3%，滤掉零碎
+
+
+def structural_walls(snap, today: date, spot: float, kind: str, *,
+                     top_n: int = 3, near_dte: int = NEAR_DTE,
+                     near_share_min: float = NEAR_SHARE_MIN,
+                     min_share: float = STRUCT_MIN_SHARE) -> list[dict]:
+    """结构主墙：全行权价范围内的 OI 堆积，滤掉长期对冲/尾部保险堆积。
+
+    只看虚值一侧（put 取 ≤spot，call 取 ≥spot）—— 实值侧的 OI 不构成支撑阻力。
+    返回按 OI 降序的前 top_n，每项含 strike/oi/share/near_share/dist_pct。
+    **不保证权利金可观**：结构墙可能距现价很远（SLV 50 距 −14.5%），
+    策略层必须自己检查报价，不得假设"墙上一定收得到钱"。
+    """
+    agg: dict[float, int] = {}
+    near: dict[float, int] = {}
+    for c in snap.contracts:
+        if c.kind != kind or not c.open_interest:
+            continue
+        if kind == "P" and c.strike > spot:
+            continue
+        if kind == "C" and c.strike < spot:
+            continue
+        agg[c.strike] = agg.get(c.strike, 0) + c.open_interest
+        if (c.expiry - today).days <= near_dte:
+            near[c.strike] = near.get(c.strike, 0) + c.open_interest
+    total = sum(agg.values())
+    if total <= 0:
+        return []
+    out = []
+    for k, v in agg.items():
+        share = v / total
+        ns = near.get(k, 0) / v if v else 0.0
+        if share < min_share or ns < near_share_min:
+            continue
+        out.append({"strike": k, "oi": v, "share": share, "near_share": ns,
+                    "dist_pct": (k / spot - 1) * 100 if spot else 0.0})
+    out.sort(key=lambda x: -x["oi"])
+    return out[:top_n]
+
+
+def local_pin(snap, today: date, spot: float, kind: str, *,
+              band: float = 0.05, max_dte: int = NEAR_DTE) -> dict | None:
+    """局部 pin：现价 ±band 内 OI 最大的行权价。**这不是墙。**
+
+    band 内总能找到一个最大值，所以它永远有输出 —— 这正是它不能当墙用的原因。
+    它描述的是「短期内价格附近哪一档挂单最多」，可用于判断当日钉住倾向，
+    不可用于判断支撑强度，更不能反转 structural_walls() 的结论。
+    """
+    agg: dict[float, int] = {}
+    for c in snap.contracts:
+        if c.kind != kind or not c.open_interest:
+            continue
+        if (c.expiry - today).days > max_dte:
+            continue
+        if kind == "P" and not (spot * (1 - band) <= c.strike <= spot):
+            continue
+        if kind == "C" and not (spot <= c.strike <= spot * (1 + band)):
+            continue
+        agg[c.strike] = agg.get(c.strike, 0) + c.open_interest
+    if not agg:
+        return None
+    k = max(agg, key=agg.get)
+    tot = sum(agg.values())
+    return {"strike": k, "oi": agg[k], "share": agg[k] / tot if tot else 0.0,
+            "dist_pct": (k / spot - 1) * 100 if spot else 0.0, "band": band}

@@ -68,7 +68,16 @@ def test_walls_and_put_call_ratio():
 
 
 def test_far_otm_oi_not_picked_as_wall():
-    # 远 OTM(150) 有巨量 call OI，但不应被当作阻力墙（超出 ±15% 带）
+    """远 OTM(150) 有巨量 call OI，不被当作阻力墙。
+
+    ⚠️ 2026-09-01（codex P0-5）：本测试锁住的是 analyze_gamma 的 **band 方式**。
+    它的意图（远 OTM 不算墙）是对的，但实现有系统性缺陷：band 内【总能】
+    找到一个最大值，于是较小的局部档位也会被叫作"墙"。实测 SLV 现价 58.5 时
+    band=5% 选出 55(102,820)，而真正的 50 有 168,526 张且在 ±15% 之外。
+    正确的拆分见 gamma.structural_walls()（全范围 + 近端到期占比门槛）
+    与 gamma.local_pin()（近价带内最大，明确【不是】墙）。
+    analyze_gamma 尚未迁移到新口径，故本断言保持不变。
+    """
     snap = _snap(100.0, [(150.0, "C", 99999), (108.0, "C", 3000), (95.0, "P", 2000)])
     ga = analyze_gamma(snap, multiplier=None, proxy_quality="good")
     assert ga.call_wall == 108.0

@@ -72,3 +72,58 @@
 To https://github.com/YuhaoDoong/undertow.git
    841ad89..a5b018c  main -> main
 [完成] 已提交并推送
+==== 2026-09-01 18:45 +08 | ET 2026-09-01 06:45 ====
+[待补] 尚缺当日快照： SLV USO
+[跳过] dxy 未配置期权数据源
+已落盘 2026-09-01 期权链快照（原始全字段，纳入 git 永久留存）:
+  gold    GLD: 8,032 合约（5,964 有OI）  → 已累计 50 天  ·  /Users/yhdong/Trading/data/snapshots/options/GLD/2026-09-01.json.gz
+  silver  SLV: 5,176 合约（4,176 有OI）  → 已累计 47 天  ·  /Users/yhdong/Trading/data/snapshots/options/SLV/2026-09-01.json.gz
+  wti     USO: 4,464 合约（3,476 有OI）  → 已累计 50 天  ·  /Users/yhdong/Trading/data/snapshots/options/USO/2026-09-01.json.gz
+  qqq     QQQ: 11,580 合约（8,746 有OI）  → 已累计 26 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-01.json.gz
+  tqqq    TQQQ: 1,680 合约（1,460 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/TQQQ/2026-09-01.json.gz
+  tlt     TLT: 2,546 合约（1,898 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/TLT/2026-09-01.json.gz
+  spy     SPY: 13,574 合约（10,219 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-01.json.gz
+  iwm     IWM: 5,484 合约（3,700 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/IWM/2026-09-01.json.gz
+[状态] snapshot overall=complete saved=8 failed=0 rc=0
+  📐 金银比 67.19　墙隐含 67.9~70.0（区间外 -1.0%）
+已生成综合研判报告 · 可交易日 2026-09-01:
+  gold    近偏多(弱)    中偏多       (可信度高)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/gold_2026-09-01.html
+  silver  近偏空(弱)    中偏多       (可信度低)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/silver_2026-09-01.html
+  wti     近偏空(弱)    中偏多(弱)    (可信度低)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/wti_2026-09-01.html
+  qqq     近偏空(弱)    中偏多       (可信度中)  ·极强看跌(低置信)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/qqq_2026-09-01.html
+  tqqq    近偏空(弱)    中偏多       (可信度中)  ·强看跌(低置信)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-01.html
+  tlt     近偏空(弱)    中偏多       (可信度高)  · 不做空 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/tlt_2026-09-01.html
+  spy     近中性       中偏多       (可信度中)  · 不做空 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/spy_2026-09-01.html
+  iwm     近中性       中偏多       (可信度中)  ⚡极强看跌  · 信号与趋势冲突 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/iwm_2026-09-01.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-01.html
+
+## ⚠️ 持仓与信号方向冲突
+
+- ⚠️ 你持有 TQQQ 看涨，而 TQQQ 出现 ⚡强看跌信号（3.2×）
+    · 看跌加权增仓 19,933 ≫ 看涨 6,273（3.2×，压倒性）——即 call 卖压＋put 买保护 全面压过 call 买盘＋put 卖方支撑
+    · 主翼 20~45Δ 卖压/买保护权重 20.6 ≫ 反向 3.6（5.7×）
+- ⚠️ 你持有 TQQQ 看涨，而 QQQ（与你持仓的 TQQQ 相关约 0.99·粗估） 出现 ⚡极强看跌信号（15.5×）
+    · 看跌加权增仓 157,600 ≫ 看涨 10,176（15.5×，压倒性）——即 call 卖压＋put 买保护 全面压过 call 买盘＋put 卖方支撑
+    · 主翼 20~45Δ 卖压/买保护权重 34.0 ≫ 反向 7.5（4.5×）
+
+> 强信号阈值未经校准，这不是平仓指令；但**方向相反时你至少该知道**。
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-01.html'）
+[状态] report overall=complete rc=0
+[强信号] iwm ⚡极强看跌�- ⚠️ 你持有 TQQQ 看涨，而 TQQQ 出现 ⚡强看跌信号（3.2×）�- ⚠️ 你持有 TQQQ 看涨，而 QQQ（与你持仓的 TQQQ 相关约 0.99·粗估） 出现 ⚡极强看跌信号（15.5×）
+[main 8263ba9] 每日自动更新 2026-09-01：期权链快照+四品种报告（launchd 定时任务）
+ 38 files changed, 598 insertions(+), 157 deletions(-)
+ create mode 100644 data/reports/archive/2026-09/gold_2026-09-01_r1800.html
+ create mode 100644 data/reports/archive/2026-09/index_2026-09-01_r1801.html
+ create mode 100644 data/reports/archive/2026-09/iwm_2026-09-01_r1801.html
+ create mode 100644 data/reports/archive/2026-09/qqq_2026-09-01_r1800.html
+ create mode 100644 data/reports/archive/2026-09/spy_2026-09-01_r1801.html
+ create mode 100644 data/reports/archive/2026-09/tlt_2026-09-01_r1801.html
+ create mode 100644 data/reports/archive/2026-09/tqqq_2026-09-01_r1801.html
+ create mode 100644 data/reports/silver_2026-09-01.html
+ create mode 100644 data/reports/wti_2026-09-01.html
+ create mode 100644 data/snapshots/options/SLV/2026-09-01.json.gz
+ create mode 100644 data/snapshots/options/USO/2026-09-01.json.gz
+To https://github.com/YuhaoDoong/undertow.git
+   a5b018c..8263ba9  main -> main
+[完成] 已提交并推送

@@ -128,6 +128,38 @@ class SnapshotStore:
             return None
         return rec.get("payload")
 
+    def captured_at(self, kind: str, symbol: str, on_date: date) -> float | None:
+        """这份快照实际是什么时候抓的（unix 秒）；缺失或损坏返回 None。
+
+        ⚠️ 2026-09-01 codex P0：`captured_at` 从 save() 起就一直写在记录里，
+        但 load() 只吐 payload，于是全部回测与台账都改用【文件名日期】
+        当"D 开盘前已知"。实测 193 份快照里 21 份不是盘前抓的
+        （18 份收盘后、3 份盘中），那部分是前视。
+        配合 undertow.core.clock.decision_session() 使用。
+        """
+        path = self._path(kind, symbol, on_date)
+        if not path.exists():
+            return None
+        try:
+            with gzip.open(path, "rb") as f:
+                rec = json.loads(f.read().decode("utf-8"))
+        except (OSError, json.JSONDecodeError, EOFError, UnicodeDecodeError):
+            return None          # 损坏的隔离交给 load() 处理，这里不重复副作用
+        if not isinstance(rec, dict):
+            return None
+        v = rec.get("captured_at")
+        return float(v) if isinstance(v, (int, float)) else None
+
+    def decision_session(self, kind: str, symbol: str, on_date: date,
+                         trading_days: list[date]) -> date | None:
+        """这份快照最早能用于交易哪一天；盘中抓取或无 captured_at 返回 None。
+
+        返回 None 时【不得】退回文件名日期 —— 那正是要消除的前视。
+        """
+        from undertow.core.clock import decision_session as _ds
+        ca = self.captured_at(kind, symbol, on_date)
+        return None if ca is None else _ds(ca, trading_days)
+
     def latest(self, kind: str, symbol: str) -> tuple[date, Any] | None:
         ds = self.dates(kind, symbol)
         if not ds:

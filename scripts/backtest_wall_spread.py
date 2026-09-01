@@ -4,8 +4,11 @@
 散落脚本。那些脚本各自定义 spot / 破墙 / 平仓口径，互相矛盾。
 
 ═══ 口径（改这里等于推翻结论，改前先读 wall_spread.py 文件头）═══
-1. 决策价 = C[D−1]（快照 D 在 D 开盘前可读，D−1 收盘是决策时已知的最后价格）
+1. 可交易日由 captured_at 决定，【不是文件名日期】（codex 2026-09-01 P0-1）：
+     盘前抓 → 当天；盘后/周末抓 → 下一交易日；盘中抓 → 剔除（无法模拟成交）
+   决策价 = C[可交易日的前一交易日] 收盘
    ⛔ 禁用 snapshot.spot —— 46 个快照里 34 个的 spot 不是文件名当天的价
+   ⛔ 禁用文件名日期当可交易日 —— 193 份里 21 份不是盘前抓的
 2. 权利金 = 快照 D 里的 bid/ask，按组合单中价让 25% 点差
 3. 破墙 = 到期日收盘越过卖腿（不是盘中触及）
 4. 换墙【不】平仓，只影响新开仓选哪个行权价
@@ -33,23 +36,42 @@ INST = {"GLD": "gold", "SLV": "silver", "QQQ": "qqq", "TQQQ": "tqqq",
 
 
 def load(sym):
+    """返回 {可交易日: (快照, 文件名日)}、收盘价表、交易日列表、剔除计数。
+
+    ⚠️ 不再裸吞异常（codex P1）：每一个被丢弃的快照都要计数并可打印，
+    否则「选择性丢样本」会伪装成「样本本来就这么多」。
+    """
     closes = {str(b["ts"])[:10]: b["close"]
               for b in fetch_bars(f"{sym}.US", period="day", count=400)}
+    dates = sorted(closes)
+    tdays = [datetime.strptime(x, "%Y-%m-%d").date() for x in dates]
     st = SnapshotStore()
-    snaps = {}
+    snaps, drop = {}, defaultdict(int)
     for f in sorted(os.listdir(f"data/snapshots/options/{sym}")):
         if not f.endswith(".json.gz"):
             continue
         try:
-            d = datetime.strptime(f[:10], "%Y-%m-%d").date()
+            fd = datetime.strptime(f[:10], "%Y-%m-%d").date()
         except ValueError:
+            drop["文件名非日期"] += 1
+            continue
+        sess = st.decision_session("options", sym, fd, tdays)
+        if sess is None:
+            drop["盘中抓取或无captured_at"] += 1
+            continue
+        if sess in snaps:
+            # 两份快照映射到同一可交易日（如周末抓 + 周一盘前抓）：留盘前那份
+            drop["同一可交易日重复"] += 1
+            continue
+        payload = st.load("options", sym, fd)
+        if payload is None:
+            drop["快照损坏或缺失"] += 1
             continue
         try:
-            snaps[d] = snapshot_from_payload(st.load("options", sym, d),
-                                             INST[sym], sym)
-        except Exception:
-            pass
-    return snaps, closes, sorted(closes)
+            snaps[sess] = (snapshot_from_payload(payload, INST[sym], sym), fd)
+        except Exception as e:
+            drop[f"解析失败({type(e).__name__})"] += 1
+    return snaps, closes, dates, drop
 
 
 def decision_price(d, closes, dates):
@@ -87,7 +109,7 @@ def run(snaps, closes, dates, kind, *, band, width_pct, dte, cap=9999,
         min_credit_mult=ws.MIN_CREDIT_MULT):
     out, skip = [], defaultdict(int)
     for d in sorted(snaps):
-        snap = snaps[d]
+        snap, file_day = snaps[d]
         spot = decision_price(d, closes, dates)
         if spot is None:
             skip["无D-1收盘"] += 1
@@ -172,10 +194,12 @@ def main():
     ap.add_argument("--detail", action="store_true")
     a = ap.parse_args()
     for sym in a.symbol.split(","):
-        snaps, closes, dates = load(sym)
+        snaps, closes, dates, drop = load(sym)
         ds = sorted(snaps)
         print(f"\n{'='*118}\n{sym}　{ds[0]}~{ds[-1]}　{len(ds)} 个快照"
-              f"　决策价=C[D−1]（禁用 snapshot.spot）\n{'='*118}")
+              f"　可交易日按 captured_at 推导，决策价=C[前一交易日]\n{'='*118}")
+        if drop:
+            print(f"  剔除：{dict(drop)}")
         for kind, kl in (("P", "卖put"), ("C", "卖call")):
             for bl, band in (("band5%", 0.05), ("真墙", None)):
                 for wp in (0.02, 0.03, 0.05):

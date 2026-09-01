@@ -1286,6 +1286,15 @@ def render_structure_section(sr, display_name: str = "") -> str:
         '</div>')
 
 
+def _val_badge(key: str) -> str:
+    """取验证状态串；模块缺失时明说，绝不静默返回空串。"""
+    try:
+        from undertow.analyze.validation import badge
+        return badge(key)
+    except Exception as e:
+        return f"⚠️ 验证状态读取失败（{type(e).__name__}）——不得作为交易依据"
+
+
 def render_strong_signal_banner(ss, display_name: str = "", stale_note: str = "") -> str:
     """近端资金流强信号置顶红/绿告警（一边倒时才由 detect_strong_signal 产出）。
 
@@ -1351,10 +1360,58 @@ def render_strong_signal_banner(ss, display_name: str = "", stale_note: str = ""
         f'{" · 波动率面追认" if ss.vol_confirms else ""}</div>'
         f'<ul style="margin:6px 0 0;padding-left:20px;font-size:13.5px">{reasons}</ul>'
         f'{diverge}'
+        # 验证状态必须贴在结论旁边 —— 这个横幅是全报告最容易被当成
+        # 可执行指令的地方（用户 2026-08-31：「照着做交易的时候，你又说这其实是不准的」）
+        f'<div style="margin-top:8px;padding:7px 10px;background:#ffffffaa;'
+        f'border-radius:6px;font-size:12.5px">{_esc(_val_badge("strong_signal_dir"))}</div>'
         f'<div class="sub" style="margin-top:8px;font-size:12px">'
         f'口径：近月主翼(20~45Δ)买卖方加权。⚠️ 它与加权增仓用同一套压力数（实测方向 100% 共线），**不是第二份独立证据**；方向裁决弃权时本告警不会出现 · 波段级情景预警，非交易指令</div>'
         f'</div>'
     )
+
+
+def render_validation_table() -> str:
+    """验证状态总览：哪些能信、哪些不能、还差多少样本才能定论。
+
+    起因（用户 2026-08-31）：「不能每次出来一个，我想要照着做交易的时候，
+    你又说这其实是不准的。现在的瓶颈到底是什么？」
+    在此之前，八个投票因子里只有一个有完整回测记录（样本量+p 值），
+    其余权重是拍的，而报告却用「按回测校准的可信度加权」的说法呈现。
+    这张表把每条判断的实际成绩摊开，包括不及格的。
+    """
+    from undertow.analyze.validation import REGISTRY
+    rows = []
+    for v in REGISTRY.values():
+        if v.kind == "corr":
+            icon = "✅" if v.significant else "🟡"
+            score = f"r={v.r:+.3f}"
+            extra = f"对照 r={v.r_control:+.3f}" if v.r_control is not None else ""
+        else:
+            icon = {"已验证": "✅", "样本不足": "🟡", "未验证": "⚠️"}[v.status]
+            score = f"{v.hits}/{v.n} = {v.rate:.0%}"
+            more = v.need_more
+            extra = ("已达显著" if v.significant else
+                     (f"还差 {more} 个样本" if more else "命中率贴近基准，难以证实"))
+        color = "#1a7f37" if v.significant else "#bc4c00"
+        rows.append(
+            f'<tr><td>{icon} {_esc(v.label)}</td>'
+            f'<td class="r">{score}</td>'
+            f'<td class="r">{v.p_value:.3f}</td>'
+            f'<td style="color:{color}">{_esc(extra)}</td>'
+            f'<td class="sub">{_esc(v.caveat)}</td></tr>')
+    return (
+        '<div class="card"><h2>验证状态总览 · 哪些能信，哪些不能</h2>'
+        '<div class="sub">每条会影响交易决策的判断，都要在这里登记实测成绩。'
+        '未登记的一律不得作为依据。p ≥ 0.05 时给出「还差多少样本」，'
+        '把「什么时候能信」变成具体数字。</div>'
+        '<table style="margin-top:8px"><tr><th>判断</th><th>实测</th><th>p 值</th>'
+        '<th>状态</th><th>已知问题</th></tr>' + "".join(rows) + '</table>'
+        '<div class="sub" style="margin-top:8px;line-height:1.7">'
+        '「还差多少样本」假设命中率原地不变，是<b>乐观下界</b>；'
+        '要在 80% 功效下确证需要更多（强信号那条：乐观 +11，功效口径 +21）。'
+        '<br>⚠️ 全部数字来自 2026-08-31 的回测，样本区间 2026-06-25 起。'
+        '「已验证」不等于可以照着下单——闸门那条虽 p=0.044，但测了 10 个阈值，'
+        'Bonferroni 校正后就不显著了。</div></div>')
 
 
 def render_vintage_banner(sess_date: str, trade_date: str, today: str) -> str:
@@ -1459,6 +1516,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'<div class="card"><h2>情景推演（规则化 if-then，非点位预言）</h2>{_scenarios_html(o)}</div>'
         f'{strategy_html}'
         f'{fib_html}'
+        + render_validation_table() +
         f'<div class="card">{_caveats_html(o)}</div>'
     )
     foot = ('<div class="foot">undertow · 规则化情景工具，非投资建议 · '

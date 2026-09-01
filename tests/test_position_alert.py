@@ -751,3 +751,50 @@ def test_cost_gate_rejects_the_actual_losing_trade():
     assert "多重比较" in fn, "多重比较风险必须写在报告里，不得只留在代码注释"
     assert "不解决方向" in fn, "必须说明这张表只解决幅度"
     print("PASS test_cost_gate_rejects_the_actual_losing_trade")
+
+
+def test_validation_registry_is_honest():
+    """验证登记簿必须诚实：不及格的也要在，且报告必须展示 n 与 p。
+
+    起因（用户 2026-08-31）：「不能每次出来一个，我想要照着做交易的时候，
+    你又说这其实是不准的。现在的瓶颈到底是什么？」
+    查下来：八个投票因子里只有一个有完整回测记录，其余权重是拍的，
+    而 outlook.py 开头却写着「按回测校准的可信度加权」。
+    """
+    from undertow.analyze.validation import (REGISTRY, badge,
+                                             samples_to_significance, binom_p)
+    # ① 不及格的必须留在表里，不许因为难看就删掉
+    wall = REGISTRY["wall_space_vote"]
+    assert wall.p_value >= 0.05 and wall.rate <= wall.baseline, \
+        "墙位空间因子的不及格结果必须保留"
+    assert "无预测力" in wall.caveat
+
+    # ② 每条都要有样本量；相关型不得被当成命中率显示
+    for k, v in REGISTRY.items():
+        assert v.n > 0, f"{k} 缺样本量"
+        assert v.kind in ("hit", "corr")
+        if v.kind == "corr":
+            assert v.r is not None, f"{k} 是相关型但没记 r"
+            assert "%" not in v.summary().split("·")[0] or "r=" in v.summary(), \
+                f"{k} 相关型不得显示成命中率"
+
+    # ③ 「还差多少样本」必须真的能算，且贴近基准时明确返回 None
+    assert samples_to_significance(17, 26) == 11
+    assert samples_to_significance(41, 83) is None, "命中率低于基准时不该给希望"
+    assert binom_p(17, 26) > 0.05 and binom_p(40, 62) < 0.05
+
+    # ④ 报告必须把验证状态贴在强信号横幅上——那是最容易被当指令的地方
+    src = (Path(__file__).resolve().parents[1] / "undertow" / "report"
+           / "html.py").read_text("utf-8")
+    banner = src[src.index("def render_strong_signal_banner"):
+                 src.index("def render_validation_table")]
+    assert '_val_badge("strong_signal_dir")' in banner, \
+        "强信号横幅必须显示该信号的实测成绩"
+    # ⑤ 读取失败时必须出声，不得静默返回空串
+    helper = src[src.index("def _val_badge"):src.index("def render_strong_signal_banner")]
+    assert "不得作为交易依据" in helper and "return \"\"" not in helper
+    # ⑥ 总览必须说明「已验证」不等于可以照着下单
+    tbl = src[src.index("def render_validation_table"):]
+    tbl = tbl[:tbl.index("\n\ndef ") if "\n\ndef " in tbl else len(tbl)]
+    assert "Bonferroni" in tbl and "不等于可以照着下单" in tbl
+    print("PASS test_validation_registry_is_honest")

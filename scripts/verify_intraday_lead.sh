@@ -24,8 +24,10 @@ ET_MIN=$(( 10#$(TZ=America/New_York date +%H) * 60 + 10#$(TZ=America/New_York da
 # 周六全天、周日 04:00 之后都不采
 (( ET_DOW == 6 )) && exit 0
 (( ET_DOW == 7 && ET_MIN > 240 )) && exit 0
-# 只在 ET 09:00~24:00 与 00:00~04:00 之间采
-(( ET_MIN > 240 && ET_MIN < 540 )) && exit 0
+# 全天采样（2026-08-31 修）。原先排除 ET 04:00~09:00，而那恰恰是 CBOE/OCC
+# 结算数据落地的时段 —— 要测"长桥最快什么时候拿到"，这段不采就永远测不出来。
+# 8/31 实测：长桥 ET 00:09 还是前一交易日的值，09:39 才追上；但 04:00~09:00
+# 之间没有采样点，所以"09:39 才更新"只是采样上界，真实时刻可能更早。
 
 "$PY" - <<'PYEOF' >> "data/logs/lb_timing_$(TZ=America/New_York date +%Y-%m-%d).log" 2>&1
 import sys, json

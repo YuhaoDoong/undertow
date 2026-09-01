@@ -1397,7 +1397,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        stretch_read=None, vintage_html: str = "",
                        indicators_html: str = "",
                        expiry_html2: str = "", summary_html: str = "",
-                       layers_html: str = "") -> str:
+                       layers_html: str = "", gate_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -1418,6 +1418,11 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         + f'<div class="sub">环境：{_esc(o.regime)}</div></div>'
     )
     body = (
+        # 可交易信息闸门排在最前 —— 它决定下面所有方向结论该给多少信任。
+        # 横盘日信号胜率 50%，有行情日 70~100%；不先说清今天属于哪种，
+        # 后面的「⚡极强看跌」会被当成可执行结论（用户 2026-08-31 的原话：
+        # 「照着做交易的时候，你又说这其实是不准的」）。
+        f'{gate_html}'
         f'{strong_html}'
         # ── 板块顺序（用户 2026-08-29 指定，2026-08-31 在最前面插入分层）──────
         #   ① 期权结构按到期分层  ② 期权关键点位  ③ 综合研判  ④ 大白话  ⑤ 增仓按到期拆开
@@ -2143,3 +2148,45 @@ def render_wall_layers_section(ga, ladder=None, bands=None, agree=None,
         + '<div class="sub" style="margin-top:10px">墙 = 该层该侧 OI 最大的行权价（现价 ±15% 内）。'
           'OI 是持仓不是方向，厚墙只说明"很多人在这有仓"，不等于价格一定停在那。</div></div>'
     )
+
+
+def render_tradeable_gate(ti, display_name: str = "") -> str:
+    """可交易信息闸门横幅 —— 放在报告最顶，决定下面所有方向结论该给多少信任。
+
+    起因（用户 2026-08-31）：「不能每次出来一个，我想要照着做交易的时候，
+    你又说这其实是不准的」。横盘日信号胜率 50%（掷硬币），有行情日 70~100%，
+    整体不显著是被横盘日稀释的。这个闸门用盘前已知的压力倍数把那类日子标出来。
+    """
+    if not ti:
+        return ""
+    ev = ti.get("evidence", {})
+    ok = ti.get("tradeable")
+    ratio = ti.get("ratio", 0.0)
+    rtxt = "∞" if ratio == float("inf") else f"{ratio:.1f}×"
+    if ok:
+        bg, bd, fg, icon, head = "#1a7f370d", "#1a7f37", "#1a7f37", "✅", "今天有可交易信息"
+    else:
+        bg, bd, fg, icon, head = "#bc4c000d", "#bc4c00", "#bc4c00", "⛔", "今天没有可交易信息"
+    # 证据行：样本量必须和结论同时出现，不得只写结论
+    eb = ""
+    if ev:
+        eb = (f'<div class="sub" style="margin-top:8px;line-height:1.7">'
+              f'闸门实测（{ev.get("n_pairs")} 品种-日 / {ev.get("n_clusters")} 个日期簇，'
+              f'快照盘前 → 当日开盘→收盘）：'
+              f'<b>放行组 {ev.get("passed_n")} 笔胜率 {ev.get("passed_hit",0):.0%}、'
+              f'顺向 {ev.get("passed_ret",0):+.2f}%/笔</b>；'
+              f'拦掉组 {ev.get("blocked_n")} 笔胜率 {ev.get("blocked_hit",0):.0%}、'
+              f'顺向 {ev.get("blocked_ret",0):+.2f}%。Fisher p={ev.get("fisher_p")}。'
+              f'<br><span style="color:#bc4c00">⚠️ 共测了 {ev.get("n_thresholds_tested")} 个阈值，'
+              f'Bonferroni 校正后 p={ev.get("bonferroni_p")} 不再显著 —— '
+              f'这个闸门尚待样本外验证，不是已确证的规则。</span>'
+              f'　拦掉组 41% 不代表可以反着做（n=29，与 50% 的差异本身不显著），'
+              f'正确读法是「这些日子没信息」。</div>')
+    return (f'<div class="card" style="background:{bg};border-left:4px solid {bd}">'
+            f'<h2 style="margin-top:0;color:{fg}">{icon} {_esc(head)}'
+            f'{" · " + _esc(display_name) if display_name else ""}</h2>'
+            f'<div style="font-size:15px;margin:6px 0"><b>多空压力比 {rtxt}</b>'
+            f'　·　可判定率 {ti.get("decidable",0):.0%}'
+            f'　·　倾向 {_esc(ti.get("side","—"))}</div>'
+            f'<div class="sub" style="line-height:1.7">{_esc(ti.get("reason",""))}</div>'
+            f'{eb}</div>')

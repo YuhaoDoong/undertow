@@ -2076,3 +2076,85 @@ def wall_structure(fa: "FlowAnalysis", wall: float | None,
             if (_wiv(below) is not None and _wiv(at) is not None) else None),
     }
 
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 可交易信息闸门（2026-08-31 加）
+#
+# 起因（用户 2026-08-31）：「不能每次出来一个，我想要照着做交易的时候，你又说
+# 这其实是不准的」。查下去发现整体统计不显著是被【横盘日】稀释的：
+#
+#   开火信号 26 笔，按当日实际波动分组
+#     横盘 <0.5%      6/12 =  50%   平均 +0.01%   ← 掷硬币
+#     小动 0.5~1.5%   7/10 =  70%   平均 +0.26%
+#     中动 1.5~3%      3/3 = 100%   平均 +1.85%
+#     大动 >3%         1/1 = 100%   平均 +3.16%
+#
+# 但"今天会不会有行情"事后才知道。所以要找一个【盘前已知】的代理。
+# 测了两族候选（91 品种-日 / 36 日期簇，快照 D 盘前 → 当日 open→close）：
+#
+#   闸门            拦掉  放行  拦掉组胜率  放行组胜率  放行顺向  Fisher p
+#   可判定率 <30%     16   75      38%       61%     +0.37%   0.099
+#   压力倍数 <1.5×    15   76      33%       62%     +0.40%   0.050
+#   压力倍数 <2×      29   62      41%       65%     +0.46%   0.044  ←
+#   压力倍数 <3×      47   44      51%       64%     +0.44%   0.290
+#
+# 选 2×：p 最小，且放行组胜率在 2× 之后稳定在 64~65%（不是单点异常，是拐点）；
+# 2 倍本身也有先验合理性，不是从数据里挖出来的怪阈值。
+#
+# ⚠️ 诚实标注：测了 10 个阈值，Bonferroni 校正后 0.044×10 = 0.44，不再显著。
+#    这个闸门需要样本外验证才算数 —— 报告里必须连同样本量一起显示，
+#    不得呈现为已确证的规则。
+# ⚠️ 拦掉组胜率 41%（低于 50%）不代表可以反着做：n=29，且 41% 与 50% 的差异
+#    本身不显著。正确读法是"这些日子没信息"，不是"这些日子反向有信息"。
+# ─────────────────────────────────────────────────────────────────────────────
+
+TRADEABLE_MIN_RATIO = 2.0     # 压力倍数低于此 → 不出方向结论
+TRADEABLE_MIN_DECIDABLE = 0.30  # 可判定率低于此 → 附加警告（p=0.099，未达显著）
+
+# 闸门的实测表现，报告直接引用，不得只写结论不写样本
+GATE_EVIDENCE = {
+    "n_pairs": 91, "n_clusters": 36,
+    "blocked_n": 29, "blocked_hit": 0.41, "blocked_ret": -0.12,
+    "passed_n": 62, "passed_hit": 0.65, "passed_ret": +0.46,
+    "fisher_p": 0.044, "bonferroni_p": 0.44, "n_thresholds_tested": 10,
+}
+
+
+def tradeable_info(fa) -> dict:
+    """今天这个品种的资金流里有没有可交易信息。
+
+    返回 dict：tradeable(bool) / ratio / decidable / reason / evidence
+    只看【盘前已知】的量（增仓结构），不含任何当日价格信息。
+    """
+    inc = [c for c in fa.changes if c.d_oi > 0]
+    dn = sum(c.d_oi for c in inc if c.bias == "bearish")
+    up = sum(c.d_oi for c in inc if c.bias == "bullish")
+    nu = sum(c.d_oi for c in inc if c.bias == "neutral")
+    total = dn + up + nu
+    if total <= 0:
+        return {"tradeable": False, "ratio": 0.0, "decidable": 0.0,
+                "reason": "无增仓，无从判断", "evidence": GATE_EVIDENCE}
+    decidable = (dn + up) / total
+    hi, lo = max(dn, up), min(dn, up)
+    ratio = hi / lo if lo > 0 else (float("inf") if hi > 0 else 0.0)
+    side = "看跌" if dn > up else ("看涨" if up > dn else "无倾向")
+    if ratio < TRADEABLE_MIN_RATIO:
+        return {"tradeable": False, "ratio": ratio, "decidable": decidable,
+                "side": side,
+                "reason": (f"多空压力比 {ratio:.1f}×，低于 {TRADEABLE_MIN_RATIO:g}× 闸门"
+                           f"（看跌 {dn:,} / 看涨 {up:,}）—— 这不是分歧信号，"
+                           f"是**没有信息**。实测这类日子胜率 "
+                           f"{GATE_EVIDENCE['blocked_hit']:.0%}、"
+                           f"顺向收益 {GATE_EVIDENCE['blocked_ret']:+.2f}%。"),
+                "evidence": GATE_EVIDENCE}
+    warn = ""
+    if decidable < TRADEABLE_MIN_DECIDABLE:
+        warn = (f"　⚠️ 但可判定率仅 {decidable:.0%}（{nu:,}/{total:,} 张判不出买卖方，"
+                f"多因 IV 齐落时买方腿被闸门掐掉）——倍数是在很小的分子分母上算的。")
+    return {"tradeable": True, "ratio": ratio, "decidable": decidable, "side": side,
+            "reason": (f"多空压力比 {ratio:.1f}×（看跌 {dn:,} / 看涨 {up:,}），"
+                       f"过 {TRADEABLE_MIN_RATIO:g}× 闸门。实测这类日子胜率 "
+                       f"{GATE_EVIDENCE['passed_hit']:.0%}、"
+                       f"顺向 {GATE_EVIDENCE['passed_ret']:+.2f}%/笔。{warn}"),
+            "evidence": GATE_EVIDENCE}

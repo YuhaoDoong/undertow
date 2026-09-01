@@ -652,3 +652,61 @@ def test_ratio_watch_records_only_never_judges():
         assert bad not in src, f"比值观察不得输出方向词：{bad}"
     assert "只记录，不判定" in src
     print("PASS test_ratio_watch_records_only_never_judges")
+
+
+def test_tradeable_gate_and_evidence():
+    """可交易信息闸门：必须在报告最顶，且结论与样本量必须同时出现。
+
+    起因（用户 2026-08-31）：「不能每次出来一个，我想要照着做交易的时候，
+    你又说这其实是不准的」。根因是横盘日把统计稀释了 ——
+      开火信号 26 笔：横盘 <0.5% 时 6/12=50%（掷硬币），
+      有行情时 70~100%。整体 17/26=65% p=0.169 不显著，是被横盘日拖的。
+    闸门用盘前已知的压力倍数把无信息日标出来（放行 65% vs 拦掉 41%，Fisher p=0.044）。
+
+    这个测试锁三件事：
+      ① 闸门排在 strong_html / 分层 / 关键点位【之前】——它决定后面该给多少信任
+      ② 报告里出现胜率数字的地方，必须同时出现样本量与多重比较警告
+      ③ 拦掉组 41% 不得被写成「可以反着做」
+    """
+    from undertow.analyze.flow import (tradeable_info, TRADEABLE_MIN_RATIO,
+                                       GATE_EVIDENCE)
+    src = (Path(__file__).resolve().parents[1] / "undertow" / "report"
+           / "html.py").read_text("utf-8")
+    i_gate = src.index("f'{gate_html}'")
+    i_strong = src.index("f'{strong_html}'")
+    i_layer = src.index("f'{layers_html}'")
+    assert i_gate < i_strong < i_layer, "闸门必须排在强信号横幅和分层卡之前"
+
+    # ② 证据与结论同源：渲染函数必须引用 evidence 里的样本量字段
+    fn = src[src.index("def render_tradeable_gate"):]
+    fn = fn[:fn.index("\n\ndef ") if "\n\ndef " in fn else len(fn)]
+    for k in ("n_pairs", "n_clusters", "passed_n", "blocked_n",
+              "fisher_p", "bonferroni_p", "n_thresholds_tested"):
+        assert k in fn, f"闸门横幅必须显示 {k}，不得只写结论不写样本"
+    # ③ 不得诱导反向操作
+    assert "反着做" in fn and "不代表" in fn, "必须显式否掉「拦掉组胜率低=可反向」的误读"
+
+    assert GATE_EVIDENCE["bonferroni_p"] > 0.05, \
+        "Bonferroni 校正后仍不显著，这一事实必须留在代码里，不得被静默删掉"
+
+    class _C:
+        def __init__(s, d, b):
+            s.d_oi, s.bias = d, b
+
+    class _F:
+        def __init__(s, ch):
+            s.changes = ch
+
+    # 1.1× —— 低于闸门，判为无信息
+    t = tradeable_info(_F([_C(1100, "bearish"), _C(1000, "bullish")]))
+    assert t["tradeable"] is False and t["ratio"] < TRADEABLE_MIN_RATIO
+    assert "没有信息" in t["reason"], "低倍数必须说成「没有信息」，不是「分歧」"
+    # 5.7× —— 放行
+    t2 = tradeable_info(_F([_C(1000, "bearish"), _C(5700, "bullish")]))
+    assert t2["tradeable"] is True and t2["side"] == "看涨"
+    # 可判定率低时必须附警告
+    t3 = tradeable_info(_F([_C(5000, "bearish"), _C(100, "bullish"),
+                            _C(50000, "neutral")]))
+    assert t3["tradeable"] is True and t3["decidable"] < 0.30
+    assert "可判定率" in t3["reason"], "可判定率过低必须在结论里出声"
+    print("PASS test_tradeable_gate_and_evidence")

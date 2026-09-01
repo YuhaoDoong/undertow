@@ -70,7 +70,7 @@
  {
   "instrument": "tlt",
   "date": "2026-09-01",
-  "spot": 82.96,
+  "spot": 81.74,
   "state": "仅结构",
   "struct_bias": "偏空(弱)",
   "band": "中性",

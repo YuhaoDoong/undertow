@@ -75,7 +75,8 @@
   "forward_1d": -3.5038,
   "forward_3d": -2.6256,
   "forward_5d": -4.876,
-  "forward_10d": -0.558
+  "forward_10d": -0.558,
+  "forward_2d": -2.0401
  },
  {
   "instrument": "wti",
@@ -154,7 +155,8 @@
   "forward_1d": 1.5169,
   "forward_3d": -2.0952,
   "forward_5d": -1.0713,
-  "forward_10d": 11.6705
+  "forward_10d": 11.6705,
+  "forward_2d": 0.9101
  },
  {
   "instrument": "wti",
@@ -233,7 +235,8 @@
   "forward_1d": -0.5977,
   "forward_3d": -2.895,
   "forward_5d": 1.7183,
-  "forward_10d": 12.2245
+  "forward_10d": 12.2245,
+  "forward_2d": -3.5581
  },
  {
   "instrument": "wti",
@@ -312,7 +315,8 @@
   "forward_1d": 0.6875,
   "forward_3d": 5.4711,
   "forward_5d": 5.5582,
-  "forward_10d": 15.5224
+  "forward_10d": 15.5224,
+  "forward_2d": 1.0458
  },
  {
   "instrument": "wti",
@@ -391,7 +395,8 @@
   "forward_1d": 4.3795,
   "forward_3d": 4.4657,
   "forward_5d": 12.8797,
-  "forward_10d": 20.2779
+  "forward_10d": 20.2779,
+  "forward_2d": 7.5323
  },
  {
   "instrument": "wti",
@@ -470,7 +475,8 @@
   "forward_1d": 3.0206,
   "forward_3d": -0.202,
   "forward_5d": 10.3287,
-  "forward_10d": 18.2978
+  "forward_10d": 18.2978,
+  "forward_2d": 0.0826
  },
  {
   "instrument": "wti",
@@ -549,7 +555,8 @@
   "forward_1d": -2.8518,
   "forward_3d": 4.9728,
   "forward_5d": 8.1722,
-  "forward_10d": 17.3514
+  "forward_10d": 17.3514,
+  "forward_2d": -3.1281
  },
  {
   "instrument": "wti",
@@ -628,7 +635,8 @@
   "forward_1d": -0.2844,
   "forward_3d": 10.2376,
   "forward_5d": 9.4395,
-  "forward_10d": 27.9607
+  "forward_10d": 27.9607,
+  "forward_2d": 8.0543
  },
  {
   "instrument": "wti",
@@ -707,7 +715,8 @@
   "forward_1d": 8.3625,
   "forward_3d": 11.6651,
   "forward_5d": 14.0386,
-  "forward_10d": 25.7498
+  "forward_10d": 25.7498,
+  "forward_2d": 10.552
  },
  {
   "instrument": "wti",
@@ -785,7 +794,8 @@
   "forward_1d": 8.3625,
   "forward_3d": 11.6651,
   "forward_5d": 14.0386,
-  "forward_10d": 25.7498
+  "forward_10d": 25.7498,
+  "forward_2d": 10.552
  },
  {
   "instrument": "wti",
@@ -863,7 +873,8 @@
   "forward_1d": 8.3625,
   "forward_3d": 11.6651,
   "forward_5d": 14.0386,
-  "forward_10d": 25.7498
+  "forward_10d": 25.7498,
+  "forward_2d": 10.552
  },
  {
   "instrument": "wti",
@@ -942,7 +953,8 @@
   "forward_1d": 2.0205,
   "forward_3d": 1.2819,
   "forward_5d": 6.554,
-  "forward_10d": 5.9173
+  "forward_10d": 5.9173,
+  "forward_2d": 3.0478
  },
  {
   "instrument": "wti",
@@ -1021,7 +1033,8 @@
   "forward_1d": 1.0069,
   "forward_3d": 3.1539,
   "forward_5d": 7.2231,
-  "forward_10d": 0.2663
+  "forward_10d": 0.2663,
+  "forward_2d": -0.724
  },
  {
   "instrument": "wti",
@@ -1100,7 +1113,8 @@
   "forward_1d": -1.7136,
   "forward_3d": 3.4025,
   "forward_5d": 8.4857,
-  "forward_10d": 6.5332
+  "forward_10d": 6.5332,
+  "forward_2d": 2.1256
  },
  {
   "instrument": "wti",
@@ -1179,7 +1193,8 @@
   "forward_1d": 3.9061,
   "forward_3d": 8.005,
   "forward_5d": 16.9237,
-  "forward_10d": 6.8567
+  "forward_10d": 6.8567,
+  "forward_2d": 5.2054
  },
  {
   "instrument": "wti",
@@ -1258,7 +1273,8 @@
   "forward_1d": 1.2504,
   "forward_3d": 6.2278,
   "forward_5d": 10.2694,
-  "forward_10d": 4.203
+  "forward_10d": 4.203,
+  "forward_2d": 3.9448
  },
  {
   "instrument": "wti",
@@ -1336,7 +1352,8 @@
   "forward_1d": 1.2504,
   "forward_3d": 6.2278,
   "forward_5d": 10.2694,
-  "forward_10d": 4.203
+  "forward_10d": 4.203,
+  "forward_2d": 3.9448
  },
  {
   "instrument": "wti",
@@ -1414,7 +1431,8 @@
   "forward_1d": 2.6611,
   "forward_3d": 11.1386,
   "forward_5d": -0.5976,
-  "forward_10d": -2.701
+  "forward_10d": -2.701,
+  "forward_2d": 4.9159
  },
  {
   "instrument": "wti",
@@ -1493,7 +1511,8 @@
   "forward_1d": 2.1964,
   "forward_3d": 6.0846,
   "forward_5d": -6.4882,
-  "forward_10d": -10.1436
+  "forward_10d": -10.1436,
+  "forward_2d": 8.2577
  },
  {
   "instrument": "wti",
@@ -1572,7 +1591,8 @@
   "forward_1d": -2.0073,
   "forward_3d": -13.621,
   "forward_5d": -8.6099,
-  "forward_10d": -14.7824
+  "forward_10d": -14.7824,
+  "forward_2d": -10.5599
  },
  {
   "instrument": "wti",
@@ -1650,7 +1670,8 @@
   "forward_1d": -8.7278,
   "forward_3d": -5.3991,
   "forward_5d": -5.5015,
-  "forward_10d": -13.6879
+  "forward_10d": -13.6879,
+  "forward_2d": -11.8516
  },
  {
   "instrument": "wti",
@@ -1728,7 +1749,8 @@
   "forward_1d": -8.7278,
   "forward_3d": -5.3991,
   "forward_5d": -5.5015,
-  "forward_10d": -13.6879
+  "forward_10d": -13.6879,
+  "forward_2d": -11.8516
  },
  {
   "instrument": "wti",
@@ -1806,7 +1828,8 @@
   "forward_1d": -8.7278,
   "forward_3d": -5.3991,
   "forward_5d": -5.5015,
-  "forward_10d": -13.6879
+  "forward_10d": -13.6879,
+  "forward_2d": -11.8516
  },
  {
   "instrument": "wti",
@@ -1885,7 +1908,8 @@
   "forward_1d": -3.4226,
   "forward_3d": 2.1802,
   "forward_5d": -2.1161,
-  "forward_10d": 0.9298
+  "forward_10d": 0.9298,
+  "forward_2d": 3.647
  },
  {
   "instrument": "wti",
@@ -1964,7 +1988,8 @@
   "forward_1d": 7.3201,
   "forward_3d": 7.2039,
   "forward_5d": -3.909,
-  "forward_10d": 5.9092
+  "forward_10d": 5.9092,
+  "forward_2d": 5.8013
  },
  {
   "instrument": "wti",
@@ -2043,7 +2068,8 @@
   "forward_1d": -1.4152,
   "forward_3d": -5.5603,
   "forward_5d": -11.1592,
-  "forward_10d": -1.5544
+  "forward_10d": -1.5544,
+  "forward_2d": -0.1083
  },
  {
   "instrument": "wti",
@@ -2122,7 +2148,8 @@
   "forward_1d": -5.4579,
   "forward_3d": -11.0629,
   "forward_5d": -8.663,
-  "forward_10d": -1.9896
+  "forward_10d": -1.9896,
+  "forward_2d": -10.3662
  },
  {
   "instrument": "wti",
@@ -2201,7 +2228,8 @@
   "forward_1d": -5.1916,
   "forward_3d": -2.6613,
   "forward_5d": 3.1117,
-  "forward_10d": 6.6901
+  "forward_10d": 6.6901,
+  "forward_2d": -5.9286
  },
  {
   "instrument": "wti",
@@ -2280,7 +2308,8 @@
   "forward_1d": -0.7773,
   "forward_3d": 1.9002,
   "forward_5d": 10.2177,
-  "forward_10d": 12.852
+  "forward_10d": 12.852,
+  "forward_2d": 2.6689
  },
  {
   "instrument": "wti",
@@ -2358,7 +2387,8 @@
   "forward_1d": 3.4732,
   "forward_3d": 9.61,
   "forward_5d": 10.8113,
-  "forward_10d": 13.9537
+  "forward_10d": 13.9537,
+  "forward_2d": 2.6985
  },
  {
   "instrument": "wti",
@@ -2437,7 +2467,8 @@
   "forward_1d": -0.7487,
   "forward_3d": 7.3526,
   "forward_5d": 5.1821,
-  "forward_10d": 13.1825
+  "forward_10d": 13.1825,
+  "forward_2d": 5.9308
  },
  {
   "instrument": "wti",
@@ -2516,7 +2547,8 @@
   "forward_1d": 6.73,
   "forward_3d": 7.8996,
   "forward_5d": 7.3063,
-  "forward_10d": 14.121
+  "forward_10d": 14.121,
+  "forward_2d": 8.1624
  },
  {
   "instrument": "wti",
@@ -2595,7 +2627,8 @@
   "forward_1d": 1.3421,
   "forward_3d": -0.7068,
   "forward_5d": 3.4705,
-  "forward_10d": 4.9952
+  "forward_10d": 4.9952,
+  "forward_2d": 1.0959
  },
  {
   "instrument": "wti",
@@ -2674,7 +2707,8 @@
   "forward_1d": -0.2429,
   "forward_3d": -0.7915,
   "forward_5d": 2.3901,
-  "forward_10d": -1.1441
+  "forward_10d": -1.1441,
+  "forward_2d": -2.0218
  },
  {
   "instrument": "wti",
@@ -2753,7 +2787,8 @@
   "forward_1d": -1.7832,
   "forward_3d": 2.3488,
   "forward_5d": 2.8358,
-  "forward_10d": 0.0393
+  "forward_10d": 0.0393,
+  "forward_2d": -0.5499
  },
  {
   "instrument": "wti",
@@ -2832,7 +2867,8 @@
   "forward_1d": 1.2557,
   "forward_3d": 4.5029,
   "forward_5d": 7.6062,
-  "forward_10d": null
+  "forward_10d": 3.983,
+  "forward_2d": 4.207
  },
  {
   "instrument": "wti",
@@ -2911,7 +2947,8 @@
   "forward_1d": 2.9147,
   "forward_3d": 3.4044,
   "forward_5d": 6.3507,
-  "forward_10d": null
+  "forward_10d": 2.4487,
+  "forward_2d": 3.207
  },
  {
   "instrument": "wti",
@@ -2989,7 +3026,8 @@
   "forward_1d": 2.9147,
   "forward_3d": 3.4044,
   "forward_5d": 6.3507,
-  "forward_10d": null
+  "forward_10d": 2.4487,
+  "forward_2d": 3.207
  },
  {
   "instrument": "wti",
@@ -3068,7 +3106,8 @@
   "forward_1d": 0.284,
   "forward_3d": 3.262,
   "forward_5d": 1.4736,
-  "forward_10d": null
+  "forward_10d": 2.6172,
+  "forward_2d": 0.4759
  },
  {
   "instrument": "wti",
@@ -3146,7 +3185,8 @@
   "forward_1d": 0.1913,
   "forward_3d": 3.0461,
   "forward_5d": -3.4517,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": 2.9695
  },
  {
   "instrument": "wti",
@@ -3225,7 +3265,8 @@
   "forward_1d": 2.7729,
   "forward_3d": 0.993,
   "forward_5d": -2.7194,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": 2.8493
  },
  {
   "instrument": "wti",
@@ -3303,8 +3344,9 @@
   "drift_60d": -0.03019,
   "forward_1d": 0.0743,
   "forward_3d": -6.2361,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": -3.367,
+  "forward_10d": null,
+  "forward_2d": -1.7318
  },
  {
   "instrument": "wti",
@@ -3381,8 +3423,9 @@
   "drift_60d": 0.04531,
   "forward_1d": -1.8048,
   "forward_3d": -5.4144,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": -3.669,
+  "forward_10d": null,
+  "forward_2d": -6.3057
  },
  {
   "instrument": "wti",
@@ -3459,16 +3502,17 @@
   "regime": "牛",
   "drift_60d": 0.01813,
   "forward_1d": -4.5836,
-  "forward_3d": null,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_3d": -1.664,
+  "forward_5d": 1.127,
+  "forward_10d": null,
+  "forward_2d": -3.676
  },
  {
   "instrument": "wti",
   "date": "2026-08-26",
   "prev_date": "2026-08-25",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 126.15,
   "fired": false,
   "direction": null,
@@ -3533,21 +3577,22 @@
   ],
   "bull_contra_margin": -3.08,
   "bear_contra_margin": 6.08,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_3d": null,
+  "base_date": "2026-08-25",
+  "base_close": 126.15,
+  "regime": "牛",
+  "drift_60d": -0.03839,
+  "forward_1d": 0.9512,
+  "forward_3d": 2.8141,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": 3.0598
  },
  {
   "instrument": "wti",
   "date": "2026-08-27",
   "prev_date": "2026-08-26",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 128.0,
   "fired": true,
   "direction": "看跌",
@@ -3612,21 +3657,22 @@
   ],
   "bull_contra_margin": 2.97,
   "bear_contra_margin": 0.03,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_3d": null,
+  "base_date": "2026-08-26",
+  "base_close": 127.35,
+  "regime": "牛",
+  "drift_60d": -0.10333,
+  "forward_1d": 2.0887,
+  "forward_3d": 4.9863,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": 1.8453
  },
  {
   "instrument": "wti",
   "date": "2026-08-28",
   "prev_date": "2026-08-27",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 129.05,
   "fired": false,
   "direction": null,
@@ -3698,14 +3744,15 @@
   ],
   "bull_contra_margin": 2.32,
   "bear_contra_margin": 0.68,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
+  "base_date": "2026-08-27",
+  "base_close": 130.01,
+  "regime": "牛",
+  "drift_60d": -0.09052,
+  "forward_1d": -0.2384,
   "forward_3d": null,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": 2.8382
  },
  {
   "instrument": "wti",
@@ -3788,6 +3835,7 @@
   "regime": null,
   "drift_60d": null,
   "forward_1d": null,
+  "forward_2d": null,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

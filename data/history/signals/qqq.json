@@ -76,7 +76,8 @@
   "forward_1d": 1.7558,
   "forward_3d": 4.2602,
   "forward_5d": 5.0931,
-  "forward_10d": 6.2617
+  "forward_10d": 6.2617,
+  "forward_2d": 5.2123
  },
  {
   "instrument": "qqq",
@@ -154,7 +155,8 @@
   "forward_1d": 1.7558,
   "forward_3d": 4.2602,
   "forward_5d": 5.0931,
-  "forward_10d": 6.2617
+  "forward_10d": 6.2617,
+  "forward_2d": 5.2123
  },
  {
   "instrument": "qqq",
@@ -233,7 +235,8 @@
   "forward_1d": 3.3968,
   "forward_3d": 2.0826,
   "forward_5d": 2.9711,
-  "forward_10d": 4.2567
+  "forward_10d": 4.2567,
+  "forward_2d": 2.4612
  },
  {
   "instrument": "qqq",
@@ -311,7 +314,8 @@
   "forward_1d": -0.9049,
   "forward_3d": -0.1133,
   "forward_5d": -0.746,
-  "forward_10d": -0.8759
+  "forward_10d": -0.8759,
+  "forward_2d": -1.271
  },
  {
   "instrument": "qqq",
@@ -389,7 +393,8 @@
   "forward_1d": -0.3694,
   "forward_3d": 0.4977,
   "forward_5d": 0.8922,
-  "forward_10d": -0.1701
+  "forward_10d": -0.1701,
+  "forward_2d": 0.7988
  },
  {
   "instrument": "qqq",
@@ -468,7 +473,8 @@
   "forward_1d": 1.1726,
   "forward_3d": 0.5317,
   "forward_5d": 2.4376,
-  "forward_10d": -0.5205
+  "forward_10d": -0.5205,
+  "forward_2d": 0.8704
  },
  {
   "instrument": "qqq",
@@ -547,7 +553,8 @@
   "forward_1d": -0.2987,
   "forward_3d": 0.0927,
   "forward_5d": 1.112,
-  "forward_10d": -1.3264
+  "forward_10d": -1.3264,
+  "forward_2d": -0.6334
  },
  {
   "instrument": "qqq",
@@ -625,7 +632,8 @@
   "forward_1d": -0.2987,
   "forward_3d": 0.0927,
   "forward_5d": 1.112,
-  "forward_10d": -1.3264
+  "forward_10d": -1.3264,
+  "forward_2d": -0.6334
  },
  {
   "instrument": "qqq",
@@ -704,7 +712,8 @@
   "forward_1d": -0.3357,
   "forward_3d": 1.5537,
   "forward_5d": 1.2485,
-  "forward_10d": -2.0184
+  "forward_10d": -2.0184,
+  "forward_2d": 0.3926
  },
  {
   "instrument": "qqq",
@@ -783,7 +792,8 @@
   "forward_1d": 0.7307,
   "forward_3d": 1.7566,
   "forward_5d": -0.1308,
-  "forward_10d": -1.0759
+  "forward_10d": -1.0759,
+  "forward_2d": 1.8957
  },
  {
   "instrument": "qqq",
@@ -862,7 +872,8 @@
   "forward_1d": 1.1566,
   "forward_3d": 0.8526,
   "forward_5d": -1.0529,
-  "forward_10d": -1.7037
+  "forward_10d": -1.7037,
+  "forward_2d": 1.0184
  },
  {
   "instrument": "qqq",
@@ -941,7 +952,8 @@
   "forward_1d": -0.1366,
   "forward_3d": -1.9889,
   "forward_5d": -2.8877,
-  "forward_10d": null
+  "forward_10d": -1.4971,
+  "forward_2d": -0.3005
  },
  {
   "instrument": "qqq",
@@ -1020,7 +1032,8 @@
   "forward_1d": -0.1641,
   "forward_3d": -2.0504,
   "forward_5d": -2.4115,
-  "forward_10d": null
+  "forward_10d": -2.0025,
+  "forward_2d": -1.8548
  },
  {
   "instrument": "qqq",
@@ -1099,7 +1112,8 @@
   "forward_1d": -1.6935,
   "forward_3d": -2.595,
   "forward_5d": -3.2266,
-  "forward_10d": null
+  "forward_10d": -1.7962,
+  "forward_2d": -1.8894
  },
  {
   "instrument": "qqq",
@@ -1178,7 +1192,8 @@
   "forward_1d": -0.1993,
   "forward_3d": -0.5672,
   "forward_5d": -0.9463,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": -0.9171
  },
  {
   "instrument": "qqq",
@@ -1257,7 +1272,8 @@
   "forward_1d": -0.7192,
   "forward_3d": -1.363,
   "forward_5d": -0.6577,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": -0.3687
  },
  {
   "instrument": "qqq",
@@ -1335,8 +1351,9 @@
   "drift_60d": -0.04475,
   "forward_1d": 0.3531,
   "forward_3d": -0.0295,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": 1.4319,
+  "forward_10d": null,
+  "forward_2d": -0.6484
  },
  {
   "instrument": "qqq",
@@ -1413,8 +1430,9 @@
   "drift_60d": -0.03698,
   "forward_1d": -0.998,
   "forward_3d": -0.2901,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": 0.4191,
+  "forward_10d": null,
+  "forward_2d": -0.3813
  },
  {
   "instrument": "qqq",
@@ -1491,8 +1509,9 @@
   "drift_60d": -0.03698,
   "forward_1d": -0.998,
   "forward_3d": -0.2901,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": 0.4191,
+  "forward_10d": null,
+  "forward_2d": -0.3813
  },
  {
   "instrument": "qqq",
@@ -1569,16 +1588,17 @@
   "regime": "牛",
   "drift_60d": -0.06767,
   "forward_1d": 0.6229,
-  "forward_3d": null,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_3d": 2.094,
+  "forward_5d": 1.4781,
+  "forward_10d": null,
+  "forward_2d": 0.715
  },
  {
   "instrument": "qqq",
   "date": "2026-08-26",
   "prev_date": "2026-08-25",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 709.22,
   "fired": true,
   "direction": "看跌",
@@ -1643,21 +1663,22 @@
   ],
   "bull_contra_margin": 1.93,
   "bear_contra_margin": 1.07,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_3d": null,
+  "base_date": "2026-08-25",
+  "base_close": 710.72,
+  "regime": "牛",
+  "drift_60d": -0.06346,
+  "forward_1d": 0.0915,
+  "forward_3d": 0.8034,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": 1.4619
  },
  {
   "instrument": "qqq",
   "date": "2026-08-27",
   "prev_date": "2026-08-26",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 718.36,
   "fired": true,
   "direction": "看跌",
@@ -1722,21 +1743,22 @@
   ],
   "bull_contra_margin": 2.79,
   "bear_contra_margin": 0.21,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_3d": null,
+  "base_date": "2026-08-26",
+  "base_close": 711.37,
+  "regime": "牛",
+  "drift_60d": -0.0719,
+  "forward_1d": 1.3692,
+  "forward_3d": 0.7577,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": 0.7113
  },
  {
   "instrument": "qqq",
   "date": "2026-08-28",
   "prev_date": "2026-08-27",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 719.3218,
   "fired": false,
   "direction": null,
@@ -1805,14 +1827,15 @@
   ],
   "bull_contra_margin": 1.63,
   "bear_contra_margin": 1.37,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
+  "base_date": "2026-08-27",
+  "base_close": 721.11,
+  "regime": "牛",
+  "drift_60d": -0.0569,
+  "forward_1d": -0.649,
   "forward_3d": null,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": -0.6032
  },
  {
   "instrument": "qqq",
@@ -1895,6 +1918,92 @@
   "regime": null,
   "drift_60d": null,
   "forward_1d": null,
+  "forward_3d": null,
+  "forward_5d": null,
+  "forward_10d": null
+ },
+ {
+  "instrument": "qqq",
+  "date": "2026-09-01",
+  "prev_date": "2026-08-31",
+  "gap_days": 1,
+  "trading_gap": null,
+  "spot": 709.12,
+  "fired": false,
+  "direction": null,
+  "level": null,
+  "vol_confirms": null,
+  "outlook_bias": "偏多",
+  "diverges": null,
+  "up_pressure": 9970.8,
+  "dn_pressure": 148147.9,
+  "bull_wing": 7.5,
+  "bear_wing": 23.6,
+  "bull_wing_oi": 2363.5,
+  "bear_wing_oi": 7644.4,
+  "churn_call": 1.0,
+  "churn_put": 1.0,
+  "call_direction": "偏空",
+  "call_abstain": false,
+  "call_hard_abstain": false,
+  "call_ratio": 14.86,
+  "call_reason": "两个口径反向：推断口径（加权增仓 14.86×）指向偏空，观测口径（净有效 Delta +10,431）指向偏多",
+  "call_reasons": [
+   "两个口径反向：推断口径（加权增仓 14.86×）指向偏空，观测口径（净有效 Delta +10,431）指向偏多",
+   "阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%"
+  ],
+  "call_calibrated": false,
+  "size_bull": 10213.8,
+  "size_bear": 148927.3,
+  "size_ratio": 14.58,
+  "breadth_bull": 69,
+  "breadth_bear": 311,
+  "breadth_ratio": 4.51,
+  "top1_share": 0.137,
+  "top3_share": 0.208,
+  "top5_share": 0.263,
+  "flip_k": 169,
+  "n_legs": 380,
+  "whale_like": false,
+  "net_delta_call": 38355.4,
+  "net_delta_put": -27924.4,
+  "net_delta_total": 10431.0,
+  "net_call_doi": 123502,
+  "net_put_doi": 229972,
+  "oi_build_ratio": 1.86,
+  "reverse_abs": 9970.8,
+  "forward_abs": 148147.9,
+  "d_spot_pct": -1.03,
+  "d_atm_pp": 0.49,
+  "d_skew25_pp": 0.2,
+  "dte_wavg": 6.07,
+  "dte_share_le2": 0.498,
+  "dte_share_le7": 0.728,
+  "dte_top1": 3,
+  "bull_pressure_ratio": 0.067,
+  "bear_pressure_ratio": 14.858,
+  "bull_wing_ratio": 0.318,
+  "bear_wing_ratio": 3.147,
+  "bull_scale_doi": 123502,
+  "bear_scale_doi": 229972,
+  "bull_gates": [
+   false,
+   false,
+   true
+  ],
+  "bear_gates": [
+   true,
+   false,
+   true
+  ],
+  "bull_contra_margin": 0.47,
+  "bear_contra_margin": 2.53,
+  "base_date": null,
+  "base_close": null,
+  "regime": null,
+  "drift_60d": null,
+  "forward_1d": null,
+  "forward_2d": null,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

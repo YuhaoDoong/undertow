@@ -76,7 +76,8 @@
   "forward_1d": 1.7571,
   "forward_3d": 2.1199,
   "forward_5d": 5.0802,
-  "forward_10d": 3.0367
+  "forward_10d": 3.0367,
+  "forward_2d": 0.6112
  },
  {
   "instrument": "silver",
@@ -155,7 +156,8 @@
   "forward_1d": -1.1261,
   "forward_3d": 0.5631,
   "forward_5d": 5.3116,
-  "forward_10d": -2.1021
+  "forward_10d": -2.1021,
+  "forward_2d": 0.3566
  },
  {
   "instrument": "silver",
@@ -234,7 +236,8 @@
   "forward_1d": 1.4996,
   "forward_3d": 4.4419,
   "forward_5d": 3.3789,
-  "forward_10d": 0.9301
+  "forward_10d": 0.9301,
+  "forward_2d": 1.7084
  },
  {
   "instrument": "silver",
@@ -312,7 +315,8 @@
   "forward_1d": 2.6876,
   "forward_3d": 1.6424,
   "forward_5d": 1.0452,
-  "forward_10d": -5.9537
+  "forward_10d": -5.9537,
+  "forward_2d": 4.7219
  },
  {
   "instrument": "silver",
@@ -391,7 +395,8 @@
   "forward_1d": -2.9407,
   "forward_3d": -3.511,
   "forward_5d": -7.0397,
-  "forward_10d": -9.1428
+  "forward_10d": -9.1428,
+  "forward_2d": -5.8457
  },
  {
   "instrument": "silver",
@@ -470,7 +475,8 @@
   "forward_1d": -2.993,
   "forward_3d": -0.9365,
   "forward_5d": -2.3687,
-  "forward_10d": -2.534
+  "forward_10d": -2.534,
+  "forward_2d": -0.5876
  },
  {
   "instrument": "silver",
@@ -549,7 +555,8 @@
   "forward_1d": 2.4797,
   "forward_3d": -1.2682,
   "forward_5d": -1.1736,
-  "forward_10d": 2.0632
+  "forward_10d": 2.0632,
+  "forward_2d": 2.12
  },
  {
   "instrument": "silver",
@@ -628,7 +635,8 @@
   "forward_1d": -0.3509,
   "forward_3d": -1.7917,
   "forward_5d": -6.9265,
-  "forward_10d": -3.8419
+  "forward_10d": -3.8419,
+  "forward_2d": -3.6572
  },
  {
   "instrument": "silver",
@@ -707,7 +715,8 @@
   "forward_1d": -3.3179,
   "forward_3d": -3.2252,
   "forward_5d": -5.8758,
-  "forward_10d": -2.5209
+  "forward_10d": -2.5209,
+  "forward_2d": -1.4458
  },
  {
   "instrument": "silver",
@@ -786,7 +795,8 @@
   "forward_1d": 1.9363,
   "forward_3d": -3.3934,
   "forward_5d": -2.2623,
-  "forward_10d": 1.4762
+  "forward_10d": 1.4762,
+  "forward_2d": 0.0959
  },
  {
   "instrument": "silver",
@@ -865,7 +875,8 @@
   "forward_1d": -1.8055,
   "forward_3d": -4.495,
   "forward_5d": -0.1693,
-  "forward_10d": -2.7647
+  "forward_10d": -2.7647,
+  "forward_2d": -5.2285
  },
  {
   "instrument": "silver",
@@ -944,7 +955,8 @@
   "forward_1d": -3.4859,
   "forward_3d": -2.3559,
   "forward_5d": 3.2752,
-  "forward_10d": -0.8428
+  "forward_10d": -0.8428,
+  "forward_2d": -2.7389
  },
  {
   "instrument": "silver",
@@ -1023,7 +1035,8 @@
   "forward_1d": 0.774,
   "forward_3d": 5.3384,
   "forward_5d": 3.3141,
-  "forward_10d": 6.1719
+  "forward_10d": 6.1719,
+  "forward_2d": 1.1709
  },
  {
   "instrument": "silver",
@@ -1102,7 +1115,8 @@
   "forward_1d": 0.3939,
   "forward_3d": 6.1835,
   "forward_5d": 3.5644,
-  "forward_10d": 3.1115
+  "forward_10d": 3.1115,
+  "forward_2d": 4.5293
  },
  {
   "instrument": "silver",
@@ -1180,7 +1194,8 @@
   "forward_1d": 0.3939,
   "forward_3d": 6.1835,
   "forward_5d": 3.5644,
-  "forward_10d": 3.1115
+  "forward_10d": 3.1115,
+  "forward_2d": 4.5293
  },
  {
   "instrument": "silver",
@@ -1259,7 +1274,8 @@
   "forward_1d": 4.1193,
   "forward_3d": 2.1185,
   "forward_5d": 3.825,
-  "forward_10d": 2.9031
+  "forward_10d": 2.9031,
+  "forward_2d": 5.767
  },
  {
   "instrument": "silver",
@@ -1338,7 +1354,8 @@
   "forward_1d": 1.5825,
   "forward_3d": -0.9231,
   "forward_5d": -2.5998,
-  "forward_10d": 1.4318
+  "forward_10d": 1.4318,
+  "forward_2d": -1.9216
  },
  {
   "instrument": "silver",
@@ -1416,7 +1433,8 @@
   "forward_1d": 1.0181,
   "forward_3d": -0.6915,
   "forward_5d": 2.766,
-  "forward_10d": 7.2801
+  "forward_10d": 7.2801,
+  "forward_2d": 1.6711
  },
  {
   "instrument": "silver",
@@ -1495,7 +1513,8 @@
   "forward_1d": 0.6465,
   "forward_3d": -1.5592,
   "forward_5d": -0.4373,
-  "forward_10d": 9.3364
+  "forward_10d": 9.3364,
+  "forward_2d": -1.6923
  },
  {
   "instrument": "silver",
@@ -1574,7 +1593,8 @@
   "forward_1d": -2.3238,
   "forward_3d": 1.0769,
   "forward_5d": -0.888,
-  "forward_10d": 12.2426
+  "forward_10d": 12.2426,
+  "forward_2d": -2.1916
  },
  {
   "instrument": "silver",
@@ -1653,7 +1673,8 @@
   "forward_1d": 0.1354,
   "forward_3d": 1.2766,
   "forward_5d": 4.1393,
-  "forward_10d": 13.2495
+  "forward_10d": 13.2495,
+  "forward_2d": 3.4816
  },
  {
   "instrument": "silver",
@@ -1731,7 +1752,8 @@
   "forward_1d": 3.3417,
   "forward_3d": 1.3328,
   "forward_5d": 8.306,
-  "forward_10d": 14.0815
+  "forward_10d": 14.0815,
+  "forward_2d": 1.1397
  },
  {
   "instrument": "silver",
@@ -1810,7 +1832,8 @@
   "forward_1d": 0.191,
   "forward_3d": 7.0856,
   "forward_5d": 9.8167,
-  "forward_10d": 11.6883
+  "forward_10d": 11.6883,
+  "forward_2d": 2.8266
  },
  {
   "instrument": "silver",
@@ -1889,7 +1912,8 @@
   "forward_1d": 2.6306,
   "forward_3d": 6.4621,
   "forward_5d": 13.2482,
-  "forward_10d": 13.5532
+  "forward_10d": 13.5532,
+  "forward_2d": 6.8814
  },
  {
   "instrument": "silver",
@@ -1968,7 +1992,8 @@
   "forward_1d": 4.1419,
   "forward_3d": 6.7979,
   "forward_5d": 8.7481,
-  "forward_10d": 6.6865
+  "forward_10d": 6.6865,
+  "forward_2d": 3.7333
  },
  {
   "instrument": "silver",
@@ -2047,7 +2072,8 @@
   "forward_1d": -0.3924,
   "forward_3d": 5.9568,
   "forward_5d": 5.3326,
-  "forward_10d": 7.0269
+  "forward_10d": 7.0269,
+  "forward_2d": 2.5504
  },
  {
   "instrument": "silver",
@@ -2126,7 +2152,8 @@
   "forward_1d": 2.9543,
   "forward_3d": 4.8344,
   "forward_5d": 4.1361,
-  "forward_10d": 10.4029
+  "forward_10d": 10.4029,
+  "forward_2d": 6.3742
  },
  {
   "instrument": "silver",
@@ -2205,7 +2232,8 @@
   "forward_1d": 3.3217,
   "forward_3d": 2.713,
   "forward_5d": 1.7043,
-  "forward_10d": 9.0783
+  "forward_10d": 9.0783,
+  "forward_2d": 1.8261
  },
  {
   "instrument": "silver",
@@ -2283,7 +2311,8 @@
   "forward_1d": 3.3217,
   "forward_3d": 2.713,
   "forward_5d": 1.7043,
-  "forward_10d": 9.0783
+  "forward_10d": 9.0783,
+  "forward_2d": 1.8261
  },
  {
   "instrument": "silver",
@@ -2362,7 +2391,8 @@
   "forward_1d": -1.4476,
   "forward_3d": -2.104,
   "forward_5d": 0.2693,
-  "forward_10d": 4.6962
+  "forward_10d": 4.6962,
+  "forward_2d": -0.5891
  },
  {
   "instrument": "silver",
@@ -2441,7 +2471,8 @@
   "forward_1d": 0.8711,
   "forward_3d": -0.1196,
   "forward_5d": -1.8958,
-  "forward_10d": 6.4389
+  "forward_10d": 6.4389,
+  "forward_2d": -0.6661
  },
  {
   "instrument": "silver",
@@ -2520,7 +2551,8 @@
   "forward_1d": -1.5239,
   "forward_3d": 0.8635,
   "forward_5d": 1.6085,
-  "forward_10d": 4.2838
+  "forward_10d": 4.2838,
+  "forward_2d": -0.9821
  },
  {
   "instrument": "silver",
@@ -2599,7 +2631,8 @@
   "forward_1d": 0.5502,
   "forward_3d": -1.238,
   "forward_5d": 6.0179,
-  "forward_10d": null
+  "forward_10d": 7.9264,
+  "forward_2d": 2.4243
  },
  {
   "instrument": "silver",
@@ -2678,7 +2711,8 @@
   "forward_1d": 1.8639,
   "forward_3d": 2.6163,
   "forward_5d": 7.2503,
-  "forward_10d": null
+  "forward_10d": 2.6334,
+  "forward_2d": -1.7784
  },
  {
   "instrument": "silver",
@@ -2756,7 +2790,8 @@
   "forward_1d": 1.8639,
   "forward_3d": 2.6163,
   "forward_5d": 7.2503,
-  "forward_10d": null
+  "forward_10d": 2.6334,
+  "forward_2d": -1.7784
  },
  {
   "instrument": "silver",
@@ -2834,7 +2869,8 @@
   "forward_1d": -3.5756,
   "forward_3d": 3.5085,
   "forward_5d": 4.415,
-  "forward_10d": null
+  "forward_10d": 0.9401,
+  "forward_2d": 0.7386
  },
  {
   "instrument": "silver",
@@ -2913,7 +2949,8 @@
   "forward_1d": 4.4742,
   "forward_3d": 9.1922,
   "forward_5d": 8.4958,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": 7.3468
  },
  {
   "instrument": "silver",
@@ -2992,7 +3029,8 @@
   "forward_1d": 2.7495,
   "forward_3d": 3.6494,
   "forward_5d": 2.6329,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": 4.5159
  },
  {
   "instrument": "silver",
@@ -3070,8 +3108,9 @@
   "drift_60d": -0.20454,
   "forward_1d": 1.7191,
   "forward_3d": 1.0704,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": 1.8002,
+  "forward_10d": null,
+  "forward_2d": 0.8758
  },
  {
   "instrument": "silver",
@@ -3148,8 +3187,9 @@
   "drift_60d": -0.12234,
   "forward_1d": -0.8291,
   "forward_3d": -1.8017,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": -4.3048,
+  "forward_10d": null,
+  "forward_2d": -0.6378
  },
  {
   "instrument": "silver",
@@ -3226,16 +3266,17 @@
   "regime": "熊",
   "drift_60d": -0.15726,
   "forward_1d": 0.1929,
-  "forward_3d": null,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_3d": 0.9164,
+  "forward_5d": -3.328,
+  "forward_10d": null,
+  "forward_2d": -0.9807
  },
  {
   "instrument": "silver",
   "date": "2026-08-26",
   "prev_date": "2026-08-25",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 62.32,
   "fired": true,
   "direction": "看跌",
@@ -3300,21 +3341,22 @@
   ],
   "bull_contra_margin": 1.69,
   "bear_contra_margin": 1.31,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_3d": null,
+  "base_date": "2026-08-25",
+  "base_close": 62.32,
+  "regime": "熊",
+  "drift_60d": -0.15333,
+  "forward_1d": -1.1714,
+  "forward_3d": -3.6906,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": 0.7221
  },
  {
   "instrument": "silver",
   "date": "2026-08-27",
   "prev_date": "2026-08-26",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 61.59,
   "fired": true,
   "direction": "看涨",
@@ -3379,21 +3421,22 @@
   ],
   "bull_contra_margin": 0.33,
   "bear_contra_margin": 2.67,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_3d": null,
+  "base_date": "2026-08-26",
+  "base_close": 61.59,
+  "regime": "熊",
+  "drift_60d": -0.15678,
+  "forward_1d": 1.9159,
+  "forward_3d": -2.3705,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": -2.5491
  },
  {
   "instrument": "silver",
   "date": "2026-08-28",
   "prev_date": "2026-08-27",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 63.6817,
   "fired": false,
   "direction": null,
@@ -3465,14 +3508,15 @@
   ],
   "bull_contra_margin": 4.9,
   "bear_contra_margin": -1.9,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
+  "base_date": "2026-08-27",
+  "base_close": 62.77,
+  "regime": "熊",
+  "drift_60d": -0.13305,
+  "forward_1d": -4.3811,
   "forward_3d": null,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": -4.2058
  },
  {
   "instrument": "silver",
@@ -3555,6 +3599,7 @@
   "regime": null,
   "drift_60d": null,
   "forward_1d": null,
+  "forward_2d": null,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

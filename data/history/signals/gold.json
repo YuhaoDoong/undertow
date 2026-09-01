@@ -76,7 +76,8 @@
   "forward_1d": 1.1287,
   "forward_3d": -0.2923,
   "forward_5d": 2.3467,
-  "forward_10d": 2.0435
+  "forward_10d": 2.0435,
+  "forward_2d": -0.2382
  },
  {
   "instrument": "gold",
@@ -155,7 +156,8 @@
   "forward_1d": -1.3516,
   "forward_3d": -0.811,
   "forward_5d": 2.275,
-  "forward_10d": -1.7397
+  "forward_10d": -1.7397,
+  "forward_2d": -1.4051
  },
  {
   "instrument": "gold",
@@ -234,7 +236,8 @@
   "forward_1d": -0.0543,
   "forward_3d": 2.591,
   "forward_5d": 2.4174,
-  "forward_10d": 0.9686
+  "forward_10d": 0.9686,
+  "forward_2d": 0.548
  },
  {
   "instrument": "gold",
@@ -313,7 +316,8 @@
   "forward_1d": 2.0318,
   "forward_3d": 1.8591,
   "forward_5d": 2.0453,
-  "forward_10d": -1.5219
+  "forward_10d": -1.5219,
+  "forward_2d": 3.1112
  },
  {
   "instrument": "gold",
@@ -392,7 +396,8 @@
   "forward_1d": -1.2142,
   "forward_3d": -1.0337,
   "forward_5d": -3.9254,
-  "forward_10d": -3.8024
+  "forward_10d": -3.8024,
+  "forward_2d": -2.0098
  },
  {
   "instrument": "gold",
@@ -471,7 +476,8 @@
   "forward_1d": -0.8053,
   "forward_3d": -0.1272,
   "forward_5d": -1.4146,
-  "forward_10d": -0.71
+  "forward_10d": -0.71,
+  "forward_2d": 0.1828
  },
  {
   "instrument": "gold",
@@ -550,7 +556,8 @@
   "forward_1d": 0.9961,
   "forward_3d": -1.9549,
   "forward_5d": -0.5608,
-  "forward_10d": 1.2472
+  "forward_10d": 1.2472,
+  "forward_2d": 0.6837
  },
  {
   "instrument": "gold",
@@ -629,7 +636,8 @@
   "forward_1d": -0.3094,
   "forward_3d": -1.5945,
   "forward_5d": -3.4957,
-  "forward_10d": -1.7611
+  "forward_10d": -1.7611,
+  "forward_2d": -2.9219
  },
  {
   "instrument": "gold",
@@ -708,7 +716,8 @@
   "forward_1d": -2.6206,
   "forward_3d": -1.236,
   "forward_5d": -2.2811,
-  "forward_10d": -1.3554
+  "forward_10d": -1.3554,
+  "forward_2d": -1.2891
  },
  {
   "instrument": "gold",
@@ -787,7 +796,8 @@
   "forward_1d": 1.3674,
   "forward_3d": -0.5911,
   "forward_5d": 0.128,
-  "forward_10d": 2.0429
+  "forward_10d": 2.0429,
+  "forward_2d": 1.4218
  },
  {
   "instrument": "gold",
@@ -866,7 +876,8 @@
   "forward_1d": 0.0537,
   "forward_3d": -1.005,
   "forward_5d": 0.7148,
-  "forward_10d": -0.747
+  "forward_10d": -0.747,
+  "forward_2d": -1.932
  },
  {
   "instrument": "gold",
@@ -945,7 +956,8 @@
   "forward_1d": -1.9847,
   "forward_3d": -1.2757,
   "forward_5d": 1.8182,
-  "forward_10d": -0.3411
+  "forward_10d": -0.3411,
+  "forward_2d": -1.0581
  },
  {
   "instrument": "gold",
@@ -1024,7 +1036,8 @@
   "forward_1d": 0.9453,
   "forward_3d": 2.6989,
   "forward_5d": 1.7975,
-  "forward_10d": 3.3428
+  "forward_10d": 3.3428,
+  "forward_2d": 0.7234
  },
  {
   "instrument": "gold",
@@ -1102,7 +1115,8 @@
   "forward_1d": -0.2199,
   "forward_3d": 2.9071,
   "forward_5d": 0.9473,
-  "forward_10d": 0.8496
+  "forward_10d": 0.8496,
+  "forward_2d": 1.7372
  },
  {
   "instrument": "gold",
@@ -1181,7 +1195,8 @@
   "forward_1d": 1.9614,
   "forward_3d": 1.0664,
   "forward_5d": 1.9124,
-  "forward_10d": 1.1181
+  "forward_10d": 1.1181,
+  "forward_2d": 3.1338
  },
  {
   "instrument": "gold",
@@ -1260,7 +1275,8 @@
   "forward_1d": 1.1499,
   "forward_3d": -0.7764,
   "forward_5d": -1.4514,
-  "forward_10d": -0.1734
+  "forward_10d": -0.1734,
+  "forward_2d": -0.8778
  },
  {
   "instrument": "gold",
@@ -1339,7 +1355,8 @@
   "forward_1d": 0.1023,
   "forward_3d": -0.5787,
   "forward_5d": 1.5181,
-  "forward_10d": 4.8853
+  "forward_10d": 4.8853,
+  "forward_2d": 0.8371
  },
  {
   "instrument": "gold",
@@ -1418,7 +1435,8 @@
   "forward_1d": 0.7341,
   "forward_3d": -0.2205,
   "forward_5d": -0.0968,
-  "forward_10d": 7.1444
+  "forward_10d": 7.1444,
+  "forward_2d": -0.6803
  },
  {
   "instrument": "gold",
@@ -1496,7 +1514,8 @@
   "forward_1d": 0.7341,
   "forward_3d": -0.2205,
   "forward_5d": -0.0968,
-  "forward_10d": 7.1444
+  "forward_10d": 7.1444,
+  "forward_2d": -0.6803
  },
  {
   "instrument": "gold",
@@ -1575,7 +1594,8 @@
   "forward_1d": -1.4041,
   "forward_3d": 0.6753,
   "forward_5d": -0.7794,
-  "forward_10d": 7.45
+  "forward_10d": 7.45,
+  "forward_2d": -0.9476
  },
  {
   "instrument": "gold",
@@ -1654,7 +1674,8 @@
   "forward_1d": 0.463,
   "forward_3d": 0.5875,
   "forward_5d": 1.2968,
-  "forward_10d": 8.5524
+  "forward_10d": 8.5524,
+  "forward_2d": 2.109
  },
  {
   "instrument": "gold",
@@ -1733,7 +1754,8 @@
   "forward_1d": 1.6385,
   "forward_3d": 0.1698,
   "forward_5d": 5.0016,
-  "forward_10d": 9.1193
+  "forward_10d": 9.1193,
+  "forward_2d": 0.124
  },
  {
   "instrument": "gold",
@@ -1812,7 +1834,8 @@
   "forward_1d": 0.0458,
   "forward_3d": 4.8716,
   "forward_5d": 7.2482,
-  "forward_10d": 8.0584
+  "forward_10d": 8.0584,
+  "forward_2d": 0.7052
  },
  {
   "instrument": "gold",
@@ -1890,7 +1913,8 @@
   "forward_1d": 0.0458,
   "forward_3d": 4.8716,
   "forward_5d": 7.2482,
-  "forward_10d": 8.0584
+  "forward_10d": 8.0584,
+  "forward_2d": 0.7052
  },
  {
   "instrument": "gold",
@@ -1969,7 +1993,8 @@
   "forward_1d": 0.6591,
   "forward_3d": 4.8317,
   "forward_5d": 8.2941,
-  "forward_10d": 9.0877
+  "forward_10d": 9.0877,
+  "forward_2d": 4.8237
  },
  {
   "instrument": "gold",
@@ -2048,7 +2073,8 @@
   "forward_1d": 4.1373,
   "forward_3d": 6.4972,
   "forward_5d": 7.1627,
-  "forward_10d": 6.5186
+  "forward_10d": 6.5186,
+  "forward_2d": 4.1453
  },
  {
   "instrument": "gold",
@@ -2127,7 +2153,8 @@
   "forward_1d": 0.0077,
   "forward_3d": 3.3107,
   "forward_5d": 3.9216,
-  "forward_10d": 6.2109
+  "forward_10d": 6.2109,
+  "forward_2d": 2.2662
  },
  {
   "instrument": "gold",
@@ -2206,7 +2233,8 @@
   "forward_1d": 2.2583,
   "forward_3d": 2.8973,
   "forward_5d": 2.3841,
-  "forward_10d": 6.5671
+  "forward_10d": 6.5671,
+  "forward_2d": 3.3028
  },
  {
   "instrument": "gold",
@@ -2285,7 +2313,8 @@
   "forward_1d": 1.0214,
   "forward_3d": 1.6187,
   "forward_5d": 0.7554,
-  "forward_10d": 6.2464
+  "forward_10d": 6.2464,
+  "forward_2d": 0.6249
  },
  {
   "instrument": "gold",
@@ -2363,7 +2392,8 @@
   "forward_1d": 1.0214,
   "forward_3d": 1.6187,
   "forward_5d": 0.7554,
-  "forward_10d": 6.2464
+  "forward_10d": 6.2464,
+  "forward_2d": 0.6249
  },
  {
   "instrument": "gold",
@@ -2441,7 +2471,8 @@
   "forward_1d": 1.0214,
   "forward_3d": 1.6187,
   "forward_5d": 0.7554,
-  "forward_10d": 6.2464
+  "forward_10d": 6.2464,
+  "forward_2d": 0.6249
  },
  {
   "instrument": "gold",
@@ -2520,7 +2551,8 @@
   "forward_1d": -0.3925,
   "forward_3d": -0.8894,
   "forward_5d": 0.7328,
-  "forward_10d": 5.9994
+  "forward_10d": 5.9994,
+  "forward_2d": 0.5912
  },
  {
   "instrument": "gold",
@@ -2599,7 +2631,8 @@
   "forward_1d": 0.9876,
   "forward_3d": 0.1297,
   "forward_5d": -0.6011,
-  "forward_10d": 6.7613
+  "forward_10d": 6.7613,
+  "forward_2d": -0.4988
  },
  {
   "instrument": "gold",
@@ -2678,7 +2711,8 @@
   "forward_1d": -1.4719,
   "forward_3d": 0.1408,
   "forward_5d": 2.2029,
-  "forward_10d": 4.0502
+  "forward_10d": 4.0502,
+  "forward_2d": -0.8496
  },
  {
   "instrument": "gold",
@@ -2757,7 +2791,8 @@
   "forward_1d": 0.6316,
   "forward_3d": -0.1028,
   "forward_5d": 4.0856,
-  "forward_10d": null
+  "forward_10d": 5.9254,
+  "forward_2d": 1.6368
  },
  {
   "instrument": "gold",
@@ -2836,7 +2871,8 @@
   "forward_1d": 0.9988,
   "forward_3d": 3.0786,
   "forward_5d": 5.4498,
-  "forward_10d": null
+  "forward_10d": 1.8457,
+  "forward_2d": -0.7298
  },
  {
   "instrument": "gold",
@@ -2915,7 +2951,8 @@
   "forward_1d": -1.7115,
   "forward_3d": 2.4094,
   "forward_5d": 5.2282,
-  "forward_10d": null
+  "forward_10d": 0.7226,
+  "forward_2d": 2.0592
  },
  {
   "instrument": "gold",
@@ -2994,7 +3031,8 @@
   "forward_1d": 3.8364,
   "forward_3d": 6.2251,
   "forward_5d": 7.4068,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": 4.1927
  },
  {
   "instrument": "gold",
@@ -3073,7 +3111,8 @@
   "forward_1d": 0.3431,
   "forward_3d": 3.1051,
   "forward_5d": 1.8075,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": 2.3004
  },
  {
   "instrument": "gold",
@@ -3151,8 +3190,9 @@
   "drift_60d": 0.00506,
   "forward_1d": 1.9506,
   "forward_3d": 3.0848,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": 1.7676,
+  "forward_10d": null,
+  "forward_2d": 2.7525
  },
  {
   "instrument": "gold",
@@ -3229,8 +3269,9 @@
   "drift_60d": 0.05961,
   "forward_1d": 0.7866,
   "forward_3d": -0.4819,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": -3.4179,
+  "forward_10d": null,
+  "forward_2d": 1.1125
  },
  {
   "instrument": "gold",
@@ -3307,8 +3348,9 @@
   "drift_60d": 0.05961,
   "forward_1d": 0.7866,
   "forward_3d": -0.4819,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": -3.4179,
+  "forward_10d": null,
+  "forward_2d": 1.1125
  },
  {
   "instrument": "gold",
@@ -3386,8 +3428,9 @@
   "drift_60d": 0.05961,
   "forward_1d": 0.7866,
   "forward_3d": -0.4819,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": -3.4179,
+  "forward_10d": null,
+  "forward_2d": 1.1125
  },
  {
   "instrument": "gold",
@@ -3464,16 +3507,17 @@
   "regime": "牛",
   "drift_60d": 0.05529,
   "forward_1d": 0.3234,
-  "forward_3d": null,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_3d": -0.9585,
+  "forward_5d": -4.2818,
+  "forward_10d": null,
+  "forward_2d": -1.2585
  },
  {
   "instrument": "gold",
   "date": "2026-08-26",
   "prev_date": "2026-08-25",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 428.07,
   "fired": false,
   "direction": null,
@@ -3538,21 +3582,22 @@
   ],
   "bull_contra_margin": 2.09,
   "bear_contra_margin": 0.91,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_3d": null,
+  "base_date": "2026-08-25",
+  "base_close": 428.07,
+  "regime": "牛",
+  "drift_60d": 0.0432,
+  "forward_1d": -1.5768,
+  "forward_3d": -4.4806,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": -1.2778
  },
  {
   "instrument": "gold",
   "date": "2026-08-27",
   "prev_date": "2026-08-26",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 420.0,
   "fired": false,
   "direction": null,
@@ -3617,21 +3662,22 @@
   ],
   "bull_contra_margin": -0.39,
   "bear_contra_margin": 3.39,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_3d": null,
+  "base_date": "2026-08-26",
+  "base_close": 421.32,
+  "regime": "牛",
+  "drift_60d": 0.04029,
+  "forward_1d": 0.3038,
+  "forward_3d": -3.0618,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": -2.9503
  },
  {
   "instrument": "gold",
   "date": "2026-08-28",
   "prev_date": "2026-08-27",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 422.54,
   "fired": true,
   "direction": "看跌",
@@ -3702,14 +3748,15 @@
   ],
   "bull_contra_margin": 2.1,
   "bear_contra_margin": 0.9,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
+  "base_date": "2026-08-27",
+  "base_close": 422.6,
+  "regime": "牛",
+  "drift_60d": 0.04255,
+  "forward_1d": -3.2442,
   "forward_3d": null,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "forward_2d": -3.3554
  },
  {
   "instrument": "gold",
@@ -3792,6 +3839,92 @@
   "regime": null,
   "drift_60d": null,
   "forward_1d": null,
+  "forward_3d": null,
+  "forward_5d": null,
+  "forward_10d": null
+ },
+ {
+  "instrument": "gold",
+  "date": "2026-09-01",
+  "prev_date": "2026-08-31",
+  "gap_days": 1,
+  "trading_gap": null,
+  "spot": 400.51,
+  "fired": false,
+  "direction": null,
+  "level": null,
+  "vol_confirms": null,
+  "outlook_bias": "偏多",
+  "diverges": null,
+  "up_pressure": 18822.7,
+  "dn_pressure": 9381.1,
+  "bull_wing": 30.4,
+  "bear_wing": 9.1,
+  "bull_wing_oi": 6426.9,
+  "bear_wing_oi": 1380.3,
+  "churn_call": 0.646,
+  "churn_put": 1.0,
+  "call_direction": "偏多",
+  "call_abstain": false,
+  "call_hard_abstain": false,
+  "call_ratio": 2.01,
+  "call_reason": "两口径同向：加权增仓 2.01× 与净有效 Delta +1,714 均指向偏多",
+  "call_reasons": [
+   "两口径同向：加权增仓 2.01× 与净有效 Delta +1,714 均指向偏多",
+   "压力比 2.01×（阈值未经校准：实测覆盖率/正确率权衡里没有任何门槛的 Wilson 95% 区间下界超过 50%）"
+  ],
+  "call_calibrated": false,
+  "size_bull": 26863.4,
+  "size_bear": 11792.7,
+  "size_ratio": 2.28,
+  "breadth_bull": 93,
+  "breadth_bear": 47,
+  "breadth_ratio": 1.98,
+  "top1_share": 0.166,
+  "top3_share": 0.363,
+  "top5_share": 0.474,
+  "flip_k": 8,
+  "n_legs": 140,
+  "whale_like": false,
+  "net_delta_call": 6891.6,
+  "net_delta_put": -5177.7,
+  "net_delta_total": 1713.9,
+  "net_call_doi": 29858,
+  "net_put_doi": 37356,
+  "oi_build_ratio": 1.25,
+  "reverse_abs": 9381.1,
+  "forward_abs": 18822.7,
+  "d_spot_pct": -1.65,
+  "d_atm_pp": -1.26,
+  "d_skew25_pp": -0.59,
+  "dte_wavg": 12.96,
+  "dte_share_le2": 0.207,
+  "dte_share_le7": 0.447,
+  "dte_top1": 29,
+  "bull_pressure_ratio": 2.006,
+  "bear_pressure_ratio": 0.498,
+  "bull_wing_ratio": 3.341,
+  "bear_wing_ratio": 0.299,
+  "bull_scale_doi": 29858,
+  "bear_scale_doi": 37356,
+  "bull_gates": [
+   false,
+   false,
+   true
+  ],
+  "bear_gates": [
+   false,
+   false,
+   true
+  ],
+  "bull_contra_margin": -0.15,
+  "bear_contra_margin": 3.15,
+  "base_date": null,
+  "base_close": null,
+  "regime": null,
+  "drift_60d": null,
+  "forward_1d": null,
+  "forward_2d": null,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

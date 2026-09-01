@@ -48,13 +48,13 @@
   "pair": "金银比",
   "num_key": "gold",
   "den_key": "silver",
-  "num_fut": 4492.7001953125,
-  "den_fut": 67.36000061035156,
-  "ratio": 66.697,
+  "num_fut": 4431.2998046875,
+  "den_fut": 65.95500183105469,
+  "ratio": 67.187,
   "num_etf": 408.42,
   "den_etf": 60.13,
-  "num_mult": 11.0002,
-  "den_mult": 1.1202,
+  "num_mult": 10.8499,
+  "den_mult": 1.0969,
   "num_wall": 350.0,
   "num_wall_oi": 125250,
   "den_wall": 60.0,
@@ -62,7 +62,7 @@
   "implied_lo": 56.55,
   "implied_hi": 58.34,
   "inside": false,
-  "dist_pct": 14.32,
+  "dist_pct": 15.16,
   "note": ""
  }
 ]

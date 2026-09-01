@@ -87,7 +87,7 @@
  {
   "instrument": "wti",
   "date": "2026-09-01",
-  "spot": 86.4,
+  "spot": 87.46,
   "state": "仅结构",
   "struct_bias": "偏空(弱)",
   "band": "中性",

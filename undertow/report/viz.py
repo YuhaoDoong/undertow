@@ -353,3 +353,100 @@ def strategy_timeline_svg(rows: list[tuple], spot: float | None = None, *,
         s.append(_txt(xs[-1], height - 8, lbl, size=9.5, fill=C_AXIS, anchor="end"))
     s.append("</svg>")
     return "".join(s)
+
+
+def wall_history_svg(rows: list[dict], *, title: str = "", w: int = 1180,
+                     h: int = 520) -> str:
+    """墙位历史图：半透明日 K + 收盘折线 + 三道墙 + 极强信号标记。
+
+    用户 2026-08-31 要求放进研报（期权结构下面）：「这个历史墙位图我觉得挺重要…
+    每日的现价可以改为半透明的 k 线（不用标涨跌颜色），收盘价继续折线。」
+
+    它回答的是「墙到底稳不稳、被没被破过」——静态的当日墙位表回答不了这个。
+    实测差异：≤14 天口径的墙位一天一换（抖动 16~19%），≤45 天口径能连守
+    30+ 个交易日；而全到期口径会被深虚建仓顶飞（GLD 8/11 因 470C/460C
+    各增 4 万张，墙从 400 跳到 460，而现价才 402）。
+
+    rows 每项：{date, o, h, l, c, topP:[[strike,oi],...], topC:[...], sig:[方向,倍数]|None}
+    """
+    if not rows:
+        return ""
+    PL, PR, PT, PB = 62, 178, 46, 62
+    iw, ih = w - PL - PR, h - PT - PB
+    vals = [r["h"] for r in rows] + [r["l"] for r in rows]
+    for r in rows:
+        vals += [k for k, _ in r.get("topP", [])] + [k for k, _ in r.get("topC", [])]
+    if not vals:
+        return ""
+    lo, hi = min(vals) - 1, max(vals) + 2
+    if hi <= lo:
+        return ""
+    n = len(rows)
+    X = lambda i: PL + iw * i / max(n - 1, 1)          # noqa: E731
+    Y = lambda v: PT + ih * (hi - v) / (hi - lo)       # noqa: E731
+    bw = max(2.0, iw / n * 0.62)
+    P = [_svg_open(w, h)]
+    for k in range(7):
+        v = lo + (hi - lo) * k / 6
+        y = Y(v)
+        P.append(_line(PL, y, PL + iw, y, stroke=C_GRID))
+        P.append(_txt(PL - 8, y + 4, f"{v:.0f}", size=10, fill="#6e7781", anchor="end"))
+    # 半透明日 K —— 不标涨跌色（用户明确要求）：这里要看的是墙与价格的关系，
+    # 涨跌颜色会把注意力引到单日方向上
+    for i, r in enumerate(rows):
+        x = X(i)
+        P.append(f'<line x1="{x:.1f}" y1="{Y(r["h"]):.1f}" x2="{x:.1f}" '
+                 f'y2="{Y(r["l"]):.1f}" stroke="#57606a" stroke-width="1" opacity=".36"/>')
+        y0, y1 = Y(max(r["o"], r["c"])), Y(min(r["o"], r["c"]))
+        P.append(f'<rect x="{x - bw / 2:.1f}" y="{y0:.1f}" width="{bw:.1f}" '
+                 f'height="{max(y1 - y0, 1):.1f}" fill="#57606a" opacity=".2"/>')
+    PC = ["#1a7f37", "#3fb950", "#7ee787"]
+    CC = ["#cf222e", "#f85149", "#ffa198"]
+    for i, r in enumerate(rows):
+        x = X(i)
+        for rk, (k, _oi) in enumerate(r.get("topP", [])[:3]):
+            P.append(f'<line x1="{x - bw / 2 - 1:.1f}" y1="{Y(k):.1f}" '
+                     f'x2="{x + bw / 2 + 1:.1f}" y2="{Y(k):.1f}" stroke="{PC[rk]}" '
+                     f'stroke-width="{5 - rk * 1.4:.1f}" opacity="{0.95 - rk * 0.24:.2f}"/>')
+        for rk, (k, _oi) in enumerate(r.get("topC", [])[:3]):
+            P.append(f'<line x1="{x - bw / 2 - 1:.1f}" y1="{Y(k):.1f}" '
+                     f'x2="{x + bw / 2 + 1:.1f}" y2="{Y(k):.1f}" stroke="{CC[rk]}" '
+                     f'stroke-width="{5 - rk * 1.4:.1f}" opacity="{0.95 - rk * 0.24:.2f}"/>')
+    pts = " ".join(f"{X(i):.1f},{Y(r['c']):.1f}" for i, r in enumerate(rows))
+    P.append(f'<polyline points="{pts}" fill="none" stroke="#0969da" stroke-width="2.3"/>')
+    for i, r in enumerate(rows):
+        P.append(f'<circle cx="{X(i):.1f}" cy="{Y(r["c"]):.1f}" r="2.2" fill="#0969da"/>')
+    for i, r in enumerate(rows):
+        sig = r.get("sig")
+        if not sig:
+            continue
+        side, ratio = sig[0], sig[1]
+        x = X(i)
+        up = side == "看涨"
+        col = "#1a7f37" if up else "#cf222e"
+        P.append(f'<line x1="{x:.1f}" y1="{PT}" x2="{x:.1f}" y2="{PT + ih}" '
+                 f'stroke="{col}" stroke-width="1" stroke-dasharray="2 4" opacity=".42"/>')
+        P.append(f'<text x="{x:.1f}" y="{Y(r["c"]) + (23 if up else -17):.1f}" '
+                 f'font-size="10" fill="{col}" text-anchor="middle" font-weight="700">'
+                 f'{"▲" if up else "▼"}{ratio:g}×</text>')
+    step = max(1, n // 13)
+    for i, r in enumerate(rows):
+        if i % step == 0 or i == n - 1:
+            x = X(i)
+            P.append(f'<text x="{x:.1f}" y="{PT + ih + 17}" font-size="9.5" '
+                     f'fill="#6e7781" text-anchor="middle" '
+                     f'transform="rotate(-42 {x:.1f},{PT + ih + 17})">{r["date"][5:]}</text>')
+    lg = [("#0969da", "收盘价", 2.4, "1"), ("#57606a", "日 K", 7, ".22"),
+          ("#1a7f37", "put 墙 #1", 5, "1"), ("#3fb950", "put 墙 #2", 3.6, "1"),
+          ("#7ee787", "put 墙 #3", 2.2, "1"), ("#cf222e", "call 墙 #1", 5, "1"),
+          ("#f85149", "call 墙 #2", 3.6, "1"), ("#ffa198", "call 墙 #3", 2.2, "1")]
+    for k, (c, t, lw, op) in enumerate(lg):
+        y = PT + 14 + k * 20
+        P.append(f'<line x1="{PL + iw + 12}" y1="{y}" x2="{PL + iw + 38}" y2="{y}" '
+                 f'stroke="{c}" stroke-width="{lw}" opacity="{op}"/>')
+        P.append(_txt(PL + iw + 44, y + 4, t, size=10.5))
+    P.append(_txt(PL + iw + 12, PT + 14 + 8 * 20 + 4, "▲▼ 极强信号 ≥10×", size=10, fill="#6e7781"))
+    if title:
+        P.append(_txt(PL, 24, title, size=13.5, weight="700"))
+    P.append("</svg>")
+    return "".join(P)

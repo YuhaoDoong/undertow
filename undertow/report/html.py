@@ -2405,7 +2405,8 @@ def render_ratio_spreads(rs, conv=None, unit: str = "", etf_symbol: str = "") ->
 
 def render_credit_wall(verdicts: dict, spot: float = 0.0, conv=None,
                        unit: str = "", etf_symbol: str = "",
-                       buying_power: float | None = None) -> str:
+                       buying_power: float | None = None,
+                       net_assets: float | None = None) -> str:
     """墙位卖方价差候选（analyze/credit_wall）—— 紧跟期权结构，因为它直接用墙位下单。
 
     用户 2026-08-31：「事实证明破墙很难，我们根据墙进行卖方价差，胜率应该很高。」
@@ -2434,6 +2435,29 @@ def render_credit_wall(verdicts: dict, spot: float = 0.0, conv=None,
         ev = (f'<span class="sub">实测 {t["n"]} 笔 · 胜率 {t["win_rate"]:.0%} · '
               f'破墙 {t["break_rate"]:.0%} · 单笔 {t["per_trade_pct"]:+.2f}% · '
               f'年化 {t["annual_pct"]:+.0f}% · 占用中位 ${t["median_occupancy"]:.0f}</span>')
+        # 仓位按 Kelly 判，不按净资产固定百分比 —— 用户 2026-08-31：
+        # 「为了这个 10%，却可能放弃更优的交易而选择次优，这反而放大了风险」
+        kel = ""
+        if net_assets and v.ok and v.spreads:
+            try:
+                from undertow.analyze.sizing import kelly as _kel, size as _sz, ruin_probability
+                _k = _kel(t["win_rate"], t["per_trade_pct"], t.get("win_roi_pct", 12.0))
+                _occ = v.spreads[0].occupancy
+                _v2 = _sz(net_assets, _occ, _k, buying_power=buying_power)
+                import math as _m
+                _n_ruin = max(1, _m.ceil(net_assets / _occ))
+                _rp = ruin_probability(t["win_rate"], _n_ruin)
+                _c = "#1a7f37" if _v2.over_kelly <= 1.5 else "#bc4c00"
+                kel = (f'<div style="margin:5px 0;padding:6px 9px;background:#f6f8fa;'
+                       f'border-radius:5px;font-size:12.5px">'
+                       f'<b>仓位</b>　盈亏比 {_k.odds:.2f}　Kelly {_k.kelly:.0%}'
+                       f'（${net_assets * _k.kelly:.0f}）　'
+                       f'<span style="color:{_c}">1 组 ${_occ:.0f} = 净资产 '
+                       f'{_occ / net_assets:.0%}，Kelly 的 {_v2.over_kelly:.1f} 倍</span>'
+                       f'　·　连续 {_n_ruin} 次全损打光的概率上限 '
+                       f'<b>{_rp:.2%}</b></div>')
+            except Exception:
+                kel = ""
         cfg = (f'<span class="sub">卖腿{"墙内" if t["offset"] < 0 else "墙外"}'
                f'{abs(t["offset"]) * 100:.0f}% · 宽 {t["width"] * 100:.1f}% · '
                f'{t["dte"][0]}~{t["dte"][1]} 天</span>')
@@ -2464,8 +2488,8 @@ def render_credit_wall(verdicts: dict, spot: float = 0.0, conv=None,
         blocks.append(
             f'<div style="border-left:3px solid {col};padding-left:10px;margin:12px 0">'
             f'<div style="font-weight:700;color:{col}">{_esc(t["label"])}档</div>'
-            f'{cfg}<br>{ev}'
-            f'<div class="sub" style="margin:4px 0">{_esc(t["note"])}</div>'
+            f'{cfg}<br>{ev}{kel}'
+            f'<div class="sub" style="margin:4px 0">{_esc(t["note"])}</div>' 
             '<table style="margin-top:6px"><tr><th>腿位</th><th>到期</th><th>收权利金</th>'
             '<th>占用</th><th>ROI</th><th>缓冲</th><th>最大亏</th><th></th></tr>'
             + "".join(rows) + '</table></div>')
@@ -2498,6 +2522,11 @@ def render_credit_wall(verdicts: dict, spot: float = 0.0, conv=None,
         '⚠️ 所有阈值在同一批数据（2026-06-25~08-31）上选出，多重比较风险实打实；'
         '年化是「单笔 × 365/持有天数」的外推，未扣信号空窗期。'
         '真实表现一定比表里的数字差。<br>'
+        '⚠️ <b>仓位按 Kelly 判，不按净资产固定百分比。</b>'
+        '净资产 $264 × 10% = $26，买不起任何一张价差（最小占用 $86）——'
+        '固定百分比对小账户不是风险管理，是强制你去选负期望的廉价合约。'
+        '期权价差 1 组是最小不可分单位，超过 Kelly 时只有「按 1 组做」或「不做」，'
+        '没有第三个选项。<br>'
         '⚠️ 到期日若落在卖腿与买腿之间（如卖61/买60、标的收在 60.5），'
         '卖腿被行权需接货、买腿保护不到，长桥规则是保证金不足即强平（不会负债），'
         '但强平时机与价格不由你控制。</div></div>')

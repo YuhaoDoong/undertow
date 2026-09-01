@@ -66,19 +66,19 @@ RISK_TIERS = {
     "conservative": {
         "label": "稳健", "offset": 0.02, "width": 0.020, "dte": (15, 45),
         "n": 38, "win_rate": 0.82, "break_rate": 0.11, "per_trade_pct": 2.84,
-        "annual_pct": 37, "median_occupancy": 96, "worst_pct": -103,
+        "annual_pct": 37, "median_occupancy": 96, "win_roi_pct": 12.0, "worst_pct": -103,
         "note": "破墙率 11% 最低。账户小的时候先活下来。",
     },
     "balanced": {
         "label": "平衡", "offset": 0.0, "width": 0.025, "dte": (15, 45),
         "n": 45, "win_rate": 0.76, "break_rate": 0.20, "per_trade_pct": -0.43,
-        "annual_pct": -6, "median_occupancy": 117, "worst_pct": -103,
+        "annual_pct": -6, "median_occupancy": 117, "win_roi_pct": 18.0, "worst_pct": -103,
         "note": "卖在墙上。窄宽度下单笔为负——权利金没覆盖住破墙损失。",
     },
     "aggressive": {
         "label": "激进", "offset": -0.02, "width": 0.025, "dte": (4, 14),
         "n": 60, "win_rate": 0.63, "break_rate": 0.35, "per_trade_pct": 9.99,
-        "annual_pct": 413, "median_occupancy": 118, "worst_pct": -105,
+        "annual_pct": 413, "median_occupancy": 118, "win_roi_pct": 20.0, "worst_pct": -105,
         "note": "年化最高，但胜率仅 63%、破墙 35%。连亏 3 次概率 5.1%，"
                 "对小账户是爆仓级风险。",
     },

@@ -1427,10 +1427,11 @@ def cmd_report(args) -> int:
             credit_wall_html = ""
             try:
                 if _ti and _ti.get("side") in ("看涨", "看跌"):
-                    _bp = None
+                    _bp = _na = None
                     try:
                         from undertow.collect.longbridge_account import fetch_assets
-                        _bp = fetch_assets().buy_power
+                        _a = fetch_assets()
+                        _bp, _na = _a.buy_power, _a.net_assets
                     except Exception:
                         pass
                     _vs = {t: cw_propose(curr, obs_day, curr.spot, _ti["side"],
@@ -1439,7 +1440,8 @@ def cmd_report(args) -> int:
                     credit_wall_html = render_credit_wall(
                         _vs, spot=curr.spot,
                         conv=(ga.to_commodity if ratio is not None else None),
-                        etf_symbol=inst.options.symbol, buying_power=_bp)
+                        etf_symbol=inst.options.symbol, buying_power=_bp,
+                        net_assets=_na)
             except Exception as e:
                 print(f"⚠️ {inst.key} 卖方价差失败：{type(e).__name__}: {e}", file=sys.stderr)
 

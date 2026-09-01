@@ -926,3 +926,59 @@ def test_credit_wall_never_sells_itm():
     assert not propose(_S(), obs, 407.23, "看涨", 3.0).ok
     assert tier_params("conservative")["break_rate"] < 0.2
     print("PASS test_credit_wall_never_sells_itm")
+
+
+def test_sizing_is_kelly_not_fixed_pct():
+    """仓位按 Kelly 判，不按净资产固定百分比。
+
+    用户 2026-08-31：「原本我们的守则是仓位管理风险 10%？但是为了这个 10%，
+    却可能放弃更优的交易，而选择次优，这反而放大了风险。风险管理得再好，
+    永远在亏损有啥用呢。」
+
+    这不是偏好问题是算术：净资产 $264 × 10% = $26，买不起任何一张价差
+    （最小占用 $86）。固定百分比对小账户 = 强制选择负期望的廉价合约。
+
+    锁三件事：
+      ① 负优势时必须拒绝（仓位再小也是慢慢亏）
+      ② 1 组超过 Kelly 时不得静默压到 0 —— 那等于"不能交易"，
+         要把超配倍数摆出来交给人决定
+      ③ 盈亏比（b）必须真的按 赢/亏 算，且实测里激进档的 b 高于稳健档
+    """
+    from undertow.analyze.sizing import kelly, size, ruin_probability
+    from undertow.analyze.credit_wall import RISK_TIERS
+
+    # ③ 关键反直觉事实：激进档胜率低但盈亏比远高（买腿保护近，破墙也只破一点）
+    cons = RISK_TIERS["conservative"]
+    aggr = RISK_TIERS["aggressive"]
+    kc = kelly(cons["win_rate"], cons["per_trade_pct"], cons["win_roi_pct"])
+    ka = kelly(aggr["win_rate"], aggr["per_trade_pct"], aggr["win_roi_pct"])
+    assert aggr["win_rate"] < cons["win_rate"], "激进档胜率更低"
+    assert ka.odds > kc.odds * 3, "但激进档盈亏比必须显著更高，这是它能上仓位的原因"
+    assert ka.kelly > kc.kelly, "Kelly 应据此给激进档更大仓位"
+    assert kc.lose_roi > ka.lose_roi, "稳健档输的时候亏得更多（卖得远=被打穿即深实值）"
+
+    # ① 负优势拒绝
+    bad = kelly(0.30, -5.0, 10.0)
+    assert not bad.positive_edge
+    v = size(264.0, 100.0, bad)
+    assert not v.ok and "不该做" in v.reason
+
+    # ② 1 组超 Kelly 不得静默归零
+    v2 = size(264.0, 96.0, kc, buying_power=153.0)
+    assert v2.ok and v2.n_units == 1, "不得因超 Kelly 就判成不能做"
+    assert v2.over_kelly > 1.0
+    assert "不存在" in v2.reason, "必须说明「压到 Kelly 以下的选项不存在」"
+
+    # 买不起要明说
+    v3 = size(264.0, 900.0, ka, buying_power=153.0)
+    assert not v3.ok and "做不了" in v3.reason
+
+    # 破产概率随胜率下降而升高
+    assert ruin_probability(0.23, 3) > ruin_probability(0.82, 3) * 10
+
+    src = (Path(__file__).resolve().parents[1] / "undertow" / "analyze"
+           / "sizing.py").read_text("utf-8")
+    assert "10%" in src and "买不起" in src, "固定百分比失效的算术必须留在代码里"
+    # 术语与 risk_reward 保持一致
+    assert "盈亏比" in src and "赔率" not in src
+    print("PASS test_sizing_is_kelly_not_fixed_pct")

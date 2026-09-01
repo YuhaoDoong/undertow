@@ -56,9 +56,11 @@ class Validation:
     key: str
     label: str
     n: int
-    hits: int
-    p_value: float
-    baseline: float          # 对照基准（无脑做多的胜率等）
+    # hits/p_value/baseline 允许 None：「这条根本没法检验」是本项目的真实状态
+    # （三条核心闸门要历史逐行 OI，免费源拿不到）。见 status 的「无法检验」分支。
+    hits: int | None
+    p_value: float | None
+    baseline: float | None   # 对照基准（无脑做多的胜率等）
     note: str
     caveat: str = ""
     cluster_n: int | None = None   # 日期簇数（跨品种同日相关，簇才是独立样本）
@@ -75,7 +77,10 @@ class Validation:
 
     @property
     def significant(self) -> bool:
-        return self.p_value < 0.05
+        # p_value / hits 允许为 None：本项目里「这条根本没法检验」是真实状态
+        # （三条核心闸门要历史逐行 OI，免费源拿不到）。没有 p 值就不算显著，
+        # 而不是崩溃，也不是硬塞一个假 p 值蒙混过去。
+        return self.p_value is not None and self.p_value < 0.05
 
     @property
     def cluster_corrected(self) -> bool:
@@ -87,6 +92,8 @@ class Validation:
     def status(self) -> str:
         if self.n == 0:
             return "未验证"
+        if self.p_value is None:
+            return "无法检验"
         # codex 2026-08-31 P1-12：原实现只看原始 p<0.05 就标「已验证」，
         # 于是 expected_move 的 raw p=0.048（同批数据第二次找模式、极端档 n=6、
         # 未用簇推断）被显示成绿色已验证。凡未做簇修正的一律降级。
@@ -131,7 +138,25 @@ REGISTRY: dict[str, Validation] = {
         cluster_n=None,
         note="开火信号配当日 open→close。分波动看：横盘<0.5% 时 6/12=50%（掷硬币）、"
              "小动 7/10=70%、中动 3/3=100%、大动 1/1=100%。整体不显著是被横盘日稀释的。",
-        caveat="样本区间仅 2026-06-25 起，且横盘日占比近半"),
+        caveat="⚠️ 2026-09-01 作废重估：baseline=0.50 是错的。样本期内 GLD/SLV/USO "
+                "全程上涨（+7.4%/+9.7%/+26.8%），随机做空命中率只有 39~40%，而本表 26 "
+                "条信号里绝大多数是看跌 —— 拿 50% 当零假设会把真信号判成噪音。"
+                "改用同(品种,方向)随机取日的置换检验后，见 strong_signal_extreme_d1。"
+                "另：本条用当日 open→close(D+0)，实测 D+1 才是有效窗口。"),
+    "strong_signal_extreme_d1": Validation(
+        key="strong_signal_extreme_d1", label="极强信号方向（正规台账口径）",
+        n=16, hits=9, p_value=0.804, baseline=0.50, cluster_n=None,
+        note="数据源：data/history/signals/*.json（record() 自动落盘，无遗漏）。"
+             "口径：base=C[D−1]，forward_Nd=C[D−1+N]/C[D−1]−1，去趋势(减 N×drift_60d)、"
+             "按品种抽稀成不重叠样本。"
+             "分窗口：D+0 9/16=56.2% p=0.804；D+1 8/15=53.3% p=1.000；"
+             "D+2 8/14=57.1% p=0.790；D+4 5/12=41.7% p=0.774。**全窗口不显著。**",
+        caveat="⚠️ 2026-09-01 教训：当天先用 data/history/strong_signal_days.json（手工台账）"
+               "算出 D+1 9/12=75%、p=0.027，差点写进 skill。核对发现该手工台账"
+               "【漏记了 3 条有结果的极强信号，且 3 条全部不应验】"
+               "（07-10 gold 看涨 −0.31%、07-30 wti 看涨 −1.42%、08-14 silver 看跌 +0.55%）"
+               "—— 典型幸存者偏差。手工台账已废弃，一切统计只走 signal_ledger.load_all()。"
+               "另：HORIZONS 原为 (1,3,5,10)，缺 2（即 D+1 次日），2026-09-01 补入。"),
     "tradeable_gate": Validation(
         key="tradeable_gate", label="可交易信息闸门（压力比 ≥2×）",
         n=62, hits=40, p_value=0.044, baseline=0.50, cluster_n=30,
@@ -140,6 +165,38 @@ REGISTRY: dict[str, Validation] = {
                "② Fisher 检验把 91 个品种-日当独立观察，未做日期簇聚类 —— "
                "登记簿里写了 cluster_n=30 但推断没用它（codex 2026-08-31 P1-11）；"
                "③ 待样本外验证"),
+    "gate_net_effect": Validation(
+        key="gate_net_effect", label="闸门净效果（开火 vs 被拦）",
+        n=36, hits=None, p_value=None, baseline=None, cluster_n=None,
+        note="2026-09-01 首次检验。三条核心闸门（压力比/主翼比/净建仓规模）"
+             "【从未被检验过】——检验需历史逐行权价 ΔOI，免费源拿不到，只能向前累积。"
+             "唯一可做的是逆向价格闸门的双样本对比：\n"
+             "  gate_contrast  开火均值 / 被拦均值 / Welch t\n"
+             "    h=1 (D+0)   +0.36% / +0.24% / +0.15\n"
+             "    h=2 (D+1)   -0.18% / +1.62% / -1.45\n"
+             "    h=3 (D+2)   -0.66% / +2.08% / -1.75\n"
+             "    h=5 (D+4)   -1.64% / +1.87% / -1.48\n"
+             "另按压力比≥10× 手工分组（各 18 条）："
+             "D+0 开火 56%/+0.28% vs 被拦 56%/−0.14%；"
+             "D+1 开火 50%/−0.42% vs 被拦 67%/+0.82%。\n"
+             "── 2026-09-01 逐条闸门检验（89 条压力比达标样本，去趋势）──\n"
+             "① 主翼比：wing_ok=True 42条 D+1 51%/+0.29% ；False 47条 D+1 69%/+0.79%\n"
+             "② 净建仓规模：scale_ok=True 89条，False 0条 —— 【89 次一次没拦过，是摆设】\n"
+             "③ 逆向价格：contra_ok=True 31条 D+1 48%/−0.23%；False 11条 D+1 60%/+1.69%\n"
+             "④ 合计：开火 27条 D+1 −0.23% vs 被拦 52条 D+1 +0.97%，"
+             "Welch t=−1.828（抽稀后 −1.716），主翼比单独置换 p=0.255。\n"
+             "被拦掉的最好几条：07-24 wti +10.68%、08-02 wti +10.00%、07-10 wti +8.60%、"
+             "08-19 silver +7.98% —— 多数被主翼比拦下。",
+        caveat="⚠️ |t| 均未达 2、blocked_n 仅 8~10，按模块自身标准一条都不成立，"
+               "【不构成「闸门有害」的结论】。但 h=2/3/5 三个窗口方向一致（被拦组更好），"
+               "这个方向须持续监控，不得因不显著就当噪音丢弃。"
+               "行动项（按确定性排序）：\n"
+               "  a) 净建仓规模闸门 89/89 全过 —— 这条【不需要显著性】就能断定是摆设，"
+               "     要么调紧阈值要么删掉，别再算作『三道闸门』之一；\n"
+               "  b) 报告应把【被闸门拦下的信号】也显示出来（标注未过闸门及卡在哪一条），"
+               "     现在用户完全看不到它们，无从判断闸门是否误伤；\n"
+               "  c) 样本到 n≥50（开火组）时重跑本条；在那之前"
+               "     既不得以「闸门已验证」为由辩护，也不得据此拆闸门。"),
     "wall_space_vote": Validation(
         key="wall_space_vote", label="Gamma 墙位空间投票",
         n=83, hits=41, p_value=1.000, baseline=0.51, cluster_n=43,

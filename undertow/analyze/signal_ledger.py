@@ -40,7 +40,11 @@ from pathlib import Path
 
 from undertow.core.config import DATA_DIR
 
-HORIZONS = (1, 3, 5, 10)
+HORIZONS = (1, 2, 3, 5, 10)
+# ⚠️ forward_Nd 的 N 是【从基准日 C[D−1] 起数的收盘根数】，不是 D 之后的天数：
+#   forward_1d = C[D]/C[D−1]−1     ← 信号日当天（决策日收盘）
+#   forward_2d = C[D+1]/C[D−1]−1   ← 次日（2026-09-01 补：原表缺 2，
+#                                     而实测最优窗口正是这里，等于从没测过）
 DRIFT_N = 60          # 局部去趋势回看窗口（与拉伸度回测同口径）
 MA_N = 200            # 牛熊制度判定
 MIN_N = 50            # 下结论的最小样本量（对齐 stretch.MIN_TEST_N）

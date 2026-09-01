@@ -266,11 +266,21 @@ def test_backfill_base_is_pre_signal_close(tmp_path):
 
 
 def test_summarize_rejects_unsupported_horizon():
+    # 用 7：不在 HORIZONS 里，没有对应的 forward_7d 字段。
+    # （原来这里举的例子是 2，但 2026-09-01 把 2 补进 HORIZONS 了 ——
+    #   forward_2d 即"信号次日"，原表 (1,3,5,10) 跳过了它，等于从没测过该窗口。）
+    assert 7 not in sl.HORIZONS
     try:
-        sl.summarize([], horizon=2)
+        sl.summarize([], horizon=7)
     except ValueError:
         print("PASS test_summarize_rejects_unsupported_horizon"); return
-    raise AssertionError("horizon=2 应当报错而不是静默返回空统计")
+    raise AssertionError("horizon=7 应当报错而不是静默返回空统计")
+
+
+def test_horizon_2_是次日窗口且被支持():
+    """2026-09-01 补：D+1（次日）此前从未被台账测过。"""
+    assert 2 in sl.HORIZONS
+    sl.summarize([], horizon=2)      # 不得抛错
 
 
 def test_thin_is_per_instrument(tmp_path):

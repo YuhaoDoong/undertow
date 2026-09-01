@@ -14,6 +14,11 @@
 ⚠️ 样本期 SLV +14.8%、GLD +10.5%，是单边上涨行情。
    put 侧零破墙有相当部分来自方向，不能外推到跌市。
 """
+# ⚠️ 2026-09-01：本脚本用 snapshot.spot 当开仓现价，而 46 个快照里 34 个的
+#    spot 不是文件名当天的价（见 memory/snapshot-date-alignment-p0）。
+#    结论仍保留（它记录的是"策略不通过验证"这个负面结果，方向不受影响），
+#    但数值不可引用。新回测走 scripts/backtest_wall_spread.py（决策价=C[D−1]）。
+
 import argparse, json, math, os, pathlib, statistics, sys
 from collections import defaultdict
 from datetime import date, datetime

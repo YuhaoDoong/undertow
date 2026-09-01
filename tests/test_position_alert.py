@@ -999,7 +999,9 @@ def test_sizing_is_kelly_not_fixed_pct():
     # ② 超 Kelly 必须分档处理（codex 2026-08-31 P0-1：原实现任何倍数都放行）
     from undertow.analyze.sizing import OVER_KELLY_SOFT, OVER_KELLY_HARD
     assert OVER_KELLY_HARD > OVER_KELLY_SOFT >= 1.0
-    v2 = size(264.0, 96.0, kc, buying_power=153.0)          # ≈1.5x
+    # 用合成的正优势策略验超配分档（不用已证伪的 credit_wall 数据）
+    kc = kelly(0.70, 3.0, 12.0)
+    v2 = size(264.0, 96.0, kc, buying_power=153.0)
     assert v2.over_kelly > 1.0
     if v2.over_kelly > OVER_KELLY_SOFT:
         assert not v2.ok, "超软上限且未显式确认 → 必须拒绝"
@@ -1007,11 +1009,11 @@ def test_sizing_is_kelly_not_fixed_pct():
             "显式确认后应可下 —— 小账户不能被仓位规则完全禁止交易"
     # 6 倍超配（顺向买方实测）必须硬拒绝，不得靠文字提示了事
     kb = kelly(0.23, 17.8, 250.0)
-    v_big = size(264.0, 116.0, kb, buying_power=153.0, allow_over=True)
+    v_big = size(264.0, 240.0, kb, buying_power=264.0, allow_over=True)
     assert not v_big.ok and "硬上限" in v_big.reason
 
     # 买不起要明说
-    v3 = size(264.0, 900.0, ka, buying_power=153.0)
+    v3 = size(264.0, 900.0, kc, buying_power=153.0)
     assert not v3.ok and "做不了" in v3.reason
 
     src = (Path(__file__).resolve().parents[1] / "undertow" / "analyze"

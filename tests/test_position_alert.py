@@ -910,16 +910,25 @@ def test_credit_wall_never_sells_itm():
         assert cw_a >= cw_b, "卖得越近，credit/width 必须越高"
         assert br_a >= br_b, "卖得越近，破墙率必须越高"
 
-    # 三档必须各自带回测证据，且激进档要标出爆仓风险
+    # 2026-08-31 codex review 后重做回测：三档全部负簇均 ROI，策略必须默认停用
+    from undertow.analyze.credit_wall import STRATEGY_VALIDATED
+    assert STRATEGY_VALIDATED is False, "未通过验证的策略不得默认放行"
     for k, t in RISK_TIERS.items():
-        for f in ("n", "win_rate", "break_rate", "per_trade_pct",
-                  "annual_pct", "median_occupancy", "worst_pct"):
+        for f in ("n", "clusters", "win_rate", "per_trade_pct",
+                  "perm_p", "ci95", "total_pnl"):
             assert f in t, f"{k} 缺 {f}"
-    assert RISK_TIERS["aggressive"]["win_rate"] < RISK_TIERS["conservative"]["win_rate"]
-    assert RISK_TIERS["aggressive"]["break_rate"] > RISK_TIERS["conservative"]["break_rate"]
-    assert "爆仓" in RISK_TIERS["aggressive"]["note"]
-    # 提前平仓的负面结论必须留在代码里，防止日后又"优化"成收50%就跑
-    assert "提前平仓实测【更差】" in src
+        assert t["per_trade_pct"] < 0, f"{k} 簇均 ROI 应为负（实测结论）"
+        assert t["perm_p"] > 0.05, f"{k} 置换 p 应不显著"
+        assert "未通过验证" in t["note"]
+    # 胜率高不等于赚钱 —— 这正是不能用二项检验代替净收益检验的原因
+    assert RISK_TIERS["aggressive"]["win_rate"] > 0.5
+    assert RISK_TIERS["aggressive"]["per_trade_pct"] < 0
+    # 四处方法论错误的记录必须留在代码里，防止凭「82% 胜率」的记忆重新打开
+    for kw in ("策略定义漂移", "DTE", "look-ahead", "日期簇"):
+        assert kw in src, f"错误记录缺 {kw}"
+    # 回测必须可复现
+    assert (Path(__file__).resolve().parents[1] / "scripts"
+            / "backtest_credit_wall.py").exists(), "回测脚本必须入库"
 
     class _C:
         def __init__(s, k, st_, e, oi, bid=1.0, ask=1.1):
@@ -933,13 +942,17 @@ def test_credit_wall_never_sells_itm():
 
     class _S:
         contracts = cs
-    v = propose(_S(), obs, 407.23, "看涨", 6.0, tier="aggressive")
+    # 默认必须拒绝（策略未通过验证）
+    assert not propose(_S(), obs, 407.23, "看涨", 6.0, tier="aggressive").ok
+    # force=True 仅供研究，此时虚值钳制仍须生效
+    v = propose(_S(), obs, 407.23, "看涨", 6.0, tier="aggressive",
+                execution_date=_d(2026, 8, 31), force=True)
     for sp in v.spreads:
         assert sp.sell_strike < 407.23, f"卖腿 {sp.sell_strike} 是实值，绝不允许"
 
-    # 中等信号必须被拒
-    assert not propose(_S(), obs, 407.23, "看涨", 3.0).ok
-    assert tier_params("conservative")["break_rate"] < 0.2
+    # 中等信号必须被拒（即便 force）
+    assert not propose(_S(), obs, 407.23, "看涨", 3.0, force=True).ok
+    assert tier_params("conservative")["per_trade_pct"] < 0
     print("PASS test_credit_wall_never_sells_itm")
 
 
@@ -962,15 +975,20 @@ def test_sizing_is_kelly_not_fixed_pct():
     from undertow.analyze.sizing import kelly, size, ruin_probability
     from undertow.analyze.credit_wall import RISK_TIERS
 
-    # ③ 关键反直觉事实：激进档胜率低但盈亏比远高（买腿保护近，破墙也只破一点）
-    cons = RISK_TIERS["conservative"]
-    aggr = RISK_TIERS["aggressive"]
-    kc = kelly(cons["win_rate"], cons["per_trade_pct"], cons["win_roi_pct"])
-    ka = kelly(aggr["win_rate"], aggr["per_trade_pct"], aggr["win_roi_pct"])
-    assert aggr["win_rate"] < cons["win_rate"], "激进档胜率更低"
-    assert ka.odds > kc.odds * 3, "但激进档盈亏比必须显著更高，这是它能上仓位的原因"
-    assert ka.kelly > kc.kelly, "Kelly 应据此给激进档更大仓位"
-    assert kc.lose_roi > ka.lose_roi, "稳健档输的时候亏得更多（卖得远=被打穿即深实值）"
+    # ③ Kelly 本身的性质用合成数据验（credit_wall 的输入已在 2026-08-31 证伪，
+    #    不能再拿它做断言 —— 那正是「用未验证数据反推参数」的老毛病）
+    #    同胜率下，盈亏比越高 → Kelly 越大
+    k_lo = kelly(0.60, 2.0, 5.0)      # 赢5% 期望2% → 输2.5% → b=2.0
+    k_hi = kelly(0.60, 10.0, 20.0)    # 赢20% 期望10% → 输5%  → b=4.0
+    assert k_hi.odds > k_lo.odds and k_hi.kelly > k_lo.kelly
+    #    高胜率不保证正优势 —— 这是 codex P1-8 的核心：胜率答错了问题
+    k_trap = kelly(0.80, -3.0, 5.0)     # 80% 胜率但期望为负
+    assert k_trap.win_rate > 0.75 and not k_trap.positive_edge, \
+        "80% 胜率 + 负期望必须被判为无优势"
+    #    credit_wall 三档实测：胜率 53~67%，簇均 ROI 全负 —— 事实要锁住
+    for t in RISK_TIERS.values():
+        assert t["win_rate"] > 0.5 and t["per_trade_pct"] < 0, \
+            "胜率过半却亏钱，这个反直觉事实必须留在数据里"
 
     # ① 负优势拒绝
     bad = kelly(0.30, -5.0, 10.0)

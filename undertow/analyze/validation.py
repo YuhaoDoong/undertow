@@ -167,20 +167,26 @@ REGISTRY: dict[str, Validation] = {
                "QQQ 随机基线仍有 4.5 个，条目多时不可信"),
     # codex 2026-08-31 P1-12：真正决定仓位的 credit_wall 与 Kelly 此前根本没登记，
     # 违反本模块开头自己写的第 1 条规则。补登记，并如实写明未通过簇修正。
+    # 2026-08-31 codex review 后重做回测：三档全部翻负，策略默认停用。
+    # 保留登记是为了记住「82% 胜率」那个错误结论是怎么来的。
     "credit_wall_conservative": Validation(
         key="credit_wall_conservative", label="墙位卖方价差·稳健档",
-        n=38, hits=31, p_value=1.0, baseline=0.50, cluster_n=None,
-        note="墙外2%·宽2.0%·15~45天，持有到期。胜率 82%、单笔 +2.84%。",
-        caveat="① 38 笔不是 38 个独立样本：同一信号下多个到期共享方向/路径/事件，"
-               "有效 n 至多是独立信号日期数；② 未做日期簇聚类，p 值不可用（故填 1.0）；"
-               "③ 入场价用盘前快照 bid/ask，非开盘可成交价；④ 未模拟提前指派与到期强平；"
-               "⑤ 报告按年化排序取 spreads[0]，但统计是全候选均值（策略定义漂移）"),
+        kind="corr", n=19, hits=0, p_value=0.949, baseline=0.0,
+        r=-0.2571, r_control=None, cluster_n=14,
+        effect="簇均 ROI -25.71%，95%CI [-53.9%, +0.2%] —— 未通过",
+        note="每信号一笔(max_roi)、DTE 按执行日、到期日缺价即丢弃、按日期簇聚合。",
+        caveat="最初报的「38 笔 82% 胜率 +2.84%/笔」来自四处方法论错误叠加："
+               "①一个信号算多笔而报告只取年化最高者(策略定义漂移) "
+               "②DTE 用 obs_day 错一天 ③到期日缺价向后取(look-ahead) "
+               "④品种-日当独立样本。修正后为负"),
     "credit_wall_aggressive": Validation(
         key="credit_wall_aggressive", label="墙位卖方价差·激进档",
-        n=60, hits=38, p_value=1.0, baseline=0.50, cluster_n=None,
-        note="墙内2%·宽2.5%·4~14天，持有到期。胜率 63%、单笔 +9.99%。",
-        caveat="同稳健档五条；另：平均亏损 7.1% 与最差 −105% 差距极大，"
-               "用平均值反解的 Kelly 忽略了真正决定账户生存的尾部"),
+        kind="corr", n=18, hits=0, p_value=0.713, baseline=0.0,
+        r=-0.0557, r_control=None, cluster_n=16,
+        effect="簇均 ROI -5.57%，95%CI [-26.4%, +10.6%] —— 三档里最接近零",
+        note="同稳健档口径。九个组合(3规则×3档)全部负簇均 ROI。",
+        caveat="胜率 67% 但簇均 ROI 为负 —— 胜率高不等于赚钱，"
+               "这正是不能用二项检验代替净收益检验的原因(codex P1-8)"),
     "kelly_sizing": Validation(
         key="kelly_sizing", label="Kelly 仓位（由平均盈亏反解）",
         kind="corr", n=0, hits=0, p_value=1.0, baseline=0.0, r=0.0,
@@ -189,7 +195,8 @@ REGISTRY: dict[str, Validation] = {
         note="f*=(p·b−q)/b，b 由平均盈利÷平均亏损得到。",
         caveat="codex 2026-08-31 P1-9：正确做法是对逐笔收益分布直接最大化 "
                "Σlog(1+f·r_i)，并按日期簇重采样、对参数不确定性折扣。"
-               "当前实现是粗近似，仅用于给出量级"),
+               "⚠️ 其输入（credit_wall 各档胜率/期望）现已证伪，"
+               "在策略本身重新通过验证前，Kelly 结果无意义"),
     "expected_move": Validation(
         key="expected_move", label="可判定率预告波动幅度",
         kind="corr", n=66, hits=0, p_value=0.048, baseline=0.0,

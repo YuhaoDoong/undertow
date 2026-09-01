@@ -2418,9 +2418,46 @@ def render_credit_wall(verdicts: dict, spot: float = 0.0, conv=None,
     仓位不作为筛选条件（用户同日：「如果因为仓位选择了更差的交易，反而得不偿失」）：
     三档全列，占用标出来，选哪档由人定。
     """
-    from undertow.analyze.credit_wall import RISK_TIERS, OFFSET_TRADEOFF
+    from undertow.analyze.credit_wall import (RISK_TIERS, OFFSET_TRADEOFF,
+                                              STRATEGY_VALIDATED)
     if not verdicts:
         return ""
+    if not STRATEGY_VALIDATED:
+        # 2026-08-31 codex review 后重做回测：三档全部负簇均 ROI，策略停用。
+        # 卡片保留，但只讲「为什么停用」——留作反例，防止日后凭「82% 胜率」
+        # 的记忆把它重新打开。
+        rows = "".join(
+            f'<tr><td>{_esc(t["label"])}档</td><td class="r">{t["n"]}</td>'
+            f'<td class="r">{t["clusters"]}</td><td class="r">{t["win_rate"]:.0%}</td>'
+            f'<td class="r" style="color:#cf222e">{t["per_trade_pct"]:+.2f}%</td>'
+            f'<td class="r">{t["perm_p"]:.3f}</td>'
+            f'<td class="r">[{t["ci95"][0]:+.1f}%, {t["ci95"][1]:+.1f}%]</td>'
+            f'<td class="r">{t["total_pnl"]:+.0f}</td></tr>'
+            for t in RISK_TIERS.values())
+        return (
+            '<div class="card" style="border-left:4px solid #cf222e">'
+            '<h2>② 墙位卖方价差 · ⛔ 未通过验证，已停用</h2>'
+            '<div class="sub" style="line-height:1.8">'
+            '最初的回测给出「稳健档 82% 胜率 +2.84%/笔、激进档 63% +9.99%/笔」，'
+            'codex 审查指出四处方法论错误，逐条修掉后<b>三档全部翻负</b>：'
+            '<br>① <b>策略定义漂移</b>：一个信号下多个到期各算一笔，而报告只取年化'
+            '最高的那个 —— 统计的策略和执行的策略不是同一个'
+            '<br>② <b>DTE 错一天</b>：用 OI 所属日算到期天数，0DTE 被当成 3DTE'
+            '<br>③ <b>向后取价</b>：到期日缺收盘价时取之后最近一天，把到期后的价格'
+            '变动带进内在价值 —— look-ahead'
+            '<br>④ <b>品种-日当独立样本</b>：金银同日相关 0.89、QQQ/TQQQ 0.99'
+            '</div>'
+            '<table style="margin-top:10px"><tr><th>档位</th><th>笔数</th>'
+            '<th>日期簇</th><th>胜率</th><th>簇均 ROI</th><th>置换 p</th>'
+            '<th>95% CI</th><th>总 PnL</th></tr>' + rows + '</table>'
+            '<div class="sub" style="margin-top:8px;line-height:1.8">'
+            '置换检验问的是<b>「日期簇净收益是否 &gt; 0」</b>，不是「胜率是否 &gt; 50%」。'
+            '胜率高不等于赚钱 —— 上表 53~67% 的胜率配的是 -5.6~-31.7% 的簇均 ROI。'
+            '<br>九个组合（3 种选择规则 × 3 档）全部负簇均 ROI，置换 p 全部 &gt; 0.7。'
+            '<br>「墙难破」这个观察本身仍成立（破墙率 5~35%），'
+            '<b>但权利金覆盖不了破墙时的损失</b>。'
+            '<br>回测可复现：<code>scripts/backtest_credit_wall.py</code>，'
+            '逐笔账本在 <code>data/backtest/</code>。</div></div>')
     sym = _esc(etf_symbol)
 
     def _p(v):

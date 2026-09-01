@@ -4,42 +4,42 @@
 应该是卖方价差。因为事实证明破墙很难。」回测证实了这个直觉，但需要三道闸门，
 少一道就变成亏损策略。
 
-═══ 回测（2026-08-31，样本区间 2026-06-25~08-31，7 个品种）═══
+═══ 回测结论（2026-08-31 codex review 后重做）：**该策略未通过验证** ═══
 
-【为什么必须用「近端加总墙」而不是「同到期专属墙」】
-用户当时追问「墙的日期也要考虑」——我第一版正是用近端(≤14天)加总的墙去卖
-22~45 天的价差，口径错配。但改成同到期专属墙后结果反而崩了：
+最初的回测给出「稳健档 82% 胜率 +2.84%/笔、激进档 63% +9.99%/笔」，
+codex 指出四处方法论错误，逐条修掉后结果全部翻负：
 
-  近端加总墙 · 厚度≥10%   45笔  84%胜率  +3.62%/笔  年化 +50%
-  近端加总墙 · 厚度≥15%   14笔  86%胜率  +9.73%/笔  年化 +133%
-  近端加总墙 · 厚度≥20%    9笔 100%胜率 +11.56%/笔  年化 +147%
-  同到期专属墙 · ≥25%     55笔  76%胜率  -5.26%/笔  年化 -72%
-  同到期专属墙 · ≥45%     22笔  68%胜率 -16.55%/笔  年化 -208%
+  错误①（P1-10 策略定义漂移）一个信号下的多个到期各算一笔，而报告只取
+        annual_roi 最高的那一个 —— 统计的策略和执行的策略不是同一个。
+        改为【每信号只选一笔】，且回测与报告用同一条事前规则。
+  错误②（P0-3）DTE 用 obs_day 算，整体错一天，0DTE 被当成 3DTE。
+  错误③（P1-14）到期日无收盘价时向后取最近一天 —— 把到期后的价格变动
+        带进内在价值，是明确的 look-ahead。改为缺失即丢弃。
+  错误④（P1-6）品种-日当独立样本。金银同日相关 0.89、QQQ/TQQQ 0.99，
+        改为同日跨品种合成一个等权组合收益，按【日期簇】统计。
 
-同到期口径提高门槛不但没改善、反而更差，所以这不是幸存者偏差：
-**跨到期都堆在同一位置＝真关键位；单个到期的最大 OI＝噪音。**
-正确用法是把同到期当【第二重确认】——加总墙的位置上，该到期自己也要有墙：
+修正后（scripts/backtest_credit_wall.py，逐笔账本在 data/backtest/）：
 
-  加总≥10% + 同到期≥20% · 15~45天   13笔 92%胜率 +8.93%/笔 年化+98% p=0.003
-  加总≥10% + 同到期≥20% ·  4~14天   23笔 78%胜率 +1.15%/笔 年化+47% p=0.011
+  规则       档位          笔数 簇数 胜率  簇均ROI   置换p   95%CI            总PnL
+  max_roi    conservative  19  14  53%  -25.71%  0.949  [-53.9,  +0.2]   -712
+  max_roi    balanced      19  14  63%  -31.70%  0.971  [-60.3,  -3.3]  -1840
+  max_roi    aggressive    18  16  67%   -5.57%  0.713  [-26.4, +10.6]   -803
+  first      conservative  19  14  58%  -15.52%  0.872  [-40.6,  +7.0]   -553
+  first      aggressive    18  16  72%   -5.90%  0.724  [-26.7, +10.2]   -802
+  max_credit conservative  17  12  59%  -12.80%  0.804  [-40.4,  +9.1]   +108
+  max_credit aggressive    17  15  65%   -8.88%  0.762  [-32.6, +11.8]   -849
 
-【为什么必须是极强信号】亏损全集中在中等信号：
-  极强(≥5×)  亏损笔最惨 -24
-  中等(2~5×) 亏损笔 -1250 / -499 / -260 —— 大亏 50 倍
-【为什么必须看墙的厚度】亏损笔的墙平均 29,969、盈利笔 65,789（差 2.2 倍）；
-  墙 OI <30,000 时破墙率 55%，≥60,000 时降到 21%。
-  绝对 OI 不可跨品种比较（QQQ 的 4 万 ≠ SLV 的 4 万），故一律用相对占比。
+**九个组合（3 选择规则 × 3 档）全部负簇均 ROI，置换 p 全部 > 0.7。**
+置换检验问的是「日期簇净收益是否 > 0」，而不是「胜率是否 > 50%」——
+胜率高不等于赚钱，balanced 档 63~74% 的胜率配的是 -17~-32% 的簇均 ROI。
 
-【到期时间】用户猜「越快到期越不容易破墙」——实测不成立，破墙率与 DTE 无关
-（20~29% 横跨 1~45 天）。但胜率随 DTE 单调上升（56%→86%），因为收到的
-权利金更厚、缓冲更大。15~45 天单笔收益率最高。
+所以本模块【默认不出候选】。保留代码是因为：
+  · 逻辑（三道闸门、墙位分层、虚值钳制）本身是对的，样本外可再验；
+  · 「墙难破」这个观察仍成立（破墙率 5~35%），只是权利金覆盖不了破墙的损失；
+  · 需要它作为反例，防止日后有人凭「82% 胜率」的记忆把它重新打开。
 
-【铁鹰不成立】双边同时卖，破墙率飙到 57~80%（任一边破就亏）：
-  全信号 4~14天 50%胜率 -3.06%/笔　全信号 15~45天 64%胜率 -4.70%/笔
-  极强 15~45天 71%胜率 -3.14%/笔 —— 全负。已否决，勿再试。
+要用必须显式 force=True，且报告会打上未验证标记。
 
-⚠️ 所有阈值都是在同一批数据上选出来的，多重比较风险实打实；
-   最优组合仅 13 笔。这套参数需要样本外验证才算数。
 """
 from __future__ import annotations
 
@@ -65,24 +65,31 @@ FEE_PER_LEG = 0.80
 RISK_TIERS = {
     "conservative": {
         "label": "稳健", "offset": 0.02, "width": 0.020, "dte": (15, 45),
-        "n": 38, "win_rate": 0.82, "break_rate": 0.11, "per_trade_pct": 2.84,
-        "annual_pct": 37, "median_occupancy": 96, "win_roi_pct": 12.0, "worst_pct": -103,
-        "note": "破墙率 11% 最低。账户小的时候先活下来。",
+        "n": 19, "clusters": 14, "win_rate": 0.53, "break_rate": None,
+        "per_trade_pct": -25.71, "annual_pct": None,
+        "median_occupancy": 96, "worst_pct": -104, "win_roi_pct": 12.0,
+        "perm_p": 0.949, "ci95": (-53.94, 0.17), "total_pnl": -712,
+        "note": "⛔ 未通过验证：簇均 ROI -25.71%，置换 p=0.949，95%CI 上界仅 +0.17%。",
     },
     "balanced": {
         "label": "平衡", "offset": 0.0, "width": 0.025, "dte": (15, 45),
-        "n": 45, "win_rate": 0.76, "break_rate": 0.20, "per_trade_pct": -0.43,
-        "annual_pct": -6, "median_occupancy": 117, "win_roi_pct": 18.0, "worst_pct": -103,
-        "note": "卖在墙上。窄宽度下单笔为负——权利金没覆盖住破墙损失。",
+        "n": 19, "clusters": 14, "win_rate": 0.63, "break_rate": None,
+        "per_trade_pct": -31.70, "annual_pct": None,
+        "median_occupancy": 117, "worst_pct": -104, "win_roi_pct": 18.0,
+        "perm_p": 0.971, "ci95": (-60.31, -3.28), "total_pnl": -1840,
+        "note": "⛔ 未通过验证：簇均 ROI -31.70%，95%CI 整体为负（上界 -3.28%）。",
     },
     "aggressive": {
         "label": "激进", "offset": -0.02, "width": 0.025, "dte": (4, 14),
-        "n": 60, "win_rate": 0.63, "break_rate": 0.35, "per_trade_pct": 9.99,
-        "annual_pct": 413, "median_occupancy": 118, "win_roi_pct": 20.0, "worst_pct": -105,
-        "note": "年化最高，但胜率仅 63%、破墙 35%。连亏 3 次概率 5.1%，"
-                "对小账户是爆仓级风险。",
+        "n": 18, "clusters": 16, "win_rate": 0.67, "break_rate": None,
+        "per_trade_pct": -5.57, "annual_pct": None,
+        "median_occupancy": 118, "worst_pct": -103, "win_roi_pct": 20.0,
+        "perm_p": 0.713, "ci95": (-26.41, 10.62), "total_pnl": -803,
+        "note": "⛔ 未通过验证：簇均 ROI -5.57%，置换 p=0.713。三档里最接近零的一个。",
     },
 }
+# ⛔ 三档全部未通过验证 —— 默认不出候选，除非显式 force=True。
+STRATEGY_VALIDATED = False
 DEFAULT_TIER = "conservative"
 
 # 兼容旧调用
@@ -197,7 +204,8 @@ def tier_params(tier: str = DEFAULT_TIER) -> dict:
 
 
 def propose(snap, oi_session: date, spot: float, direction: str, ratio: float,
-            tier: str = DEFAULT_TIER, *, execution_date: date | None = None) -> Verdict:
+            tier: str = DEFAULT_TIER, *, execution_date: date | None = None,
+            force: bool = False) -> Verdict:
     """给出墙位卖方价差候选。三道闸门任一不过就不出候选，并说明卡在哪。
 
     direction: '看涨'/'看跌' —— 卖【逆向】侧：看涨卖 put 价差、看跌卖 call 价差。
@@ -210,6 +218,18 @@ def propose(snap, oi_session: date, spot: float, direction: str, ratio: float,
     于是「4~14 天」的激进档窗口实际选进了 1~11 天的合约，含 0DTE。
     """
     exec_day = execution_date or oi_session
+    if not STRATEGY_VALIDATED and not force:
+        t0 = RISK_TIERS[tier]
+        return Verdict(False,
+                       f"⛔ 该策略未通过验证，默认不出候选。{t0['label']}档修正方法论后："
+                       f"{t0['n']} 笔 / {t0['clusters']} 个日期簇，簇均 ROI "
+                       f"{t0['per_trade_pct']:+.2f}%，置换 p={t0['perm_p']:.3f}，"
+                       f"95%CI [{t0['ci95'][0]:+.1f}%, {t0['ci95'][1]:+.1f}%]。"
+                       f"九个组合（3 选择规则 × 3 档）全部负收益 —— "
+                       f"最初那批「82% 胜率 +2.84%」来自四处方法论错误的叠加"
+                       f"（策略定义漂移 / DTE 错一天 / 向后取价 / 未按日期簇）。"
+                       f"要研究用途可传 force=True。",
+                       [], {"tier": tier, "validated": False})
     gates = {"ratio": ratio, "min_ratio": MIN_RATIO}
     if ratio < MIN_RATIO:
         return Verdict(False, (f"压力倍数 {ratio:.1f}× 未达 {MIN_RATIO:g}× —— "

@@ -1,0 +1,22 @@
+{
+  "tier": "conservative",
+  "rule": "max_credit",
+  "min_ratio": null,
+  "n_trades": 17,
+  "n_clusters": 12,
+  "win_rate": 0.5882352941176471,
+  "cluster_mean_roi": -0.1280375,
+  "permutation_p": 0.8039598020098995,
+  "ci95": [
+    -0.40427083333333336,
+    0.09100833333333332
+  ],
+  "worst_roi": -1.0364,
+  "total_pnl": 107.60000000000011,
+  "skipped": {
+    "无候选": 82,
+    "方向不明": 14,
+    "到期日无收盘价(丢弃,不向后取)": 16
+  },
+  "generated_by": "scripts/backtest_credit_wall.py"
+}

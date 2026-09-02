@@ -261,7 +261,7 @@
   "direction": "看跌",
   "level": "强",
   "vol_confirms": false,
-  "outlook_bias": "偏多",
+  "outlook_bias": "偏多(弱)",
   "diverges": false,
   "up_pressure": 6272.6,
   "dn_pressure": 19933.1,

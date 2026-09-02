@@ -719,3 +719,60 @@ def local_pin(snap, today: date, spot: float, kind: str, *,
     tot = sum(agg.values())
     return {"strike": k, "oi": agg[k], "share": agg[k] / tot if tot else 0.0,
             "dist_pct": (k / spot - 1) * 100 if spot else 0.0, "band": band}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 卖方选墙规则（用户 2026-09-02 定，第一步产物）
+# ═══════════════════════════════════════════════════════════════════════════
+# 三步法里的第一步：**只确定卖哪道墙**，不涉及价差宽度、到期日、权利金。
+# 判定标准也只有一个：用 D−1 的期权结构算出的墙，D 当天【收盘】破没破。
+#
+# 规则：
+#   ① 取三道结构墙（structural_walls，裁掉距现价 >25% 的）
+#   ② 最大墙【就是】最近墙 → 卖最大墙
+#   ③ 最大墙【不是】最近墙 → 卖「最大墙朝现价方向的相邻一道」
+#      ⚠️ 不是跳到最近那道。实测差别很大（SLV put）：
+#          上挪一层    21 天 破 1 = 4.8%  均缓冲 6.9%
+#          改卖最近墙  21 天 破 2 = 9.5%  均缓冲 3.9%
+#      用户原话：「50 是最大墙但不是最近的，那么用 50 往上一层，55 作为卖墙，
+#      而不是卖 60。」
+#   ④ 缓冲门槛：put ≥2%、call ≥3%（低于此弃权）
+#
+# SLV 实测（43 个可交易日，2026-06-26~09-01）：
+#     put  门槛2%  覆盖 38/43 = 88%  破墙 0/38 = 0.0%  均缓冲 6.8%
+#     call 门槛3%  覆盖 35/41 = 85%  破墙 0/35 = 0.0%  均缓冲 8.8%
+#
+# ⚠️ 样本期 SLV +9.7%，put 侧的 0% 含方向成分；call 侧是逆势方向，
+#    那个 0% 相对更有说服力，但代价写在缓冲里（10.4% 意味着权利金极薄）。
+#    未经跌市验证。
+WALL_PICK_MAX_DIST = 0.25       # 三道墙的取用半径
+WALL_PICK_MIN_BUF = {"P": 0.02, "C": 0.03}
+
+
+def pick_sell_wall(snap, today: date, spot: float, kind: str, *,
+                   max_dist: float = WALL_PICK_MAX_DIST,
+                   min_buf: float | None = None) -> dict | None:
+    """按上述规则选出该卖哪道墙；不满足缓冲门槛返回 None（弃权）。
+
+    返回 dict 含 strike / oi / near_share / dist_pct / rule / buf_pct，
+    其中 rule ∈ {"基准", "上挪一层"}，buf_pct 为正数百分比。
+    """
+    if min_buf is None:
+        min_buf = WALL_PICK_MIN_BUF.get(kind, 0.02)
+    w3 = [w for w in structural_walls(snap, today, spot, kind, top_n=8)
+          if abs(w["dist_pct"]) <= max_dist * 100][:3]
+    if not w3:
+        return None
+    big = max(w3, key=lambda x: x["oi"])
+    near = min(w3, key=lambda x: abs(x["dist_pct"]))
+    if big["strike"] == near["strike"]:
+        sel, rule = big, "基准"
+    else:
+        # 按"离现价由近到远"排；big 不是最近的，所以 i>=1，i-1 即朝现价挪一层
+        order = sorted(w3, key=lambda x: abs(x["dist_pct"]))
+        i = [x["strike"] for x in order].index(big["strike"])
+        sel, rule = order[i - 1], "上挪一层"
+    buf = abs(sel["strike"] / spot - 1) if spot else 0.0
+    if buf < min_buf:
+        return None
+    return {**sel, "rule": rule, "buf_pct": buf * 100}

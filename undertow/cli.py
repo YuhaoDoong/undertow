@@ -3178,15 +3178,27 @@ def _wall_history_rows(inst, sym: str, upto: date, *, days: int = 60) -> list[di
             snap = snapshot_from_payload(payload, inst.key, sym)
         except Exception:
             continue
-        spot = float(bar["close"])
+        # ⚠️ 2026-09-02 用户发现的前视：算墙用的 spot 必须是【决策时已知】的
+        # 前一交易日收盘，不能用当日收盘。structural_walls 只取虚值侧，
+        # 用当日收盘筛虚值 = 用未来信息决定哪些行权价算墙。
+        # 实测 SLV 2026-07-07（前收 56.11、当日收 54.46）：
+        #   用前收   → 三道 put 墙 50/55/45，最大50≠最近55 → 该卖 55
+        #   用当日收 → 三道 put 墙 50/45/48，最大50=最近50 → 显示成卖 50
+        # 后者让墙总是"恰好"落在价格外侧，图上看起来比实际稳得多。
+        prior_k = [x for x in sorted(ohlc) if x < k]
+        if not prior_k:
+            continue
+        decide_spot = float(ohlc[prior_k[-1]]["close"])
+        close_today = float(bar["close"])
+
         def _near(ws):
             return [[w["strike"], w["oi"]] for w in ws
                     if abs(w["dist_pct"]) <= WALL_HIST_MAX_DIST * 100][:3]
-        wp = structural_walls(snap, sess, spot, "P", top_n=8)
-        wc = structural_walls(snap, sess, spot, "C", top_n=8)
+        wp = structural_walls(snap, sess, decide_spot, "P", top_n=8)
+        wc = structural_walls(snap, sess, decide_spot, "C", top_n=8)
         rows.append({
             "date": k, "o": float(bar["open"]), "h": float(bar["high"]),
-            "l": float(bar["low"]), "c": spot,
+            "l": float(bar["low"]), "c": close_today,
             "topP": _near(wp), "topC": _near(wc),
             "sig": sig_by_day.get(k),
         })

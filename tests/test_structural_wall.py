@@ -126,3 +126,47 @@ def test_sig缺第三项时按未开火处理():
     rows = [{"date": "2026-09-01", "o": 58, "h": 59, "l": 57, "c": 58,
              "topP": [[55.0, 100]], "topC": [], "sig": ["看跌", 12.0]}]
     assert _marks(wall_history_svg(rows)) == ["▽12×"]
+
+
+# ── 卖方选墙规则（用户 2026-09-02 第一步产物）──────────────────────
+def _snap3(spot, strikes_oi, kind="P", dte=20):
+    cs = []
+    for k, oi in strikes_oi:
+        cs.append(C(k, kind, oi, dte))
+        cs.append(C(k, kind, oi, dte + 40))   # 保证近端占比过门槛
+    return Snap(cs)
+
+
+def test_最大墙就是最近墙时用最大墙():
+    from undertow.analyze.gamma import pick_sell_wall
+    snap = _snap3(60.0, [(55.0, 100_000), (50.0, 40_000), (45.0, 20_000)])
+    r = pick_sell_wall(snap, TODAY, 60.0, "P")
+    assert r["strike"] == 55.0 and r["rule"] == "基准"
+
+
+def test_最大墙不是最近墙时上挪一层而非跳到最近():
+    """用户 2026-09-02 原话：三道 put 墙 60/55/50，最大是 50，
+    应该卖 55（50 往上一层），不是卖 60。"""
+    from undertow.analyze.gamma import pick_sell_wall
+    snap = _snap3(60.5, [(60.0, 30_000), (55.0, 50_000), (50.0, 200_000)])
+    r = pick_sell_wall(snap, TODAY, 60.5, "P")
+    assert r["strike"] == 55.0, "应上挪一层到 55，不是跳到最近的 60"
+    assert r["rule"] == "上挪一层"
+
+
+def test_缓冲不足时弃权而不是硬做():
+    from undertow.analyze.gamma import pick_sell_wall
+    # 55 距 55.3 只有 0.5% < 2% 门槛
+    snap = _snap3(55.3, [(55.0, 100_000), (50.0, 40_000)])
+    assert pick_sell_wall(snap, TODAY, 55.3, "P") is None
+
+
+def test_call侧门槛更高():
+    from undertow.analyze.gamma import WALL_PICK_MIN_BUF
+    assert WALL_PICK_MIN_BUF["C"] > WALL_PICK_MIN_BUF["P"], \
+        "call 侧实测需要 3% 才降到 0 破墙，put 侧 2% 即可"
+
+
+def test_无墙时返回None():
+    from undertow.analyze.gamma import pick_sell_wall
+    assert pick_sell_wall(Snap([]), TODAY, 60.0, "P") is None

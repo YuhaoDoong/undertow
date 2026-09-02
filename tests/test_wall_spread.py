@@ -53,7 +53,7 @@ def test_建仓参数为第二步实测值():
     p = ws.PARAMS["silver"]
     assert p["dte"] == (2, 4), "短 DTE 双赢：theta 最快 + 暴露最短"
     assert p["width_n"] == (2, 3), "宽1档被手续费吃掉，宽5档破满亏放大更快"
-    assert p["offsets"] == (0, 1), "墙内1档破卖腿率与墙上相同、权利金多24%；2档起跳升"
+    assert p["offsets"] == (0,), "2026-09-02 撤回墙内1档：逐日判定下会被假破墙误伤"
     assert p["min_buf"] == 0.03
 
 
@@ -168,3 +168,51 @@ def test_v1与v3卡片标题不得撞车():
     assert "墙位卖方价差 <b>v3</b>" in src
     assert "墙位卖方价差 <b>v1</b>" in src
     assert "'<h2>② 墙位卖方价差 · " not in src, "旧的无版本号标题应已改掉"
+
+
+# ── 推荐台账（用户 2026-09-02：记录每次研报的推荐）────────────────
+def test_台账记录无候选的日子(tmp_path):
+    """无候选也要记 —— 否则台账只剩"有机会的日子"，覆盖率无从统计。"""
+    from undertow.analyze import spread_ledger as sled
+    v = ws.Verdict(False, "缓冲不足", params=ws.PARAMS["silver"])
+    sled.record("silver", "SLV", date(2026, 9, 2), 60.0, v, root=tmp_path)
+    rows = sled.load("silver", root=tmp_path)
+    assert len(rows) == 1 and rows[0]["ok"] is False
+    assert rows[0]["candidates"] == []
+    assert rows[0]["spot"] == 60.0
+
+
+def test_台账同日重复记录会覆盖(tmp_path):
+    """研报一天可能重跑多次（定时任务四个时点），不能累积成多条。"""
+    from undertow.analyze import spread_ledger as sled
+    for r in ("A", "B"):
+        sled.record("silver", "SLV", date(2026, 9, 2), 60.0,
+                    ws.Verdict(False, r, params={}), root=tmp_path)
+    rows = sled.load("silver", root=tmp_path)
+    assert len(rows) == 1 and rows[0]["reason"] == "B"
+
+
+def test_台账回填用到期收盘判破卖腿(tmp_path):
+    from undertow.analyze import spread_ledger as sled
+    v = ws.Verdict(True, "x", puts=[_cand(sell=55.0, expiry=date(2026, 9, 11))],
+                   params={})
+    sled.record("silver", "SLV", date(2026, 9, 2), 60.0, v, root=tmp_path)
+    n, pend = sled.backfill("silver", {"2026-09-11": 54.0}, root=tmp_path)
+    c = sled.load("silver", root=tmp_path)[0]["candidates"][0]
+    assert n == 1 and c["broke"] is True and c["settle"] == 54.0
+    assert c["pnl"] < 0, "跌破 1 美元，价差宽 1.5 美元，应为亏损"
+
+
+def test_台账缺收盘价时不猜(tmp_path):
+    from undertow.analyze import spread_ledger as sled
+    v = ws.Verdict(True, "x", puts=[_cand(expiry=date(2026, 12, 31))], params={})
+    sled.record("silver", "SLV", date(2026, 9, 2), 60.0, v, root=tmp_path)
+    n, pend = sled.backfill("silver", {}, root=tmp_path)
+    assert n == 0 and pend == 1
+    assert sled.load("silver", root=tmp_path)[0]["candidates"][0]["pnl"] is None
+
+
+def test_只卖墙上不卖墙内():
+    """2026-09-02 撤回「墙内1档免费」：逐日判定下它触发率 7%~23%，
+    触发的全是假破墙（擦破 $0.11 又回来），平仓即平错。"""
+    assert ws.PARAMS["silver"]["offsets"] == (0,)

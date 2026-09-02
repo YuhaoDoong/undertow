@@ -1656,6 +1656,16 @@ def cmd_report(args) -> int:
                 _ws_v = _ws_propose(curr, inst.key, obs_day, _exec_day,
                                     spot=_ws_spot)
                 _ws_html = render_wall_spread(_ws_v, inst.display_name)
+                # 落盘推荐台账（用户 2026-09-02：记录每次研报里的推荐，收集数据）。
+                # 事前记录、事后回填 —— 回测再怎么做都是事后的，只有前瞻台账
+                # 能回答"照着做结果会怎样"。
+                try:
+                    from undertow.analyze import spread_ledger as _sl
+                    _sl.record(inst.key, inst.options.symbol, _exec_day,
+                               _ws_spot, _ws_v)
+                except Exception as e:
+                    print(f"⚠️ {inst.key} 价差台账落盘失败：{type(e).__name__}: {e}",
+                          file=sys.stderr)
             except Exception as e:
                 print(f"⚠️ {inst.key} 卖方价差候选失败：{type(e).__name__}: {e}",
                       file=sys.stderr)
@@ -1805,7 +1815,8 @@ def cmd_report(args) -> int:
             from undertow.report.html import _esc as _e2
             _ratio_html = _rw_render(_ratio_rows, _e2)
         index_html = render_index_html(idx_items, _idx_day, family_notes=idx_family,
-                                       ratio_html=_ratio_html)
+                                       ratio_html=_ratio_html,
+                                       events=all_events, today=today)
         index_path = reports_dir / f"index_{_idx_day}.html"
         _archive_existing(index_path)
         index_path.write_text(index_html, encoding="utf-8")

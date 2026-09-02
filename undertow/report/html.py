@@ -1793,12 +1793,46 @@ def render_summary_card(it: dict) -> str:
 
 
 def render_index_html(items: list[dict], asof: str, *, family_notes=None,
-                      ratio_html: str = "") -> str:
+                      ratio_html: str = "", events=None, today=None) -> str:
     """多品种综合研报（每品种一句话摘要 + 强信号置顶），非仅链接。
 
     items=[{name, fn, bias, conf, summary, signal}]，signal 为 StrongSignal|None。
     有强信号的品种置顶并显著标识；其余按可信度默认顺序。
     """
+    # ── 临近事件横幅（用户 2026-09-02：重要数据新闻要进 index）──────────
+    # index 是每天第一眼看的页面，而 ADP/非农/CPI/FOMC 会在几分钟内改写方向。
+    # 只放 3 天内的 🔴高 / 🟡中，再远的留给品种研报里的事件雷达。
+    ev_html = ""
+    if events and today:
+        near = [e for e in events if 0 <= e.days_until(today) <= 3]
+        near = [e for e in near if str(getattr(e, "importance", "")).lower()
+                in ("high", "medium")] or near[:4]
+        if near:
+            rows = []
+            for e in sorted(near, key=lambda x: (x.days_until(today), str(x)))[:6]:
+                d = e.days_until(today)
+                when = "今天" if d == 0 else f"T+{d}"
+                hi = str(getattr(e, "importance", "")).lower() == "high"
+                col = "#cf222e" if hi else "#bf8700"
+                t = getattr(e, "time_et", "") or ""
+                rows.append(
+                    f'<div style="padding:3px 0"><b style="color:{col}">'
+                    f'{"🔴" if hi else "🟡"} {when}</b> '
+                    f'<code>{_esc(str(getattr(e, "date", ""))[:10])} {_esc(t)}ET</code> '
+                    f'{_esc(getattr(e, "name", "") or str(e))}'
+                    + (f' <span class="sub">预测 {_esc(e.forecast)}'
+                       f'{" / 前值 " + _esc(e.previous) if getattr(e, "previous", "") else ""}'
+                       f'</span>' if getattr(e, "forecast", "") else "")
+                    + '</div>')
+            ev_html = (
+                '<div class="card" style="border-left:4px solid #cf222e">'
+                '<h2>⚠️ 临近数据/事件 · 三天内</h2>'
+                '<div class="sub" style="line-height:1.7">'
+                '这些时点会在几分钟内改写方向，也会让期权 IV 与墙位失真。'
+                '事件前后请主动降置信、缩仓位；卖方价差尤其要避开在数据前开新仓。'
+                '</div><div style="margin-top:8px;font-size:13px">'
+                + "".join(rows) + '</div></div>')
+
     # 强信号品种置顶（看涨绿/看跌红），醒目
     alerts = []
     for it in items:
@@ -1921,7 +1955,9 @@ def render_index_html(items: list[dict], asof: str, *, family_notes=None,
         f'<title>综合研判 {_esc(asof)}</title><style>{_CSS}</style></head>'
         f'<body><div class="wrap"><div class="card"><h1>大宗商品综合研报</h1>'
         f'<div class="sub">{_esc(asof)} · 各品种摘要 + 强信号告警 · 点击进入详情</div></div>'
-        f'{alert_block}{fam_block}{"".join(cards)}'
+        # 事件横幅排在强信号之前 —— 数据公布会在几分钟内推翻结构读数，
+        # 先让人看见"今晚有雷"，再看方向判断（用户 2026-09-02）
+        f'{ev_html}{alert_block}{fam_block}{"".join(cards)}'
         + ratio_html + _horizon_legend() +
         '<div class="foot">undertow · 规则化情景工具，非投资建议 · 纯标准库生成</div></div></body></html>'
     )

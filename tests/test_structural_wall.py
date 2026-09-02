@@ -158,13 +158,14 @@ def test_缓冲不足时弃权而不是硬做():
     from undertow.analyze.gamma import pick_sell_wall
     # 55 距 55.3 只有 0.5% < 2% 门槛
     snap = _snap3(55.3, [(55.0, 100_000), (50.0, 40_000)])
-    assert pick_sell_wall(snap, TODAY, 55.3, "P") is None
+    assert pick_sell_wall(snap, TODAY, 55.3, "P") is None      # 0.5% < 3%
 
 
-def test_call侧门槛更高():
+def test_门槛统一为_3pct():
+    """2026-09-02 在 GLD 上验证后统一：3% 是 SLV/GLD × put/call
+    四个组合的共同最低点，全部 0% 破墙，再往上只丢覆盖率。"""
     from undertow.analyze.gamma import WALL_PICK_MIN_BUF
-    assert WALL_PICK_MIN_BUF["C"] > WALL_PICK_MIN_BUF["P"], \
-        "call 侧实测需要 3% 才降到 0 破墙，put 侧 2% 即可"
+    assert WALL_PICK_MIN_BUF["P"] == WALL_PICK_MIN_BUF["C"] == 0.03
 
 
 def test_无墙时返回None():

@@ -736,11 +736,18 @@ def local_pin(snap, today: date, spot: float, kind: str, *,
 #          改卖最近墙  21 天 破 2 = 9.5%  均缓冲 3.9%
 #      用户原话：「50 是最大墙但不是最近的，那么用 50 往上一层，55 作为卖墙，
 #      而不是卖 60。」
-#   ④ 缓冲门槛：put ≥2%、call ≥3%（低于此弃权）
+#   ④ 挪过去之后若缓冲不足门槛 → **退回最大墙**（用户 2026-09-02 选 B）
+#      理由：挪一层是为了多收权利金，挪不动就退回来 —— 保住覆盖率，
+#      又不在薄缓冲上冒险。实测触发点 2026-07-07：挪到 55 只剩 2.0% 缓冲，
+#      次日收 54.46 破墙；退回最大墙 50（缓冲 10.9%）则守住。
+#   ⑤ 若最大墙自身缓冲也不足门槛 → 弃权
+#      缓冲门槛：put ≥2%、call ≥3%
 #
-# SLV 实测（43 个可交易日，2026-06-26~09-01）：
-#     put  门槛2%  覆盖 38/43 = 88%  破墙 0/38 = 0.0%  均缓冲 6.8%
-#     call 门槛3%  覆盖 35/41 = 85%  破墙 0/35 = 0.0%  均缓冲 8.8%
+# SLV 实测（43 个可交易日，2026-06-26~09-01，含退回规则）：
+#     put  门槛2%  覆盖 42/43 = 98%  破墙 0/42 = 0.0%  均缓冲 7.1%
+#         基准 21 天(5.7%) / 上挪一层 17 天(8.2%) / 退回最大墙 4 天(10.3%)
+#     call 门槛3%  覆盖 36/41 = 88%  破墙 0/36 = 0.0%  均缓冲 8.9%
+#         基准 17 天(11.3%) / 上挪一层 18 天(6.5%) / 退回最大墙 1 天(11.4%)
 #
 # ⚠️ 样本期 SLV +9.7%，put 侧的 0% 含方向成分；call 侧是逆势方向，
 #    那个 0% 相对更有说服力，但代价写在缓冲里（10.4% 意味着权利金极薄）。
@@ -765,14 +772,22 @@ def pick_sell_wall(snap, today: date, spot: float, kind: str, *,
         return None
     big = max(w3, key=lambda x: x["oi"])
     near = min(w3, key=lambda x: abs(x["dist_pct"]))
+    def _buf(w):
+        return abs(w["strike"] / spot - 1) if spot else 0.0
+
     if big["strike"] == near["strike"]:
         sel, rule = big, "基准"
     else:
         # 按"离现价由近到远"排；big 不是最近的，所以 i>=1，i-1 即朝现价挪一层
         order = sorted(w3, key=lambda x: abs(x["dist_pct"]))
         i = [x["strike"] for x in order].index(big["strike"])
-        sel, rule = order[i - 1], "上挪一层"
-    buf = abs(sel["strike"] / spot - 1) if spot else 0.0
+        moved = order[i - 1]
+        if _buf(moved) >= min_buf:
+            sel, rule = moved, "上挪一层"
+        else:
+            # 挪过去太薄 → 退回最大墙（用户 2026-09-02 选项 B）
+            sel, rule = big, "退回最大墙"
+    buf = _buf(sel)
     if buf < min_buf:
-        return None
+        return None            # 连最大墙都不够厚 → 弃权
     return {**sel, "rule": rule, "buf_pct": buf * 100}

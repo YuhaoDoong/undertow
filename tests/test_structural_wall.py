@@ -170,3 +170,29 @@ def test_call侧门槛更高():
 def test_无墙时返回None():
     from undertow.analyze.gamma import pick_sell_wall
     assert pick_sell_wall(Snap([]), TODAY, 60.0, "P") is None
+
+
+def test_挪过去太薄则退回最大墙():
+    """用户 2026-09-02 选项 B。原型是 SLV 2026-07-07：
+    三道 put 墙 50/55/45，最大 50 距 -10.9%、最近 55 距 -2.0%。
+    挪到 55 只剩 2.0% 缓冲，次日收 54.46 破墙；退回 50 则守住。"""
+    from undertow.analyze.gamma import pick_sell_wall
+    snap = _snap3(56.11, [(55.0, 128_892), (50.0, 175_988), (45.0, 109_358)])
+    r = pick_sell_wall(snap, TODAY, 56.11, "P", min_buf=0.03)
+    assert r["strike"] == 50.0, "挪到 55 只剩 2.0%，应退回最大墙 50"
+    assert r["rule"] == "退回最大墙"
+    assert r["buf_pct"] > 10
+
+
+def test_挪过去够厚就正常上挪():
+    from undertow.analyze.gamma import pick_sell_wall
+    snap = _snap3(60.5, [(60.0, 30_000), (55.0, 50_000), (50.0, 200_000)])
+    r = pick_sell_wall(snap, TODAY, 60.5, "P", min_buf=0.02)
+    assert r["strike"] == 55.0 and r["rule"] == "上挪一层"
+
+
+def test_连最大墙都太薄则弃权():
+    from undertow.analyze.gamma import pick_sell_wall
+    # 最大墙 55 距 55.3 仅 0.5%，退回也不够 → 弃权
+    snap = _snap3(55.3, [(55.0, 200_000), (54.0, 50_000)])
+    assert pick_sell_wall(snap, TODAY, 55.3, "P", min_buf=0.02) is None

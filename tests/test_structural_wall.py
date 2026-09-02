@@ -84,3 +84,45 @@ def test_返回距现价百分比供策略层自行过滤():
     cs = [C(50.0, "P", 100_000, 20)]
     w = structural_walls(Snap(cs), TODAY, 58.5, "P")
     assert w[0]["dist_pct"] < -14
+
+
+# ── 墙位历史图（用户 2026-08-31 要求，2026-09-02 接线）────────────────
+def test_墙位历史卡片_空数据不产生空卡():
+    from undertow.report.html import render_wall_history
+    assert render_wall_history([]) == ""
+
+
+def test_墙位历史卡片_区分开火与未开火():
+    """图例误导是 2026-09-01 用户「图上不止 4 个」的根因：
+    旧图例写「极强信号 ≥10×」，但 ≥10× 只是压力比一个条件。"""
+    from undertow.report.html import render_wall_history
+    rows = [{"date": "2026-09-01", "o": 58, "h": 59, "l": 57, "c": 58,
+             "topP": [[55.0, 100]], "topC": [[60.0, 100]],
+             "sig": ["看跌", 12.3, True]}]
+    h = render_wall_history(rows, "白银")
+    assert "已开火" in h and "未开火" in h
+    assert "structural_walls" in h, "必须写明墙的口径"
+
+
+def _marks(svg):
+    """只取数据标记，不含图例 —— 图例里本来就同时有 ▲▼ 和 △▽。"""
+    import re
+    return re.findall(r"[▲▼△▽][\d.]+×", svg)
+
+
+def test_墙位历史图_未开火用空心标记():
+    from undertow.report.viz import wall_history_svg
+    base = {"date": "2026-09-01", "o": 58, "h": 59, "l": 57, "c": 58,
+            "topP": [[55.0, 100]], "topC": [[60.0, 100]]}
+    assert _marks(wall_history_svg([{**base, "sig": ["看跌", 12.0, True]}])) == ["▼12×"]
+    assert _marks(wall_history_svg([{**base, "sig": ["看跌", 12.0, False]}])) == ["▽12×"]
+    assert _marks(wall_history_svg([{**base, "sig": ["看涨", 12.0, True]}])) == ["▲12×"]
+    assert _marks(wall_history_svg([{**base, "sig": ["看涨", 12.0, False]}])) == ["△12×"]
+
+
+def test_sig缺第三项时按未开火处理():
+    """向后兼容：老数据只有 [方向, 倍数]，不得当成已开火。"""
+    from undertow.report.viz import wall_history_svg
+    rows = [{"date": "2026-09-01", "o": 58, "h": 59, "l": 57, "c": 58,
+             "topP": [[55.0, 100]], "topC": [], "sig": ["看跌", 12.0]}]
+    assert _marks(wall_history_svg(rows)) == ["▽12×"]

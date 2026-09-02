@@ -420,15 +420,26 @@ def wall_history_svg(rows: list[dict], *, title: str = "", w: int = 1180,
         sig = r.get("sig")
         if not sig:
             continue
+        # sig = [方向, 压力比, 是否真正开火]。第三项缺省视为未开火。
+        # ⚠️ 2026-09-01 用户指出：旧图例写「极强信号 ≥10×」，但 ≥10× 只是
+        # 压力比一个条件，真正开火还要过主翼比/净建仓/逆向价格/波动率追认。
+        # 白银 ≥10× 有 9 个标记而真正开火只有 4 个 —— 看图数信号会数出两倍多。
+        # 现在：开火=实心三角+级别，未开火=空心三角+虚线更淡。
         side, ratio = sig[0], sig[1]
+        fired = bool(sig[2]) if len(sig) > 2 else False
         x = X(i)
         up = side == "看涨"
         col = "#1a7f37" if up else "#cf222e"
         P.append(f'<line x1="{x:.1f}" y1="{PT}" x2="{x:.1f}" y2="{PT + ih}" '
-                 f'stroke="{col}" stroke-width="1" stroke-dasharray="2 4" opacity=".42"/>')
+                 f'stroke="{col}" stroke-width="{1 if fired else 0.7}" '
+                 f'stroke-dasharray="{"2 4" if fired else "1 6"}" '
+                 f'opacity="{".42" if fired else ".2"}"/>')
+        mark = ("▲" if up else "▼") if fired else ("△" if up else "▽")
         P.append(f'<text x="{x:.1f}" y="{Y(r["c"]) + (23 if up else -17):.1f}" '
-                 f'font-size="10" fill="{col}" text-anchor="middle" font-weight="700">'
-                 f'{"▲" if up else "▼"}{ratio:g}×</text>')
+                 f'font-size="{10 if fired else 9}" fill="{col}" text-anchor="middle" '
+                 f'font-weight="{700 if fired else 400}" '
+                 f'opacity="{1 if fired else .55}">'
+                 f'{mark}{ratio:g}×</text>')
     step = max(1, n // 13)
     for i, r in enumerate(rows):
         if i % step == 0 or i == n - 1:
@@ -437,15 +448,18 @@ def wall_history_svg(rows: list[dict], *, title: str = "", w: int = 1180,
                      f'fill="#6e7781" text-anchor="middle" '
                      f'transform="rotate(-42 {x:.1f},{PT + ih + 17})">{r["date"][5:]}</text>')
     lg = [("#0969da", "收盘价", 2.4, "1"), ("#57606a", "日 K", 7, ".22"),
-          ("#1a7f37", "put 墙 #1", 5, "1"), ("#3fb950", "put 墙 #2", 3.6, "1"),
-          ("#7ee787", "put 墙 #3", 2.2, "1"), ("#cf222e", "call 墙 #1", 5, "1"),
-          ("#f85149", "call 墙 #2", 3.6, "1"), ("#ffa198", "call 墙 #3", 2.2, "1")]
+          ("#1a7f37", "put 结构墙 #1", 5, "1"), ("#3fb950", "put 结构墙 #2", 3.6, "1"),
+          ("#7ee787", "put 结构墙 #3", 2.2, "1"), ("#cf222e", "call 结构墙 #1", 5, "1"),
+          ("#f85149", "call 结构墙 #2", 3.6, "1"), ("#ffa198", "call 结构墙 #3", 2.2, "1")]
     for k, (c, t, lw, op) in enumerate(lg):
         y = PT + 14 + k * 20
         P.append(f'<line x1="{PL + iw + 12}" y1="{y}" x2="{PL + iw + 38}" y2="{y}" '
                  f'stroke="{c}" stroke-width="{lw}" opacity="{op}"/>')
         P.append(_txt(PL + iw + 44, y + 4, t, size=10.5))
-    P.append(_txt(PL + iw + 12, PT + 14 + 8 * 20 + 4, "▲▼ 极强信号 ≥10×", size=10, fill="#6e7781"))
+    P.append(_txt(PL + iw + 12, PT + 14 + 8 * 20 + 4,
+                  "▲▼ 已开火（过全部闸门）", size=10, fill="#24292f"))
+    P.append(_txt(PL + iw + 12, PT + 14 + 9 * 20 + 4,
+                  "△▽ 仅压力比≥10×，未开火", size=10, fill="#6e7781"))
     if title:
         P.append(_txt(PL, 24, title, size=13.5, weight="700"))
     P.append("</svg>")

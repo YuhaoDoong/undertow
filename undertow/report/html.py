@@ -1472,7 +1472,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        expiry_html2: str = "", summary_html: str = "",
                        layers_html: str = "", gate_html: str = "",
                        cost_html: str = "", backmonth_html: str = "",
-                       ratio_html: str = "", credit_wall_html: str = "") -> str:
+                       ratio_html: str = "", credit_wall_html: str = "",
+                       wall_hist_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -1511,6 +1512,10 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         #   而混算会造出实盘不存在的墙（见 render_wall_layers_section），
         #   所以必须先让人看到"这墙属于哪个到期层"，再看汇总表。
         f'{layers_html}'
+        # 墙位历史图紧跟分层卡（用户 2026-08-31：「这个历史墙位图我觉得挺重要，
+        # 可以放进研报里，期权结构的下面」）。它回答静态墙位表答不了的问题：
+        # 这道墙守住过没有、被破过几次、破的时候有没有信号。
+        f'{wall_hist_html}'
         # 卖方价差紧跟期权结构 —— 它直接拿上面那张卡的墙位下单（用户 2026-08-31
         # 「在研报里加上我们刚做的模块，就在期权结构下面」）
         f'{credit_wall_html}'
@@ -2632,3 +2637,35 @@ def render_wall_zones(mg: dict) -> str:
           '⚠️ 这里不做任何判断。把它读成「要跌破了」是**过度解读** —— '
           '按同类结构做的预测器回测 30 次只中 1 次，已决定不上线。'
           '</div></div>')
+
+def render_wall_history(rows: list[dict], display_name: str = "") -> str:
+    """墙位历史卡片（用户 2026-08-31 要求，2026-09-02 接线）。
+
+    静态的当日墙位表只说"墙在哪"，答不了"这墙守住过没有"。
+    图里三件事叠在一起看：半透明日 K（不标涨跌色）+ 收盘折线 + 三道结构墙，
+    再叠上信号标记 —— 于是"破墙那天有没有信号"变成一眼可见。
+
+    ⚠️ 墙用的是 gamma.structural_walls()（全范围 + 近端到期占比门槛），
+    不是 band 内相对最大 —— 后者会把较小的局部档位画成墙（见 gamma 文件头）。
+    """
+    if not rows:
+        return ""
+    from undertow.report.viz import wall_history_svg
+    svg = wall_history_svg(rows, title=f"{display_name} 墙位历史")
+    if not svg:
+        return ""
+    n_fired = sum(1 for r in rows if (r.get("sig") or [None, None, False])[2:3] == [True])
+    n_mark = sum(1 for r in rows if r.get("sig"))
+    return (
+        '<div class="card"><h2>② 墙位历史 · 这墙守住过没有</h2>'
+        '<div class="sub" style="line-height:1.7">'
+        '墙取自 <code>structural_walls()</code>：全行权价范围内、近端到期占比 ≥15% '
+        '的 OI 堆积（滤掉长期对冲与尾部保险的堆积）。'
+        '<b>不是</b>「现价 ±band 内最大」——那种口径带内总有最大值，'
+        '会把较小的局部档位画成墙。<br>'
+        f'信号标记：实心 ▲▼ = 已开火（过全部闸门，共 {n_fired} 天）；'
+        f'空心 △▽ = 仅压力比 ≥10× 但未开火（合计标记 {n_mark} 天）。'
+        '<b>两者必须分开看</b> —— 未开火的那些从没在报告里弹过告警，'
+        '把它们当信号数会数出两倍多。'
+        '</div>'
+        f'<div class="chart">{svg}</div></div>')

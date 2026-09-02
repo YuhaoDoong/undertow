@@ -57,6 +57,7 @@ from undertow.analyze.family import check as _family_check
 from undertow.analyze.indicators import build as _build_labels
 from undertow.report.html import (render_report_html, render_index_html,
                           render_wall_layers_section,
+                          render_wall_history,
                           render_tradeable_gate,
                           render_cost_gate,
                           render_backmonth,
@@ -1619,6 +1620,18 @@ def cmd_report(args) -> int:
                 print(f"⚠️ {inst.key} 指标分组失败：{type(e).__name__}: {e}", file=sys.stderr)
                 _labels, _indicators_html, _scores = [], "", {}
                 _expiry_html = _summary_html = ""
+            # 墙位历史图（用户 2026-08-31 要求「放进研报，期权结构下面」）。
+            # 单独 try：图挂了不能拖垮整份研报，但要出声 —— 静默少一张图，
+            # 下次就没人记得它本该在那里（这正是它被漏了两天的原因）。
+            _wall_hist_html = ""
+            try:
+                _wh_rows = _wall_history_rows(
+                    inst, inst.options.symbol if inst.options else "",
+                    date.fromisoformat(curr_date_s) if curr_date_s else today)
+                _wall_hist_html = render_wall_history(_wh_rows, inst.display_name)
+            except Exception as e:
+                print(f"⚠️ {inst.key} 墙位历史图失败：{type(e).__name__}: {e}",
+                      file=sys.stderr)
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,
                                       strategy_html,
@@ -1638,6 +1651,7 @@ def cmd_report(args) -> int:
                                       gate_html=gate_html, cost_html=cost_html,
                                       backmonth_html=backmonth_html,
                                       ratio_html=ratio_html,
+                                      wall_hist_html=_wall_hist_html,
                                       credit_wall_html=credit_wall_html)
             # ⚠️ 文件名用【可交易日】（= 快照日期），不是生成日期。
             # 时点约定：快照 D 于 D 凌晨捕获，OI 是 D−1 收盘的 OCC 结算，
@@ -3089,3 +3103,91 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
+
+#: 墙位历史图的**显示**裁剪半径。structural_walls 本身不设距离上限
+#: （它按近端到期占比认墙，见 gamma 文件头），但图上要是画一条距现价 +73% 的
+#: SLV call 100，Y 轴会被拉爆、其余全部压成一条线。这里只裁显示，不改墙定义 ——
+#: 被裁掉的墙仍然存在于结构分析里，只是不进这张图。
+WALL_HIST_MAX_DIST = 0.25
+
+
+def _wall_history_rows(inst, sym: str, upto: date, *, days: int = 60) -> list[dict]:
+    """构建墙位历史图的数据（用户 2026-08-31 要求，2026-09-02 接线）。
+
+    每行 = 一个【可交易日】：日 K + 三道结构墙 + 当日信号标记。
+
+    三个口径都走已定版的那一套，不另立：
+      · 可交易日由 captured_at 推导（clock.decision_session），不是文件名；
+      · 墙用 gamma.structural_walls（全范围 + 近端到期占比门槛），不是 band 内最大；
+      · 信号的"开火"取自台账 fired 字段，与报告告警同源 —— 压力比 ≥10× 但
+        未开火的只画空心标记，因为它们从没在报告里弹过告警。
+    """
+    from datetime import datetime as _dt
+    from undertow.analyze.gamma import structural_walls
+    from undertow.collect.longbridge_kline import fetch_bars
+    from undertow.core.clock import decision_session
+
+    try:
+        bars = fetch_bars(f"{sym}.US", period="day", count=260)
+    except Exception:
+        return []
+    ohlc = {str(b["ts"])[:10]: b for b in bars}
+    tdays = [_dt.strptime(x, "%Y-%m-%d").date() for x in sorted(ohlc)]
+    if not tdays:
+        return []
+
+    # 台账里的信号（fired 与压力比），按可交易日索引
+    sig_by_day: dict[str, list] = {}
+    try:
+        from undertow.analyze import signal_ledger as sl
+        for r in sl.load_all([inst.key]):
+            br = r.get("bear_pressure_ratio") or 0
+            bl = r.get("bull_pressure_ratio") or 0
+            ratio = max(br, bl)
+            if ratio < 10:
+                continue
+            side = "看跌" if br >= bl else "看涨"
+            fired = bool(r.get("fired")) and r.get("direction") == side
+            sig_by_day[r["date"]] = [side, round(ratio, 1), fired]
+    except Exception:
+        pass
+
+    st = SnapshotStore()
+    # 同一 decision_session 取 captured_at 最新的那份（codex 2026-09-02 P0）
+    cand: dict[date, tuple[float, date]] = {}
+    for fd in st.dates("options", sym):
+        sess = st.decision_session("options", sym, fd, tdays)
+        if sess is None or sess > upto:
+            continue
+        ca = st.captured_at("options", sym, fd) or 0.0
+        if sess not in cand or ca > cand[sess][0]:
+            cand[sess] = (ca, fd)
+
+    rows = []
+    for sess in sorted(cand)[-days:]:
+        _, fd = cand[sess]
+        k = sess.isoformat()
+        bar = ohlc.get(k)
+        if not bar:
+            continue
+        payload = st.load("options", sym, fd)
+        if payload is None:
+            continue
+        try:
+            snap = snapshot_from_payload(payload, inst.key, sym)
+        except Exception:
+            continue
+        spot = float(bar["close"])
+        def _near(ws):
+            return [[w["strike"], w["oi"]] for w in ws
+                    if abs(w["dist_pct"]) <= WALL_HIST_MAX_DIST * 100][:3]
+        wp = structural_walls(snap, sess, spot, "P", top_n=8)
+        wc = structural_walls(snap, sess, spot, "C", top_n=8)
+        rows.append({
+            "date": k, "o": float(bar["open"]), "h": float(bar["high"]),
+            "l": float(bar["low"]), "c": spot,
+            "topP": _near(wp), "topC": _near(wc),
+            "sig": sig_by_day.get(k),
+        })
+    return rows

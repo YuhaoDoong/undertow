@@ -48,7 +48,7 @@ def load(sym):
     dates = sorted(closes)
     tdays = [datetime.strptime(x, "%Y-%m-%d").date() for x in dates]
     st = SnapshotStore()
-    snaps, drop = {}, defaultdict(int)
+    snaps, drop, cand = {}, defaultdict(int), {}
     for f in sorted(os.listdir(f"data/snapshots/options/{sym}")):
         if not f.endswith(".json.gz"):
             continue
@@ -61,10 +61,18 @@ def load(sym):
         if sess is None:
             drop["盘中抓取或无captured_at"] += 1
             continue
-        if sess in snaps:
-            # 两份快照映射到同一可交易日（如周末抓 + 周一盘前抓）：留盘前那份
-            drop["同一可交易日重复"] += 1
-            continue
+        ca = st.captured_at("options", sym, fd)
+        cand.setdefault(sess, []).append((ca or 0.0, fd))
+
+    # ⚠️ codex 2026-09-02 P0：同一决策日常有多份快照（周六、周日、周一盘前
+    # 都映射到周一）。旧实现按文件名排序、先到先得，于是留下的是【周六】那份
+    # ——注释却写着"留盘前那份"。结果是新时序口径仍在用陈旧 OI。
+    # 正确做法：在同一 decision_session 的候选里取 captured_at 最大的一份。
+    for sess, lst in cand.items():
+        lst.sort(key=lambda x: -x[0])
+        ca, fd = lst[0]
+        if len(lst) > 1:
+            drop[f"同日多份取最新(弃{len(lst)-1})"] += len(lst) - 1
         payload = st.load("options", sym, fd)
         if payload is None:
             drop["快照损坏或缺失"] += 1

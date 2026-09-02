@@ -72,8 +72,15 @@ def test_对照型条目_有p值但无命中数_也不得崩溃():
     assert html.render_validation_table()
 
 
-def test_安慰剂对照条目已注册且结论为无法区分():
+def test_安慰剂对照的结论口径不得退回_证伪():
+    """2026-09-02 自查：两组都 0 破墙 → 配对差里只剩权利金差，
+    这个检验【无力】检验破墙率。把它写成「证伪了墙位价值」是过度解读。
+    本测试锁住修正后的口径，防止以后又被简化回去。"""
     v = validation.REGISTRY["wall_edge_vs_placebo"]
-    assert v.p_value == 0.267 and v.cluster_n == 37
-    assert not v.significant
-    assert "无法区分" in v.note
+    assert v.cluster_n == 37
+    assert v.p_value is None, "结果不稳健，不得挂单一 p 值冒充结论"
+    assert v.status == "无法检验"
+    assert "不支持任何方向性结论" in v.caveat
+    assert "有效事件数为 0" in v.caveat, "必须说明零事件"
+    assert "不稳健" in v.caveat, "必须说明对匹配方式敏感"
+    assert "证伪" not in v.note

@@ -9,17 +9,22 @@
         <string>/bin/zsh</string>
         <string>/Users/yhdong/Trading/scripts/daily_update.sh</string>
     </array>
-    <!-- 多时点触发（本地 WITA = 夏令时 ET+12）：14:05≈ET02:05 主跑，
-         19:00/20:00/20:45≈ET07:00/08:00/08:45 为重试点——覆盖 OCC 隔夜 OI
-         发布时刻的不确定性。脚本幂等：OI 未结算的点跳过不出报告，OCC 发布后
-         第一个命中的点提交，其余点因"无变更"不重复提交。 -->
+    <!-- 多时点触发（本地 UTC+8 = 夏令时 ET+12 / 冬令时 ET+13）：
+         18:00/19:00/20:00/20:45 ≈ 夏令时 ET 06:00/07:00/08:00/08:45。
+         2026-09-02 实测改：原首班 14:05（ET 02:05）注定抓不到 —— CBOE 的 OI
+         要到次日 ET 04:09~06:45 才刷新（周末样本：周五结算周一 04:09 才到；
+         8/28、9/1 均 06:45；8/31 06:00）。8/27 曾在 ET 01:06 抓到 4 个品种，
+         是个例。首班改到 18:00（ET 06:00）为最早有把握的时点；
+         20:00 恰在 ADP/非农（ET 08:15/08:30）之前，是数据前最后一次读数。
+         脚本幂等：OI 未结算的点跳过不出报告，OCC 发布后第一个命中的点提交，
+         其余点因"无变更"不重复提交。末班车（20:45）由脚本读本文件最大时点识别。 -->
     <key>StartCalendarInterval</key>
     <array>
         <dict>
             <key>Hour</key>
-            <integer>14</integer>
+            <integer>18</integer>
             <key>Minute</key>
-            <integer>5</integer>
+            <integer>0</integer>
         </dict>
         <dict>
             <key>Hour</key>

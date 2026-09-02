@@ -1473,7 +1473,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        layers_html: str = "", gate_html: str = "",
                        cost_html: str = "", backmonth_html: str = "",
                        ratio_html: str = "", credit_wall_html: str = "",
-                       wall_hist_html: str = "") -> str:
+                       wall_hist_html: str = "",
+                       wall_spread_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -1518,6 +1519,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'{wall_hist_html}'
         # 卖方价差紧跟期权结构 —— 它直接拿上面那张卡的墙位下单（用户 2026-08-31
         # 「在研报里加上我们刚做的模块，就在期权结构下面」）
+        f'{wall_spread_html}'
         f'{credit_wall_html}'
         f'<div class="card"><h2>③ 期权关键点位（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
         f'<div class="chart">{price_svg}</div>'
@@ -2669,3 +2671,67 @@ def render_wall_history(rows: list[dict], display_name: str = "") -> str:
         '把它们当信号数会数出两倍多。'
         '</div>'
         f'<div class="chart">{svg}</div></div>')
+
+
+def render_wall_spread(v, display_name: str = "") -> str:
+    """墙位卖方价差候选（v3 三步法）。put 与 call 分开列，不合成铁鹰。
+
+    铁鹰在长桥收两份保证金（组合保证金只认 Covered Call/Put），
+    资金效率腰斩且仍不如单边 put —— 见 docs/broker/longbridge_margin.md。
+    做哪边、做不做，由用户自己决定；这里只提供事实。
+    """
+    if v is None:
+        return ""
+    be_lo, be_hi = (v.params or {}).get("breakeven_rate", (0, 0))
+    ad_lo, ad_hi = (v.params or {}).get("adverse_rate", (0, 0))
+    warn = (
+        '<div style="background:#fff8c5;border:1px solid #d4a72c;border-radius:6px;'
+        'padding:10px 12px;margin:10px 0;font-size:12.5px;line-height:1.75">'
+        f'⚠️ <b>这套规则尚未通过生死线，输出候选 ≠ 建议下单。</b><br>'
+        f'按期权定价，盈亏平衡要求破墙率低于 <b>{be_lo:.1%}~{be_hi:.1%}</b>；'
+        f'而唯一的逆势样本（call 侧，样本期白银 +9.7%）实测持有到期破墙率是 '
+        f'<b>{ad_lo:.0%}~{ad_hi:.0%}</b>。<br>'
+        'put 侧全程 0 破墙、年化 +400%~580%，那是样本期单边上涨送的，不是策略挣的。'
+        '<b>整套东西未经跌市验证。</b>'
+        '</div>')
+    if not v.ok:
+        return ('<div class="card"><h2>墙位卖方价差 · 今日无候选</h2>'
+                f'<div class="sub" style="line-height:1.8">{_esc(v.reason)}</div>'
+                f'{warn}</div>')
+
+    def rows(cands, side_name):
+        if not cands:
+            return f'<tr><td colspan="9" class="sub">{side_name} 无合格候选</td></tr>'
+        out = []
+        for c in cands[:4]:
+            pos = "墙上" if c.offset == 0 else f"墙内{c.offset}档"
+            out.append(
+                f'<tr><td>{_esc(side_name)}</td>'
+                f'<td>{c.sell:g} / {c.buy:g}</td>'
+                f'<td class="r">{c.expiry}</td><td class="r">{c.dte}天</td>'
+                f'<td class="r">{c.wall:g}<span class="sub">（{_esc(pos)}·{_esc(c.wall_rule)}）</span></td>'
+                f'<td class="r">{c.buffer_pct:.1f}%</td>'
+                f'<td class="r">${c.credit:.1f}<span class="sub">净${c.net_credit:.1f}</span></td>'
+                f'<td class="r">${c.occupancy:.0f}</td>'
+                f'<td class="r">{c.roi:+.1%}<span class="sub">日均${c.net_daily:.2f}</span></td></tr>')
+        return "".join(out)
+
+    return (
+        '<div class="card"><h2>墙位卖方价差 · 今日候选</h2>'
+        f'<div class="sub" style="line-height:1.75">{_esc(v.reason)}。'
+        'put 与 call 分开列出，<b>不合成铁鹰</b> —— 长桥的组合保证金只认 '
+        'Covered Call/Put，铁鹰收两份保证金、资金效率腰斩，且即便按标准一份'
+        '也只有单边 put 的 41%。做哪边由你决定。</div>'
+        f'{warn}'
+        '<table><thead><tr><th>方向</th><th>卖/买</th><th class="r">到期</th>'
+        '<th class="r">DTE</th><th class="r">墙位</th><th class="r">缓冲</th>'
+        '<th class="r">权利金</th><th class="r">占用</th><th class="r">ROI</th>'
+        '</tr></thead><tbody>'
+        + rows(v.puts, "卖 put") + rows(v.calls, "卖 call") +
+        '</tbody></table>'
+        '<div class="sub" style="margin-top:8px;line-height:1.7">'
+        '<b>出场规则（第三步定版）</b>：只在<b>收盘越过卖腿</b>时平仓；'
+        '换墙不平、浮盈不平。实测：破卖腿即平在逆势侧砍掉 76% 亏损，'
+        '顺势侧一次都不触发；而换墙即平两侧都亏，还把最差单笔从 −$2 恶化到 −$45。'
+        '<br>推导全过程见 <code>docs/wall_spread_3steps.md</code>。'
+        '</div></div>')

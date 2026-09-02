@@ -58,6 +58,7 @@ from undertow.analyze.indicators import build as _build_labels
 from undertow.report.html import (render_report_html, render_index_html,
                           render_wall_layers_section,
                           render_wall_history,
+                          render_wall_spread,
                           render_tradeable_gate,
                           render_cost_gate,
                           render_backmonth,
@@ -1632,6 +1633,18 @@ def cmd_report(args) -> int:
             except Exception as e:
                 print(f"⚠️ {inst.key} 墙位历史图失败：{type(e).__name__}: {e}",
                       file=sys.stderr)
+            # 墙位卖方价差候选（v3 三步法，只激活白银）。
+            # spot 必须是决策时已知的价格：优先用实时报价，否则用快照日的前收。
+            _ws_html = ""
+            try:
+                from undertow.analyze.wall_spread import propose as _ws_propose
+                _ws_spot = real_price if real_price else curr.spot
+                _ws_v = _ws_propose(curr, inst.key, obs_day, _exec_day,
+                                    spot=_ws_spot)
+                _ws_html = render_wall_spread(_ws_v, inst.display_name)
+            except Exception as e:
+                print(f"⚠️ {inst.key} 卖方价差候选失败：{type(e).__name__}: {e}",
+                      file=sys.stderr)
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,
                                       strategy_html,
@@ -1652,6 +1665,7 @@ def cmd_report(args) -> int:
                                       backmonth_html=backmonth_html,
                                       ratio_html=ratio_html,
                                       wall_hist_html=_wall_hist_html,
+                                      wall_spread_html=_ws_html,
                                       credit_wall_html=credit_wall_html)
             # ⚠️ 文件名用【可交易日】（= 快照日期），不是生成日期。
             # 时点约定：快照 D 于 D 凌晨捕获，OI 是 D−1 收盘的 OCC 结算，

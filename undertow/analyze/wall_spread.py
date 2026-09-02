@@ -1,36 +1,54 @@
-"""墙位卖方价差 v2 —— 白银/黄金已激活，参数逐品种实测
+"""墙位卖方价差 v3 —— 三步法定版（2026-09-02）
 
-取代 credit_wall.py（那版用近端分层墙 + 墙外偏移 + 盘中触及口径，全部是错的）。
-2026-08-31 用户逐条纠正后重建，口径见 memory/wall-credit-spread-strategy.md：
-  ① 墙 = 跨到期累计 OI 最大行权价（cap 参数控制到期上限）
-  ② 破墙 = 到期日收盘越过卖腿，不是盘中触及
-  ③ 价差按组合单中价成交（让 25% 点差），不是两边吃满
-  ④ 【2026-09-01 推翻】原文"换墙当天平掉旧仓"是错的。用户："换墙是新开仓的
-     换墙，不是让你浮亏平仓吧。" 换墙只影响【新开仓】选哪个行权价，
-     已持仓一律持有到期，除非触发 should_exit。实测该错误使 37 笔里 27 笔
-     被提前平掉（合计 −$37），而持到期的 10 笔赚 +$369。
-  ⑤ 价差宽度按【现价百分比】，且每品种单独定
-  ⑥ 反向极强信号 + 已破卖腿 → 平仓（见 should_exit）
+取代 v1(credit_wall.py) 与 v2。v2 的参数与绩效全部作废，原因见 git 历史：
+回测用 snapshot.spot 当开仓价，而 46 个快照里 34 个的 spot 不是当天的价。
 
 ═══════════════════════════════════════════════════════════════════════
-⛔ 2026-09-01：PARAMS 里的全部回测数字（n / unbroken / roi / annual /
-   occ / credit）作废，不得引用，重算前不要拿它们做任何决策。
-   根因：回测用 `snapshot.spot` 当开仓现价，而 46 个快照里 34 个（74%）
-   的 spot 不是文件名当天的价（详见 memory/snapshot-date-alignment-p0）。
-   实例：2026-07-07 快照 spot=56.11 实为 7/6 收盘，7/7 真实收盘 54.46 ——
-   回测据此"卖 55 put"以为价外 2%，实际卖腿已在价内。
-   重算时 spot 必须取 C[D−1]（真实日线收盘），禁用 snapshot.spot。
+用户 2026-09-02 定的三步法。每一步单独测、单独定，不混在一个回测里。
+完整数据与推导见 docs/wall_spread_3steps.md
+═══════════════════════════════════════════════════════════════════════
 
-⛔ 另一处未解决：`accum_wall` 的 band 参数是"在现价附近多大范围内找最大 OI"，
-   于是【范围内总能找到一个最大值】，那不是墙。实测 SLV 真墙一直是 50
-   （OI 16~20 万张），而 band=5% 每天选出 53/55/60 这些只有 3 万张的档位。
-   用户 2026-09-01：「7月6日-7月7日刚从下方穿越上方的墙，最大的 put 墙还是 55，
-   这时候肯定是卖 50 put。反倒是卖 call 可以激进点卖 55，保守点则卖 60。」
-   → 待实现：(a) 墙要按 OI 绝对量认定，不是范围内相对最大；
-             (b) 价格刚穿越某道墙时，该墙作为支撑不可靠，卖腿应退到下一道墙。
+① 选墙　gamma.pick_sell_wall()
+    最大墙 = 最近墙 → 卖最大墙
+    最大墙 ≠ 最近墙 → 朝现价挪一层；挪过去缓冲 <3% 则退回最大墙
+    最大墙自己也 <3% → 弃权
+    实测（SLV 43 个可交易日，判定=用 D−1 结构算的墙、D 当日收盘破没破）：
+        put 覆盖 98% 破墙 0.0%；call 覆盖 84% 破墙 0.0%
 
-⚠️ 样本期 GLD +10.5%、SLV +14.8%，单边上涨。put 侧零破墙有相当部分来自方向，
-   未经跌市验证。call 侧在两个品种上都不赚钱，默认不出候选。
+② 建仓　DTE 2~4、宽 2~3 档、卖在墙上或墙内 1 档
+    · 短 DTE 是双赢不是权衡：theta 临近到期最快 + 暴露时间最短。
+      DTE2 净日均 $2.14(破7%) ≈ DTE14 $2.07(破45%)，收益相同风险差六倍。
+    · 宽 2~3 档的"平衡破墙率"最高（最耐打）；宽 1 档被手续费吃掉
+      （DTE1 手续费占权利金 93%），宽 5 档破满亏放大更快。
+    · 墙内 1 档：破卖腿率与墙上完全相同（put 0%、call 8%），权利金多 24%。
+      墙内 2 档起两侧同时跳升 —— 1 档是免费的，2 档不是。
+
+③ 出场　只在【收盘越过卖腿】时平仓；换墙不平、浮盈不平
+    两侧对照（SLV 墙上 宽3档 DTE7，call=逆势 / put=顺势 / 合计）：
+        持有到期      −329 / +249 / −80
+        破卖腿即平     −80 / +249 / +169   ← 唯一两侧都不吃亏
+        换墙即平      −302 / +113 / −189   ← 坏规则
+        破墙或浮盈50%  −21 / +116 / +95
+    破卖腿即平：逆势砍掉 76% 亏损，顺势一次都不触发。
+    换墙即平平掉 27~75% 仓位却几乎不减亏，还把最差单笔从 −$2 恶化到 −$45。
+
+═══════════════════════════════════════════════════════════════════════
+⚠️⚠️ 未通过的生死线 —— 每次输出候选都必须一并显示
+═══════════════════════════════════════════════════════════════════════
+平衡破墙率（DTE 2~4、宽 2~3 档）  2.9% ~ 4.8%
+call 侧持有到期实测破墙率          7%  ~ 8%
+
+即：按期权定价，破墙率超过 ~4% 这套就不赚钱；而唯一的逆势样本
+（call 侧，样本期白银 +9.7%）实测是 7~8%。第三步的破墙平仓把亏损
+砍掉 76%，是把结果拉回平衡线的关键，但它是补救不是余量。
+
+put 侧全程 0 破墙、年化 +400%~580%，那是样本期单边上涨送的，不是策略挣的。
+**整套东西未经跌市验证。** 输出候选 ≠ 建议下单。
+
+券商约束见 docs/broker/longbridge_margin.md：长桥的组合保证金只认
+Covered Call/Put，价差与铁鹰不减免 —— 铁鹰收两份保证金，
+资金效率腰斩（年化 +197% → +107%），且即便按标准一份也只有单边 put 的 41%。
+故本模块**不出铁鹰候选**，只出单边 put / call，由用户自己决定做哪边或都做。
 """
 from __future__ import annotations
 
@@ -38,139 +56,103 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 
+from undertow.analyze.gamma import pick_sell_wall
+
 FEE_PER_LEG = 0.80
-SIG_EXIT_RATIO = 30.0      # 反向极强信号平仓阈值
-SIG_EXIT_DIST = 0.05       # 且价格须距卖腿 ≤5%（离得远就不用平）
-MIN_CREDIT_MULT = 3.0      # 权利金至少要是手续费(4腿)的几倍，否则这笔没有交易意义
+FEE_PER_TRADE = FEE_PER_LEG * 4          # 4 腿；提前平仓再收一次
 
-# band = 找墙时往现价看多远。2026-08-31 实测：硬编码 15% 会让 GLD 选中距现价
-# -14% 的 350（累计 OI 126k，比 400 的 112k 还大），但那里一周到期的 put 报价
-# 是 0.00 —— 卖它收不到钱还要付 $3.2 手续费。远处的大 OI 是长期持仓堆积
-# （LEAPS/年度对冲），不是近期支撑位。band=5% 后选中 400，权利金 $171。
-# 这一改把 GLD 的年化从 +92% 抬到 +564%。
-
-# 逐品种参数（2026-08-31 扫参数定下）。未列出的品种不出候选。
+#: 第二步定的建仓参数。逐品种，未列出的不出候选。
 PARAMS: dict[str, dict] = {
     "silver": {
-        # ⛔ 以下参数同样作废（污染网格挑出），保留仅为记录曾用值
-        "cap": 9999, "confirm": 1, "band": 0.05, "width_pct": 0.03, "dte": (4, 11),
-        "sides": ("P",),           # call 侧实测 ≈ 打平，暂不出
-        # ⛔ 下面 6 个数作废（错位 spot），重算前不得引用
-        "n": None, "unbroken": None, "roi": None, "annual": None,
-        "occ": None, "credit": None, "fee_share": None,
-        "note": "band=8%/宽度2% 的年化更高(+503%)但只有 22 笔；"
-                "按用户要求取样本更多的 band=5%。宽度 3% 是拐点："
-                "1% 时权利金被手续费吃掉 48%",
-    },
-    # ⚠️ 未激活。band 维度的结论存疑：ROI 随 band 变大而升高（5%→15% 是
-    # 6.9%→15.4%），但权利金是【下降】的（$37.7→$24.2）——升高来自权利金门槛
-    # 筛掉了低权利金的笔。配对比较（同 21 天）显示 band 大确实更好，
-    # 但那是「墙离得远、缓冲厚」的效果，与样本期单边上涨无法分离。
-    "gold": {
-        # ⛔ 同上作废
-        "cap": 9999, "confirm": 3, "band": 0.05, "width_pct": 0.01, "dte": (4, 11),
-        "sides": ("P",),           # call 侧 -$487，明确不出
-        # ⛔ 同上作废
-        "n": None, "unbroken": None, "roi": None, "annual": None,
-        "occ": None, "credit": None, "fee_share": None,
-        "note": "band 从 15% 改 5% 后年化 +92%→+564%：原来选中距现价 -14% 的 350，"
-                "那里一周到期报价 0.00。conf=3 优于 1，与白银相反；"
-                "极强信号全都离墙远，信号平仓在黄金上触发 0 次",
+        "dte": (2, 4),
+        "width_n": (2, 3),
+        "offsets": (0, 1),               # 0=墙上、1=墙内一档
+        "min_buf": 0.03,
+        "min_credit_mult": 2.0,          # 权利金至少是手续费的 2 倍才有意义
+        # 第 2.1 步实测的平衡破墙率区间与逆势实测破墙率，随候选一起显示
+        "breakeven_rate": (0.029, 0.048),
+        "adverse_rate": (0.07, 0.08),
     },
 }
-# QQQ 参数已测出（cap=9999/conf=1/宽度1%/年化+31%）但样本仅 19 个快照且占用 $697，
-# 暂不激活。其余品种快照不足 5 份，无法回测。
-# 2026-08-31 用户定：先只激活白银。黄金的 band=5%/+564% 同样有筛选嫌疑
-# （被权利金门槛筛掉的笔全是低权利金的，剩下的自然好看），需单独查证后再开。
-# ⛔ 2026-09-01 停用（codex P0）：此前只清空了 n/unbroken/roi/annual 等【绩效】数字，
-#    但 cap / band / width_pct / dte / sides / confirm 这些【策略参数】同样是用
-#    错位 snapshot.spot 的网格挑出来的，污染程度一样。只清绩效栏而留着参数继续
-#    出候选，等于换个说法照做同一笔交易。
-#    2026-09-02 结论（含 codex 复核与自查修正）：
-#    安慰剂对照（scripts/placebo_wall_value.py，登记于 wall_edge_vs_placebo）
-#    **对墙位价值给不出结论**，不是证伪也不是证实：
-#      ① 两组均 0/80 破墙 → 配对率差的有效事件数为 0，
-#         『墙上是否更难破』这个核心主张的观测信息量为零；
-#      ② 权利金维度的结果对匹配方式敏感（最近匹配 −0.97% p=0.011 vs
-#         全候选均值 +0.08%，方向相反），且残余距离差可完整解释前者；
-#      ③ 匹配卡尺收到 0.2pp 时可用对数 <8，做不下去。
-#
-#    ⛔ 因此本模块保持停用，理由是**核心主张至今未被检验**。
-#    在拿到跌市样本之前，这个策略与"卖远虚值 put 价差"无法区分；
-#    若要交易，应当按后者的风险来理解，不要因为"卖在墙上"而放松仓位。
-ACTIVE: set[str] = set()
+
+#: 2026-09-02 用户定：目前只激活白银。
+ACTIVE = {"silver"}
 
 
 @dataclass(frozen=True)
 class Candidate:
-    kind: str
+    kind: str                 # "P" / "C"
     expiry: date
     dte: int
     sell: float
     buy: float
-    credit: float          # 每张净收权利金($)，按中价让 25% 点差
-    width: float           # 实际宽度($)
-    occupancy: float
     wall: float
+    offset: int               # 0=墙上、1=墙内一档
+    width_n: int
+    credit: float             # 每张净收权利金（$，按组合单中价让 25% 点差）
+    width: float              # 实际宽度（$）
     spot: float
+    wall_rule: str            # 基准 / 上挪一层 / 退回最大墙
+
+    @property
+    def occupancy(self) -> float:
+        """单边一份保证金。铁鹰在长桥要两份，见 docs/broker/longbridge_margin.md。"""
+        return self.width - self.credit
+
+    @property
+    def max_loss(self) -> float:
+        return self.occupancy + FEE_PER_TRADE
+
+    @property
+    def net_credit(self) -> float:
+        return self.credit - FEE_PER_TRADE
 
     @property
     def roi(self) -> float:
-        return self.credit / self.occupancy if self.occupancy else 0.0
+        return self.net_credit / self.occupancy if self.occupancy > 0 else 0.0
+
+    @property
+    def net_daily(self) -> float:
+        return self.net_credit / self.dte if self.dte else 0.0
 
     @property
     def buffer_pct(self) -> float:
         return abs(self.sell / self.spot - 1) * 100
 
     @property
-    def max_loss(self) -> float:
-        return self.occupancy + FEE_PER_LEG * 4
+    def fee_share(self) -> float:
+        return FEE_PER_TRADE / self.credit if self.credit > 0 else float("inf")
 
     @property
-    def fee_share(self) -> float:
-        return FEE_PER_LEG * 4 / self.credit if self.credit else float("inf")
+    def breakeven_rate(self) -> float:
+        """盈亏平衡所需的最高破墙率：守住赚 ÷ (守住赚 + 破满亏)。"""
+        win, loss = self.net_credit, self.width - self.credit + FEE_PER_TRADE
+        return win / (win + loss) if win + loss > 0 else 0.0
+
+    @property
+    def label(self) -> str:
+        pos = "墙上" if self.offset == 0 else f"墙内{self.offset}档"
+        return (f"{'卖put' if self.kind == 'P' else '卖call'} "
+                f"{self.sell:g}/{self.buy:g} {self.expiry} ({self.dte}天, {pos})")
 
 
 @dataclass(frozen=True)
 class Verdict:
     ok: bool
     reason: str
-    wall: float | None = None
-    candidates: list[Candidate] = field(default_factory=list)
+    puts: list[Candidate] = field(default_factory=list)
+    calls: list[Candidate] = field(default_factory=list)
     params: dict = field(default_factory=dict)
 
-
-def accum_wall(snap, spot: float, kind: str, obs: date, cap: int,
-               band: float = 0.15) -> tuple[float | None, int, float]:
-    """跨到期累计 OI 最大的行权价（≤cap 天到期）。
-
-    cap 的选择实测：≤14 天抖动 16~19%（8/21 SLV 选出 55 而非用户看到的 60）；
-    全到期在 GLD 上会被深虚污染（8/11 470C/460C 各增 4 万张把墙顶到 460，
-    而现价 402）——但 SLV 上全到期反而最稳。所以 cap 逐品种定。
-    """
-    agg: dict[float, int] = defaultdict(int)
-    total = 0
-    for c in snap.contracts:
-        if c.kind != kind:
-            continue
-        if kind == "C" and not (spot <= c.strike <= spot * (1 + band)):
-            continue
-        if kind == "P" and not (spot * (1 - band) <= c.strike <= spot):
-            continue
-        if not (1 <= (c.expiry - obs).days <= cap):
-            continue
-        agg[c.strike] += c.open_interest
-        total += c.open_interest
-    if not agg or total <= 0:
-        return None, 0, 0.0
-    k = max(agg, key=agg.get)
-    return k, agg[k], agg[k] / total
+    @property
+    def all(self) -> list[Candidate]:
+        return self.puts + self.calls
 
 
 def _fill(sell, buy, give: float = 0.25) -> float:
-    """组合单成交价：中价往不利方向让 give。
+    """开仓成交价：组合单中价往不利方向让 give。
 
-    「卖腿吃 bid、买腿吃 ask」对窄价差是毁灭性的假设 —— 它把 SLV 55/54
+    「卖腿吃 bid、买腿吃 ask」对窄价差是毁灭性假设 —— 它把 SLV 55/54
     一周价差的 $7 权利金算成 $0，进而得出「手续费比权利金大」的荒谬结论。
     """
     sb, sa = sell.bid or 0, sell.ask or 0
@@ -180,103 +162,138 @@ def _fill(sell, buy, give: float = 0.25) -> float:
     return mid + (worst - mid) * give
 
 
+def close_cost(sell, buy, give: float = 0.25) -> float:
+    """平仓成本（正数=要付出）：买回卖腿吃 ask 方向、卖出买腿吃 bid 方向。"""
+    sb, sa = sell.bid or 0, sell.ask or 0
+    bb, ba = buy.bid or 0, buy.ask or 0
+    mid = ((sb + sa) / 2 - (bb + ba) / 2) * 100
+    worst = (sa - bb) * 100
+    return mid + (worst - mid) * give
+
+
 def propose(snap, instrument: str, obs: date, execution_date: date,
             spot: float) -> Verdict:
-    """给出该品种的墙位卖方价差候选。未激活的品种直接说明原因。
+    """给出该品种当日的卖方价差候选（put 与 call 分别列出，不合成铁鹰）。
 
-    ⚠️ spot 必填（codex 2026-09-01 P0）：原来允许回退 `snap.spot`，
-    而 46 个快照里 34 个的 spot 不是当天的价。调用方必须显式传入
-    决策时点已知的价格（真实日线 C[D−1] 或实时报价）。
+    ⚠️ spot 必填且必须是【决策时已知】的价格（真实日线 C[D−1] 或实时报价）。
+    绝不可回退 snap.spot —— 46 个快照里 34 个的 spot 不是当天的价。
     """
     if instrument not in ACTIVE:
-        return Verdict(False,
-                       f"{instrument} 未激活。2026-09-01 起【全品种停用】："
-                       f"参数与绩效均出自用 snapshot.spot 当开仓价的污染回测，"
-                       f"且快照捕获时序、墙的定义两个前提都还没修好。"
-                       f"重开条件见模块内 ACTIVE 处的三项清单。")
+        return Verdict(False, f"{instrument} 未激活（当前只激活：{'、'.join(sorted(ACTIVE)) or '无'}）")
     p = PARAMS[instrument]
-    out: list[Candidate] = []
-    wall_used = None
-    for kind in p["sides"]:
-        wk, woi, wsh = accum_wall(snap, spot, kind, obs, p["cap"],
-                                  band=p.get("band", 0.05))
-        if wk is None:
+    lo_dte, hi_dte = p["dte"]
+    out: dict[str, list[Candidate]] = {"P": [], "C": []}
+    walls: dict[str, dict] = {}
+
+    for kind in ("P", "C"):
+        w = pick_sell_wall(snap, obs, spot, kind, min_buf=p["min_buf"])
+        if w is None:
             continue
-        wall_used = wk
+        walls[kind] = w
+        W = w["strike"]
         legs: dict[date, dict[float, object]] = defaultdict(dict)
         for c in snap.contracts:
             if c.kind != kind or c.bid is None or not c.ask:
                 continue
-            d = (c.expiry - execution_date).days
-            if p["dte"][0] <= d <= p["dte"][1]:
+            if lo_dte <= (c.expiry - execution_date).days <= hi_dte:
                 legs[c.expiry][c.strike] = c
         for exp in sorted(legs):
             ks = sorted(legs[exp])
-            pool = [x for x in ks if (x > spot if kind == "C" else x < spot)]
-            if not pool:
+            if W not in ks:
                 continue
-            sk = min(pool, key=lambda x: abs(x - wk))
-            w_abs = spot * p["width_pct"]
-            far = [x for x in ks if (x > sk if kind == "C" else x < sk)]
-            if not far:
-                continue
-            bk = min(far, key=lambda x: abs(x - (sk + w_abs if kind == "C" else sk - w_abs)))
-            credit = _fill(legs[exp][sk], legs[exp][bk])
-            width = abs(bk - sk) * 100
-            # 权利金连手续费 3 倍都不到 → 这笔没有交易意义（GLD 350P 收 $0 的教训）
-            if credit <= FEE_PER_LEG * 4 * MIN_CREDIT_MULT or width <= credit:
-                continue
-            out.append(Candidate(kind=kind, expiry=exp,
-                                 dte=(exp - execution_date).days,
-                                 sell=sk, buy=bk, credit=credit, width=width,
-                                 occupancy=width - credit, wall=wk, spot=spot))
-    if not out:
-        return Verdict(False, f"{p['dte'][0]}~{p['dte'][1]} 天内没有可用的价差组合"
-                              f"（宽度 {p['width_pct']:.0%}≈${spot * p['width_pct']:.1f}）。",
-                       wall_used, [], p)
-    out.sort(key=lambda c: -c.roi)
+            i = ks.index(W)
+            for off in p["offsets"]:
+                si = i + off if kind == "P" else i - off
+                if si < 0 or si >= len(ks):
+                    continue
+                S = ks[si]
+                if (kind == "P" and S >= spot) or (kind == "C" and S <= spot):
+                    continue                      # 不卖实值
+                for wn in p["width_n"]:
+                    bi = si - wn if kind == "P" else si + wn
+                    if bi < 0 or bi >= len(ks):
+                        continue
+                    B = ks[bi]
+                    credit = _fill(legs[exp][S], legs[exp][B])
+                    width = abs(B - S) * 100
+                    if width <= credit:
+                        continue
+                    if credit <= FEE_PER_TRADE * p["min_credit_mult"]:
+                        continue
+                    out[kind].append(Candidate(
+                        kind=kind, expiry=exp,
+                        dte=(exp - execution_date).days,
+                        sell=S, buy=B, wall=W, offset=off, width_n=wn,
+                        credit=credit, width=width, spot=spot,
+                        wall_rule=w["rule"]))
+
+    for k in out:
+        out[k].sort(key=lambda c: -c.net_daily)
+    if not out["P"] and not out["C"]:
+        return Verdict(False, _diagnose(snap, walls, spot, execution_date, p),
+                       params=p)
     return Verdict(True,
-                   f"墙 {wall_used:g}（≤{p['cap']} 天累计 OI 最大），"
-                   f"卖在墙上、宽度 {p['width_pct']:.0%}、{p['dte'][0]}~{p['dte'][1]} 天。"
-                   f"⚠️ 无可引用的实测绩效：原数字出自污染回测，已全部作废。",
-                   wall_used, out, p)
+                   f"DTE {lo_dte}~{hi_dte}、宽 {'/'.join(map(str, p['width_n']))} 档、"
+                   f"墙上或墙内 1 档；出场只认「收盘越过卖腿」",
+                   puts=out["P"], calls=out["C"], params=p)
 
 
-def should_exit(kind: str, sell_strike: float, spot: float,
-                signal_side: str | None, signal_ratio: float) -> tuple[bool, str]:
-    """是否该因反向极强信号提前平仓。
+def _diagnose(snap, walls, spot, execution_date, p) -> str:
+    """没有候选时说清楚卡在哪 —— 干巴巴一句「无候选」没有信息量。
 
-    两个条件缺一不可（用户 2026-08-31）：
-      · 信号足够极端（≥30×）—— ≥10× 触发太频繁，白平的损失超过避开的亏损
-      · 价格已经贴近卖腿（≤5%）—— 「如果离得很远，其实也无所谓」
-
-    2026-09-01 改：原来 put 侧直接 return False（理由是"样本里从没破过墙"），
-    但那个"从没破过"是用错位 spot 算出来的，不成立。用户明确要求：
-    「这种极强信号出现破墙时，应该平仓卖方价差，改为顺向买方。」
-    现在两侧同规则。历史上"极强信号 + 已破卖腿"只触发过 1 次
-    （2026-07-07 开仓 / 07-10 触发）：持有到期 −$150、触发日平仓 −$105、
-    反手买 put 两日 +71% —— n=1 不构成统计证据，采纳的理由是不对称性：
-    破墙后卖方剩余收益封顶在已收权利金，剩余风险却是整个价差宽度。
+    2026-09-02 实测暴露的结构性矛盾：第一步选出的墙缓冲越厚越安全，
+    但缓冲厚 + DTE 短 = 时间价值几乎为零。第二步测出「DTE 2~4 最优」时
+    样本均缓冲是 6.8%；缓冲到 8%+ 时短期权根本收不到钱。
+    **DTE 的最优区间隐含了缓冲条件，两者不独立。**
+    所以这里要报告：放宽到多少天才够权利金，以及那个 DTE 的逆势破墙率。
     """
-    adverse = (signal_side == "看涨") if kind == "C" else (signal_side == "看跌")
-    if not adverse or signal_ratio < SIG_EXIT_RATIO:
-        return False, f"信号 {signal_side or '无'} {signal_ratio:.1f}× 未达 {SIG_EXIT_RATIO:g}×"
+    lo_dte, hi_dte = p["dte"]
+    thr = FEE_PER_TRADE * p["min_credit_mult"]
+    parts = []
+    for kind, nm in (("P", "put"), ("C", "call")):
+        if kind not in walls:
+            parts.append(f"{nm} 侧无合格墙（缓冲 <{p['min_buf']:.0%} 或无结构墙）")
+            continue
+        W = walls[kind]["strike"]
+        buf = walls[kind]["buf_pct"]
+        legs: dict[date, dict[float, object]] = defaultdict(dict)
+        for c in snap.contracts:
+            if c.kind == kind and c.bid is not None and c.ask:
+                legs[c.expiry][c.strike] = c
+        need = None
+        for exp in sorted(legs):
+            d = (exp - execution_date).days
+            if d < lo_dte or W not in legs[exp]:
+                continue
+            ks = sorted(legs[exp])
+            i = ks.index(W)
+            best = 0.0
+            for wn in p["width_n"]:
+                bi = i - wn if kind == "P" else i + wn
+                if 0 <= bi < len(ks):
+                    best = max(best, _fill(legs[exp][W], legs[exp][ks[bi]]))
+            if best > thr:
+                need = (d, best)
+                break
+        if need:
+            parts.append(
+                f"{nm} 墙 {W:g}（缓冲 {buf:.1f}%）在 {lo_dte}~{hi_dte} 天内"
+                f"权利金不足 ${thr:.1f}；要放宽到 DTE {need[0]} 才收得到 "
+                f"${need[1]:.1f} —— 但那个持有期的逆势破墙率远超平衡率，不建议")
+        else:
+            parts.append(f"{nm} 墙 {W:g}（缓冲 {buf:.1f}%）各到期权利金均不足 ${thr:.1f}")
+    return "；".join(parts)
 
-    # ⚠️ codex 2026-09-01 P0：原实现只看 |sell/spot − 1| 这个【无方向】的距离，
-    # 两头都错：
-    #   · 卖 60C、现价 59 —— 尚在安全侧（未破墙），却因距离 1.7% 被平掉；
-    #   · 卖 60P、现价 50 —— 已经深度破墙 16.7%，却因距离 >5% 拒绝平仓，
-    #     等于在风险最大的时候锁死出口。
-    # 正确顺序：先判有方向的破墙，再让距离只承担「尚在安全侧时别乱动」。
-    breached = (spot > sell_strike) if kind == "C" else (spot < sell_strike)
-    if breached:
-        gap = abs(spot / sell_strike - 1)
-        return True, (f"反向极强信号 {signal_ratio:.1f}× 且【已破卖腿】"
-                      f"（现价 {spot:g} vs 卖腿 {sell_strike:g}，越过 {gap:.1%}）→ 当天平仓")
 
-    dist = abs(sell_strike / spot - 1)
-    if dist > SIG_EXIT_DIST:
-        return False, (f"信号达标但仍在安全侧且距卖腿 {dist:.1%} > {SIG_EXIT_DIST:.0%}，"
-                       f"离得远，不必平")
-    return True, (f"反向极强信号 {signal_ratio:.1f}×，虽未破墙但价格已逼近卖腿"
-                  f"（距 {dist:.1%}）→ 当天平仓")
+def should_exit(kind: str, sell_strike: float, close_px: float) -> tuple[bool, str]:
+    """第三步定版出场规则：**只**在收盘越过卖腿时平仓。
+
+    换墙不平、浮盈不平 —— 两者在顺势侧都白白让出利润，逆势侧又几乎不减亏。
+    用 close_px（收盘价），不是盘中价：破墙口径一律以收盘为准。
+    """
+    breached = (close_px > sell_strike) if kind == "C" else (close_px < sell_strike)
+    if not breached:
+        return False, f"收盘 {close_px:g} 未越过卖腿 {sell_strike:g} → 持有"
+    gap = abs(close_px / sell_strike - 1) * 100
+    return True, (f"收盘 {close_px:g} 已越过卖腿 {sell_strike:g}"
+                  f"（{gap:.1f}%）→ 平仓")

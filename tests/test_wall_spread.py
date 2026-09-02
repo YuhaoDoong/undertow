@@ -3,6 +3,7 @@
 这个模块直接产出交易候选，却长期零测试覆盖（2026-09-01 发现）。
 下面每条测试都对应一次真实的口径错误，改错了就红。
 """
+import pathlib
 from datetime import date
 
 import pytest
@@ -157,3 +158,13 @@ def test_put与call分开列出():
                    params=ws.PARAMS["silver"])
     h = render_wall_spread(v, "白银")
     assert "卖 put" in h and "卖 call" in h
+
+
+def test_v1与v3卡片标题不得撞车():
+    """2026-09-02：研报里出现两张都叫「墙位卖方价差」的卡片
+    （v1 失败记录 + v3 今日候选），会让人以为是同一个东西。"""
+    from undertow.report import html
+    src = pathlib.Path(html.__file__).read_text("utf-8")
+    assert "墙位卖方价差 <b>v3</b>" in src
+    assert "墙位卖方价差 <b>v1</b>" in src
+    assert "'<h2>② 墙位卖方价差 · " not in src, "旧的无版本号标题应已改掉"

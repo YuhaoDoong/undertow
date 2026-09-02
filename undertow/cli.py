@@ -1634,11 +1634,25 @@ def cmd_report(args) -> int:
                 print(f"⚠️ {inst.key} 墙位历史图失败：{type(e).__name__}: {e}",
                       file=sys.stderr)
             # 墙位卖方价差候选（v3 三步法，只激活白银）。
-            # spot 必须是决策时已知的价格：优先用实时报价，否则用快照日的前收。
+            #
+            # ⛔ 决策价必须是【该 ETF 自己】的前一交易日收盘，与回测口径一致。
+            #    2026-09-02 踩过的坑：这里原本写 `real_price if real_price else
+            #    curr.spot`，而 real_price 来自 YahooFuturesSource —— 那是白银
+            #    【期货】价（SI=F ≈ 64.5），行权价却是 SLV 的（50~70）。
+            #    后果：55 put 的缓冲被算成 14.7%（实际 8.4%），call 侧还因此
+            #    选错了墙（70 而非 65）。用错价格标的，整套选墙与缓冲全废。
+            #    curr.spot 同样不能用 —— 74% 的快照 spot 不是文件名当天的价。
             _ws_html = ""
             try:
                 from undertow.analyze.wall_spread import propose as _ws_propose
-                _ws_spot = real_price if real_price else curr.spot
+                from undertow.collect.longbridge_kline import fetch_bars as _fb
+                _px = {str(b["ts"])[:10]: b["close"]
+                       for b in _fb(f"{inst.options.symbol}.US", period="day",
+                                    count=30)}
+                _prior = [d for d in sorted(_px) if d < _exec_day.isoformat()]
+                if not _prior:
+                    raise ValueError("拿不到前一交易日收盘，无法确定决策价")
+                _ws_spot = _px[_prior[-1]]
                 _ws_v = _ws_propose(curr, inst.key, obs_day, _exec_day,
                                     spot=_ws_spot)
                 _ws_html = render_wall_spread(_ws_v, inst.display_name)

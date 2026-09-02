@@ -2455,7 +2455,7 @@ def render_credit_wall(verdicts: dict, spot: float = 0.0, conv=None,
             for t in RISK_TIERS.values())
         return (
             '<div class="card" style="border-left:4px solid #cf222e">'
-            '<h2>② 墙位卖方价差 · ⛔ 未通过验证，已停用</h2>'
+            '<h2>墙位卖方价差 <b>v1</b> · ⛔ 失败记录（已停用，保留作反例）</h2>'
             '<div class="sub" style="line-height:1.8">'
             '最初的回测给出「稳健档 82% 胜率 +2.84%/笔、激进档 63% +9.99%/笔」，'
             'codex 审查指出四处方法论错误，逐条修掉后<b>三档全部翻负</b>：'
@@ -2562,7 +2562,7 @@ def render_credit_wall(verdicts: dict, spot: float = 0.0, conv=None,
 
     head = ("✅ 今日有卖方价差候选" if any_ok else "⛔ 今日无卖方价差候选")
     return (
-        '<div class="card"><h2>② 墙位卖方价差 · 候选腿位</h2>'
+        '<div class="card"><h2>墙位卖方价差 <b>v1</b> · 候选腿位（已停用）</h2>'
         f'<div style="font-size:15px;margin:6px 0"><b>{head}</b></div>'
         '<div class="sub" style="line-height:1.7">三道闸门：极强信号（压力比 ≥5×）、'
         '近端加总墙厚度 ≥10%、该到期自己的墙落在同一位置且 ≥20%。'
@@ -2695,7 +2695,7 @@ def render_wall_spread(v, display_name: str = "") -> str:
         '<b>整套东西未经跌市验证。</b>'
         '</div>')
     if not v.ok:
-        return ('<div class="card"><h2>墙位卖方价差 · 今日无候选</h2>'
+        return ('<div class="card"><h2>② 墙位卖方价差 <b>v3</b> · 今日无候选</h2>'
                 f'<div class="sub" style="line-height:1.8">{_esc(v.reason)}</div>'
                 f'{warn}</div>')
 
@@ -2717,7 +2717,7 @@ def render_wall_spread(v, display_name: str = "") -> str:
         return "".join(out)
 
     return (
-        '<div class="card"><h2>墙位卖方价差 · 今日候选</h2>'
+        '<div class="card"><h2>② 墙位卖方价差 <b>v3</b> · 今日候选</h2>'
         f'<div class="sub" style="line-height:1.75">{_esc(v.reason)}。'
         'put 与 call 分开列出，<b>不合成铁鹰</b> —— 长桥的组合保证金只认 '
         'Covered Call/Put，铁鹰收两份保证金、资金效率腰斩，且即便按标准一份'

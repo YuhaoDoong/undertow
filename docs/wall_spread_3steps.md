@@ -238,3 +238,21 @@ should_exit(kind, sell_strike, close_px)
 见 `docs/broker/longbridge_margin.md`：长桥组合保证金只认 Covered Call/Put，
 价差与铁鹰不减免。铁鹰收两份保证金 → 年化 +197% 腰斩到 +107%；
 且即便按标准一份，也只有单边 put 的 41%（铁鹰 = 赚钱那边补亏钱那边）。
+
+
+### 决策价必须是【该 ETF 自己】的前一交易日收盘（2026-09-02 踩坑）
+
+接线时写成 `real_price if real_price else curr.spot`，而 `real_price` 来自
+`YahooFuturesSource` —— 那是白银**期货**价（SI=F ≈ 64.5），行权价却是 SLV 的
+（50~70）。后果：
+
+```
+                  错（用期货价 64.5）    对（用 SLV 前收 60.02）
+put  墙            55，缓冲 14.7%        55，缓冲 8.5%
+call 墙            70，缓冲  8.6%        65，缓冲 8.1%   ← 连墙都选错了
+```
+
+用错价格标的，选墙与缓冲全废。三条禁令：
+- ⛔ 不用 `real_price`（期货价，标的不同）
+- ⛔ 不用 `snap.spot`（74% 的快照 spot 不是文件名当天的价）
+- ✅ 用 `C[可交易日的前一交易日]`，与回测口径完全一致

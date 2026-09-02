@@ -20,6 +20,7 @@
 import argparse
 import os
 import pathlib
+import random
 import statistics
 import sys
 from collections import defaultdict
@@ -27,6 +28,7 @@ from datetime import datetime
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from undertow.analyze import wall_spread as ws                    # noqa: E402
+from undertow.analyze.gamma import local_pin, structural_walls    # noqa: E402
 from undertow.cli import snapshot_from_payload                    # noqa: E402
 from undertow.collect.longbridge_kline import fetch_bars          # noqa: E402
 from undertow.collect.store import SnapshotStore                  # noqa: E402
@@ -81,31 +83,25 @@ def decision_price(d, closes, dates):
     return closes[prior[-1]] if prior else None
 
 
-def wall_of(snap, spot, kind, obs, cap, band):
-    """band=None → 真墙（不限范围）。"""
-    agg = defaultdict(int)
-    for c in snap.contracts:
-        if c.kind != kind:
-            continue
-        if kind == "P" and c.strike > spot:
-            continue
-        if kind == "C" and c.strike < spot:
-            continue
-        if band is not None:
-            if kind == "P" and c.strike < spot * (1 - band):
-                continue
-            if kind == "C" and c.strike > spot * (1 + band):
-                continue
-        if not (1 <= (c.expiry - obs).days <= cap):
-            continue
-        agg[c.strike] += c.open_interest
-    if not agg:
-        return None, 0
-    k = max(agg, key=agg.get)
-    return k, agg[k]
+def wall_of(snap, spot, kind, obs, mode):
+    """三种找墙口径并列，供对比。返回 (行权价, OI) 或 (None, 0)。
+
+    · "structural" —— gamma.structural_walls()：全范围 + 近端到期占比 ≥15%。
+      2026-09-01 定的正确口径：长期对冲堆积（GLD 330 的 ≤30 天占比仅 2%）
+      被滤掉，真承接区（GLD 400 占 28%）保留。
+    · "pin" —— gamma.local_pin()：近价带内最大。**它不是墙**，带内总有最大值；
+      放在这里只为量化"用错口径会差多少"。
+    · "band5" —— 旧实现，等价于 pin(band=0.05)，保留以复现历史结论。
+    """
+    if mode == "structural":
+        w = structural_walls(snap, obs, spot, kind, top_n=1)
+        return (w[0]["strike"], w[0]["oi"]) if w else (None, 0)
+    band = 0.05 if mode == "band5" else 0.05
+    p = local_pin(snap, obs, spot, kind, band=band)
+    return (p["strike"], p["oi"]) if p else (None, 0)
 
 
-def run(snaps, closes, dates, kind, *, band, width_pct, dte, cap=9999,
+def run(snaps, closes, dates, kind, *, mode, width_pct, dte,
         min_credit_mult=ws.MIN_CREDIT_MULT):
     out, skip = [], defaultdict(int)
     for d in sorted(snaps):
@@ -116,7 +112,7 @@ def run(snaps, closes, dates, kind, *, band, width_pct, dte, cap=9999,
             continue
         prior = [x for x in dates if x < d.isoformat()]
         obs = datetime.strptime(prior[-1], "%Y-%m-%d").date()
-        wk, woi = wall_of(snap, spot, kind, obs, cap, band)
+        wk, woi = wall_of(snap, spot, kind, obs, mode)
         if wk is None:
             skip["无墙"] += 1
             continue
@@ -164,6 +160,44 @@ def run(snaps, closes, dates, kind, *, band, width_pct, dte, cap=9999,
     return out, skip
 
 
+def cluster_bootstrap(rows, *, trials=5000, seed=7):
+    """按【进场日期】整簇重采样，给净收益率的 95% 置信区间。
+
+    为什么必须按簇（项目回测硬要求之一）：同一天开的多笔、以及跨品种同日的仓位，
+    收益高度相关。把它们当独立样本会把置信区间算得过窄，
+    再小的样本都能"显著"。
+    统计量 = 总净损益 / 峰值资本占用（这才是这套策略的真实收益率，
+    不是单笔 ROI 的平均 —— 后者忽略了同时持有多笔时的资金占用）。
+    """
+    if len(rows) < 3:
+        return None
+    byday = defaultdict(list)
+    for r in rows:
+        byday[r["d"]].append(r)
+    days = list(byday)
+    if len(days) < 3:
+        return None
+
+    def ratio(sample):
+        if not sample:
+            return 0.0
+        live = defaultdict(float)
+        for r in sample:
+            for k in range(r["dte"] + 1):
+                live[r["d"].toordinal() + k] += r["occ"]
+        peak = max(live.values()) if live else 1.0
+        return sum(r["pnl"] for r in sample) / peak if peak else 0.0
+
+    rng = random.Random(seed)
+    out = []
+    for _ in range(trials):
+        samp = [x for dd in rng.choices(days, k=len(days)) for x in byday[dd]]
+        out.append(ratio(samp))
+    out.sort()
+    return {"obs": ratio(rows), "lo": out[int(trials * 0.025)],
+            "hi": out[int(trials * 0.975)], "clusters": len(days)}
+
+
 def report(sym, rows, skip, label):
     if len(rows) < 3:
         print(f"  {label:<12} 笔数 {len(rows)} 不足，跳过（{dict(skip)}）")
@@ -180,12 +214,15 @@ def report(sym, rows, skip, label):
     wins = [r["pnl"] for r in rows if r["pnl"] > 0]
     loss = [r["pnl"] for r in rows if r["pnl"] <= 0]
     b = (statistics.mean(wins) / abs(statistics.mean(loss))) if loss and wins else float("inf")
+    cb = cluster_bootstrap(rows)
+    ci = (f" 簇{cb['clusters']:>2} CI[{cb['lo']:+.0%},{cb['hi']:+.0%}]"
+          f"{'✓' if cb['lo'] > 0 else '✗'}" if cb else " 簇<3")
     print(f"  {label:<12}{len(rows):>4}笔 未破墙{nb/len(rows):>5.0%} "
           f"均缓冲{statistics.mean(r['buffer'] for r in rows):>5.1f}% "
           f"均权利金${statistics.mean(r['credit'] for r in rows):>6.1f} "
           f"总损益{tot:>+7.0f} 峰值占用${peak:>6.0f} "
           f"年化{tot/peak*365/span*100:>+6.0f}% "
-          f"赔率{(f'{b:.2f}' if b != float('inf') else '∞'):>5}")
+          f"赔率{(f'{b:.2f}' if b != float('inf') else '∞'):>5}" + ci)
 
 
 def main():
@@ -201,14 +238,14 @@ def main():
         if drop:
             print(f"  剔除：{dict(drop)}")
         for kind, kl in (("P", "卖put"), ("C", "卖call")):
-            for bl, band in (("band5%", 0.05), ("真墙", None)):
+            for mode, ml in (("structural", "结构墙"), ("pin", "局部pin")):
                 for wp in (0.02, 0.03, 0.05):
                     for dte, dl in (((4, 11), "4~11d"), ((12, 25), "12~25d")):
                         rows, skip = run(snaps, closes, dates, kind,
-                                         band=band, width_pct=wp, dte=dte)
-                        report(sym, rows, skip, f"{kl} {bl} {wp*100:.0f}% {dl}")
+                                         mode=mode, width_pct=wp, dte=dte)
+                        report(sym, rows, skip, f"{kl} {ml} {wp*100:.0f}% {dl}")
         if a.detail:
-            rows, _ = run(snaps, closes, dates, "P", band=None,
+            rows, _ = run(snaps, closes, dates, "P", mode="structural",
                           width_pct=0.03, dte=(4, 11))
             print(f"\n  真墙 put 3% 4~11d 明细")
             for r in rows:

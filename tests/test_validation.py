@@ -58,3 +58,22 @@ def test_rate为None时不得用0冒充():
                               p_value=None, baseline=None, note="")
     assert v.rate is None
     assert v.need_more is None
+
+
+def test_对照型条目_有p值但无命中数_也不得崩溃():
+    """2026-09-02：wall_edge_vs_placebo 有 p=0.267 但 hits=None，
+    status 是「样本不足」而非「无法检验」，昨天按 status 分支会走进命中率格式化。
+    判据必须是 hits is None。"""
+    v = validation.Validation(key="k", label="l", n=79, hits=None,
+                              p_value=0.267, baseline=None, note="", cluster_n=37)
+    assert v.status == "样本不足"
+    assert "0.267" in v.summary()
+    from undertow.report import html
+    assert html.render_validation_table()
+
+
+def test_安慰剂对照条目已注册且结论为无法区分():
+    v = validation.REGISTRY["wall_edge_vs_placebo"]
+    assert v.p_value == 0.267 and v.cluster_n == 37
+    assert not v.significant
+    assert "无法区分" in v.note

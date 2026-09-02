@@ -122,11 +122,16 @@ class Validation:
             if self.effect:
                 s += f" · {self.effect}"
             return s + (" · 已验证" if self.significant else " · 未达显著")
-        if self.status == "无法检验":
-            # 不访问 rate / need_more / baseline —— 这些在本类条目里全是 None。
-            # codex 2026-09-01 P0：只改 status 不改渲染路径，会让整份研报 TypeError。
-            return (f"n={self.n} · 无法检验（缺可用的零假设或前瞻收益），"
-                    f"详见 note 与复现入口")
+        if self.hits is None:
+            # 不访问 rate / need_more —— 这两个都要 hits。
+            # 判据必须是 hits is None，不能是 status=="无法检验"：
+            # 对照型条目（如 wall_edge_vs_placebo）有 p 值但没有"命中数"这个概念，
+            # 它的 status 是「样本不足」，照样会崩（2026-09-02 实测）。
+            tail = ("无法检验（缺可用的零假设或前瞻收益）" if self.p_value is None
+                    else f"p={self.p_value:.3f}"
+                         + (f"，{self.cluster_n} 个日期簇" if self.cluster_n else "")
+                         + ("" if self.significant else " · 未达显著"))
+            return f"n={self.n} · {tail} · 详见 note 与复现入口"
         s = f"{self.hits}/{self.n} = {self.rate:.0%}（基准 {self.baseline:.0%}），p={self.p_value:.3f}"
         if self.cluster_n:
             s += f"，{self.cluster_n} 个日期簇"
@@ -214,6 +219,21 @@ REGISTRY: dict[str, Validation] = {
                "  c) 复现入口：scripts/gate_analysis.py（支持 --thin/--dedupe-row/--exclude）；\n"
                "  d) 样本到 n≥50（开火组）时重跑本条；在那之前"
                "     既不得以「闸门已验证」为由辩护，也不得据此拆闸门。"),
+    "wall_edge_vs_placebo": Validation(
+        key="wall_edge_vs_placebo", label="卖在墙上 vs 同距离非墙（安慰剂对照）",
+        n=79, hits=None, p_value=0.267, baseline=None, cluster_n=37,
+        note="复现入口：scripts/placebo_wall_value.py。"
+             "配对设计：同到期、同宽度、同距现价百分比(±1.5pp)，唯一差别是是否为结构墙。"
+             "SLV/GLD/QQQ/USO put 侧，宽度 3%，到期 4~11 天：\n"
+             "  结构墙   n=79 未破墙 100% 缓冲 5.2% 权利金 $52.8 收益率 +110.0%\n"
+             "  非墙同距 n=79 未破墙 100% 缓冲 5.0% 权利金 $50.2 收益率  +98.4%\n"
+             "  差 +11.6%，37 个日期簇符号置换 p=0.267 —— **无法区分**。",
+        caveat="⛔ 这否定的是策略前提本身：「墙难破」成立，但「卖在墙上因此更好」不成立。"
+               "两组都是 100% 未破墙，说明难破来自【距离 5% + 样本期上涨】，墙无贡献。"
+               "与 call 侧对照一致（put 墙实际破得比 IV 隐含少 17.7%、call 墙多破 18.3%，"
+               "对称相反 = 趋势签名，非 pin 效应）。"
+               "剥掉「墙」之后剩下的是普通的卖远虚值 put 价差，未经跌市验证。"
+               "要推翻本结论需在跌市样本重跑，或找到墙起作用的其它条件。"),
     "wall_space_vote": Validation(
         key="wall_space_vote", label="Gamma 墙位空间投票",
         n=83, hits=41, p_value=1.000, baseline=0.51, cluster_n=43,

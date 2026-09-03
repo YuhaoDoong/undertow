@@ -112,6 +112,45 @@ def atr(highs: list[float], lows: list[float], closes: list[float],
     raise ValueError(f'method 须为 "rma" 或 "sma"，收到 {method!r}')
 
 
+def linreg(xs: list[float], n: int, offset: int = 0) -> list[float | None]:
+    """Pine ta.linreg —— 最近 n 点最小二乘拟合，取 (n−1−offset) 处的值。
+
+    ⚠️ 它**不是**滞后平均：拟合直线会比均线更早转向。
+    这既是它的卖点，也是它容易制造"看起来提前"的假象的原因 ——
+    转向早不等于预测对，早转向也早出错。
+    """
+    if n <= 1:
+        raise ValueError("n 必须大于 1")
+    out: list[float | None] = [None] * min(n - 1, len(xs))
+    if len(xs) < n:
+        return out
+    sx = n * (n - 1) / 2
+    sxx = sum(j * j for j in range(n))
+    den = n * sxx - sx * sx
+    for i in range(n - 1, len(xs)):
+        w = xs[i - n + 1:i + 1]
+        sy = sum(w)
+        sxy = sum(j * w[j] for j in range(n))
+        b = (n * sxy - sx * sy) / den
+        a = (sy - b * sx) / n
+        out.append(a + b * (n - 1 - offset))
+    return out
+
+
+def highest(xs: list[float], n: int) -> list[float | None]:
+    out: list[float | None] = [None] * min(n - 1, len(xs))
+    for i in range(n - 1, len(xs)):
+        out.append(max(xs[i - n + 1:i + 1]))
+    return out
+
+
+def lowest(xs: list[float], n: int) -> list[float | None]:
+    out: list[float | None] = [None] * min(n - 1, len(xs))
+    for i in range(n - 1, len(xs)):
+        out.append(min(xs[i - n + 1:i + 1]))
+    return out
+
+
 def last_valid(xs: list[float | None]) -> float | None:
     """最后一个非 None 值。"""
     for x in reversed(xs):

@@ -87,9 +87,9 @@
  {
   "instrument": "spy",
   "date": "2026-09-03",
-  "spot": 759.93,
-  "state": "无信号",
-  "struct_bias": "中性",
+  "spot": 765.47,
+  "state": "仅结构",
+  "struct_bias": "偏多(弱)",
   "band": "偏超卖",
   "regime": "牛",
   "stretch": -0.7457598726914274,

@@ -59,6 +59,7 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_wall_layers_section,
                           render_wall_history,
                           render_wall_spread,
+                          render_smc,
                           render_tradeable_gate,
                           render_cost_gate,
                           render_backmonth,
@@ -1126,14 +1127,23 @@ def cmd_report(args) -> int:
                 store, opt_src, inst, today, no_cache=args.no_cache,
                 no_snapshot=args.no_snapshot, replay=bool(replay))
 
-            # —— 真实商品期货价：用【当日实时比值】= 期货价/ETF价 换算所有位点（免乘数漂移）——
+            # —— 真实商品期货价：比值 = 期货价/ETF价，换算研报里所有位点（免乘数漂移）——
+            # ⚠️ 2026-09-03 修：原来用 `real_price / curr.spot`，两者**不同步** ——
+            # real_price 是 Yahoo 的实时期货报价（可能已是今天盘中），curr.spot 是
+            # ETF 的前一日收盘。隔夜跳空会整个灌进比值里：实测黄金隔夜 +1.9%，
+            # 比值被推到 11.10，而 GC÷GLD 的真实区间是 10.84~10.96（均值 10.89），
+            # 于是 4H 结构区 4386 被显示成 4768 —— 差了 380 点，直接误导读位。
+            # 改用期货序列里【today 之前最后一根】的收盘，与 ETF 前收同日，比值才同源。
             real_series, real_price, real_asof, ratio = None, None, "", None
             if inst.commodity is not None:
                 try:
                     real_series, real_price, real_asof = fut_src.fetch_for(
                         inst, use_cache=not args.no_cache)
                     if curr.spot > 0:
-                        ratio = real_price / curr.spot
+                        _cl = [c for d, c in zip(real_series.dates, real_series.closes)
+                               if d < today] if real_series else []
+                        ratio = (_cl[-1] / curr.spot) if _cl else (
+                            real_price / curr.spot if real_price else None)
                 except Exception as e:
                     print(f"[提示] {inst.key} 真实期货价获取失败，回退静态乘数: {e}", file=sys.stderr)
             # ⚠️ 回放必须掐断未来价格 —— 否则整份重放都不可信。
@@ -1655,7 +1665,8 @@ def cmd_report(args) -> int:
                 _ws_spot = _px[_prior[-1]]
                 _ws_v = _ws_propose(curr, inst.key, obs_day, _exec_day,
                                     spot=_ws_spot)
-                _ws_html = render_wall_spread(_ws_v, inst.display_name)
+                _ws_html = render_wall_spread(_ws_v, inst.display_name,
+                                              events=all_events)
                 # 落盘推荐台账（用户 2026-09-02：记录每次研报里的推荐，收集数据）。
                 # 事前记录、事后回填 —— 回测再怎么做都是事后的，只有前瞻台账
                 # 能回答"照着做结果会怎样"。
@@ -1668,6 +1679,20 @@ def cmd_report(args) -> int:
                           file=sys.stderr)
             except Exception as e:
                 print(f"⚠️ {inst.key} 卖方价差候选失败：{type(e).__name__}: {e}",
+                      file=sys.stderr)
+            # 4H 供需结构区（技术面第二视角，只展示不计票）
+            _smc_html = ""
+            try:
+                from undertow.analyze.smc import read_4h_zones as _smc_z
+                _sym = inst.options.symbol if inst.options else ""
+                _zs = _smc_z(f"{_sym}.US") if _sym else None
+                if _zs:
+                    # 复用上面算好的同日比值，不要自己拿 real_price 再除一遍 ——
+                    # real_price 是实时期货报价，curr.spot 是 ETF 前收，两者差一个隔夜。
+                    # 2026-09-03 实测该 bug 把 GLD 429.39 显示成现货 4768（真值 4654）。
+                    _smc_html = render_smc(_zs, curr.spot, inst.display_name, ratio=ratio)
+            except Exception as e:
+                print(f"⚠️ {inst.key} 4H 结构区失败：{type(e).__name__}: {e}",
                       file=sys.stderr)
             html = render_report_html(outlook, price_svg, oi_svg, cot_svg,
                                       flow_html, macro_html, events_html, tldr_html,
@@ -1690,6 +1715,7 @@ def cmd_report(args) -> int:
                                       ratio_html=ratio_html,
                                       wall_hist_html=_wall_hist_html,
                                       wall_spread_html=_ws_html,
+                                      smc_html=_smc_html,
                                       credit_wall_html=credit_wall_html)
             # ⚠️ 文件名用【可交易日】（= 快照日期），不是生成日期。
             # 时点约定：快照 D 于 D 凌晨捕获，OI 是 D−1 收盘的 OCC 结算，

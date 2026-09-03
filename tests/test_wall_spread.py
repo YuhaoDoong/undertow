@@ -216,3 +216,20 @@ def test_只卖墙上不卖墙内():
     """2026-09-02 撤回「墙内1档免费」：逐日判定下它触发率 7%~23%，
     触发的全是假破墙（擦破 $0.11 又回来），平仓即平错。"""
     assert ws.PARAMS["silver"]["offsets"] == (0,)
+
+
+def test_到期撞高影响事件要标注():
+    """2026-09-03 启示 12：白银候选 9/4 到期正撞非农，DTE 2~4 没看事件日历。
+    只标不禁 —— 决定权在用户。"""
+    from undertow.report.html import render_wall_spread
+    from undertow.core.calendar import Event
+    ev = [Event(date=date(2026, 9, 4), name="Non-Farm Employment Change",
+                category="data", importance="high", time_et="08:30")]
+    v = ws.Verdict(True, "x", puts=[_cand(expiry=date(2026, 9, 4))],
+                   params=ws.PARAMS["silver"])
+    h = render_wall_spread(v, "白银", events=ev)
+    assert "🔴撞" in h and "Non-Farm" in h
+    # 不撞的不标
+    h2 = render_wall_spread(v, "白银", events=[Event(date=date(2026, 9, 10),
+        name="X", category="data", importance="high", time_et="08:30")])
+    assert "🔴撞" not in h2

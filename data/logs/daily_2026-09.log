@@ -127,3 +127,208 @@ To https://github.com/YuhaoDoong/undertow.git
 To https://github.com/YuhaoDoong/undertow.git
    a5b018c..8263ba9  main -> main
 [完成] 已提交并推送
+==== 2026-09-02 15:09 +08 | ET 2026-09-02 03:09 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试
+==== 2026-09-02 16:00 +08 | ET 2026-09-02 04:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试
+==== 2026-09-02 17:00 +08 | ET 2026-09-02 05:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试
+==== 2026-09-02 18:00 +08 | ET 2026-09-02 06:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM
+[跳过] dxy 未配置期权数据源
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+已落盘 2026-09-02 期权链快照（原始全字段，纳入 git 永久留存）:
+  gold    GLD: 7,864 合约（5,959 有OI）  → 已累计 51 天  ·  /Users/yhdong/Trading/data/snapshots/options/GLD/2026-09-02.json.gz
+  silver  SLV: 4,998 合约（4,112 有OI）  → 已累计 48 天  ·  /Users/yhdong/Trading/data/snapshots/options/SLV/2026-09-02.json.gz
+  wti     USO: 4,654 合约（3,595 有OI）  → 已累计 51 天  ·  /Users/yhdong/Trading/data/snapshots/options/USO/2026-09-02.json.gz
+  qqq     QQQ: 11,254 合约（8,554 有OI）  → 已累计 27 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-02.json.gz
+  spy     SPY: 13,108 合约（9,899 有OI）  → 已累计 6 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-02.json.gz
+[状态] snapshot overall=complete saved=5 failed=0 rc=0
+  📐 金银比 67.85　墙隐含 67.9~70.0（区间外 -0.0%）
+已生成综合研判报告 · 可交易日 2026-09-02:
+  gold    近偏多(弱)    中偏多       (可信度高)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/gold_2026-09-02.html
+  silver  近中性       中偏多(弱)    (可信度中)  ⚡强看涨  · 不做空 · 别追·等回调 · 短线跟多 · 长线拿住  → /Users/yhdong/Trading/data/reports/silver_2026-09-02.html
+  wti     近中性       中偏多(弱)    (可信度低)  · 不做空 · 追不划算 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/wti_2026-09-02.html
+  qqq     近中性       中偏多(弱)    (可信度中)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/qqq_2026-09-02.html
+  tqqq    近偏空(弱)    中偏多(弱)    (可信度低)  ·强看跌(已过期)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-01.html
+  tlt     近偏空(弱)    中偏多       (可信度中)  · 不做空 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/tlt_2026-09-01.html
+  spy     近中性       中偏多(弱)    (可信度低)  ·极强看跌(低置信)  · 不做空 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/spy_2026-09-02.html
+  iwm     近中性       中偏多(弱)    (可信度低)  ·极强看跌(已过期)  · 信号与趋势冲突 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/iwm_2026-09-01.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-02.html
+
+📅 ⚠️ 各品种数据不同龄：2026-09-01, 2026-09-02 —— 混龄比较需谨慎。
+
+## ⚠️ 持仓与信号方向冲突
+
+- ⚠️ 你持有 SLV 看跌，而 SLV 出现 ⚡强看涨信号（3.6×）
+    · 看涨加权增仓 26,196 ≫ 看跌 7,349（3.6×，压倒性）——即 call 买盘＋put 卖方做支撑 全面压过 call 卖压＋put 买保护
+    · 主翼 20~45Δ call 买盘权重 16.8 ≫ 卖压 3.5（4.8×）
+
+> 强信号阈值未经校准，这不是平仓指令；但**方向相反时你至少该知道**。
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-02.html'）
+[状态] report overall=complete rc=0
+[强信号] silver ⚡强看涨�- ⚠️ 你持有 SLV 看跌，而 SLV 出现 ⚡强看涨信号（3.6×）
+[main db63fd2] 每日自动更新 2026-09-02：期权链快照+四品种报告（launchd 定时任务）
+ 52 files changed, 963 insertions(+), 115 deletions(-)
+ create mode 100644 data/history/wall_spread/iwm.jsonl
+ create mode 100644 data/history/wall_spread/qqq.jsonl
+ create mode 100644 data/history/wall_spread/spy.jsonl
+ create mode 100644 data/history/wall_spread/tlt.jsonl
+ create mode 100644 data/history/wall_spread/tqqq.jsonl
+ create mode 100644 data/history/wall_spread/wti.jsonl
+ create mode 100644 data/reports/ALERT_2026-09-02.txt
+ create mode 100644 data/reports/archive/2026-09/iwm_2026-09-01_r1846.html
+ create mode 100644 data/reports/archive/2026-09/tlt_2026-09-01_r1846.html
+ create mode 100644 data/reports/archive/2026-09/tqqq_2026-09-01_r1846.html
+ create mode 100644 data/reports/gold_2026-09-02.html
+ create mode 100644 data/reports/index_2026-09-02.html
+ create mode 100644 data/reports/qqq_2026-09-02.html
+ create mode 100644 data/reports/silver_2026-09-02.html
+ create mode 100644 data/reports/spy_2026-09-02.html
+ create mode 100644 data/reports/wti_2026-09-02.html
+ create mode 100644 data/snapshots/options/GLD/2026-09-02.json.gz
+ create mode 100644 data/snapshots/options/QQQ/2026-09-02.json.gz
+ create mode 100644 data/snapshots/options/SLV/2026-09-02.json.gz
+ create mode 100644 data/snapshots/options/SPY/2026-09-02.json.gz
+ create mode 100644 data/snapshots/options/USO/2026-09-02.json.gz
+To https://github.com/YuhaoDoong/undertow.git
+   fbb3d52..db63fd2  main -> main
+[完成] 已提交并推送
+==== 2026-09-02 18:45 +08 | ET 2026-09-02 06:45 ====
+[待补] 尚缺当日快照： TQQQ TLT IWM
+[跳过] dxy 未配置期权数据源
+已落盘 2026-09-02 期权链快照（原始全字段，纳入 git 永久留存）:
+  gold    GLD: 7,864 合约（5,959 有OI）  → 已累计 51 天  ·  /Users/yhdong/Trading/data/snapshots/options/GLD/2026-09-02.json.gz
+  silver  SLV: 4,998 合约（4,112 有OI）  → 已累计 48 天  ·  /Users/yhdong/Trading/data/snapshots/options/SLV/2026-09-02.json.gz
+  wti     USO: 4,654 合约（3,595 有OI）  → 已累计 51 天  ·  /Users/yhdong/Trading/data/snapshots/options/USO/2026-09-02.json.gz
+  qqq     QQQ: 11,254 合约（8,554 有OI）  → 已累计 27 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-02.json.gz
+  tqqq    TQQQ: 1,612 合约（1,461 有OI）  → 已累计 6 天  ·  /Users/yhdong/Trading/data/snapshots/options/TQQQ/2026-09-02.json.gz
+  tlt     TLT: 2,456 合约（1,842 有OI）  → 已累计 6 天  ·  /Users/yhdong/Trading/data/snapshots/options/TLT/2026-09-02.json.gz
+  spy     SPY: 13,108 合约（9,899 有OI）  → 已累计 6 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-02.json.gz
+  iwm     IWM: 5,378 合约（3,700 有OI）  → 已累计 6 天  ·  /Users/yhdong/Trading/data/snapshots/options/IWM/2026-09-02.json.gz
+[状态] snapshot overall=complete saved=8 failed=0 rc=0
+  📐 金银比 67.85　墙隐含 67.9~70.0（区间外 -0.0%）
+已生成综合研判报告 · 可交易日 2026-09-02:
+  gold    近偏多(弱)    中偏多       (可信度高)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/gold_2026-09-02.html
+  silver  近中性       中偏多(弱)    (可信度中)  ⚡强看涨  · 不做空 · 别追·等回调 · 短线跟多 · 长线拿住  → /Users/yhdong/Trading/data/reports/silver_2026-09-02.html
+  wti     近中性       中偏多(弱)    (可信度低)  · 不做空 · 追不划算 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/wti_2026-09-02.html
+  qqq     近中性       中偏多(弱)    (可信度中)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/qqq_2026-09-02.html
+  tqqq    近偏空(弱)    中偏多(弱)    (可信度低)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-02.html
+  tlt     近偏多(弱)    中偏多       (可信度高)  · 不做空 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/tlt_2026-09-02.html
+  spy     近中性       中偏多(弱)    (可信度低)  ·极强看跌(低置信)  · 不做空 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/spy_2026-09-02.html
+  iwm     近中性       中偏多(弱)    (可信度低)  ·极强看跌(低置信)  · 不做空 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/iwm_2026-09-02.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-02.html
+
+## ⚠️ 持仓与信号方向冲突
+
+- ⚠️ 你持有 SLV 看跌，而 SLV 出现 ⚡强看涨信号（3.6×）
+    · 看涨加权增仓 26,196 ≫ 看跌 7,349（3.6×，压倒性）——即 call 买盘＋put 卖方做支撑 全面压过 call 卖压＋put 买保护
+    · 主翼 20~45Δ call 买盘权重 16.8 ≫ 卖压 3.5（4.8×）
+
+> 强信号阈值未经校准，这不是平仓指令；但**方向相反时你至少该知道**。
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-02.html'）
+[状态] report overall=complete rc=0
+[强信号] silver ⚡强看涨�- ⚠️ 你持有 SLV 看跌，而 SLV 出现 ⚡强看涨信号（3.6×）
+[main 7091716] 每日自动更新 2026-09-02：期权链快照+四品种报告（launchd 定时任务）
+ 37 files changed, 684 insertions(+), 123 deletions(-)
+ create mode 100644 data/reports/archive/2026-09/gold_2026-09-02_r1800.html
+ create mode 100644 data/reports/archive/2026-09/index_2026-09-02_r1802.html
+ create mode 100644 data/reports/archive/2026-09/qqq_2026-09-02_r1801.html
+ create mode 100644 data/reports/archive/2026-09/silver_2026-09-02_r1800.html
+ create mode 100644 data/reports/archive/2026-09/spy_2026-09-02_r1802.html
+ create mode 100644 data/reports/archive/2026-09/wti_2026-09-02_r1801.html
+ create mode 100644 data/reports/iwm_2026-09-02.html
+ create mode 100644 data/reports/tlt_2026-09-02.html
+ create mode 100644 data/reports/tqqq_2026-09-02.html
+ create mode 100644 data/snapshots/options/IWM/2026-09-02.json.gz
+ create mode 100644 data/snapshots/options/TLT/2026-09-02.json.gz
+ create mode 100644 data/snapshots/options/TQQQ/2026-09-02.json.gz
+To https://github.com/YuhaoDoong/undertow.git
+   db63fd2..7091716  main -> main
+[完成] 已提交并推送
+==== 2026-09-03 16:00 +08 | ET 2026-09-03 04:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+已落盘 2026-09-03 期权链快照（原始全字段，纳入 git 永久留存）:
+  gold    GLD: 7,748 合约（5,846 有OI）  → 已累计 52 天  ·  /Users/yhdong/Trading/data/snapshots/options/GLD/2026-09-03.json.gz
+[状态] snapshot overall=complete saved=1 failed=0 rc=0
+  📐 金银比 67.45　墙隐含 67.9~70.0（区间外 -0.6%）
+已生成综合研判报告 · 可交易日 2026-09-03:
+  gold    近偏多(弱)    中偏多       (可信度高)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/gold_2026-09-03.html
+  silver  近中性       中偏多(弱)    (可信度中)  ·强看涨(已过期)  · 不做空 · 别追·等回调 · 短线跟多 · 长线拿住  → /Users/yhdong/Trading/data/reports/silver_2026-09-02.html
+  wti     近中性       中偏多(弱)    (可信度低)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/wti_2026-09-02.html
+  qqq     近中性       中偏多(弱)    (可信度中)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/qqq_2026-09-02.html
+  tqqq    近偏空(弱)    中偏多(弱)    (可信度低)  · 不做空 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-02.html
+  tlt     近偏多(弱)    中偏多       (可信度高)  · 不做空 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/tlt_2026-09-02.html
+  spy     近中性       中偏多(弱)    (可信度低)  ·极强看跌(已过期)  · 不做空 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/spy_2026-09-02.html
+  iwm     近中性       中偏多(弱)    (可信度低)  ·极强看跌(已过期)  · 不做空 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/iwm_2026-09-02.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-03.html
+
+📅 ⚠️ 各品种数据不同龄：2026-09-02, 2026-09-03 —— 混龄比较需谨慎。
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-03.html'）
+[状态] report overall=complete rc=0
+[main a0e56e7] 每日自动更新 2026-09-03：期权链快照+四品种报告（launchd 定时任务）
+ 39 files changed, 804 insertions(+), 130 deletions(-)
+ create mode 100644 data/history/spreads/2026-09-02.jsonl
+ create mode 100644 data/reports/archive/2026-09/iwm_2026-09-02_r1846.html
+ create mode 100644 data/reports/archive/2026-09/qqq_2026-09-02_r1846.html
+ create mode 100644 data/reports/archive/2026-09/silver_2026-09-02_r1021.html
+ create mode 100644 data/reports/archive/2026-09/silver_2026-09-02_r1845.html
+ create mode 100644 data/reports/archive/2026-09/spy_2026-09-02_r1846.html
+ create mode 100644 data/reports/archive/2026-09/tlt_2026-09-02_r1846.html
+ create mode 100644 data/reports/archive/2026-09/tqqq_2026-09-02_r1846.html
+ create mode 100644 data/reports/archive/2026-09/wti_2026-09-02_r1845.html
+ create mode 100644 data/reports/gold_2026-09-03.html
+ create mode 100644 data/reports/index_2026-09-03.html
+ create mode 100644 data/snapshots/options/GLD/2026-09-03.json.gz
+To https://github.com/YuhaoDoong/undertow.git
+   08e02c4..a0e56e7  main -> main
+[完成] 已提交并推送

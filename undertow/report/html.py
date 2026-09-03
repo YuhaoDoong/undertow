@@ -1474,7 +1474,8 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
                        cost_html: str = "", backmonth_html: str = "",
                        ratio_html: str = "", credit_wall_html: str = "",
                        wall_hist_html: str = "",
-                       wall_spread_html: str = "") -> str:
+                       wall_spread_html: str = "",
+                       smc_html: str = "") -> str:
     if o.commodity_symbol and o.commodity_spot is not None:
         # 真实期货价为主，ETF 代理为辅
         price_line = (f'真实价 <b>{o.commodity_spot:,.1f}</b>（{_esc(o.commodity_symbol)} 期货）'
@@ -1517,6 +1518,9 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         # 可以放进研报里，期权结构的下面」）。它回答静态墙位表答不了的问题：
         # 这道墙守住过没有、被破过几次、破的时候有没有信号。
         f'{wall_hist_html}'
+        # 技术面第二视角紧跟墙位历史 —— 两者都在回答"关键位在哪"，
+        # 一个用持仓、一个用 K 线结构，放一起便于对照（但不合并计票）
+        f'{smc_html}'
         # 卖方价差紧跟期权结构 —— 它直接拿上面那张卡的墙位下单（用户 2026-08-31
         # 「在研报里加上我们刚做的模块，就在期权结构下面」）
         f'{wall_spread_html}'
@@ -2709,7 +2713,7 @@ def render_wall_history(rows: list[dict], display_name: str = "") -> str:
         f'<div class="chart">{svg}</div></div>')
 
 
-def render_wall_spread(v, display_name: str = "") -> str:
+def render_wall_spread(v, display_name: str = "", events=None) -> str:
     """墙位卖方价差候选（v3 三步法）。put 与 call 分开列，不合成铁鹰。
 
     铁鹰在长桥收两份保证金（组合保证金只认 Covered Call/Put），
@@ -2735,16 +2739,27 @@ def render_wall_spread(v, display_name: str = "") -> str:
                 f'<div class="sub" style="line-height:1.8">{_esc(v.reason)}</div>'
                 f'{warn}</div>')
 
+    # 到期日撞 🔴高影响事件 → 标注（2026-09-03 启示 12：白银候选 9/4 到期正撞非农，
+    # 第二步的 DTE 2~4 完全没看事件日历）。只标不禁：决定权在用户。
+    hi_days = {}
+    for e in (events or []):
+        if str(getattr(e, "importance", "")).lower() == "high":
+            hi_days.setdefault(getattr(e, "date", None), []).append(
+                getattr(e, "name", "") or str(e))
+
     def rows(cands, side_name):
         if not cands:
             return f'<tr><td colspan="9" class="sub">{side_name} 无合格候选</td></tr>'
         out = []
         for c in cands[:4]:
             pos = "墙上" if c.offset == 0 else f"墙内{c.offset}档"
+            clash = hi_days.get(c.expiry)
+            exp_cell = (f'{c.expiry} <b style="color:#cf222e">🔴撞{_esc(clash[0][:12])}</b>'
+                        if clash else f'{c.expiry}')
             out.append(
                 f'<tr><td>{_esc(side_name)}</td>'
                 f'<td>{c.sell:g} / {c.buy:g}</td>'
-                f'<td class="r">{c.expiry}</td><td class="r">{c.dte}天</td>'
+                f'<td class="r">{exp_cell}</td><td class="r">{c.dte}天</td>'
                 f'<td class="r">{c.wall:g}<span class="sub">（{_esc(pos)}·{_esc(c.wall_rule)}）</span></td>'
                 f'<td class="r">{c.buffer_pct:.1f}%</td>'
                 f'<td class="r">${c.credit:.1f}<span class="sub">净${c.net_credit:.1f}</span></td>'
@@ -2771,3 +2786,48 @@ def render_wall_spread(v, display_name: str = "") -> str:
         '顺势侧一次都不触发；而换墙即平两侧都亏，还把最差单笔从 −$2 恶化到 −$45。'
         '<br>推导全过程见 <code>docs/wall_spread_3steps.md</code>。'
         '</div></div>')
+
+
+def render_smc(zones, spot: float, display_name: str = "",
+               ratio: float | None = None) -> str:
+    """4H 供需结构区（SMC）—— 独立于期权链的技术面视角。
+
+    用户 2026-09-03：「期权结构落后一天，同时容易噪声，而且大多代表大资金和
+    机构的观点，他们也有可能错的。」这张卡就是那个第二视角。
+
+    ⛔ 只做展示，不进方向投票、不给期权墙加权 —— 实测两者同源（都跟着价格走），
+    重合率与随机行权价无差别，控制缓冲后破墙率差异消失。详见 smc.py 文件头。
+    """
+    if not zones:
+        return ""
+    rows = []
+    for z in sorted(zones, key=lambda x: -x.mid):
+        d = (z.mid / spot - 1) * 100 if spot else 0.0
+        is_dem = z.kind == "需求"
+        col = "#1a7f37" if is_dem else "#cf222e"
+        conv = (f'<span class="sub">≈{z.lo*ratio:.0f}~{z.hi*ratio:.0f}</span>'
+                if ratio else "")
+        here = ' <b style="color:#0969da">← 现价在此区内</b>' if z.lo <= spot <= z.hi else ""
+        rows.append(
+            f'<tr><td style="color:{col}">{"需求/支撑" if is_dem else "供给/阻力"}</td>'
+            f'<td class="r">{z.lo:.2f} ~ {z.hi:.2f} {conv}</td>'
+            f'<td class="r">{d:+.1f}%</td>'
+            f'<td class="r">{(z.hi-z.lo)/z.mid*100:.1f}%</td>'
+            f'<td class="sub">{_esc(z.source)}{here}</td></tr>')
+    return (
+        '<div class="card"><h2>4H 供需结构区 · 技术面第二视角</h2>'
+        '<div class="sub" style="line-height:1.75">'
+        '取 4 小时 K 线的<b>订单块</b>，按 LuxAlgo SMC 的 Pine 源码口径实现：'
+        '结构被收盘价突破时，回看这一段里波幅极值那根 K 线的完整高低区间；'
+        '真实波幅超过 2 倍 ATR(200) 的异常 K 线会被排除；'
+        '区间被最高价或最低价越过即作废。按<b>距现价远近</b>各取上下两个'
+        '（与「找墙取最近三道」同构）。'
+        '<br>公允价值缺口在 LuxAlgo 里默认关闭，此处同样不用。'
+        '<br>⛔ <b>只作参考，不参与方向投票、也不给期权墙加权。</b>'
+        '实测它与期权墙同源（持仓本就跟着价格走），重合率与随机行权价无差别，'
+        '控制缓冲后破墙率差异消失 —— 重合是重复计数，不是相互印证。'
+        '它的价值在于：期权 OI 是前一交易日结算的滞后量，K 线结构是当下的。'
+        '</div>'
+        '<table><thead><tr><th>类型</th><th class="r">区间</th>'
+        '<th class="r">距现价</th><th class="r">区宽</th><th>来源</th></tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table></div>')

@@ -147,6 +147,8 @@ class PositionReview:
     flags: list[str] = field(default_factory=list)   # 风险旗标
     comment: str = ""        # 一句话评价
     iv: float | None = None  # 该腿隐含波动率（链上/实时，供买方边际估算）
+    pos_gamma: float | None = None  # 持仓 Gamma（份×100×每股gamma×方向）
+    pos_theta: float | None = None  # 持仓 Theta（每日，份×100×每股theta×方向）
 
 
 def _side(kind: str, qty: float) -> str:
@@ -245,6 +247,16 @@ def _review_leg(pos, parsed: ParsedSymbol, ctx: InstrumentContext | None) -> Pos
         est = bs.price(ctx.spot, parsed.strike, T, iv, kind=parsed.kind, r=RISK_FREE)
     pnl = (est - pos.cost_price) * CONTRACT_MULT * pos.quantity
     pos_delta = d_share * CONTRACT_MULT * pos.quantity
+    # Gamma / Theta：光有 Delta 说不清这个 Delta 有多脆、这份仓位每天在流血还是收租。
+    #   净 Gamma < 0（**贷方**价差，收权金）：跳空时 Delta 朝不利方向加速，止损来不及；
+    #   净 Gamma > 0（**借方**价差，付权金）：跳空对你有利，但要付 Theta。
+    # ⚠️ 别把"卖方价差"一概当成负 Gamma —— 借方价差里买的那腿更接近平值，
+    #    gamma 更大，整体是**正** Gamma。判断依据是收权金还是付权金，不是有没有卖腿。
+    # Theta 是这两者的价签：正 Gamma 的组合每天付租，负 Gamma 的每天收租。
+    g_share = bs.gamma(ctx.spot, parsed.strike, T, iv, r=RISK_FREE)
+    t_share = bs.theta(ctx.spot, parsed.strike, T, iv, kind=parsed.kind, r=RISK_FREE)
+    pos_gamma = g_share * CONTRACT_MULT * pos.quantity
+    pos_theta = t_share * CONTRACT_MULT * pos.quantity
     money, dist = _moneyness(parsed.kind, ctx.spot, parsed.strike)
     wall = _wall_note(parsed.kind, parsed.strike, ctx)
     align = _align(parsed.kind, pos.quantity, ctx)
@@ -264,6 +276,7 @@ def _review_leg(pos, parsed: ParsedSymbol, ctx: InstrumentContext | None) -> Pos
     if live_priced:
         comment += "〔实时价〕"
     return PositionReview(**base, dte=dte, est_value=est, iv=iv, pnl=pnl, pos_delta=pos_delta,
+                          pos_gamma=pos_gamma, pos_theta=pos_theta,
                           moneyness=money, dist_pct=dist, wall_note=wall,
                           align=align, flags=flags, comment=comment)
 
@@ -337,6 +350,8 @@ class UnderlyingGroup:
     spot: float = 0.0             # 评价所用现价
     spot_source: str = "snapshot" # 现价来源
     price_note: str = ""          # 报价源说明
+    net_gamma: float | None = None   # 组合净 Gamma：这个 Delta 有多脆
+    net_theta: float | None = None   # 组合净 Theta：每天收/付多少
 
 
 @dataclass(frozen=True)
@@ -784,6 +799,10 @@ def review_portfolio(positions, contexts: dict, asof: date,
             groups.append(UnderlyingGroup(
                 underlying=und, display_name=ctx.display_name,
                 net_delta=sum(deltas) if deltas else None,
+                net_gamma=(sum(x.pos_gamma for x in legs if x.pos_gamma is not None)
+                           if any(x.pos_gamma is not None for x in legs) else None),
+                net_theta=(sum(x.pos_theta for x in legs if x.pos_theta is not None)
+                           if any(x.pos_theta is not None for x in legs) else None),
                 total_pnl=sum(pnls) if pnls else None,
                 bias=ctx.bias, verdict_head=ctx.verdict_head,
                 legs=legs, combos=combos, stance=stance, capital_note=cap_note,

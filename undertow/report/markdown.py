@@ -538,6 +538,29 @@ def _money(v) -> str:
 _SEV_ICON = {"高": "🔴", "中": "🟠", "低": "🟡"}
 
 
+def _greeks_text(g, capital=None) -> str:
+    """净 Gamma / Theta 的一行展示。
+
+    净 Δ 说不清两件事：这个 Δ 有多脆、这份仓位每天在流血还是收租。
+      净Γ<0（贷方价差，收权金）跳空时 Δ 朝不利方向加速；
+      净Γ>0（借方价差，付权金）跳空有利，代价是每天付 Θ。
+    ⚠️ 有卖腿 ≠ 负 Gamma：借方价差里买的那腿更接近平值、gamma 更大，整体是正的。
+
+    Θ 相对**净资产**的比例比绝对值更该看 —— 每天 −6.5 美元在 $6800 上是噪声，
+    在 $68 上是每天 −9.5%。所以拿得到净资产时一并给出占比。
+    """
+    ng = getattr(g, "net_gamma", None)
+    nt = getattr(g, "net_theta", None)
+    out = []
+    if ng is not None and abs(ng) > 1e-9:
+        out.append(f"净Γ {ng:+.1f}")
+    if nt is not None and abs(nt) > 1e-9:
+        eq = getattr(capital, "net_assets", None) if capital is not None else None
+        pct = f"（≈净资产{abs(nt) / eq * 100:.1f}%/天）" if eq and eq > 0 else ""
+        out.append(f"净Θ {nt:+.1f}/天{pct}")
+    return (" · " + " · ".join(out)) if out else ""
+
+
 def render_account_md(review, assets=None, health=None) -> str:
     """实盘持仓评价 终端 Markdown。review=PortfolioReview, assets=AccountAssets|None,
     health=list[HealthFinding]|None（持仓体检）。"""
@@ -566,7 +589,8 @@ def render_account_md(review, assets=None, health=None) -> str:
     for g in review.groups:
         L.append(f"## {g.display_name}（{g.underlying}）")
         d = "—" if g.net_delta is None else f"{g.net_delta:+.0f}"
-        L.append(f"- 综合：净 Delta {d} · 浮动盈亏 {_money(g.total_pnl)} · 综合研判 **{g.bias}**"
+        L.append(f"- 综合：净 Delta {d}{_greeks_text(g, assets)} · "
+                 f"浮动盈亏 {_money(g.total_pnl)} · 综合研判 **{g.bias}**"
                  + (f" · 决策：{g.verdict_head}" if g.verdict_head else ""))
         pn = getattr(g, "price_note", "")
         if pn:

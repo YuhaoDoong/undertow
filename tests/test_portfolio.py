@@ -304,3 +304,46 @@ if __name__ == "__main__":
     for fn in fns:
         fn()
     print(f"\n{len(fns)} tests passed.")
+
+
+# ── 组合级 Gamma / Theta（2026-09-03 加）────────────────────────────
+def test_期权腿同时给出gamma与theta():
+    """光有 Δ 说不清这个 Δ 有多脆。卖方价差天然负 Gamma，
+    跳空时 Δ 朝不利方向加速 —— Δ 中性的组合在跳空日照样能爆。"""
+    from undertow.analyze import blackscholes as bs
+    g = bs.gamma(100.0, 100.0, 30 / 365, 0.3)
+    t = bs.theta(100.0, 100.0, 30 / 365, 0.3, kind="C")
+    assert g > 0, "gamma 恒为正（买方视角）"
+    assert t < 0, "平值买方每天损耗"
+
+
+def test_平值gamma大于深度虚值():
+    """常见误解：以为深度虚值 gamma 最大。实际平值最大，
+    虚值越深 gamma 越小 —— 这决定了卖方该卖哪一档。"""
+    from undertow.analyze import blackscholes as bs
+    atm = bs.gamma(100.0, 100.0, 30 / 365, 0.3)
+    otm = bs.gamma(100.0, 130.0, 30 / 365, 0.3)
+    deep = bs.gamma(100.0, 200.0, 30 / 365, 0.3)
+    assert atm > otm > deep
+
+
+def test_卖出期权是负gamma():
+    """卖方（qty<0）的持仓 gamma 为负 —— 这是跳空风险的来源。"""
+    from undertow.analyze import blackscholes as bs
+    g_share = bs.gamma(100.0, 100.0, 30 / 365, 0.3)
+    sold = g_share * 100 * (-2)                 # 卖出 2 张
+    assert sold < 0
+
+
+def test_UnderlyingGroup带净gamma与净theta():
+    from undertow.analyze.portfolio import UnderlyingGroup
+    import dataclasses
+    names = {f.name for f in dataclasses.fields(UnderlyingGroup)}
+    assert "net_gamma" in names and "net_theta" in names
+
+
+def test_PositionReview带持仓gamma与theta():
+    from undertow.analyze.portfolio import PositionReview
+    import dataclasses
+    names = {f.name for f in dataclasses.fields(PositionReview)}
+    assert "pos_gamma" in names and "pos_theta" in names

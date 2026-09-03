@@ -2055,6 +2055,32 @@ def _health_html(health) -> str:
     return f'<div class="card"><h1>{head}</h1>{"".join(rows)}</div>'
 
 
+def _greeks_pills(g) -> str:
+    """净 Gamma / Theta 的展示。
+
+    光有净 Δ 说不清两件事：这个 Δ 有多脆、这份仓位每天在流血还是收租。
+
+      净Γ < 0（贷方价差，收权金）跳空时 Δ 朝不利方向加速，止损来不及；
+      净Γ > 0（借方价差，付权金）跳空对你有利，代价是每天付 Θ。
+
+    ⚠️ 别把"有卖腿"等同于负 Gamma：借方价差里买的那腿更接近平值、gamma 更大，
+       整体是**正** Gamma。判断依据是收权金还是付权金。
+
+    Θ 是价签。它相对**净资产**的比例比绝对值更该看 —— 每天 −6.5 美元在
+    $6800 的账户上是噪声，在 $68 的账户上是每天 −9.5%。
+    """
+    out = []
+    ng = getattr(g, "net_gamma", None)
+    nt = getattr(g, "net_theta", None)
+    if ng is not None and abs(ng) > 1e-9:
+        # 负 Gamma 要显眼 —— 它是跳空日的真正敌人
+        warn = ' style="background:#fff3cd;color:#856404"' if ng < 0 else ""
+        out.append(f'<span class="pill"{warn}>净Γ {ng:+.1f}</span>')
+    if nt is not None and abs(nt) > 1e-9:
+        out.append(f'<span class="pill">净Θ {nt:+.0f}/天</span>')
+    return "".join(out)
+
+
 def render_account_html(review, assets=None, health=None) -> str:
     """实盘持仓理论评价 → 自包含 HTML（本地私有，落 gitignore 的 data/account/）。
 
@@ -2120,7 +2146,8 @@ def render_account_html(review, assets=None, health=None) -> str:
             cards.append(
                 f'<div class="card"><h1>{_esc(g.display_name)}<span class="pill">{_esc(g.underlying)}</span></h1>'
                 f'<div style="margin:6px 0"><span class="badge" style="background:{bcol}">{_esc(g.bias)}</span>'
-                f'<span class="pill">净Δ {d}</span><span class="pill">浮盈亏 {pnl}</span></div>'
+                f'<span class="pill">净Δ {d}</span>{_greeks_pills(g)}'
+                f'<span class="pill">浮盈亏 {pnl}</span></div>'
                 + (f'<div class="sub">🧭 {_esc(g.verdict_head)}</div>' if g.verdict_head else "")
                 + (f'<div class="sub">📈 报价源：{_esc(g.price_note)}</div>' if getattr(g, "price_note", "") else "")
                 + stance_html + combo_html +

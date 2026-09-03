@@ -49,30 +49,52 @@ def test_kd平滑参数与脚本一致():
     assert S.UP_LINE == 80 and S.LOW_LINE == 20
 
 
-def test_MTF对齐不得前瞻():
-    """第 k 根高周期 K 线，只有在第 k+1 根开始之后才可见；末根永远不可见。
-
-    2026-09-03 修掉的 P0：长桥的 ts 是 K 线**开始**时间，原来的
-    `mtf_ts <= t` 让 4h 在 16:30 就读到当天日线（ts=04:00）的收盘价，
-    泄露 3.5 小时。"""
+def test_MTF对齐用收盘时间且不前瞻():
+    """第 k 根高周期 K 线在它的**收盘时刻**之后才可见。
+    对应 TradingView 的 "last confirmed values"。"""
     out = S.align_mtf([1, 2, 3, 4, 5], [2, 4], [10.0, 20.0])
-    assert out == [None, None, None, 10.0, 10.0]
-    assert out[1] is None, "t=2 时第 0 根刚开始，远未收盘"
-    assert out[4] == 10.0, "末根(ts=4)可能未收盘，只能看到第 0 根"
+    assert out == [None, 10.0, 10.0, 20.0, 20.0]
+    assert out[0] is None, "第 0 根要到 t=2 才收盘"
 
 
-def test_MTF末根永远不可见():
-    out = S.align_mtf([100], [2, 4], [10.0, 20.0])
-    assert out == [10.0], "即使时间远超，也不得看到末根"
+def test_已收盘的末根应当可见():
+    """codex P1-5：先前用「下一根已开始」判定，导致末根永远不可见 ——
+    一根已确定收盘、只是没有后继的历史 K 线不该被永久屏蔽。"""
+    assert S.align_mtf([100], [2, 4], [10.0, 20.0]) == [20.0]
 
 
-def test_MTF按开始时间对齐会泄露的具体场景():
-    """回归锁：日线 ts=04:00、4h ts=16:30 的真实时间戳形态。"""
-    day_ts = [1000, 2000]        # 两根日线的开始时间
-    h4_ts = [1500, 1800, 2500]   # 4h，其中 1500/1800 在第 0 根日线当天
-    out = S.align_mtf(h4_ts, day_ts, [7.0, 8.0])
+def test_传ts而非close_ts会泄露的真实场景():
+    """回归锁：日线 ts=当天 04:00、4h 盘中 ts=16:30 的真实形态。
+    日线 close_ts = ts + 1 天。"""
+    day_ts = [1000, 2000]                  # 两根日线的**开盘**时间
+    day_close = [2000, 3000]               # 各自的收盘时间
+    h4_ts = [1500, 1800, 2500]             # 4h，前两根在第 0 根日线当天
+    out = S.align_mtf(h4_ts, day_close, [7.0, 8.0])
     assert out[0] is None and out[1] is None, "当天盘中不得读到当天日线"
     assert out[2] == 7.0, "次日才能读到前一日"
+    # 反面：若误传开盘时间，当天盘中就能读到当天日线 —— 这正是修掉的 bug
+    leak = S.align_mtf(h4_ts, day_ts, [7.0, 8.0])
+    assert leak[0] == 7.0, "（演示泄露：传 ts 会提前 3.5 小时读到）"
+
+
+def test_合成4h不该被推迟释放():
+    """codex P1-5 的另一面：合成 4h 的 ts 是组内最后一根 1h 的开盘，
+    组 1（ts=16:30）实际 17:30 收盘。用 close_ts 后 1h 在 17:30 就能读到，
+    不必等组 2 开始（19:30）—— 先前的实现晚 2 小时。"""
+    h4_close = [17.5, 20.5]                # 组1 收 17:30，组2 收 20:30
+    out = S.align_mtf([16.5, 17.5, 18.5], h4_close, [1.0, 2.0])
+    assert out == [None, 1.0, 1.0], "17:30 即可读到组 1"
+
+
+def test_frames给每根附收盘时间():
+    """跨周期比较一律用 close_ts，不得用 ts。"""
+    from undertow.analyze.ta import frames
+    import inspect
+    src = inspect.getsource(frames.bars)
+    assert 'b["close_ts"] = b["ts"] + off' in src
+    assert frames._CLOSE_OFFSET["4h"].total_seconds() == 3600, \
+        "合成 4h 的 ts 是组内最后一根 1h 的开盘，只需再加 1 小时"
+    assert frames._CLOSE_OFFSET["1d"].days == 1, "日线保守加满一天"
 
 
 def test_MTF映射到相邻上一级():

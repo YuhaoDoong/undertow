@@ -101,6 +101,8 @@ class Position:
 
 def open_position(direction: int, entry_px: float, atr_val: float, bar: int, *,
                   stop_mult: float = ATR_STOP_MULT) -> Position:
+    if direction not in (1, -1):
+        raise ValueError(f"direction 必须是 1 或 −1，收到 {direction!r}")
     dist = atr_val * stop_mult
     return Position(direction, entry_px, dist, entry_px - direction * dist, bar)
 

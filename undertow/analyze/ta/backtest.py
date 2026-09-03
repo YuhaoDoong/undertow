@@ -17,6 +17,18 @@ strategy 包装版）。对比时发现我前一轮的实测用【信号根收�
   ② 每次翻转计一次往返成本（默认 0.10%，ETF 佣金+点差的保守估计）
   ③ always-in-market 多空反转 —— 与 `strategy.entry` 的行为一致
      （反向信号自动平仓反手，没有空仓状态）
+  ④ **权益递推（复利），不是把各段百分比相加**
+  ⑤ 买入持有基准与策略**同期**：从策略首次可成交时点起算
+
+④⑤ 是 2026-09-03 codex review 指出的（P1-2 / P1-3），都会直接改变结论：
+
+    ④ +100% 后 −50%，相加报 +50%，实际权益是 0%。误差可正可负。
+    ⑤ 策略在首次 flip 的次根开盘才有敞口，基准却从 closes[0] 起算。
+       若信号前标的下跌，策略靠空仓躲过，会被记成"跑赢买入持有"。
+
+还有一处段落配对的 bug（P1-4）：末根产生的 flip 无法成交时，
+原实现连带把仍存续的上一段一起丢掉 —— "最新一根刚翻转"是最常见的场景，
+整个当前持仓段会凭空消失。现在先过滤出可成交的 flip 再两两配对。
 
 ⚠️ TradingView 的 strategy 测试器**默认 0 手续费 0 滑点**
 （脚本的 `strategy()` 没写 commission_type / slippage）。
@@ -54,7 +66,7 @@ class Segment:
 class Result:
     segments: list[Segment]
     cost_pct: float
-    buy_hold_pct: float
+    bh_pct: float           # 与策略**同期**的买入持有
 
     @property
     def n(self) -> int:
@@ -62,19 +74,34 @@ class Result:
 
     @property
     def gross_pct(self) -> float:
-        return sum(s.ret_pct for s in self.segments)
+        """毛收益，**按权益递推**（复利），不是各段相加。"""
+        eq = 1.0
+        for s in self.segments:
+            eq *= 1 + s.ret_pct / 100
+        return (eq - 1) * 100
 
     @property
     def total_cost_pct(self) -> float:
-        return self.n * self.cost_pct
+        """成本对权益的实际拖累，同样是递推不是相加。"""
+        if not self.segments:
+            return 0.0
+        drag = (1 - self.cost_pct / 100) ** self.n
+        return (1 - drag) * 100
 
     @property
     def net_pct(self) -> float:
-        return self.gross_pct - self.total_cost_pct
+        eq = 1.0
+        for s in self.segments:
+            eq *= (1 + s.ret_pct / 100) * (1 - self.cost_pct / 100)
+        return (eq - 1) * 100
+
+    @property
+    def buy_hold_pct(self) -> float:
+        return self.bh_pct
 
     @property
     def vs_buy_hold(self) -> float:
-        return self.net_pct - self.buy_hold_pct
+        return self.net_pct - self.bh_pct
 
     @property
     def win_rate(self) -> float:
@@ -97,28 +124,32 @@ def run(opens: list[float], closes: list[float],
     """按【次根开盘成交】回溯一串翻转信号。
 
     flips 是 [(信号确认根的下标, 新方向)]，由 supertrend.flips / ut_bot.flips 给出。
-    **进场价一律是次根开盘**，拿不到就丢弃这一段，不退化成收盘价 —— 那正是要防的事。
 
-    末段尚未平仓（没有下一个反向信号），它的 exit_px 用**最新收盘**做市值标记，
-    并置 is_open=True。这不是破例：进场价是真实成交、必须用开盘，
-    而未平仓头寸的估值本来就该用最新价。
+    先过滤出**能成交**的 flip（次根开盘存在），再两两配对成段；
+    最后一段持有到序列末尾，用最新收盘做市值标记（is_open=True）。
+    进场价一律次根开盘，绝不退化成信号根收盘 —— 那正是要防的事。
     """
+    if not closes or not opens:
+        return Result([], cost_pct, 0.0)
+    # 只保留能真正进场的信号；不可成交的 flip 不得连累上一段（codex P1-4）
+    tradable = [(i, d) for i, d in flips if 0 <= i + 1 < len(opens) and opens[i + 1] > 0]
     segs: list[Segment] = []
-    last = len(flips) - 1
-    for k, (i, d) in enumerate(flips):
-        if i + 1 >= len(opens):
-            continue
+    for k, (i, d) in enumerate(tradable):
         ep = opens[i + 1]
-        if ep <= 0:
-            continue
-        if k == last:                                  # 未平仓，市值标记
-            j, xp, is_open = len(closes) - 1, closes[-1], True
-        else:
-            j = flips[k + 1][0]
-            if j + 1 >= len(opens) or j <= i:
+        if k + 1 < len(tradable):
+            j = tradable[k + 1][0]
+            if j <= i or j + 1 >= len(opens):
                 continue
-            j, xp, is_open = j, opens[j + 1], False
+            xp, is_open = opens[j + 1], False
+        else:
+            j, xp, is_open = len(closes) - 1, closes[-1], True
+        if j <= i:
+            continue
         segs.append(Segment(i, j, d, ep, xp,
                             (xp / ep - 1) * 100 * (1 if d == 1 else -1), is_open))
-    bh = (closes[-1] / closes[0] - 1) * 100 if closes and closes[0] else 0.0
+    # 基准与策略同期：从首次可成交时点起算（codex P1-3）
+    if segs:
+        bh = (closes[-1] / segs[0].entry_px - 1) * 100
+    else:
+        bh = 0.0
     return Result(segs, cost_pct, bh)

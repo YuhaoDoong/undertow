@@ -54,22 +54,29 @@ def pullback(closes: list[float], regime: list[int], *,
     out = [0] * len(closes)
     for i in range(len(closes)):
         c = _cross(closes, fast, i)
-        if regime[i] == 1 and c == -1:
-            long_pb, long_gap = True, 0
-        elif regime[i] != 1:
+        # grace 只宽容「趋势强度暂时不足」（regime==0）；
+        # 遇到**明确的反向 regime** 必须立即清掉相反标记，
+        # 否则旧多头标记能跨过一段空头趋势复活（codex P2-2）。
+        if regime[i] == -1:
+            long_pb, long_gap = False, 0
+        elif regime[i] == 1:
+            long_gap = 0
+            if c == -1:
+                long_pb = True
+        else:
             long_gap += 1
             if long_gap > grace:
                 long_pb = False
+        if regime[i] == 1:
+            short_pb, short_gap = False, 0
+        elif regime[i] == -1:
+            short_gap = 0
+            if c == 1:
+                short_pb = True
         else:
-            long_gap = 0
-        if regime[i] == -1 and c == 1:
-            short_pb, short_gap = True, 0
-        elif regime[i] != -1:
             short_gap += 1
             if short_gap > grace:
                 short_pb = False
-        else:
-            short_gap = 0
         # 触发时只要求方向未反转，不要求 regime 仍满强度
         if long_pb and c == 1 and regime[i] != -1:
             out[i], long_pb = 1, False

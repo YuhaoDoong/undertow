@@ -99,10 +99,11 @@ def read(closes: list[float], **kw) -> MacdReading | None:
     prev = h[-2] if len(h) > 1 else None
     cross = None
     if len(m) > 1 and m[-2] is not None and s[-2] is not None:
-        was, now = m[-2] >= s[-2], m[-1] >= s[-1]
-        if now and not was:
+        # Pine ta.crossover(a,b) 要求**当根严格 a>b**、前根 a<=b。
+        # 用 >= 判定当根会把「刚好相等」也报成金叉（codex P2-5）。
+        if m[-1] > s[-1] and m[-2] <= s[-2]:
             cross = "金叉"
-        elif was and not now:
+        elif m[-1] < s[-1] and m[-2] >= s[-2]:
             cross = "死叉"
     return MacdReading(macd=m[-1], signal=s[-1], hist=h[-1],
                        state=hist_state(h[-1], prev),
@@ -116,14 +117,15 @@ def read_multi(symbol: str, tfs: tuple[str, ...] = ("1h", "4h", "1d"),
     ⚠️ 默认**不含 15m** —— 用户 2026-09-03 明确 15m 只用于入场出场时机，
     不用于判断方向。要看 15m 请显式传入，并且只当择时用。
     """
+    from undertow.collect.longbridge_kline import KlineUnavailable
     from undertow.analyze.ta.frames import bars
 
     out = {}
     for tf in tfs:
         try:
             c = [b["close"] for b in bars(symbol, tf)]
-        except Exception:
-            continue
+        except (KlineUnavailable, ValueError):
+            continue        # 取不到数据是正常情况；程序错误必须往外抛
         r = read(c, **kw)
         if r is not None:
             out[tf] = r

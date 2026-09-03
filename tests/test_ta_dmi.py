@@ -6,13 +6,29 @@ from undertow.analyze.ta import dmi as D, entries as E, exits as X
 
 # ── DMI/ADX ───────────────────────────────────────────────────────
 def test_正负DM互斥同根只记更大的那个():
-    """DMI 的关键定义：两个方向都动时只记更大的。
+    """DMI 的关键定义：两个方向都动时只记更大的，另一个记 0。
     这是它与"内外包线"类指标的根本区别。"""
-    h = [10.0, 12.0, 13.0]
-    l = [8.0, 5.0, 7.0]          # 第二根 up=2, dn=3 → 只记 −DM
-    c = [9.0, 8.0, 10.0]
-    dip, dim, _ = D.dmi(h, l, c, di_len=2, adx_len=2)
-    assert dim[-1] is not None
+    # 第 1 根：up = 12−10 = 2，dn = 8−5 = 3 → dn 更大，只记 −DM
+    pdm, mdm = D.directional_movement([10.0, 12.0], [8.0, 5.0])
+    assert pdm[1] == 0.0 and mdm[1] == pytest.approx(3.0)
+    # 反过来：up = 5，dn = 1 → 只记 +DM
+    pdm2, mdm2 = D.directional_movement([10.0, 15.0], [8.0, 7.0])
+    assert pdm2[1] == pytest.approx(5.0) and mdm2[1] == 0.0
+    # 内包线：高更低、低更高，两边都不记
+    pdm3, mdm3 = D.directional_movement([10.0, 9.0], [8.0, 8.5])
+    assert pdm3[1] == 0.0 and mdm3[1] == 0.0
+
+
+def test_任何一根都不会同时有正负DM():
+    import random
+    random.seed(11)
+    h, l = [], []
+    px = 100.0
+    for _ in range(200):
+        px *= 1 + random.gauss(0, 0.02)
+        h.append(px * 1.01); l.append(px * 0.99)
+    pdm, mdm = D.directional_movement(h, l)
+    assert not any(p > 0 and m > 0 for p, m in zip(pdm, mdm)), "互斥被破坏"
 
 
 def test_单边上涨时正DI压倒负DI():
@@ -87,11 +103,13 @@ def test_回调与regime的内在矛盾写进文档():
     assert "内在矛盾" in doc and "互斥的两个要求" in doc
 
 
-def test_grace放宽后标记能存活():
-    c = [10.0]*12 + [8.0]*3 + [12.0]*12
-    reg = [1]*13 + [0, 0] + [1]*12             # 回调期间 regime 断两根
-    assert all(x == 0 for x in E.pullback(c, reg, grace=0)) or True
-    assert any(x == 1 for x in E.pullback(c, reg, grace=5))
+def test_明确反向regime立即清掉相反标记():
+    """codex P2-2：grace 只该宽容「趋势强度暂时不足」(regime==0)，
+    遇到明确反向 regime 必须立即清标记，否则旧多头标记能跨过一段空头趋势复活。"""
+    c = [10.0]*12 + [8.0]*4 + [12.0]*12
+    reg = [1]*13 + [-1]*3 + [1]*12             # 回调期间转成明确空头
+    assert not any(x == 1 for x in E.pullback(c, reg, grace=10)), \
+        "反向 regime 出现后不得再触发旧的多头回调"
 
 
 def test_裸DI交叉入场():
@@ -204,3 +222,35 @@ def test_回调标记在regime断开后按grace存活或清除():
     reg = [1]*13 + [0]*3 + [1]*12              # 回调期间 regime 断 3 根
     assert not any(E.pullback(c, reg, grace=0)), "grace=0 标记被清掉"
     assert any(E.pullback(c, reg, grace=5)), "grace=5 标记存活"
+
+
+# ── codex P2 边界校验 ─────────────────────────────────────────────
+def test_方向必须是正负一():
+    from undertow.analyze.ta import risk as RK
+    for bad in (0, 2, -2):
+        with pytest.raises(ValueError):
+            RK.open_position(bad, 100.0, 2.0, 0)
+        with pytest.raises(ValueError):
+            X.open_chandelier(bad, 100.0, 2.0)
+
+
+def test_OHLC长度不一致必须抛错而非静默截断():
+    """zip() 会截断到最短，悄悄少算几根比报错危险得多。"""
+    from undertow.analyze.ta import true_range
+    with pytest.raises(ValueError):
+        true_range([1.0, 2.0, 3.0], [1.0, 2.0], [1.0, 2.0, 3.0])
+
+
+def test_窗口非正的极值函数也要抛错():
+    from undertow.analyze.ta import highest, lowest
+    for fn in (highest, lowest):
+        with pytest.raises(ValueError):
+            fn([1.0, 2.0], 0)
+
+
+def test_stoch平坦区返回50是有意偏离且已标注():
+    from undertow.analyze.ta import stoch as S
+    import inspect
+    doc = inspect.getdoc(S.raw_stoch)
+    assert "有意偏离" in doc and "不是" in doc
+    assert S.raw_stoch([10.0]*5, [10.0]*5, [10.0]*5, 3)[-1] == 50.0

@@ -66,6 +66,8 @@ class ChandelierStop:
 def open_chandelier(direction: int, entry_px: float, atr_val: float, *,
                     init_mult: float = INITIAL_STOP_MULT) -> ChandelierStop:
     """初始止损用固定 ATR 倍数，之后交给吊灯接管（脚本 baseStop 的行为）。"""
+    if direction not in (1, -1):
+        raise ValueError(f"direction 必须是 1 或 −1，收到 {direction!r}")
     return ChandelierStop(direction, entry_px - direction * atr_val * init_mult, entry_px)
 
 

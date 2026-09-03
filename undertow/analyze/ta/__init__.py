@@ -66,9 +66,12 @@ def sma(xs: list[float], n: int) -> list[float | None]:
 def ema(xs: list[float], n: int) -> list[float | None]:
     """Pine ta.ema。
 
-    ⚠️ 种子是 **SMA(n)** 不是首值 —— Pine 的实现是
-        ema := na(ema[1]) ? sma(src, n) : alpha*src + (1-alpha)*ema[1]
-    用首值当种子会让前几十根偏离，MACD 快慢线之差被放大，早期柱状图对不上 TradingView。
+    ⚠️ 种子是 **SMA(n)** 不是首值。
+    2026-09-03 codex review 曾提出这里应改为「以第一个有效 src 初始化」，
+    向 TradingView 官方说明核实后**不成立**：
+    「For the first EMA, we use the SMA(previous day) instead of EMA(previous day)」
+    —— https://www.tradingview.com/support/solutions/43000502589-exponential-moving-average/
+    保持 SMA 种子。用首值当种子会让前几十根偏离，早期柱状图对不上 TradingView。
     """
     if n <= 0:
         raise ValueError("n 必须为正")
@@ -101,7 +104,14 @@ def rma(xs: list[float], n: int) -> list[float | None]:
 
 def true_range(highs: list[float], lows: list[float],
                closes: list[float]) -> list[float]:
-    """Pine ta.tr。首根无前收，退化为 high−low。"""
+    """Pine ta.tr。首根无前收，退化为 high−low。
+
+    长度不一致直接抛错 —— zip() 会静默截断到最短，
+    悄悄少算几根比报错危险得多。
+    """
+    if not (len(highs) == len(lows) == len(closes)):
+        raise ValueError(
+            f"OHLC 长度不一致：high={len(highs)} low={len(lows)} close={len(closes)}")
     out = []
     for i in range(len(highs)):
         if i == 0:
@@ -156,6 +166,8 @@ def linreg(xs: list[float], n: int, offset: int = 0) -> list[float | None]:
 
 
 def highest(xs: list[float], n: int) -> list[float | None]:
+    if n <= 0:
+        raise ValueError("n 必须为正")
     out: list[float | None] = [None] * min(n - 1, len(xs))
     for i in range(n - 1, len(xs)):
         out.append(max(xs[i - n + 1:i + 1]))
@@ -163,6 +175,8 @@ def highest(xs: list[float], n: int) -> list[float | None]:
 
 
 def lowest(xs: list[float], n: int) -> list[float | None]:
+    if n <= 0:
+        raise ValueError("n 必须为正")
     out: list[float | None] = [None] * min(n - 1, len(xs))
     for i in range(n - 1, len(xs)):
         out.append(min(xs[i - n + 1:i + 1]))

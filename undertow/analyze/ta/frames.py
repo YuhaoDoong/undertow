@@ -23,6 +23,8 @@
 """
 from __future__ import annotations
 
+from datetime import timedelta
+
 from undertow.collect.longbridge_kline import KlineUnavailable, aggregate, fetch_bars
 
 TIMEFRAMES = ("15m", "1h", "4h", "1d")
@@ -45,6 +47,16 @@ _PER_SESSION = {"15m": 26, "1h": 7, "4h": 2, "1d": 1}
 #: 我们只有这四个周期，故按用户的分工映射到相邻的上一级。1d 无更高级。
 MTF_PARENT = {"15m": "1h", "1h": "4h", "4h": "1d", "1d": None}
 
+#: 每根 K 线从 ts 到收盘要多久。长桥的 ts 是**开盘时间**，
+#: 跨周期比较必须用收盘时间，否则会把尚未走完的高周期值泄露给低周期。
+#:   15m/1h/1d  ts 是该根自身的开盘 → 加自身跨度
+#:   4h         合成而来，ts 是**组内最后一根 1h 的开盘** → 只需再加 1 小时
+#:   1d         保守加满一天：日线 ts 是 ET 00:00，收盘 ET 16:00，
+#:              但夏令时会漂；加一天必不泄露，且下一个交易时段本就在次日
+#:              13:30 UTC 之后，实际零延迟。
+_CLOSE_OFFSET = {"15m": timedelta(minutes=15), "1h": timedelta(hours=1),
+                 "4h": timedelta(hours=1), "1d": timedelta(days=1)}
+
 _cache: dict[tuple[str, str, int], list[dict]] = {}
 
 
@@ -57,7 +69,9 @@ def bars(symbol: str, tf: str, *, count: int | None = None,
     """
     if tf not in TIMEFRAMES:
         raise ValueError(f"周期须为 {TIMEFRAMES} 之一，收到 {tf!r}")
-    n = count or DEFAULT_COUNT[tf]
+    n = DEFAULT_COUNT[tf] if count is None else count
+    if n <= 0:
+        raise ValueError(f"count 必须为正，收到 {count!r}")
     key = (symbol, tf, n)
     if use_cache and key in _cache:
         return _cache[key]
@@ -71,6 +85,13 @@ def bars(symbol: str, tf: str, *, count: int | None = None,
         period = {"15m": "15m", "1h": "1h", "1d": "day"}[tf]
         out = fetch_bars(symbol, period=period, count=n)
 
+    # docstring 承诺「取不到抛异常，不返回空列表」—— 这里兑现它。
+    # 上游 fetch_bars 解析后可能返回空，静默放过等于把「没数据」当「没信号」。
+    if not out:
+        raise KlineUnavailable(f"{symbol} {tf} 返回空序列")
+    off = _CLOSE_OFFSET[tf]
+    for b in out:
+        b["close_ts"] = b["ts"] + off
     if use_cache:
         _cache[key] = out
     return out

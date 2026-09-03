@@ -33,11 +33,33 @@ def test_中间段的出场也用次根开盘():
     assert r.segments[1].exit_px == o[15] and not r.segments[1].is_open
 
 
-def test_必然计入换手成本():
+def test_必然计入换手成本且按权益递推():
+    """成本对权益的拖累是 (1−c)^n，不是 n×c。"""
     o, c = _bars()
     r = B.run(o, c, [(2, 1), (8, -1), (14, 1)])
-    assert r.total_cost_pct == pytest.approx(r.n * B.DEFAULT_COST_PCT)
-    assert r.net_pct == pytest.approx(r.gross_pct - r.total_cost_pct)
+    assert r.n == 3
+    drag = (1 - B.DEFAULT_COST_PCT / 100) ** 3
+    assert r.total_cost_pct == pytest.approx((1 - drag) * 100)
+    assert r.total_cost_pct < r.n * B.DEFAULT_COST_PCT, "递推略小于相加"
+
+
+def test_收益按权益递推而非各段相加():
+    """codex P1-2：+100% 后 −50%，相加报 +50%，实际权益是 0%。
+    误差可正可负，足以制造虚假的跑赢。"""
+    o = [100.0, 100.0, 200.0, 200.0, 100.0, 100.0]
+    r = B.run(o, o, [(0, 1), (2, 1)])
+    assert [round(s.ret_pct) for s in r.segments] == [100, -50]
+    assert r.gross_pct == pytest.approx(0.0), "复利后回到原点"
+    assert sum(s.ret_pct for s in r.segments) == pytest.approx(50.0), "相加会得 +50"
+
+
+def test_末根不可成交的flip不得连累上一段():
+    """codex P1-4：最新一根刚翻转是最常见场景，
+    原实现会把仍存续的当前持仓段一起丢掉。"""
+    o = [100.0, 101.0, 102.0, 103.0, 104.0]
+    r = B.run(o, o, [(0, 1), (4, -1)])
+    assert r.n == 1, "第二个信号进不了场，但第一段应持有到末尾"
+    assert r.segments[0].is_open
 
 
 def test_默认成本非零():
@@ -61,11 +83,24 @@ def test_末段未平仓用最新收盘做市值标记():
     assert s.exit_px == c[-1] and s.entry_px == o[4]
 
 
-def test_买入持有基准同期计算():
+def test_买入持有基准与策略同期():
+    """codex P1-3：策略在首次 flip 的次根开盘才有敞口，
+    基准却从 closes[0] 起算 —— 信号前若标的下跌，
+    策略靠空仓躲过，会被记成「跑赢买入持有」。"""
     o, c = _bars(20)
     r = B.run(o, c, [(3, 1)])
-    assert r.buy_hold_pct == pytest.approx((c[-1] / c[0] - 1) * 100)
+    assert r.buy_hold_pct == pytest.approx((c[-1] / o[4] - 1) * 100), "从首次进场价起算"
+    assert r.buy_hold_pct != pytest.approx((c[-1] / c[0] - 1) * 100)
     assert r.vs_buy_hold == pytest.approx(r.net_pct - r.buy_hold_pct)
+
+
+def test_信号前下跌不得被算成超额收益():
+    """构造：前段大跌，策略在跌完后才进场。
+    用 closes[0] 当基准会凭空多出一截「跑赢」。"""
+    o = [200.0, 150.0, 100.0, 100.0, 101.0, 102.0]
+    r = B.run(o, o, [(2, 1)])
+    assert r.buy_hold_pct == pytest.approx((102.0 / 100.0 - 1) * 100)
+    assert abs(r.vs_buy_hold) < 1.0, "同期比较下不应有大幅超额"
 
 
 def test_胜率带着不可用于评价的警告():

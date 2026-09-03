@@ -47,7 +47,14 @@ class StochReading:
 
 def raw_stoch(closes: list[float], highs: list[float], lows: list[float],
               n: int = LEN) -> list[float | None]:
-    """Pine ta.stoch = 100 × (close − lowest(low,n)) / (highest(high,n) − lowest(low,n))。"""
+    """Pine ta.stoch = 100 × (close − lowest(low,n)) / (highest(high,n) − lowest(low,n))。
+
+    ⚠️ **有意偏离**：区间为零（最高=最低，完全平坦）时 Pine 会除零得 na，
+    我们返回 50。理由是后续 SMA/linreg 遇到 na 会整段中断，而完全平坦区间
+    在日内低周期上并不罕见（停牌、极低流动性）。代价是会造出一个 Pine 里
+    不存在的中性值 —— 这一点 codex review 提过（P2-3），此处明确记为偏离，
+    不是"与 Pine 一致"。
+    """
     hh, ll = highest(highs, n), lowest(lows, n)
     out: list[float | None] = []
     for i in range(len(closes)):
@@ -100,33 +107,31 @@ def stoch_linreg(closes, highs, lows, *, n: int = LEN, smooth_k: int = SMOOTH_K,
     return _lr(k), _lr(d)
 
 
-def align_mtf(base_ts: list, mtf_ts: list, mtf_vals: list[float | None]
+def align_mtf(base_ts: list, mtf_close_ts: list, mtf_vals: list[float | None]
               ) -> list[float | None]:
     """把高周期序列按 `lookahead_off` 的语义对齐到低周期时间轴。
 
-    规则：**第 k 根高周期 K 线，只有在第 k+1 根开始之后才可见。**
-    末根永远不可见 —— 它可能还没收盘。
+    规则：**第 k 根高周期 K 线在它的收盘时刻之后才可见。**
+    对应 TradingView 的说法 ——「fills the gaps with the **last confirmed
+    values** on historical bars」。
 
-    ⚠️ 2026-09-03 修掉的前瞻偏差
-    ----------------------------
-    原实现用 `mtf_ts[j] <= t` 判定可见，这是错的，因为**长桥的 ts 是 K 线的
-    开始时间**，不是结束时间：
+    ⚠️ 必须传 close_ts，不能传 ts
+    ---------------------------------
+    长桥的 `ts` 是 K 线**开盘**时间。2026-09-03 起 `frames.bars()` 会给每根
+    附上 `close_ts`，跨周期比较一律用它。这里有两处坑：
 
-        1d  末根 ts = 2026-09-02 04:00   （当天 ET 00:00，要到 20:00 才收盘）
-        4h  盘中 ts = 2026-09-02 16:30
-        1h  末根 ts = 2026-09-02 19:30
-
-    于是 4h 在 16:30 那根就能读到当天日线的收盘价 —— **泄露 3.5 小时**。
-    1h→4h 同理泄露 1 小时（4h 的 ts 是组内最后一根 1h 的开始时间，
-    该组实际要到那根 1h 收盘才结束）。
-
-    用「下一根已开始」判定可见，正是 Pine `lookahead_off` 的实际行为：
-    高周期 bar 未完成时返回**上一个已完成** bar 的值。
+      · 用 ts 判定 → 直接泄露未来。日线 ts=当天 04:00，4h 盘中 ts=16:30，
+        于是 4h 在 16:30 就读到了当天日线的收盘价（泄露 3.5 小时）。
+      · 用「下一根 ts 已开始」判定 → 不泄露了，但会**错移信号**：
+        合成 4h 的 ts 是组内最后一根 1h 的开盘，组 1（ts=16:30）实际 17:30
+        就收盘了，却要等到组 2 开始（19:30）才释放，晚 2 小时；
+        而且末根永远不可见 —— 一根已确定收盘、只是没有后继的历史 K 线
+        不该被永久屏蔽。（codex review P1-5）
     """
     out: list[float | None] = []
     k = -1
     for t in base_ts:
-        while k + 2 < len(mtf_ts) and mtf_ts[k + 2] <= t:
+        while k + 1 < len(mtf_close_ts) and mtf_close_ts[k + 1] <= t:
             k += 1
         out.append(mtf_vals[k] if 0 <= k < len(mtf_vals) else None)
     return out
@@ -134,11 +139,12 @@ def align_mtf(base_ts: list, mtf_ts: list, mtf_vals: list[float | None]
 
 def read_mtf(symbol: str, tf: str) -> StochReading | None:
     """当前周期的 k/d + 上一级周期的 linreg k/d。上一级不存在时 mtf_* 为 None。"""
+    from undertow.collect.longbridge_kline import KlineUnavailable
     from undertow.analyze.ta.frames import MTF_PARENT, bars
 
     try:
         b = bars(symbol, tf)
-    except Exception:
+    except (KlineUnavailable, ValueError):
         return None
     c = [x["close"] for x in b]; h = [x["high"] for x in b]; l = [x["low"] for x in b]
     k, d = stoch_kd(c, h, l)
@@ -153,9 +159,10 @@ def read_mtf(symbol: str, tf: str) -> StochReading | None:
             pc = [x["close"] for x in pb]; ph = [x["high"] for x in pb]
             pl = [x["low"] for x in pb]
             pk, pd = stoch_linreg(pc, ph, pl)
-            ts = [x["ts"] for x in b]; pts = [x["ts"] for x in pb]
-            mk = align_mtf(ts, pts, pk)[-1]
-            md = align_mtf(ts, pts, pd)[-1]
-        except Exception:
-            pass
+            ts = [x["ts"] for x in b]
+            pcts = [x["close_ts"] for x in pb]
+            mk = align_mtf(ts, pcts, pk)[-1]
+            md = align_mtf(ts, pcts, pd)[-1]
+        except (KlineUnavailable, ValueError, KeyError):
+            mk = md = None      # 取不到父周期是正常；程序错误必须往外抛
     return StochReading(k[-1], d[-1], mk, md)

@@ -74,17 +74,25 @@ class DmiReading:
         return 1.5 if self.score >= 70 else (1.0 if self.score >= 45 else 0.5)
 
 
-def dmi(highs, lows, closes, *, di_len: int = DI_LEN, adx_len: int = ADX_LEN
-        ) -> tuple[list[float | None], list[float | None], list[float | None]]:
-    """返回 (+DI, −DI, ADX)，等长，前段为 None。"""
+def directional_movement(highs: list[float], lows: list[float]
+                         ) -> tuple[list[float], list[float]]:
+    """±DM。**同一根 K 线不可能同时产生 +DM 和 −DM** —— 两个方向都动时
+    只记更大的那个，这是 DMI 与"内外包线"类指标的关键区别。"""
     n = len(highs)
     plus_dm, minus_dm = [0.0] * n, [0.0] * n
     for i in range(1, n):
         up = highs[i] - highs[i - 1]
         dn = lows[i - 1] - lows[i]
-        # 互斥：两个方向都动时只记更大的那个
         plus_dm[i] = up if (up > dn and up > 0) else 0.0
         minus_dm[i] = dn if (dn > up and dn > 0) else 0.0
+    return plus_dm, minus_dm
+
+
+def dmi(highs, lows, closes, *, di_len: int = DI_LEN, adx_len: int = ADX_LEN
+        ) -> tuple[list[float | None], list[float | None], list[float | None]]:
+    """返回 (+DI, −DI, ADX)，等长，前段为 None。"""
+    n = len(highs)
+    plus_dm, minus_dm = directional_movement(highs, lows)
     trur = rma(true_range(highs, lows, closes), di_len)
     sp = rma(plus_dm, di_len)
     sm = rma(minus_dm, di_len)

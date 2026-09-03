@@ -113,6 +113,8 @@ def flips(highs, lows, closes, **kw) -> list[tuple[int, int]]:
     _, ps = ut_bot(highs, lows, closes, **kw)
     out = []
     for i in range(1, len(ps)):
-        if ps[i] is not None and ps[i - 1] is not None and ps[i] != ps[i - 1] and ps[i - 1] != 0:
+        # 首次 0→±1 也是可交易信号：Pine 的 buy/sell 是 crossover/crossunder，
+        # 首次穿越就成立。原来要求 ps[i−1] != 0 会丢掉第一笔（codex P2-1）。
+        if ps[i] is not None and ps[i - 1] is not None and ps[i] != ps[i - 1] and ps[i] != 0:
             out.append((i, ps[i]))
     return out

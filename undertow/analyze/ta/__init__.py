@@ -1,0 +1,82 @@
+"""技术面子模块包 —— 每个技术指标一个独立子模块。
+
+用户 2026-09-03：「每个技术指标，都是技术面大模块里的一个子模块。」
+「我会把 trading view 上比较热门的技术指标复制过来，你看看觉得有用，
+  就建立成一个独立的子模块。我们不一定用它，可以先建好保存。」
+
+所以这里的东西**默认不进研报、不进方向投票**。先建好、能取数、有测试锁住口径，
+用得上时再单独接线。谁要进研报，必须先过统计检验（见 analyze/validation.py）。
+
+已建子模块
+----------
+frames  多周期 K 线数据层（15m / 1h / 4h / 1d）
+macd    MACD，CM_Ult_MacD_MTF 口径（⚠️ signal 用 SMA，非标准 EMA）
+
+规划中
+------
+· smc.py 目前仍在 analyze/ 下（先前已接研报），后续可平移进来
+· 反向导出：把我们自研的指标（墙位、极强信号）写成 Pine 脚本贴到 TradingView 看
+  —— 用户 2026-09-03 提出，先记，未做
+
+公共基础函数（Pine 口径）放在本文件，各子模块共用。
+"""
+from __future__ import annotations
+
+
+def sma(xs: list[float], n: int) -> list[float | None]:
+    """Pine ta.sma。前 n−1 个位置为 None，保持与输入等长便于对齐。"""
+    if n <= 0:
+        raise ValueError("n 必须为正")
+    out: list[float | None] = [None] * min(n - 1, len(xs))
+    if len(xs) < n:
+        return out
+    run = sum(xs[:n])
+    out.append(run / n)
+    for i in range(n, len(xs)):
+        run += xs[i] - xs[i - n]
+        out.append(run / n)
+    return out
+
+
+def ema(xs: list[float], n: int) -> list[float | None]:
+    """Pine ta.ema。
+
+    ⚠️ 种子是 **SMA(n)** 不是首值 —— Pine 的实现是
+        ema := na(ema[1]) ? sma(src, n) : alpha*src + (1-alpha)*ema[1]
+    用首值当种子会让前几十根偏离，MACD 快慢线之差被放大，早期柱状图对不上 TradingView。
+    """
+    if n <= 0:
+        raise ValueError("n 必须为正")
+    out: list[float | None] = [None] * min(n - 1, len(xs))
+    if len(xs) < n:
+        return out
+    a = 2.0 / (n + 1)
+    prev = sum(xs[:n]) / n
+    out.append(prev)
+    for x in xs[n:]:
+        prev = a * x + (1 - a) * prev
+        out.append(prev)
+    return out
+
+
+def rma(xs: list[float], n: int) -> list[float | None]:
+    """Pine ta.rma（Wilder 平滑）。ATR / RSI 内部用的就是它。"""
+    if n <= 0:
+        raise ValueError("n 必须为正")
+    out: list[float | None] = [None] * min(n - 1, len(xs))
+    if len(xs) < n:
+        return out
+    prev = sum(xs[:n]) / n
+    out.append(prev)
+    for x in xs[n:]:
+        prev = (prev * (n - 1) + x) / n
+        out.append(prev)
+    return out
+
+
+def last_valid(xs: list[float | None]) -> float | None:
+    """最后一个非 None 值。"""
+    for x in reversed(xs):
+        if x is not None:
+            return x
+    return None

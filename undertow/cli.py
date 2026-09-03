@@ -209,6 +209,57 @@ def _realtime_multiplier(inst, spot, *, no_cache):
     return static
 
 
+def cmd_ta(args) -> int:
+    """技术面子模块的查看入口。
+
+    用户 2026-09-03：「先不用放到研报里可视化，先不用这么复杂，
+    你就先建立单独的模块，能拿到数据即可。我们准备一些备用着。」
+    所以这里只做展示，**不写任何台账、不进研报、不参与方向投票**。
+    """
+    from undertow.analyze.ta import frames as _fr
+    from undertow.analyze.ta import macd as _md
+
+    syms = args.symbols
+    if not syms:
+        cfg = load_config()
+        syms = [f"{i.options.symbol}.US" for i in cfg.instruments.values()
+                if i.options and i.options.symbol]
+    if not syms:
+        print("没有可用标的", file=sys.stderr)
+        return 1
+
+    for sym in syms:
+        print(f"\n══ {sym} ══")
+        rows = _fr.describe(sym)
+        for r in rows:
+            if not r["ok"]:
+                print(f"  {r['tf']:>3}  ✗ {r['err'][:70]}")
+                continue
+            role = "择时" if r["role"] == "entry" else "方向"
+            print(f"  {r['tf']:>3}  {r['n']:>3} 根  "
+                  f"{str(r['first'])[:16]} → {str(r['last'])[:16]}  "
+                  f"收 {r['last_close']:>9.2f}  [{role}]")
+        if args.frames:
+            continue
+        print(f"  ── MACD(12,26,9)  signal={args.signal_ma.upper()} ──")
+        for tf in _fr.TIMEFRAMES:
+            try:
+                c = [b["close"] for b in _fr.bars(sym, tf)]
+            except Exception as e:
+                print(f"  {tf:>3}  ✗ {type(e).__name__}")
+                continue
+            r = _md.read(c, signal_ma=args.signal_ma)
+            if r is None:
+                print(f"  {tf:>3}  数据不足")
+                continue
+            cx = f"  【{r.cross}】" if r.cross else ""
+            note = "  ← 仅择时，不判方向" if _fr.ROLE[tf] == "entry" else ""
+            print(f"  {tf:>3}  MACD {r.macd:>8.3f}  Signal {r.signal:>8.3f}  "
+                  f"Hist {r.hist:>8.3f}  {r.state}{cx}{note}")
+    print("\n⛔ 备用层：未经统计检验，不进研报、不参与方向投票。")
+    return 0
+
+
 def cmd_gamma(args) -> int:
     cfg = load_config()
     source = CboeOptionsSource()
@@ -3117,6 +3168,14 @@ def build_parser() -> argparse.ArgumentParser:
     pt = sub.add_parser("tech", help="技术面：短线过热度 + 趋势结构（RSI/KDJ/MACD/布林/均线，确定性）")
     pt.add_argument("instruments", nargs="*", help="品种，留空=全部")
     pt.set_defaults(func=cmd_tech)
+
+    pta = sub.add_parser("ta", help="技术面子模块：多周期数据体检 + MACD（备用层，不进研报）")
+    pta.add_argument("symbols", nargs="*",
+                     help="标的代码，如 GLD.US SLV.US（留空=配置里所有有期权源的品种）")
+    pta.add_argument("--frames", action="store_true", help="只做数据时效体检，不算指标")
+    pta.add_argument("--signal-ma", choices=("sma", "ema"), default="sma",
+                     help='signal 线口径：sma=跟 CM_Ult_MacD_MTF 脚本（默认），ema=跟 TradingView 内置')
+    pta.set_defaults(func=cmd_ta)
 
     plv = sub.add_parser("live", help="持仓实时体检：长桥实时盘口 → 真实可平仓价（只读）")
     plv.set_defaults(func=cmd_live)

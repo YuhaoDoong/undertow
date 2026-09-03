@@ -101,12 +101,12 @@
   "den_mult": null,
   "num_wall": 350.0,
   "num_wall_oi": 127096,
-  "den_wall": 50.0,
-  "den_wall_oi": 166059,
-  "implied_lo": 67.95,
-  "implied_hi": 70.03,
+  "den_wall": 60.0,
+  "den_wall_oi": 139771,
+  "implied_lo": 56.62,
+  "implied_hi": 58.36,
   "inside": false,
-  "dist_pct": -1.23,
+  "dist_pct": 15.0,
   "note": ""
  }
 ]

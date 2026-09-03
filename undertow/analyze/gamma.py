@@ -659,13 +659,27 @@ STRUCT_MIN_SHARE = 0.03    # 该档位至少要占同侧总 OI 的 3%，滤掉�
 def structural_walls(snap, today: date, spot: float, kind: str, *,
                      top_n: int = 3, near_dte: int = NEAR_DTE,
                      near_share_min: float = NEAR_SHARE_MIN,
-                     min_share: float = STRUCT_MIN_SHARE) -> list[dict]:
+                     min_share: float = STRUCT_MIN_SHARE,
+                     min_dte: int = 0) -> list[dict]:
     """结构主墙：全行权价范围内的 OI 堆积，滤掉长期对冲/尾部保险堆积。
 
     只看虚值一侧（put 取 ≤spot，call 取 ≥spot）—— 实值侧的 OI 不构成支撑阻力。
     返回按 OI 降序的前 top_n，每项含 strike/oi/share/near_share/dist_pct。
     **不保证权利金可观**：结构墙可能距现价很远（SLV 50 距 −14.5%），
     策略层必须自己检查报价，不得假设"墙上一定收得到钱"。
+
+    min_dte —— 剩余期限下界（天）。
+        0（默认）只剔已过期的合约（数据滞后残留）。
+        1 连**当日到期**一起剔掉，选要卖的墙必须用它。
+
+    ⚠️ 为什么要有 min_dte（2026-09-03 用户问「黄金之前有 408 的墙，
+       今天怎么没有」时挖出来的）：
+       2026-08-28 那天 GLD 408 put 有 40,957 张、近端排名第 2，看着是道厚墙。
+       拆开看，其中 **40,481 张的到期日就是 08-28 当天** —— 一批 0DTE。
+       当天收盘它们全部消失，8/31 只剩 1,672 张。
+       这种堆积对**当日**的 pin 效应是真的，但对第二天零约束力。
+       我们的三步法第一步是「看前一天的墙，是否应用到第二天」，
+       卖方价差又要持有 2~4 天 —— 拿一道明天就不存在的墙当卖点，是自欺。
     """
     agg: dict[float, int] = {}
     near: dict[float, int] = {}
@@ -676,8 +690,11 @@ def structural_walls(snap, today: date, spot: float, kind: str, *,
             continue
         if kind == "C" and c.strike < spot:
             continue
+        dte = (c.expiry - today).days
+        if dte < min_dte:
+            continue
         agg[c.strike] = agg.get(c.strike, 0) + c.open_interest
-        if (c.expiry - today).days <= near_dte:
+        if dte <= near_dte:
             near[c.strike] = near.get(c.strike, 0) + c.open_interest
     total = sum(agg.values())
     if total <= 0:
@@ -778,7 +795,9 @@ def pick_sell_wall(snap, today: date, spot: float, kind: str, *,
     """
     if min_buf is None:
         min_buf = WALL_PICK_MIN_BUF.get(kind, 0.02)
-    w3 = [w for w in structural_walls(snap, today, spot, kind, top_n=8)
+    # min_dte=1：当日到期的堆积不得进入卖墙候选 —— 它今天收盘就没了，
+    # 而这张价差要持有 2~4 天。见 structural_walls 的 min_dte 说明（GLD 408 案例）。
+    w3 = [w for w in structural_walls(snap, today, spot, kind, top_n=8, min_dte=1)
           if abs(w["dist_pct"]) <= max_dist * 100][:3]
     if not w3:
         return None

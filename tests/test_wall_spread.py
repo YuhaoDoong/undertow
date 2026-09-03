@@ -233,3 +233,61 @@ def test_到期撞高影响事件要标注():
     h2 = render_wall_spread(v, "白银", events=[Event(date=date(2026, 9, 10),
         name="X", category="data", importance="high", time_et="08:30")])
     assert "🔴撞" not in h2
+
+
+# ── 当日到期的 0DTE 堆积不得当成卖墙（2026-09-03 GLD 408 案例）──────
+def _mk_snap(rows):
+    """rows: [(kind, strike, expiry, oi)]"""
+    from types import SimpleNamespace
+    return SimpleNamespace(contracts=[
+        SimpleNamespace(kind=k, strike=s, expiry=e, open_interest=oi)
+        for k, s, e, oi in rows])
+
+
+def test_当日到期的堆积不进卖墙候选():
+    """2026-08-28 GLD 408 put 有 40,957 张、近端排名第 2，看着是道厚墙。
+    其中 40,481 张的到期日就是当天 —— 一批 0DTE，收盘即消失，
+    8/31 只剩 1,672 张。拿它当卖点，等于卖一道明天不存在的墙。"""
+    from datetime import date
+    from undertow.analyze.gamma import structural_walls
+    today = date(2026, 8, 28)
+    snap = _mk_snap([
+        ("P", 408.0, date(2026, 8, 28), 40481),   # 当日到期，占绝大多数
+        ("P", 408.0, date(2026, 9, 18), 296),
+        ("P", 390.0, date(2026, 9, 4), 9000),
+        ("P", 380.0, date(2026, 9, 11), 8000),
+        ("P", 370.0, date(2026, 9, 18), 7000),
+    ])
+    with_0dte = [w["strike"] for w in structural_walls(snap, today, 420.0, "P")]
+    without = [w["strike"] for w in structural_walls(snap, today, 420.0, "P", min_dte=1)]
+    assert 408.0 == with_0dte[0], "含 0DTE 时 408 是最大墙"
+    assert 408.0 not in without, "剔掉当日到期后 408 不该再是墙"
+    assert without[0] == 390.0
+
+
+def test_已过期合约总是被剔除():
+    """数据滞后会留下已过期的合约，任何口径下都不该算进墙。"""
+    from datetime import date
+    from undertow.analyze.gamma import structural_walls
+    today = date(2026, 9, 3)
+    snap = _mk_snap([
+        ("P", 400.0, date(2026, 9, 1), 50000),    # 已过期
+        ("P", 390.0, date(2026, 9, 18), 9000),
+    ])
+    ws = [w["strike"] for w in structural_walls(snap, today, 410.0, "P")]
+    assert 400.0 not in ws and ws == [390.0]
+
+
+def test_选卖墙必须用min_dte等于1():
+    """pick_sell_wall 持有 2~4 天，不得依赖当日到期的堆积。"""
+    import inspect
+    from undertow.analyze import gamma
+    src = inspect.getsource(gamma.pick_sell_wall)
+    assert "min_dte=1" in src
+
+
+def test_默认口径保留当日到期供pin判定():
+    """当日到期对**当日**的 pin 效应是真的，报告展示不该剔掉。"""
+    import inspect
+    from undertow.analyze.gamma import structural_walls
+    assert inspect.signature(structural_walls).parameters["min_dte"].default == 0

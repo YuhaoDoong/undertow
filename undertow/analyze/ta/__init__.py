@@ -9,8 +9,15 @@
 
 已建子模块
 ----------
-frames  多周期 K 线数据层（15m / 1h / 4h / 1d）
-macd    MACD，CM_Ult_MacD_MTF 口径（⚠️ signal 用 SMA，非标准 EMA）
+frames      多周期 K 线数据层（15m / 1h / 4h / 1d）
+macd        MACD，CM_Ult_MacD_MTF 口径（⚠️ signal 用 SMA，非标准 EMA）
+supertrend  Supertrend，ATR(10)×3.0，双棘轮轨
+ut_bot      UT Bot Alerts，ATR(10)×1.0，单追踪止损线
+
+supertrend 与 ut_bot 是同一族（ATR 追踪止损+状态机），差异在轨道结构与敏感度，
+对比表与实测见 docs/ta_modules.md。实测结论：裸用判方向没有稳定优势
+（12 个品种×周期组合里只有 3 个跑赢买入持有，且全在标的下跌段），
+可能的正确用法是**当离场线**而非开仓方向 —— 未检验，未接线。
 
 规划中
 ------
@@ -72,6 +79,37 @@ def rma(xs: list[float], n: int) -> list[float | None]:
         prev = (prev * (n - 1) + x) / n
         out.append(prev)
     return out
+
+
+def true_range(highs: list[float], lows: list[float],
+               closes: list[float]) -> list[float]:
+    """Pine ta.tr。首根无前收，退化为 high−low。"""
+    out = []
+    for i in range(len(highs)):
+        if i == 0:
+            out.append(highs[i] - lows[i])
+        else:
+            pc = closes[i - 1]
+            out.append(max(highs[i] - lows[i], abs(highs[i] - pc), abs(lows[i] - pc)))
+    return out
+
+
+def atr(highs: list[float], lows: list[float], closes: list[float],
+        n: int, *, method: str = "rma") -> list[float | None]:
+    """ATR。
+
+    method="rma"  → Pine 的 ta.atr（Wilder 平滑），绝大多数指标用这个
+    method="sma"  → sma(tr, n)，Supertrend 脚本里 changeATR=false 时的分支
+
+    两者在波动突变后收敛速度不同：RMA 记忆更长、反应更钝，
+    SMA 在窗口滚出极端值时会阶跃。Supertrend 默认走 RMA。
+    """
+    tr = true_range(highs, lows, closes)
+    if method == "rma":
+        return rma(tr, n)
+    if method == "sma":
+        return sma(tr, n)
+    raise ValueError(f'method 须为 "rma" 或 "sma"，收到 {method!r}')
 
 
 def last_valid(xs: list[float | None]) -> float | None:

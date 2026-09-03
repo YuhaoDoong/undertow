@@ -241,6 +241,23 @@ def cmd_ta(args) -> int:
                   f"收 {r['last_close']:>9.2f}  [{role}]")
         if args.frames:
             continue
+        print(f"  ── Supertrend(10, 3.0)   |   UT Bot(10, 1.0) ──")
+        from undertow.analyze.ta import supertrend as _st
+        from undertow.analyze.ta import ut_bot as _ut
+        for tf in _fr.TIMEFRAMES:
+            try:
+                bs = _fr.bars(sym, tf)
+            except Exception:
+                continue
+            hi = [b["high"] for b in bs]; lo = [b["low"] for b in bs]
+            cl = [b["close"] for b in bs]
+            a, u = _st.read(hi, lo, cl), _ut.read(hi, lo, cl)
+            if a is None or u is None:
+                continue
+            fa = " ⚑翻转" if a.flipped else ""
+            fu = " ⚑翻转" if u.flipped else ""
+            print(f"  {tf:>3}  ST {a.label} 轨 {a.line:>9.2f} 距{a.dist_pct:>+5.1f}%{fa:<5}"
+                  f"  |  UT {u.label} 线 {u.stop:>9.2f} 距{u.dist_pct:>+5.1f}%{fu}")
         print(f"  ── MACD(12,26,9)  signal={args.signal_ma.upper()} ──")
         for tf in _fr.TIMEFRAMES:
             try:

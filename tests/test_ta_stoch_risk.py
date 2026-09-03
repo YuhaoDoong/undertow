@@ -50,13 +50,29 @@ def test_kd平滑参数与脚本一致():
 
 
 def test_MTF对齐不得前瞻():
-    """lookahead_off：低周期只能看到已收盘的高周期 K 线。
-    开着前瞻会把当根尚未走完的高周期值泄露给低周期，回测直接虚高。"""
-    base = [1, 2, 3, 4, 5]
-    mtf_ts = [2, 4]
-    out = S.align_mtf(base, mtf_ts, [10.0, 20.0])
-    assert out == [None, 10.0, 10.0, 20.0, 20.0]
-    assert out[2] == 10.0, "t=3 时 t=4 的高周期尚未收盘，不得看到 20"
+    """第 k 根高周期 K 线，只有在第 k+1 根开始之后才可见；末根永远不可见。
+
+    2026-09-03 修掉的 P0：长桥的 ts 是 K 线**开始**时间，原来的
+    `mtf_ts <= t` 让 4h 在 16:30 就读到当天日线（ts=04:00）的收盘价，
+    泄露 3.5 小时。"""
+    out = S.align_mtf([1, 2, 3, 4, 5], [2, 4], [10.0, 20.0])
+    assert out == [None, None, None, 10.0, 10.0]
+    assert out[1] is None, "t=2 时第 0 根刚开始，远未收盘"
+    assert out[4] == 10.0, "末根(ts=4)可能未收盘，只能看到第 0 根"
+
+
+def test_MTF末根永远不可见():
+    out = S.align_mtf([100], [2, 4], [10.0, 20.0])
+    assert out == [10.0], "即使时间远超，也不得看到末根"
+
+
+def test_MTF按开始时间对齐会泄露的具体场景():
+    """回归锁：日线 ts=04:00、4h ts=16:30 的真实时间戳形态。"""
+    day_ts = [1000, 2000]        # 两根日线的开始时间
+    h4_ts = [1500, 1800, 2500]   # 4h，其中 1500/1800 在第 0 根日线当天
+    out = S.align_mtf(h4_ts, day_ts, [7.0, 8.0])
+    assert out[0] is None and out[1] is None, "当天盘中不得读到当天日线"
+    assert out[2] == 7.0, "次日才能读到前一日"
 
 
 def test_MTF映射到相邻上一级():
@@ -82,6 +98,16 @@ def test_三段推进的顺序与阈值():
     assert p.stop == pytest.approx(100.0) and p.stage == R.BREAKEVEN, "1R 移保本"
     p = p.update(104.5, 2.0)
     assert p.stage == R.TRAILING and p.stop > 100.0, "1.5R 开始追踪"
+
+
+def test_阶段只前进不后退():
+    """止损只收紧不放松，阶段标签也不该回退 ——
+    原脚本每根重算 if/elif，价格回落到 1.5R 以下时标签会从「追踪中」退回「已保本」。"""
+    p = R.open_position(1, 100.0, 2.0, 0).update(107.0, 2.0)
+    assert p.stage == R.TRAILING
+    p2 = p.update(103.5, 2.0)                  # R 掉到 1.17
+    assert p2.stage == R.TRAILING, "不得退回已保本"
+    assert p2.stop == p.stop, "止损同时也不得放松"
 
 
 def test_止损只朝有利方向移动():
@@ -137,3 +163,28 @@ def test_模块声明不进研报():
     for f in ("stoch.py", "risk.py"):
         src = pathlib.Path(f"undertow/analyze/ta/{f}").read_text("utf-8")
         assert "不进研报" in src
+
+
+# ── 行为断言（补强只锁了文档字符串的那几条）──────────────────────
+def test_进场价不同则R与止损位都不同():
+    """行为验证：信号根收盘 100、次根开盘 102 时，同样的 ATR 给出不同的
+    止损位与 R。用错价格不是标签问题，是算错止损。"""
+    a = R.open_position(1, 100.0, 2.0, 0)      # 若误用信号根收盘
+    b = R.open_position(1, 102.0, 2.0, 0)      # 实际成交价
+    assert a.stop != b.stop
+    assert a.r_multiple(103.0) != b.r_multiple(103.0)
+    # 关键后果：用 a 的基准会把 103 判成 1R（该移保本），用 b 只有 0.33R
+    assert a.r_multiple(103.0) == pytest.approx(1.0)
+    assert b.r_multiple(103.0) < 0.5
+
+
+def test_跳空时误用信号价会过早移保本到亏损位():
+    """具体重现原脚本的后果：次根跳空高开 2%，
+    误用信号价算 R 会在实际仍亏损时判定「已保本」。"""
+    signal_close, actual_open = 100.0, 102.0
+    wrong = R.open_position(1, signal_close, 2.0, 0).update(103.0, 2.0)
+    right = R.open_position(1, actual_open, 2.0, 0).update(103.0, 2.0)
+    assert wrong.stage == R.BREAKEVEN and wrong.stop == pytest.approx(100.0)
+    assert right.stage == R.INITIAL
+    # 100 这个「保本位」对实际成本 102 来说是亏 2%
+    assert wrong.stop < actual_open

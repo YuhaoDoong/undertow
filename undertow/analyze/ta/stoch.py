@@ -104,17 +104,31 @@ def align_mtf(base_ts: list, mtf_ts: list, mtf_vals: list[float | None]
               ) -> list[float | None]:
     """把高周期序列按 `lookahead_off` 的语义对齐到低周期时间轴。
 
-    规则：低周期第 i 根只能看到**已经收盘**的高周期 K 线，即
-    时间戳严格小于等于自己的最后一根。这正是 lookahead_off 的含义 ——
-    开着前瞻会把当根尚未走完的高周期值提前泄露给低周期，回测直接虚高。
+    规则：**第 k 根高周期 K 线，只有在第 k+1 根开始之后才可见。**
+    末根永远不可见 —— 它可能还没收盘。
+
+    ⚠️ 2026-09-03 修掉的前瞻偏差
+    ----------------------------
+    原实现用 `mtf_ts[j] <= t` 判定可见，这是错的，因为**长桥的 ts 是 K 线的
+    开始时间**，不是结束时间：
+
+        1d  末根 ts = 2026-09-02 04:00   （当天 ET 00:00，要到 20:00 才收盘）
+        4h  盘中 ts = 2026-09-02 16:30
+        1h  末根 ts = 2026-09-02 19:30
+
+    于是 4h 在 16:30 那根就能读到当天日线的收盘价 —— **泄露 3.5 小时**。
+    1h→4h 同理泄露 1 小时（4h 的 ts 是组内最后一根 1h 的开始时间，
+    该组实际要到那根 1h 收盘才结束）。
+
+    用「下一根已开始」判定可见，正是 Pine `lookahead_off` 的实际行为：
+    高周期 bar 未完成时返回**上一个已完成** bar 的值。
     """
     out: list[float | None] = []
-    j, cur = 0, None
+    k = -1
     for t in base_ts:
-        while j < len(mtf_ts) and mtf_ts[j] <= t:
-            cur = mtf_vals[j]
-            j += 1
-        out.append(cur)
+        while k + 2 < len(mtf_ts) and mtf_ts[k + 2] <= t:
+            k += 1
+        out.append(mtf_vals[k] if 0 <= k < len(mtf_vals) else None)
     return out
 
 

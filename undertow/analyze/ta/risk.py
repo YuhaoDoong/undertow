@@ -77,11 +77,14 @@ class Position:
         """按当前价推进止损。止损**只朝有利方向移动**，绝不放松。"""
         r = self.r_multiple(px)
         stop, stage = self.stop, self.stage
-        if r >= trail_start_r:
+        if r >= trail_start_r or stage == TRAILING:
+            # 一旦进入追踪就不再退回 —— 止损本来就只收紧不放松，
+            # 阶段标签跟着回退会让人误以为"又能放松了"。
+            # 原脚本每根重算 if/elif，价格回落到 1.5R 以下时标签会倒退。
             cand = px - self.direction * atr_val * trail_mult
             stop = max(stop, cand) if self.direction == 1 else min(stop, cand)
             stage = TRAILING
-        elif r >= breakeven_r:
+        elif r >= breakeven_r or stage == BREAKEVEN:
             stop = (max(stop, self.entry_px) if self.direction == 1
                     else min(stop, self.entry_px))
             stage = BREAKEVEN

@@ -167,3 +167,40 @@ def test_模块声明不进研报():
     for f in ("dmi.py", "entries.py", "exits.py"):
         src = pathlib.Path(f"undertow/analyze/ta/{f}").read_text("utf-8")
         assert "不进研报" in src
+
+
+# ── 行为断言（补强只锁了文档字符串的那几条）──────────────────────
+def test_吊灯只在创新高时上移而三段式跟着当前价():
+    """行为验证锚点差异：价格从高点回落时，吊灯不动，三段式会跟着回落
+    （虽然因为单向约束不会真的放松，但候选值不同）。"""
+    from undertow.analyze.ta import risk as RK
+    ch = X.open_chandelier(1, 100.0, 2.0)
+    ch = ch.update(hh=110.0, ll=None, atr_val=2.0)      # 110−6=104
+    assert ch.stop == pytest.approx(104.0)
+    ch2 = ch.update(hh=110.0, ll=None, atr_val=2.0)     # 未创新高 → 不动
+    assert ch2.stop == pytest.approx(104.0)
+    # 三段式的候选跟着当前价走：价格 105 时候选是 105−3=102 < 104
+    st = RK.open_position(1, 100.0, 2.0, 0).update(110.0, 2.0)
+    assert st.stop == pytest.approx(107.0), "三段式锚在当前价"
+    assert st.stop != ch.stop, "两者锚点不同，止损位必然不同"
+
+
+def test_趋势评分里ADX水平与斜率同源撬动():
+    """行为验证同源：ADX 走强时「水平」与「斜率」两个分项必然同向动。
+
+    实测 ADX 20→40、斜率 1→5，评分 42.5→77.5，差 **35 分**。
+    若两项真的独立，单靠 ADX 水平最多只能撬动它自己的 30 分权重；
+    多出来的 5 分正是斜率跟着动的部分 —— 一条曲线，数了两遍。
+    """
+    lo = D.trend_score(20, 15, 1.0, 1.0)
+    hi = D.trend_score(40, 15, 5.0, 1.0)
+    assert lo == pytest.approx(42.5) and hi == pytest.approx(77.5)
+    assert hi - lo > D.W_ADX, "撬动幅度超过 ADX 水平单项的权重，说明斜率同向叠加了"
+
+
+def test_回调标记在regime断开后按grace存活或清除():
+    """行为验证 grace：同一段数据，grace=0 不触发、grace 足够大才触发。"""
+    c = [10.0]*12 + [8.0]*4 + [12.0]*12
+    reg = [1]*13 + [0]*3 + [1]*12              # 回调期间 regime 断 3 根
+    assert not any(E.pullback(c, reg, grace=0)), "grace=0 标记被清掉"
+    assert any(E.pullback(c, reg, grace=5)), "grace=5 标记存活"

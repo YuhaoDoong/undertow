@@ -9,15 +9,33 @@
 
 已建子模块
 ----------
-frames      多周期 K 线数据层（15m / 1h / 4h / 1d）
-macd        MACD，CM_Ult_MacD_MTF 口径（⚠️ signal 用 SMA，非标准 EMA）
-supertrend  Supertrend，ATR(10)×3.0，双棘轮轨
-ut_bot      UT Bot Alerts，ATR(10)×1.0，单追踪止损线
+数据层
+  frames      多周期 K 线（15m/1h/4h/1d）。⚠️ 15m 只用于择时，不判方向
 
-supertrend 与 ut_bot 是同一族（ATR 追踪止损+状态机），差异在轨道结构与敏感度，
-对比表与实测见 docs/ta_modules.md。实测结论：裸用判方向没有稳定优势
-（12 个品种×周期组合里只有 3 个跑赢买入持有，且全在标的下跌段），
-可能的正确用法是**当离场线**而非开仓方向 —— 未检验，未接线。
+指标
+  macd        MACD，CM_Ult_MacD_MTF 口径。⚠️ signal 用 SMA 非标准 EMA
+  supertrend  Supertrend，ATR(10)×3.0，双棘轮轨
+  ut_bot      UT Bot Alerts，ATR(10)×1.0，单追踪止损线
+  stoch       随机指标 + MTF（linreg 可外推出 [0,100] 之外）
+  dmi         DMI/ADX + 趋势评分（⚠️ 评分 75/100 同源）
+
+策略组件
+  entries     回调入场 / 裸 DI 交叉 / regime 合成
+  exits       吊灯止损 + ADX 衰减 + 冷却期
+  risk        三段式 ATR 止损 + 风险仓位
+
+回溯
+  backtest    ⚠️ 成交假设焊死：次根开盘 + 必计成本 + always-in-market
+
+关键实测结论（都在 docs/ta_modules.md 有完整表）
+-------------------------------------------------
+· supertrend 与 ut_bot 同族，裸用判方向没有稳定优势：12 个品种×周期组合里
+  只有 4 个跑赢买入持有，且多在标的下跌段。可能的正确用法是**当离场线**。
+· 成交假设改一下（信号根收盘 → 次根开盘）就翻盘 3 个组合。样本撑不起结论。
+· DMI 那套的回调入场与 regime 过滤器**互斥**：regime 要求趋势强，
+  而回调本身削弱趋势指标 —— 实测跌破 EMA9 时 regime 仍成立的只有 0~4 次/组合。
+· 三份脚本的"多重确认"评分**都是同源重复计数**（60/100、75/100），
+  把一个信号数了三遍。这与我们在 SMC vs 期权墙上发现的是同一个毛病。
 
 规划中
 ------

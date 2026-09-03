@@ -258,6 +258,21 @@ def cmd_ta(args) -> int:
             fu = " ⚑翻转" if u.flipped else ""
             print(f"  {tf:>3}  ST {a.label} 轨 {a.line:>9.2f} 距{a.dist_pct:>+5.1f}%{fa:<5}"
                   f"  |  UT {u.label} 线 {u.stop:>9.2f} 距{u.dist_pct:>+5.1f}%{fu}")
+        print("  ── DMI/ADX(14,14) ──")
+        from undertow.analyze.ta import dmi as _dmi
+        for tf in _fr.TIMEFRAMES:
+            try:
+                bs = _fr.bars(sym, tf)
+            except Exception:
+                continue
+            r = _dmi.read([b["high"] for b in bs], [b["low"] for b in bs],
+                          [b["close"] for b in bs])
+            if r is None:
+                continue
+            trend = "趋势中" if r.trending else "无趋势"
+            print(f"  {tf:>3}  +DI {r.di_plus:>5.1f}  -DI {r.di_minus:>5.1f}  "
+                  f"ADX {r.adx:>5.1f}  差 {r.spread:>5.1f}  "
+                  f"评分 {r.score:>5.1f}({r.tier})  {'多' if r.bullish else '空'} {trend}")
         print(f"  ── MACD(12,26,9)  signal={args.signal_ma.upper()} ──")
         for tf in _fr.TIMEFRAMES:
             try:

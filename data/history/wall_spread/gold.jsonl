@@ -1,2 +1,3 @@
 {"date": "2026-09-01", "inst": "gold", "sym": "GLD", "spot": 408.42, "ok": false, "reason": "gold 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-02", "inst": "gold", "sym": "GLD", "spot": 396.75, "ok": false, "reason": "gold 未激活（当前只激活：silver）", "params": {}, "candidates": []}
+{"date": "2026-09-03", "inst": "gold", "sym": "GLD", "spot": 402.78, "ok": false, "reason": "gold 未激活（当前只激活：silver）", "params": {}, "candidates": []}

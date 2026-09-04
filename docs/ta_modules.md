@@ -427,3 +427,66 @@ regime 通过率并不低（26~55%），瓶颈在回调触发。再往下拆：
 过程记在 `validation.py` 的 caveat 与 `docs/codex_review_2026-09-04.md`。
 
 ⚠️ 想重新启用任何一个子模块，先读那两条 caveat。
+
+---
+
+## 封存后收到的脚本（只做审查，不建模块）
+
+### SMC Institutional Clean Wave & Structure PRO（2026-09-04）
+
+**⛔ 第 5 节的 BUY/SELL 徽章是纯事后标注，不可交易。**
+
+```pine
+ph_sig = ta.pivothigh(high, sig_sens, sig_sens)   // sig_sens 默认 10
+if show_sig and not na(ph_sig)
+    int idx = bar_index - sig_sens                 // ← 画在 10 根之前
+    label.new(idx, high[sig_sens] + atr*0.3, "SELL", ...)
+```
+
+`ta.pivothigh(src, n, n)` 要**右侧 n 根走完**才能确认，而标签却画在 n 根之前的
+位置上。GLD 日线实测：
+
+| 标注在 | 实际能知道 | 标注处价格 | 确认时价格 | 期间已走 |
+|---|---|---|---|---|
+| 2026-01-29 | 2026-02-12 | 509.70 | 451.39 | **−11.4%** |
+| 2025-10-20 | 2025-11-03 | 403.30 | 368.78 | −8.6% |
+| 2026-03-02 | 2026-03-16 | 492.15 | 460.43 | −6.4% |
+
+图上那个 SELL 标在 509.70 的顶部，但你能看到它时价格已经 451.39。
+在 4h 上延迟是 40 小时。**这不是滞后，是事后画上去的。**
+
+#### 其余四节的判断
+
+| 组件 | 实现 | 判断 |
+|---|---|---|
+| Dynamic Trend Wave | `ta.alma(close,21,0.85,6)`，`close>=wave` 定方向 | 又一个均线类方向指标，与已证伪的同族 |
+| Smart Candle Coloring | 内包线 `high<=high[1] and low>=low[1]` | 波动收缩，我们的 `analyze/squeeze.py` 已有同类概念 |
+| BOS / CHoCH | pivot 确认后，**close 上/下穿该 pivot 时实时触发** | ✅ 实时，无重绘。概念我们没有，见下 |
+| −2.5 SD Target | `sma(20) − 2.5×stdev(20)` | 就是布林下轨（2.5σ 而非 2σ）。叫 "Next Target" 有误导，它是统计边界不是预测目标；且金融数据厚尾，触及频率高于正态假设 |
+
+#### 唯一值得记的概念：BOS vs CHoCH
+
+    上穿前高时：当前趋势为空 → CHoCH（性格转变，转折）
+                当前趋势为多 → BOS  （结构突破，延续）
+
+同样是"突破前高"，**在多头里是延续、在空头里是转折**，两者的含义完全不同。
+我们的 `analyze/smc.py` 只做订单块，没有区分这两种突破。
+
+⚠️ 但按封存约定**不建模块**。真要用，得先过 validation.py 的检验，
+而且要吸取教训：按品种拆、不跨周期汇总、算多重比较。
+
+## 审查 Pine 脚本的重绘检查清单
+
+这次的经验值得固化。看到"信号精准踩在顶底"时，按顺序查：
+
+1. **有没有 `ta.pivothigh/pivotlow(src, L, R)` 且 R > 0？**
+   → 该 pivot 要等右侧 R 根才确认。若标签画在 `bar_index - R`，就是事后标注。
+2. **`request.security()` 有没有写 `lookahead=barmerge.lookahead_off`？**
+   → 不写默认是 `lookahead_on`，直接泄露高周期未来值。
+3. **画图坐标用的是 `bar_index` 还是 `bar_index - N`？**
+   → 后者要核对那个位置的信息在当时是否已知。
+4. **`strategy` 有没有写 `commission_type` / `slippage`？**
+   → 不写就是 0 成本回测。
+5. **`default_qty_type` 是什么？**
+   → 不写默认 `strategy.fixed` / qty=1，在 100 万初始资金下敞口只有 0.04%
+   （这正是同一个 Supertrend 策略报 16% 与 0.06% 的全部原因）。

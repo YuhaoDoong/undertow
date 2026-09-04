@@ -101,8 +101,9 @@ def test_ta方向检验条目已记录且结论为不进投票():
     from undertow.analyze.validation import REGISTRY
     v = REGISTRY["ta_indicators_direction"]
     assert v.cluster_n == 397 and v.baseline == 0.539
-    assert "没有一个显著优于基线" in v.note
-    assert "聚类校正是必须的" in v.caveat
+    assert "全部与基线无区别" in v.note and "全部显著劣于" in v.note
+    assert "统计必须按品种拆" in v.caveat, "合并样本得出过错误结论，必须留下这条"
+    assert "功效不足，不是证明无效" in v.caveat
     assert "不进方向投票" in v.caveat
 
 

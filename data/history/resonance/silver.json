@@ -134,5 +134,22 @@
   "forward_5d": null,
   "forward_10d": null,
   "forward_20d": null
+ },
+ {
+  "instrument": "silver",
+  "date": "2026-09-04",
+  "spot": 67.58,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "中性",
+  "regime": "熊",
+  "stretch": 0.30242038216558986,
+  "stretch_pctile": 0.468,
+  "drawdown": -2.1095541401273876,
+  "dd_pctile": 0.688,
+  "combo_pctile": 0.578,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
  }
 ]

@@ -121,7 +121,7 @@
  {
   "instrument": "tlt",
   "date": "2026-09-04",
-  "spot": 81.96,
+  "spot": 82.32,
   "state": "仅结构",
   "struct_bias": "偏多(弱)",
   "band": "中性",

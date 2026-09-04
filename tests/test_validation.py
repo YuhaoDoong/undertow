@@ -100,11 +100,13 @@ def test_hits有值但p为None时summary不崩():
 def test_ta方向检验条目已记录且结论为不进投票():
     from undertow.analyze.validation import REGISTRY
     v = REGISTRY["ta_indicators_direction"]
-    assert v.cluster_n == 397 and v.baseline == 0.539
-    assert "全部与基线无区别" in v.note and "全部显著劣于" in v.note
-    assert "统计必须按品种拆" in v.caveat, "合并样本得出过错误结论，必须留下这条"
-    assert "功效不足，不是证明无效" in v.caveat
-    assert "不进方向投票" in v.caveat
+    assert v.n == 60, "60 个 (品种,周期,指标) 组合，分别报告"
+    assert "不做任何跨周期汇总" in v.note
+    assert "期望假阳性正好 3 个" in v.note, "多重比较必须写明"
+    assert "被推翻过两次" in v.caveat, "结论的修正过程比结论本身更该留下"
+    assert "撤回" in v.caveat, "『美元明确有害』已撤回"
+    assert "8.4pp" in v.caveat, "80% power 的功效说明"
+    assert "尚未用合格方法" in v.caveat and "不是已经证伪" in v.caveat
 
 
 def test_二项检验在大n下不溢出():
@@ -147,3 +149,37 @@ def test_已显著时所需样本为零而非None():
     from undertow.analyze.validation import samples_to_significance as f
     assert f(120, 200) == 0
     assert f(17, 26) == 11, "未显著的仍要给出增量"
+
+
+def test_退化零假设下不可能事件的p值为零():
+    """p0=0 时只有 k=0 可能发生。原来一律返回 1.0，
+    等于说「不可能事件也不奇怪」（codex P2-1）。"""
+    from undertow.analyze.validation import binom_p
+    assert binom_p(0, 10, 0.0) == 1.0 and binom_p(3, 10, 0.0) == 0.0
+    assert binom_p(10, 10, 1.0) == 1.0 and binom_p(3, 10, 1.0) == 0.0
+
+
+def test_k越界必须抛错():
+    from undertow.analyze.validation import binom_p
+    import pytest as _p
+    for bad in (-1, 11):
+        with _p.raises(ValueError):
+            binom_p(bad, 10, 0.5)
+
+
+def test_双侧定义已在文档里写明():
+    """equal-tailed 与 probability-ordering 在 p0≠0.5 时可能给出不同结果，
+    采用哪种必须写清楚。"""
+    from undertow.analyze.validation import binom_p
+    import inspect
+    doc = inspect.getdoc(binom_p)
+    assert "equal-tailed" in doc and "probability-ordering" in doc
+    assert "不保证任意极端参数下" in doc
+
+
+def test_0DTE的pin措辞不得过度确定():
+    """仅凭 OI 无法确证 pin 效应；能确定的只有「收盘后消失」。"""
+    import pathlib
+    src = pathlib.Path("undertow/analyze/gamma.py").read_text("utf-8")
+    assert "可能" in src and "不能支撑跨日的墙位" in src
+    assert "pin 效应是真的" not in src

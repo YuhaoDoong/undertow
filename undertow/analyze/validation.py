@@ -33,11 +33,20 @@ def binom_p(k: int, n: int, p0: float = 0.5) -> float:
         return 1.0
     lp, lq = math.log(p0), math.log1p(-p0)
     lgn = math.lgamma(n + 1)
-    tot = 0.0
-    for i in range(k, n + 1):
+
+    def _pmf(i: int) -> float:
         lg = lgn - math.lgamma(i + 1) - math.lgamma(n - i + 1) + i * lp + (n - i) * lq
-        if lg > -745:                      # exp 下溢阈值，再小的项加了也没意义
-            tot += math.exp(lg)
+        return math.exp(lg) if lg > -745 else 0.0   # -745 是 exp 下溢阈值
+
+    # ⚠️ 尾巴要挑对边。原来一律算 2×P(X≥k)，k **小于**均值时恒返回 1.0 ——
+    # 于是「显著劣于基线」会被掩盖成「不显著」（2026-09-04 实测
+    # binom_p(0,10,0.5) 给 1.0，正确答案 0.00195）。
+    # 这不是理论洁癖：ta_indicators_direction 那条命中率 48.6% < 基线 53.9%，
+    # 正是 k < 均值的情形。
+    if k >= n * p0:
+        tot = sum(_pmf(i) for i in range(k, n + 1))
+    else:
+        tot = sum(_pmf(i) for i in range(0, k + 1))
     return min(1.0, 2 * tot)
 
 
@@ -54,6 +63,8 @@ def samples_to_significance(hits: int, n: int, p0: float = 0.5,
     rate = hits / n
     if rate <= p0:
         return None
+    if binom_p(hits, n, p0) < alpha:
+        return 0        # 当前已显著，不必再等（原来会因 n>上界而误返回 None）
     # 判据必须用**精确**二项检验：小 n 时离散性让精确解显著早于正态近似
     # （实测 hits=17/n=26：精确要 +11，正态近似说要 +14）。
     # 正态近似只用来定搜索上界，免得在命中率贴近 p0 时白跑到 cap。

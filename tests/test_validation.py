@@ -127,3 +127,23 @@ def test_命中率贴近基线时返回None而不是硬算到上限():
     from undertow.analyze.validation import samples_to_significance as f
     assert f(510, 1000) is None, "边缘太薄，cap 之内等不到"
     assert f(50, 100) is None, "命中率等于基线"
+
+
+def test_双尾检验必须挑对尾巴():
+    """原实现一律算 2×P(X≥k)，k **小于**均值时恒返回 1.0，
+    把「显著劣于基线」掩盖成「不显著」。
+    ta_indicators_direction 那条 48.6% vs 基线 53.9% 正是这种情形。"""
+    from undertow.analyze.validation import binom_p
+    import pytest as _p
+    assert binom_p(0, 10, 0.5) == _p.approx(2 * 0.5 ** 10), "k=0 该用左尾"
+    assert binom_p(10, 10, 0.5) == _p.approx(2 * 0.5 ** 10), "两侧应对称"
+    assert binom_p(5, 10, 0.5) == 1.0, "正中间不显著"
+    # 显著劣于基线的真实数据不得被算成 p=1
+    assert binom_p(1328, 2733, 0.539) < 1e-5
+
+
+def test_已显著时所需样本为零而非None():
+    """原来当 n 已超过正态近似上界时循环不执行，误返回 None（读作"永远等不到"）。"""
+    from undertow.analyze.validation import samples_to_significance as f
+    assert f(120, 200) == 0
+    assert f(17, 26) == 11, "未显著的仍要给出增量"

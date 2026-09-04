@@ -84,3 +84,45 @@ def test_安慰剂对照的结论口径不得退回_证伪():
     assert "有效事件数为 0" in v.caveat, "必须说明零事件"
     assert "不稳健" in v.caveat, "必须说明对匹配方式敏感"
     assert "证伪" not in v.note
+
+
+def test_hits有值但p为None时summary不崩():
+    """用 bootstrap CI 判定的条目没有 p 值。这是 p_value=None 的第三个变体：
+    前两个是 hits=None（2026-09-02 codex P0）与对照型条目有 p 无 hits。"""
+    from undertow.analyze.validation import Validation
+    v = Validation(key="x", label="x", n=100, hits=52, p_value=None,
+                   baseline=0.5, cluster_n=20, note="", caveat="")
+    s = v.summary()
+    assert "bootstrap" in s and "52/100" in s
+    assert not v.significant, "p 为 None 时不得判为显著"
+
+
+def test_ta方向检验条目已记录且结论为不进投票():
+    from undertow.analyze.validation import REGISTRY
+    v = REGISTRY["ta_indicators_direction"]
+    assert v.cluster_n == 397 and v.baseline == 0.539
+    assert "没有一个显著优于基线" in v.note
+    assert "聚类校正是必须的" in v.caveat
+    assert "不进方向投票" in v.caveat
+
+
+def test_二项检验在大n下不溢出():
+    """math.comb(5000, 2500) 超出 float 范围会直接抛 OverflowError。
+    改用 lgamma 在对数域求和（2026-09-04 实测触发）。"""
+    from undertow.analyze.validation import binom_p
+    assert 0 <= binom_p(2600, 5000) <= 1
+    assert 0 <= binom_p(2500, 5000) <= 1
+    assert binom_p(4000, 5000) < 1e-6, "极端偏离应给出极小 p"
+
+
+def test_所需样本量必须用精确二项而非正态近似():
+    """小 n 时离散性让精确检验显著得更早：
+    hits=17/n=26 精确要 +11，正态近似会说要 +14。"""
+    from undertow.analyze.validation import samples_to_significance as f
+    assert f(17, 26) == 11
+
+
+def test_命中率贴近基线时返回None而不是硬算到上限():
+    from undertow.analyze.validation import samples_to_significance as f
+    assert f(510, 1000) is None, "边缘太薄，cap 之内等不到"
+    assert f(50, 100) is None, "命中率等于基线"

@@ -22,11 +22,23 @@ from dataclasses import dataclass
 
 
 def binom_p(k: int, n: int, p0: float = 0.5) -> float:
-    """双侧二项检验：n 次里 k 次命中，与 p0 的差异有多容易被运气解释。"""
+    """双侧二项检验：n 次里 k 次命中，与 p0 的差异有多容易被运气解释。
+
+    ⚠️ 用 lgamma 在对数域求和，不能直接 math.comb —— n 上千时组合数会超出
+    float 范围直接抛 OverflowError（2026-09-04 实测 n=5000 必崩）。
+    """
     if n <= 0:
         return 1.0
-    return min(1.0, 2 * sum(math.comb(n, i) * p0 ** i * (1 - p0) ** (n - i)
-                            for i in range(k, n + 1)))
+    if not 0 < p0 < 1:
+        return 1.0
+    lp, lq = math.log(p0), math.log1p(-p0)
+    lgn = math.lgamma(n + 1)
+    tot = 0.0
+    for i in range(k, n + 1):
+        lg = lgn - math.lgamma(i + 1) - math.lgamma(n - i + 1) + i * lp + (n - i) * lq
+        if lg > -745:                      # exp 下溢阈值，再小的项加了也没意义
+            tot += math.exp(lg)
+    return min(1.0, 2 * tot)
 
 
 def samples_to_significance(hits: int, n: int, p0: float = 0.5,
@@ -42,8 +54,17 @@ def samples_to_significance(hits: int, n: int, p0: float = 0.5,
     rate = hits / n
     if rate <= p0:
         return None
+    # 判据必须用**精确**二项检验：小 n 时离散性让精确解显著早于正态近似
+    # （实测 hits=17/n=26：精确要 +11，正态近似说要 +14）。
+    # 正态近似只用来定搜索上界，免得在命中率贴近 p0 时白跑到 cap。
+    z = 1.959963985                        # 双侧 α=0.05
+    delta = rate - p0
+    approx = math.ceil((z * math.sqrt(p0 * (1 - p0)) / delta) ** 2)
+    if approx > cap:
+        return None                        # 边缘太薄，cap 之内等不到
+    limit = min(cap, approx + 50)
     m = n
-    while m < cap:
+    while m < limit:
         m += 1
         k = math.ceil(rate * m - 1e-9)
         if binom_p(k, m, p0) < alpha:
@@ -132,7 +153,12 @@ class Validation:
                          + (f"，{self.cluster_n} 个日期簇" if self.cluster_n else "")
                          + ("" if self.significant else " · 未达显著"))
             return f"n={self.n} · {tail} · 详见 note 与复现入口"
-        s = f"{self.hits}/{self.n} = {self.rate:.0%}（基准 {self.baseline:.0%}），p={self.p_value:.3f}"
+        # ⚠️ hits 有值但 p_value 为 None 是合法组合：用 bootstrap CI 判定的条目
+        # （如 ta_indicators_direction）没有 p 值。2026-09-04 实测这里会崩 ——
+        # 这是 hits is None 那条注释所说问题的第三个变体，别再假设 p 一定存在。
+        s = f"{self.hits}/{self.n} = {self.rate:.0%}（基准 {self.baseline:.0%}）"
+        s += (f"，p={self.p_value:.3f}" if self.p_value is not None
+              else "，以 bootstrap 置信区间判定（见 note）")
         if self.cluster_n:
             s += f"，{self.cluster_n} 个日期簇"
         if self.significant:
@@ -242,6 +268,32 @@ REGISTRY: dict[str, Validation] = {
                "→ 历史上本条曾被写成『证伪了墙位价值』（2026-09-02 上午），"
                "  那是过度解读，已作废。正确表述是：**当前样本对墙位价值给不出结论**，"
                "  要检验核心主张必须有破墙样本，即跌市数据。"),
+    "ta_indicators_direction": Validation(
+        key="ta_indicators_direction", label="技术面子模块的方向有效性（六个状态型指标）",
+        n=2733, hits=1328, p_value=None, baseline=0.539, cluster_n=397,
+        note="复现入口：scripts/validate_ta.py。四品种(GLD/SLV/USO/UUP)×三周期"
+             "(1h/4h/1d)，信号只用第 i 根及之前的数据算出，测 close[i+3]/close[i] 的方向。\n"
+             "**基线不是 50%**：样本期整体上涨，一直做多的命中率就是 53.9%。\n"
+             "按连续同向段聚类 bootstrap（4000 次）后：\n"
+             "  UT持仓      397 段  48.6%  CI[45.8, 51.2]  ⛔ 显著劣于一直做多\n"
+             "  Stoch-K>50  284 段  50.6%  CI[47.8, 53.3]  ⛔ 显著劣于\n"
+             "  DI方向      245 段  50.8%  CI[47.8, 53.4]  ⛔ 显著劣于\n"
+             "  MACD柱>0    204 段  51.4%  CI[48.3, 54.5]  — 与基线无区别\n"
+             "  DMI-regime  129 段  53.5%  CI[49.0, 57.3]  — 与基线无区别\n"
+             "  ST趋势      112 段  51.3%  CI[48.7, 54.0]  — 与基线无区别\n"
+             "**没有一个显著优于基线。三个显著为负，三个无区别。**\n"
+             "事件型（触发根才计）样本太小：ST翻转 n=100、MACD交叉 n=192、"
+             "DMI回调入场 n=37，全部不显著；回调入场是唯一方向为正的(+5.5pp)但 n=37。",
+        caveat="⚠️ **聚类校正是必须的，不是可选的。** 未校正时六个指标全部『显著』、"
+               "其中五个 p<0.01；校正后只剩三个显著。原因：状态型指标相邻根的状态几乎相同"
+               "（一段 Supertrend 趋势能连着几十根），名义样本 2800 的有效样本量只有百余段，"
+               "不校正会把自相关当成证据。\n"
+               "⚠️ 结论的适用范围：只对**这段以涨为主的行情**成立（金银 2026 大涨）。"
+               "趋势指标在回调时翻空，而这段行情的回调都被快速买回 —— "
+               "翻空的时段恰好是反弹时段，所以择时是负贡献。"
+               "这不代表它们在震荡市或下跌市无效，但我们没有那样的样本。\n"
+               "→ 结论：ta 包维持『不进研报、不进方向投票』的边界。"
+               "这一层的价值若有，也不在方向判断上。"),
     "vol_surface_as_filter": Validation(
         key="vol_surface_as_filter", label="波动率面作为资金流的过滤器（同向 vs 反向）",
         n=60, hits=36, p_value=0.17, baseline=0.47, cluster_n=None,

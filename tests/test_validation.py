@@ -183,3 +183,12 @@ def test_0DTE的pin措辞不得过度确定():
     src = pathlib.Path("undertow/analyze/gamma.py").read_text("utf-8")
     assert "可能" in src and "不能支撑跨日的墙位" in src
     assert "pin 效应是真的" not in src
+
+
+def test_趋势作为过滤器的检验已登记且结论为不接入():
+    from undertow.analyze.validation import REGISTRY
+    v = REGISTRY["trend_as_filter"]
+    assert "全部不显著" in v.note
+    assert "D−1" in v.note, "必须写明取前一日收盘，否则是未来函数"
+    assert "不支持接入" in v.caveat
+    assert "期权链内部" in v.caveat, "留下方法论指向"

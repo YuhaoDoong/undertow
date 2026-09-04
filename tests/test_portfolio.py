@@ -347,3 +347,23 @@ def test_PositionReview带持仓gamma与theta():
     import dataclasses
     names = {f.name for f in dataclasses.fields(PositionReview)}
     assert "pos_gamma" in names and "pos_theta" in names
+
+
+def test_卖方收theta而买方付theta():
+    """符号约定：pos_theta = 每股theta × 100 × 张数。
+    每股 theta 恒为负（时间价值流逝），所以卖方（qty<0）的 pos_theta 为正 —— 收租。"""
+    from undertow.analyze import blackscholes as bs
+    t = bs.theta(100.0, 100.0, 30 / 365, 0.3, kind="C")
+    assert t < 0, "每股 theta 恒为负"
+    assert t * 100 * 2 < 0, "买方付 theta"
+    assert t * 100 * -2 > 0, "卖方收 theta"
+
+
+def test_跳空风险与收租是同一枚硬币的两面():
+    """负 Gamma 必然伴随正 Theta：卖方每天收租，代价是跳空时 Delta 加速恶化。
+    看到「净Γ<0 且 净Θ>0」就该知道这份收入的对价是什么。"""
+    from undertow.analyze import blackscholes as bs
+    g = bs.gamma(100.0, 100.0, 30 / 365, 0.3)
+    t = bs.theta(100.0, 100.0, 30 / 365, 0.3, kind="C")
+    qty = -2
+    assert (g * 100 * qty < 0) and (t * 100 * qty > 0)

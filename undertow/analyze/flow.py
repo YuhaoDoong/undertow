@@ -97,6 +97,14 @@ STRONG_MIN_NET_DOI = 3_000    # 顺向净建仓 OI 最小规模（ETF 口径，�
 STRONG_WING_DELTA_LO = 0.18   # 主翼 Delta 下界（更 OTM 的深尾不单独定性）
 STRONG_WING_DELTA_HI = 0.45   # 主翼 Delta 上界（避开 ATM 的方向含糊腿）
 STRONG_CONTRA_SPOT = 1.5      # 当日价格逆信号方向 ≥ 此% 则抑制（涨后防守型 put 买盘≠看空）
+# 逆向压力低于此值时，压力比是被分母塌陷放大出来的，不是顺向方有多强。
+# ⚠️ **只用于展示降级，不参与开火判定** —— 2026-09-08 实测：薄分母组 3/8=37.5%
+# vs 厚分母组 8/19=42.1%，差 4.6pp；要以 80% 功效检出这个差距每组需 n≈1,777，
+# 按当前 0.7 次开火/交易日约需 34 年。样本远不够，加硬门就是凭直觉改判定。
+# 但**摘要行只报比值会误导**（2026-09-04 GLD：403,494 vs 813 → 496×，
+# 分母是被 churn_call=0.27 折减压塌的；次个交易日 491×→4.69×、净Δ−20,133→−1,490，
+# 证实那是非农事件对冲而非方向性建仓），所以分母必须跟着比值一起出现。
+STRONG_THIN_COUNTER = 1000.0
 
 
 @dataclass(frozen=True)
@@ -313,6 +321,14 @@ class StrongSignal:
     # **检测与可执行性分离**（codex review 2026-08-27）：检测口径保持稳定，
     # 由渲染层决定降级为琥珀提示还是置顶红色告警 —— 不再用 return None 把两件事耦死。
     low_confidence: bool = False
+    # 逆向压力绝对值（压力比的分母）。渲染层据此判断比值是否被薄分母放大；
+    # 与 low_confidence 同属"检测口径不变、可执行性由渲染层降级"那一族。
+    counter_pressure: float = 0.0
+
+    @property
+    def thin(self) -> bool:
+        """分母过小 → 压力比失真（展示层降级用，不影响 direction/level）。"""
+        return self.counter_pressure < STRONG_THIN_COUNTER
 
 
 def wing_weights(fa: "FlowAnalysis") -> tuple[float, float]:
@@ -421,7 +437,8 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "",
             reasons.append(f"skew 向 call 倾斜：25Δ(put−call) {fa.vol.d_skew25_pp:+.2f}pp（call 相对变贵＝抢 call）")
         return StrongSignal("看涨", "极强" if vc else "强", round(pr, 1), round(wr, 1),
                             fa.net_call_doi, vc, reasons, _diverges("看涨"), outlook_bias,
-                            mid_bias, "空" in (mid_bias or ""), _lowc)
+                            mid_bias, "空" in (mid_bias or ""), _lowc,
+                            counter_pressure=dn)
 
     # —— 看跌 ——
     if (dn >= STRONG_PRESSURE_RATIO * max(up, 1.0)
@@ -443,7 +460,8 @@ def detect_strong_signal(fa: "FlowAnalysis", *, outlook_bias: str = "",
             reasons.append(f"skew 向 put 倾斜：25Δ(put−call) {fa.vol.d_skew25_pp:+.2f}pp（put 相对变贵＝抢保护）")
         return StrongSignal("看跌", "极强" if vc else "强", round(pr, 1), round(wr, 1),
                             fa.net_put_doi, vc, reasons, _diverges("看跌"), outlook_bias,
-                            mid_bias, "多" in (mid_bias or ""), _lowc)
+                            mid_bias, "多" in (mid_bias or ""), _lowc,
+                            counter_pressure=up)
 
     return None
 

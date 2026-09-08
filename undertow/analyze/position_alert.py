@@ -19,6 +19,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+# 薄分母阈值从 flow 引入，**不在这里复制第二份常量** —— 同一个数字散在两处，
+# 迟早会悄悄漂移（flow.py:323 对 wing_weights 有同样的告诫）。
+from .flow import STRONG_THIN_COUNTER
+
 # 期权代码：SLV260918C73000 → 标的 SLV / 到期 260918 / C / 行权 73000
 # ⚠️ 必须容忍交易所后缀：长桥实际返回的是 "SLV260918C70000.US"。
 # 早先的正则以 $ 收尾，真实持仓一条都解析不出来 → 被当成"没持仓" → 静默无告警。
@@ -142,6 +146,12 @@ def _spread_bias(legs: list[tuple[str, str, float, int]]) -> int:
     return -1 if buy_strike > sell_strike else 1
 
 
+def _counter(ss: object) -> float | None:
+    """取信号的逆向压力（压力比分母）。旧对象没有该字段 → None（摘要行就不带分母）。"""
+    v = getattr(ss, "counter_pressure", None)
+    return float(v) if v is not None else None
+
+
 @dataclass(frozen=True)
 class Conflict:
     underlying: str          # 持仓标的
@@ -152,6 +162,10 @@ class Conflict:
     ratio: float             # 压力比
     corr: float | None       # 交叉告警时的相关性；同品种为 None
     reasons: list[str] = field(default_factory=list)
+    # 压力比的分母（逆向压力绝对值）。摘要行只报比值会误导：2026-09-04 GLD
+    # 报「⚡强看跌（491.5×）」，分母其实只有 813——桌面通知和 ALERT 文件里
+    # 完全看不出来，而详情页 reasons[0] 一直是带绝对量的。None = 未知（旧数据）。
+    counter: float | None = None
 
     @property
     def cross(self) -> bool:
@@ -160,8 +174,13 @@ class Conflict:
     def headline(self) -> str:
         who = (f"{self.source}（与你持仓的 {self.underlying} 相关约 {self.corr:.2f}·粗估）"
                if self.cross else self.underlying)
+        amt = ""
+        if self.counter is not None:
+            amt = f"，逆向仅 {self.counter:,.0f}"
+            if self.counter < STRONG_THIN_COUNTER:
+                amt += "·分母过小·比值失真"
         return (f"⚠️ 你持有 {self.underlying} {self.holding}，"
-                f"而 {who} 出现 ⚡{self.level}{self.signal}信号（{self.ratio:.1f}×）")
+                f"而 {who} 出现 ⚡{self.level}{self.signal}信号（{self.ratio:.1f}×{amt}）")
 
 
 def check_conflicts(held: dict[str, int], signals: dict[str, object],
@@ -189,7 +208,8 @@ def check_conflicts(held: dict[str, int], signals: dict[str, object],
             out.append(Conflict(und, hold_txt, und, ss.direction,
                                 getattr(ss, "level", ""),
                                 float(getattr(ss, "pressure_ratio", 0) or 0), None,
-                                list(getattr(ss, "reasons", []) or [])))
+                                list(getattr(ss, "reasons", []) or []),
+                                counter=_counter(ss)))
             seen_src.add(und)
         # ② 高相关交叉 —— 黄金的信号必须能惊动白银的持仓
         for other, corr in CORRELATED.get(und, []):
@@ -201,7 +221,8 @@ def check_conflicts(held: dict[str, int], signals: dict[str, object],
             out.append(Conflict(und, hold_txt, other, so.direction,
                                 getattr(so, "level", ""),
                                 float(getattr(so, "pressure_ratio", 0) or 0), corr,
-                                list(getattr(so, "reasons", []) or [])))
+                                list(getattr(so, "reasons", []) or []),
+                                counter=_counter(so)))
     # 同品种排在交叉前；同类里压力比大的在前
     out.sort(key=lambda c: (c.cross, -c.ratio))
     return out

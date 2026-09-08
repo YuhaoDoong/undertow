@@ -152,7 +152,9 @@ def build(outlook, fa=None, stretch=None) -> list[Label]:
             # 8/12 的看跌绝对量【是 8/28 的两倍多】，比值却高 6.7 倍 ——
             # 差别全在分母。**只报比值会让人以为 360.8× 比 53.5× 强得多。**
             lo_side = min(up, dn)
-            thin = lo_side < 1000        # 分母过小 → 比值失真
+            # 阈值与 flow/告警摘要同源，避免两处各写一个 1000 后悄悄漂移
+            from undertow.analyze.flow import STRONG_THIN_COUNTER
+            thin = lo_side < STRONG_THIN_COUNTER   # 分母过小 → 比值失真
             out.append(Label(
                 "flow", icon, name, sign,
                 f"{'看涨' if sign>0 else '看跌'}侧 {max(up,dn):,.0f} vs "

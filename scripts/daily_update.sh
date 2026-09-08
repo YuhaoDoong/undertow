@@ -206,6 +206,24 @@ if [[ -n "$STRONG_LINES" ]]; then
     /usr/bin/osascript -e "display notification \"${SUMMARY}\" with title \"⚡ undertow 强信号\" subtitle \"近端资金流一边倒 · 点开报告看详情\" sound name \"Glass\"" 2>/dev/null || true
 fi
 
+# —— 台账回填：用真实收盘价补齐前瞻收益 ——
+# 2026-09-08 发现：回填一直是【手动】的 —— 本脚本只跑 snapshot 和 report，
+# 于是 8/31 起 8 天没人填，signal_ledger 的 forward_* / trading_gap 全空。
+# 而台账是本项目唯一认可的统计口径（手工台账因幸存者偏差已废弃），
+# 断了没有任何地方会出声，等于统计在裸奔 —— 这跟本脚本要防的"静默失败"是同一类。
+# 放在报告之后、提交之前：backfill 要求价格序列已走过信号日，当天新记的那行
+# 本来就填不了，填的是前几天那些已经到期的格子；结果随 data/history 一并提交。
+# 价格源是外部依赖，失败只告警不阻断（快照和报告已经成功，不该因回填丢掉提交）。
+set +e
+BF_OUT=$(python3 -m undertow signals --backfill 2>&1)
+BF_RC=$?
+set -e
+if (( BF_RC == 0 )); then
+    printf '%s\n' "$BF_OUT" | grep -E '回填|警告' || true
+else
+    alert "⚠️ 台账回填失败（ET $ET_NOW）" "rc=$BF_RC：$(printf '%s' "$BF_OUT" | tail -1)"
+fi
+
 git add data/snapshots data/reports data/history
 if git diff --cached --quiet; then
     echo "[跳过] 无变更可提交"

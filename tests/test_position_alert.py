@@ -70,6 +70,44 @@ def test_gold_signal_wakes_silver_position():
     print("PASS test_gold_signal_wakes_silver_position")
 
 
+def test_thin_denominator_is_visible_in_the_headline():
+    """2026-09-04 GLD：⚡强看跌 491.5×，分母只有 813。
+
+    当天 ALERT 文件与桌面通知写的是「⚡强看跌信号（491.5×）」—— 看上去压倒性，
+    实则 813 是 churn 折减后的残值，比值是分母塌出来的。绝对量只出现在详情页
+    reasons[0]，**最该看见的地方反而看不见**。次个交易日 491.5×→4.69×、
+    净Δ −20,133→−1,490，证实那是事件对冲而非方向性建仓。
+
+    ⚠️ 这是【展示层】降级：direction/level 一律不动。实测薄分母组 37.5%(3/8)
+    vs 厚分母组 42.1%(8/19)，差 4.6pp 远不显著（每组需 n≈1,777 才检得出），
+    所以不得据此压制开火 —— 见 validation.thin_denominator_gate。
+    """
+    @dataclass
+    class SSC(SS):
+        counter_pressure: float = 0.0
+
+    thin = SSC("看跌", "强", 491.5, ["看跌加权增仓 403,494 ≫ 看涨 813"],
+               counter_pressure=813.0)
+    h = check_conflicts(REAL, {"GLD": thin})[0].headline()
+    assert "491.5×" in h
+    assert "813" in h, "比值必须带分母，否则摘要行就是误导"
+    assert "分母过小" in h and "失真" in h
+
+    thick = SSC("看跌", "极强", 53.5, ["看跌加权增仓 116,492 ≫ 看涨 2,178"],
+                counter_pressure=2178.0)
+    h2 = check_conflicts(REAL, {"GLD": thick})[0].headline()
+    assert "2,178" in h2, "厚分母也要报绝对量（53.5× 与 491.5× 的差别全在分母）"
+    assert "分母过小" not in h2, "厚分母不得误标失真"
+
+    # 检测口径不受影响：等级/方向只由 flow 决定，展示层不许改判
+    assert "⚡强看跌" in h and "⚡极强看跌" in h2
+
+    # 向后兼容：旧信号对象没有该字段 → 不带分母，也不得崩
+    old = SS("看跌", "强", 53.5, [])
+    assert "53.5×）" in check_conflicts(REAL, {"GLD": old})[0].headline()
+    print("PASS test_thin_denominator_is_visible_in_the_headline")
+
+
 def test_same_direction_does_not_alert():
     """信号与持仓同向不该告警 —— 告警滥发等于没有告警。"""
     assert check_conflicts(REAL, {"GLD": SS("看涨", "强", 5.0, [])}) == []

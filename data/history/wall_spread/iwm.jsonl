@@ -3,3 +3,4 @@
 {"date": "2026-09-03", "inst": "iwm", "sym": "IWM", "spot": 294.01, "ok": false, "reason": "iwm 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-04", "inst": "iwm", "sym": "IWM", "spot": 295.19, "ok": false, "reason": "iwm 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-07", "inst": "iwm", "sym": "IWM", "spot": 296.01, "ok": false, "reason": "iwm 未激活（当前只激活：silver）", "params": {}, "candidates": []}
+{"date": "2026-09-09", "inst": "iwm", "sym": "IWM", "spot": 294.67, "ok": false, "reason": "iwm 未激活（当前只激活：silver）", "params": {}, "candidates": []}

@@ -1,3 +1,5 @@
-2026-09-09 | qqq ⚡极强看跌�spy ⚡极强看跌
+2026-09-09 | gold ⚡强看涨�qqq ⚡极强看跌�spy ⚡极强看跌�iwm ⚡极强看跌
+  gold    近偏多(弱)    中偏多(弱)    (可信度中)  ⚡强看涨  · 不做空 · 别追·等回调 · 短线跟多 · 长线拿住  → /Users/yhdong/Trading/data/reports/gold_2026-09-09.html
   qqq     近中性       中偏多(弱)    (可信度中)  ⚡极强看跌  · 信号与趋势冲突 · 回调买·不追 · 短线等回调 · 长线拿住  → /Users/yhdong/Trading/data/reports/qqq_2026-09-09.html
   spy     近中性       中中性       (可信度低)  ⚡极强看跌  · 可空 · 追势无依据 · 短线观望 · 长线维持  → /Users/yhdong/Trading/data/reports/spy_2026-09-09.html
+  iwm     近中性       中偏多(弱)    (可信度中)  ⚡极强看跌  · 信号与趋势冲突 · 追势无依据 · 短线观望 · 长线拿住  → /Users/yhdong/Trading/data/reports/iwm_2026-09-09.html

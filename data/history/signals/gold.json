@@ -3270,7 +3270,7 @@
   "forward_1d": 0.7866,
   "forward_3d": -0.4819,
   "forward_5d": -3.4179,
-  "forward_10d": null,
+  "forward_10d": -3.9187,
   "forward_2d": 1.1125
  },
  {
@@ -3349,7 +3349,7 @@
   "forward_1d": 0.7866,
   "forward_3d": -0.4819,
   "forward_5d": -3.4179,
-  "forward_10d": null,
+  "forward_10d": -3.9187,
   "forward_2d": 1.1125
  },
  {
@@ -3429,7 +3429,7 @@
   "forward_1d": 0.7866,
   "forward_3d": -0.4819,
   "forward_5d": -3.4179,
-  "forward_10d": null,
+  "forward_10d": -3.9187,
   "forward_2d": 1.1125
  },
  {
@@ -3840,7 +3840,7 @@
   "drift_60d": 0.00416,
   "forward_1d": -0.1149,
   "forward_3d": -1.4943,
-  "forward_5d": null,
+  "forward_5d": -0.5185,
   "forward_10d": null,
   "forward_2d": -2.969
  },
@@ -4013,7 +4013,7 @@
   "drift_60d": 0.00214,
   "forward_1d": 1.5198,
   "forward_2d": 3.3951,
-  "forward_3d": null,
+  "forward_3d": 2.5255,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -4022,7 +4022,7 @@
   "date": "2026-09-03",
   "prev_date": "2026-09-02",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 405.6,
   "fired": false,
   "direction": null,
@@ -4094,12 +4094,12 @@
   ],
   "bull_contra_margin": 4.08,
   "bear_contra_margin": -1.08,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
+  "base_date": "2026-09-02",
+  "base_close": 402.78,
+  "regime": "熊",
+  "drift_60d": 0.02296,
+  "forward_1d": 1.8472,
+  "forward_2d": 0.9906,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

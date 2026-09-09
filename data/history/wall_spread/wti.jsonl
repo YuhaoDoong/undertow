@@ -2,3 +2,4 @@
 {"date": "2026-09-03", "inst": "wti", "sym": "USO", "spot": 141.15, "ok": false, "reason": "wti 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-04", "inst": "wti", "sym": "USO", "spot": 142.09, "ok": false, "reason": "wti 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-07", "inst": "wti", "sym": "USO", "spot": 141.96, "ok": false, "reason": "wti 未激活（当前只激活：silver）", "params": {}, "candidates": []}
+{"date": "2026-09-09", "inst": "wti", "sym": "USO", "spot": 146.03, "ok": false, "reason": "wti 未激活（当前只激活：silver）", "params": {}, "candidates": []}

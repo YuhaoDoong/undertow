@@ -2,3 +2,4 @@
 {"date": "2026-09-03", "inst": "qqq", "sym": "QQQ", "spot": 709.24, "ok": false, "reason": "qqq 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-04", "inst": "qqq", "sym": "QQQ", "spot": 717.67, "ok": false, "reason": "qqq 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-07", "inst": "qqq", "sym": "QQQ", "spot": 718.96, "ok": false, "reason": "qqq 未激活（当前只激活：silver）", "params": {}, "candidates": []}
+{"date": "2026-09-09", "inst": "qqq", "sym": "QQQ", "spot": 718.36, "ok": false, "reason": "qqq 未激活（当前只激活：silver）", "params": {}, "candidates": []}

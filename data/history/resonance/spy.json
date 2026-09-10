@@ -151,5 +151,22 @@
   "forward_5d": null,
   "forward_10d": null,
   "forward_20d": null
+ },
+ {
+  "instrument": "spy",
+  "date": "2026-09-10",
+  "spot": 762.835,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "偏超卖",
+  "regime": "牛",
+  "stretch": -1.0804144507610627,
+  "stretch_pctile": 0.12,
+  "drawdown": -3.1120484137172304,
+  "dd_pctile": 0.112,
+  "combo_pctile": 0.11599999999999999,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
  }
 ]

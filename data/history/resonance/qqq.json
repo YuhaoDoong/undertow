@@ -185,5 +185,22 @@
   "forward_5d": null,
   "forward_10d": null,
   "forward_20d": null
+ },
+ {
+  "instrument": "qqq",
+  "date": "2026-09-10",
+  "spot": 29400.75,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "偏超卖",
+  "regime": "牛",
+  "stretch": -0.12936976153656238,
+  "stretch_pctile": 0.36,
+  "drawdown": -3.89445749088342,
+  "dd_pctile": 0.116,
+  "combo_pctile": 0.238,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
  }
 ]

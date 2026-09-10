@@ -155,9 +155,9 @@
  {
   "instrument": "iwm",
   "date": "2026-09-10",
-  "spot": 293.5,
-  "state": "仅超卖",
-  "struct_bias": "中性",
+  "spot": 290.81,
+  "state": "共振看多",
+  "struct_bias": "偏多(弱)",
   "band": "极超卖",
   "regime": "牛",
   "stretch": -2.4356007480131274,

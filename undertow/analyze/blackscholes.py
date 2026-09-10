@@ -87,6 +87,23 @@ def theta(S: float, K: float, T: float, sigma: float, kind: str = "C",
     return annual / 365.0
 
 
+def vega(S: float, K: float, T: float, sigma: float, r: float = 0.04, q: float = 0.0) -> float:
+    """每股 vega，**每 1 个百分点(pp) IV 变化**的价格变动（call 与 put 相同）。
+
+    ⚠️ 教科书 vega 是"每 1.0 个波动率单位"（即 100pp），这里已除以 100 换成
+    每 pp —— 因为本项目所有 IV 都以 pp 记（快照 iv 是小数，报告里一律 ×100）。
+    口径混用会让日历价差的 vega 敞口差 100 倍。
+
+    日历/对角结构的主敞口就是它：远月买腿 vega 远大于近月卖腿（vega ∝ √T），
+    所以"近月卖 + 远月买"整体是 **vega 多头** —— 赚 IV 上行，怕 IV 塌。
+    """
+    if S <= 0 or K <= 0 or T <= 0 or sigma <= 0:
+        return 0.0
+    vol_sqrt_t = sigma * math.sqrt(T)
+    d1 = (math.log(S / K) + (r - q + 0.5 * sigma * sigma) * T) / vol_sqrt_t
+    return S * math.exp(-q * T) * _norm_pdf(d1) * math.sqrt(T) / 100.0
+
+
 def gamma(S: float, K: float, T: float, sigma: float, r: float = 0.04, q: float = 0.0) -> float:
     """期权每股 gamma（call 与 put 相同）。
 

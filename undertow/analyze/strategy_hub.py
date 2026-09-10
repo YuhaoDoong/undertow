@@ -21,7 +21,8 @@ class StrategyProposal:
     headline: str      # 一句话结论
 
 
-def assemble_strategies(*, directional=None, condor=None, credit_spread=None) -> list[StrategyProposal]:
+def assemble_strategies(*, directional=None, condor=None, credit_spread=None,
+                       calendar=None) -> list[StrategyProposal]:
     """汇总各独立策略子模块 → 统一提案列表。参数均可为 None（该子模块未运行）。"""
     props: list[StrategyProposal] = []
 
@@ -46,5 +47,12 @@ def assemble_strategies(*, directional=None, condor=None, credit_spread=None) ->
             applicable=condor.applicable,
             tag=(condor.condor_type or "适配") if condor.applicable else "不适配",
             headline=condor.headline))
+
+    if calendar is not None:
+        props.append(StrategyProposal(
+            name="日历 / 对角（近月卖 + 远月买）",
+            applicable=calendar.applicable,
+            tag=(calendar.shape or "适配") if calendar.applicable else "不适配",
+            headline=calendar.headline))
 
     return props

@@ -209,6 +209,46 @@ def _realtime_multiplier(inst, spot, *, no_cache):
     return static
 
 
+def cmd_cal_spread(args) -> int:
+    """日历 / 对角价差结构核算（按需调用，**不进每日研报**）。
+
+    为什么不进研报：全历史 386 个（日期×品种×侧）样本里只有 5.4% 适配 ——
+    美股 ETF 上正向期限结构是常态（近月 IV − 远月 IV 中位 −0.57pp），
+    日历多头的窗口天然稀少。进日报就是 94.6% 的「不适配」噪音，
+    与「不该进报告的就别进」的既定原则冲突（波动率栏先例）。
+    """
+    from undertow.analyze import calendar_spread as _cal
+    from undertow.collect.store import SnapshotStore
+    from undertow.collect.cboe_options import snapshot_from_payload
+
+    cfg = load_config()
+    keys = args.instruments or [k for k, v in cfg.instruments.items() if v.options]
+    store = SnapshotStore()
+    any_ok = False
+    for key in keys:
+        inst = cfg.instruments.get(key)
+        if not inst or not inst.options:
+            print(f"[跳过] {key} 未配置期权数据源", file=sys.stderr)
+            continue
+        got = store.latest("options", inst.options.symbol)
+        if not got:
+            print(f"[跳过] {key} 无期权快照", file=sys.stderr)
+            continue
+        d, payload = got
+        snap = snapshot_from_payload(payload, key, inst.options.symbol)
+        print(f"\n{'=' * 70}\n{key}（{inst.options.symbol}）· 快照日 {d} · 现价 {snap.spot}")
+        for kind in (args.side.upper(),) if args.side != "both" else ("C", "P"):
+            plan = _cal.build(snap, kind=kind, today=d,
+                              sell_delta=args.sell_delta)
+            print()
+            print(_cal.render_md(plan))
+            any_ok = any_ok or plan.applicable
+    if not any_ok:
+        print("\n[提示] 当前无适配窗口 —— 这是常态（历史适配率 5.4%），"
+              "不是故障。主因通常是正向期限结构（远月 IV 高于近月）。")
+    return 0
+
+
 def cmd_ta(args) -> int:
     """技术面子模块的查看入口。
 
@@ -3208,6 +3248,18 @@ def build_parser() -> argparse.ArgumentParser:
     pta.add_argument("--signal-ma", choices=("sma", "ema"), default="sma",
                      help='signal 线口径：sma=跟 CM_Ult_MacD_MTF 脚本（默认），ema=跟 TradingView 内置')
     pta.set_defaults(func=cmd_ta)
+
+    # ⚠️ 命令名不能叫 calendar —— 那是事件雷达（FOMC/数据/COT 到期）已占用的名字。
+    pcal = sub.add_parser("cal-spread",
+                          help="日历/对角价差结构核算：近月卖+远月买（按需，不进研报）")
+    pcal.add_argument("instruments", nargs="*",
+                      help="品种 key，如 gold silver（留空=所有有期权源的品种）")
+    pcal.add_argument("--side", choices=("c", "p", "both"), default="both",
+                      help="call 侧 / put 侧 / 两侧都算（默认 both）")
+    pcal.add_argument("--sell-delta", type=float, default=None,
+                      help="近月卖腿目标 |delta|。不给=ATM 日历（同行权价）；"
+                           "给值=对角（卖更虚的近月）")
+    pcal.set_defaults(func=cmd_cal_spread)
 
     plv = sub.add_parser("live", help="持仓实时体检：长桥实时盘口 → 真实可平仓价（只读）")
     plv.set_defaults(func=cmd_live)

@@ -211,12 +211,12 @@
   "den_mult": null,
   "num_wall": 350.0,
   "num_wall_oi": 126044,
-  "den_wall": 60.0,
-  "den_wall_oi": 140669,
-  "implied_lo": 56.49,
-  "implied_hi": 58.64,
-  "inside": false,
-  "dist_pct": 15.83,
+  "den_wall": 50.0,
+  "den_wall_oi": 184944,
+  "implied_lo": 67.78,
+  "implied_hi": 70.37,
+  "inside": true,
+  "dist_pct": null,
   "note": ""
  }
 ]

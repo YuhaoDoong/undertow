@@ -172,7 +172,7 @@
  {
   "instrument": "spy",
   "date": "2026-09-11",
-  "spot": 761.75,
+  "spot": 762.25,
   "state": "仅超卖",
   "struct_bias": "中性",
   "band": "极超卖",

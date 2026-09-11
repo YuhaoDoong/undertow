@@ -422,7 +422,7 @@
   "forward_1d": 0.0977,
   "forward_2d": 0.2443,
   "forward_3d": 0.4153,
-  "forward_5d": null,
+  "forward_5d": -0.171,
   "forward_10d": null
  },
  {
@@ -594,7 +594,7 @@
   "drift_60d": -0.0608,
   "forward_1d": 0.1706,
   "forward_2d": 0.1584,
-  "forward_3d": null,
+  "forward_3d": -0.4143,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -680,7 +680,7 @@
   "regime": "熊",
   "drift_60d": -0.05326,
   "forward_1d": -0.0122,
-  "forward_2d": null,
+  "forward_2d": -0.5839,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

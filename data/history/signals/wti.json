@@ -3584,7 +3584,7 @@
   "forward_1d": 0.9512,
   "forward_3d": 2.8141,
   "forward_5d": 11.7717,
-  "forward_10d": null,
+  "forward_10d": 18.8823,
   "forward_2d": 3.0598
  },
  {
@@ -4009,7 +4009,7 @@
   "forward_1d": 0.1064,
   "forward_2d": 0.773,
   "forward_3d": 0.6809,
-  "forward_5d": null,
+  "forward_5d": 6.3617,
   "forward_10d": null
  },
  {
@@ -4182,7 +4182,7 @@
   "drift_60d": 0.13171,
   "forward_1d": -0.0915,
   "forward_2d": 2.7729,
-  "forward_3d": null,
+  "forward_3d": 5.5458,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -4268,7 +4268,7 @@
   "regime": "牛",
   "drift_60d": 0.09249,
   "forward_1d": 2.867,
-  "forward_2d": null,
+  "forward_2d": 5.6424,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

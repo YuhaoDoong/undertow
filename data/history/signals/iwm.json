@@ -423,7 +423,7 @@
   "forward_1d": 1.1839,
   "forward_2d": 1.59,
   "forward_3d": 1.8722,
-  "forward_5d": null,
+  "forward_5d": 0.0241,
   "forward_10d": null
  },
  {
@@ -596,7 +596,7 @@
   "drift_60d": 0.05845,
   "forward_1d": 0.2778,
   "forward_2d": -0.1762,
-  "forward_3d": null,
+  "forward_3d": -1.5414,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -681,7 +681,7 @@
   "regime": "牛",
   "drift_60d": 0.08055,
   "forward_1d": -0.4527,
-  "forward_2d": null,
+  "forward_2d": -1.8141,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

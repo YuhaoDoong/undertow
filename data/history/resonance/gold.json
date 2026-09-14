@@ -219,5 +219,22 @@
   "forward_5d": null,
   "forward_10d": null,
   "forward_20d": null
+ },
+ {
+  "instrument": "gold",
+  "date": "2026-09-14",
+  "spot": 4321.1,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "中性",
+  "regime": "熊",
+  "stretch": -1.3499489145471946,
+  "stretch_pctile": 0.148,
+  "drawdown": -3.879781914845526,
+  "dd_pctile": 0.472,
+  "combo_pctile": 0.31,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
  }
 ]

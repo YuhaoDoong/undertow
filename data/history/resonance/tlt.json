@@ -206,7 +206,7 @@
  {
   "instrument": "tlt",
   "date": "2026-09-14",
-  "spot": 81.05,
+  "spot": 81.03,
   "state": "背离",
   "struct_bias": "偏空(弱)",
   "band": "强超卖",

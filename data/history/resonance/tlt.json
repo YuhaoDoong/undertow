@@ -219,5 +219,22 @@
   "forward_5d": null,
   "forward_10d": null,
   "forward_20d": null
+ },
+ {
+  "instrument": "tlt",
+  "date": "2026-09-15",
+  "spot": 81.03,
+  "state": "仅结构",
+  "struct_bias": "偏空(弱)",
+  "band": "偏超卖",
+  "regime": "熊",
+  "stretch": -1.825923539518881,
+  "stretch_pctile": 0.208,
+  "drawdown": -10.313573883161515,
+  "dd_pctile": 0.024,
+  "combo_pctile": 0.11599999999999999,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
  }
 ]

@@ -1,5 +1,6 @@
-2026-09-15 | gold ⚡强看涨�wti ⚡极强看跌�qqq ⚡极强看跌�spy ⚡强看跌
+2026-09-15 | gold ⚡强看涨�silver ⚡强看涨�wti ⚡极强看跌�qqq ⚡极强看跌�spy ⚡强看跌
   gold    近偏多(弱)    中分歧(双向)   (可信度中)  ⚡强看涨  · 不做空 · 回调买·不追 · 短线等回调 · 长线维持  → /Users/yhdong/Trading/data/reports/gold_2026-09-15.html
+  silver  近偏多(弱)    中分歧(双向)   (可信度低)  ⚡强看涨  · 不做空 · 回调买·不追 · 短线等回调 · 长线维持  → /Users/yhdong/Trading/data/reports/silver_2026-09-15.html
   wti     近偏空(弱)    中偏多(弱)    (可信度低)  ⚡极强看跌  · 信号与趋势冲突 · 别追·等回调 · 短线止盈/收紧 · 长线拿住  → /Users/yhdong/Trading/data/reports/wti_2026-09-15.html
   qqq     近中性       中分歧(双向)   (可信度低)  ⚡极强看跌  · 可空 · 别追·等回调 · 短线跟空 · 长线维持  → /Users/yhdong/Trading/data/reports/qqq_2026-09-15.html
   spy     近中性       中分歧(双向)   (可信度低)  ⚡强看跌  · 可空 · 追势无依据 · 短线观望 · 长线维持  → /Users/yhdong/Trading/data/reports/spy_2026-09-15.html

@@ -262,5 +262,27 @@
   "inside": false,
   "dist_pct": 0.23,
   "note": ""
+ },
+ {
+  "date": "2026-09-16",
+  "pair": "金银比",
+  "num_key": "gold",
+  "den_key": "silver",
+  "num_fut": 4373.89990234375,
+  "den_fut": 65.1449966430664,
+  "ratio": 67.141,
+  "num_etf": 394.15,
+  "den_etf": 57.53,
+  "num_mult": 11.097,
+  "den_mult": 1.1324,
+  "num_wall": 335.0,
+  "num_wall_oi": 199220,
+  "den_wall": 50.0,
+  "den_wall_oi": 138469,
+  "implied_lo": 65.63,
+  "implied_hi": 68.01,
+  "inside": true,
+  "dist_pct": null,
+  "note": ""
  }
 ]

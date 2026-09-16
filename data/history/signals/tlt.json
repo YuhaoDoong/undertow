@@ -250,7 +250,7 @@
   "forward_1d": -0.4344,
   "forward_3d": -1.1221,
   "forward_5d": -0.8084,
-  "forward_10d": null,
+  "forward_10d": -2.3528,
   "forward_2d": -1.2186
  },
  {
@@ -682,7 +682,7 @@
   "forward_1d": -0.0122,
   "forward_2d": -0.5839,
   "forward_3d": -1.7394,
-  "forward_5d": null,
+  "forward_5d": -1.557,
   "forward_10d": null
  },
  {
@@ -854,7 +854,7 @@
   "drift_60d": -0.08038,
   "forward_1d": -1.1624,
   "forward_2d": -1.0522,
-  "forward_3d": null,
+  "forward_3d": -0.9788,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -863,7 +863,7 @@
   "date": "2026-09-11",
   "prev_date": "2026-09-10",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 80.89,
   "fired": true,
   "direction": "看涨",
@@ -935,12 +935,12 @@
   ],
   "bull_contra_margin": 0.79,
   "bear_contra_margin": 2.21,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
+  "base_date": "2026-09-10",
+  "base_close": 80.78,
+  "regime": "熊",
+  "drift_60d": -0.09888,
+  "forward_1d": 0.1114,
+  "forward_2d": 0.1857,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

@@ -3838,7 +3838,7 @@
   "forward_2d": 8.7124,
   "forward_3d": 8.8281,
   "forward_5d": 9.4526,
-  "forward_10d": null
+  "forward_10d": 20.7864
  },
  {
   "instrument": "wti",
@@ -4270,7 +4270,7 @@
   "forward_1d": 2.867,
   "forward_2d": 5.6424,
   "forward_3d": 11.5666,
-  "forward_5d": null,
+  "forward_5d": 10.355,
   "forward_10d": null
  },
  {
@@ -4441,7 +4441,7 @@
   "drift_60d": 0.29826,
   "forward_1d": 5.6078,
   "forward_2d": 3.2873,
-  "forward_3d": null,
+  "forward_3d": 4.4609,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -4450,7 +4450,7 @@
   "date": "2026-09-11",
   "prev_date": "2026-09-10",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 153.0,
   "fired": false,
   "direction": null,
@@ -4521,12 +4521,12 @@
   ],
   "bull_contra_margin": 3.17,
   "bear_contra_margin": -0.17,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
+  "base_date": "2026-09-10",
+  "base_close": 158.38,
+  "regime": "牛",
+  "drift_60d": 0.44678,
+  "forward_1d": -2.1972,
+  "forward_2d": -1.086,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

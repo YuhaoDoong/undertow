@@ -240,7 +240,7 @@
  {
   "instrument": "tlt",
   "date": "2026-09-16",
-  "spot": 80.79,
+  "spot": 80.8697,
   "state": "仅超卖",
   "struct_bias": "中性",
   "band": "强超卖",

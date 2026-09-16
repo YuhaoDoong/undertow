@@ -275,14 +275,14 @@
   "den_etf": 57.53,
   "num_mult": 11.097,
   "den_mult": 1.1324,
-  "num_wall": 335.0,
-  "num_wall_oi": 199220,
+  "num_wall": 350.0,
+  "num_wall_oi": 99120,
   "den_wall": 50.0,
   "den_wall_oi": 138469,
-  "implied_lo": 65.63,
-  "implied_hi": 68.01,
-  "inside": true,
-  "dist_pct": null,
+  "implied_lo": 68.57,
+  "implied_hi": 71.06,
+  "inside": false,
+  "dist_pct": -2.08,
   "note": ""
  }
 ]

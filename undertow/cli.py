@@ -209,6 +209,42 @@ def _realtime_multiplier(inst, spot, *, no_cache):
     return static
 
 
+def cmd_quote(args) -> int:
+    """实时报价（含夜盘/盘后/盘前）—— 一条命令拿"现在到底多少钱"。
+
+    2026-09-17 加：那天我用 ta.frames.bars()[-1] 当现价，拿到的是昨收 57.05，
+    而 SLV 盘前已经 59.04（+3.49%），整套墙位距离偏了 3.5%。
+    根因是【绕开现成模块自己解析报价 JSON】，还把字段名写错。
+    所以给 longbridge_quote 一个正式入口，以后查价走这里，不要手写解析。
+    """
+    from undertow.collect.longbridge_quote import (fetch_stock_quotes,
+                                                   LiveQuotesUnavailable)
+    syms = [s if "." in s else f"{s}.US" for s in (args.symbols or [])]
+    if not syms:
+        cfg = load_config()
+        syms = [f"{i.options.symbol}.US" for i in cfg.instruments.values()
+                if i.options and i.options.symbol]
+    try:
+        quotes = fetch_stock_quotes(syms)
+    except LiveQuotesUnavailable as e:
+        print(f"[错误] {e}", file=sys.stderr)
+        return 1
+    if not quotes:
+        print("未取到任何报价", file=sys.stderr)
+        return 1
+    print(f"{'标的':<10}{'昨收':>10}{'最新':>10}{'时段':>7}{'涨跌':>9}")
+    for sym in syms:
+        q = quotes.get(sym)
+        if not q:
+            print(f"{sym:<10}{'—':>10}")
+            continue
+        print(f"{q.symbol:<10}{q.prev_close:>10.2f}{q.freshest:>10.2f}"
+              f"{q.freshest_kind:>7}{q.change_pct * 100:>+8.2f}%")
+    print("\n⛔ 注意：盘前 open_interest 是【前一天】的值，GLD 约 09:39ET、"
+          "SLV 约 09:44ET 才刷新到位 —— 盘前不可用于 OI/墙位结构分析。")
+    return 0
+
+
 def cmd_cal_spread(args) -> int:
     """日历 / 对角价差结构核算（按需调用，**不进每日研报**）。
 
@@ -3260,6 +3296,10 @@ def build_parser() -> argparse.ArgumentParser:
                       help="近月卖腿目标 |delta|。不给=ATM 日历（同行权价）；"
                            "给值=对角（卖更虚的近月）")
     pcal.set_defaults(func=cmd_cal_spread)
+
+    pq = sub.add_parser("quote", help="实时报价（含夜盘/盘后/盘前）——查价一律走这里")
+    pq.add_argument("symbols", nargs="*", help="标的，如 SLV GLD 或 SLV.US（留空=配置里全部）")
+    pq.set_defaults(func=cmd_quote)
 
     plv = sub.add_parser("live", help="持仓实时体检：长桥实时盘口 → 真实可平仓价（只读）")
     plv.set_defaults(func=cmd_live)

@@ -66,6 +66,20 @@ def bars(symbol: str, tf: str, *, count: int | None = None,
 
     取不到抛 KlineUnavailable —— **不返回空列表**，调用方必须显式处理，
     否则"没数据"会被静默当成"没信号"。
+
+    ⛔ **最后一根不是"实时价"，盘前/盘后/夜盘一律看不见**（2026-09-17 踩过）：
+    当天 SLV 盘前已 59.04（+3.49%），而 bars()[-1]['close'] 仍是昨收 57.05——
+    我拿它当现价去算墙位距离，整套读数偏了 3.5%，是用户当场指出才发现的。
+    要实时价/扩展时段价，用现成的：
+
+        from undertow.collect.longbridge_quote import fetch_stock_quotes
+        q = fetch_stock_quotes(["SLV.US"])["SLV.US"]
+        q.freshest          # 最新可得价（盘中=常规，非盘中=夜盘/盘后/盘前）
+        q.freshest_kind     # "常规" / "夜盘" / "盘后" / "盘前"
+
+    那个模块的 _freshest() 已按美东时段正确选场次，**别再自己解析报价 JSON**——
+    我那次正是绕开它手写解析，把字段名 pre_market 错写成 pre_market_quote，
+    于是"查不到盘前"，进而得出"夜盘持平"的错误结论。
     """
     if tf not in TIMEFRAMES:
         raise ValueError(f"周期须为 {TIMEFRAMES} 之一，收到 {tf!r}")

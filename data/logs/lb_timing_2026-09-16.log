@@ -458,3 +458,23 @@ OpenAPI permissions are separate from App / PC / Web per
 US option quotes require the "OPRA US Options" OpenAPI market data permission.
 OpenAPI permissions are separate from App / PC / Web per
 {"t": "09-16 22:50", "oi": {}, "vol": {}, "GLD.US": {"call": 1052747, "put": 584012}, "SLV.US": {"call": 256061, "put": 162854}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-16 23:05", "oi": {}, "vol": {}, "GLD.US": {"call": 1052747, "put": 584012}, "SLV.US": {"call": 256061, "put": 162854}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-16 23:20", "oi": {}, "vol": {}, "GLD.US": {"call": 1052747, "put": 584012}, "SLV.US": {"call": 256061, "put": 162854}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-16 23:35", "oi": {}, "vol": {}, "GLD.US": {"call": 1052747, "put": 584012}, "SLV.US": {"call": 256061, "put": 162854}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-16 23:50", "oi": {}, "vol": {}, "GLD.US": {"call": 1052747, "put": 584012}, "SLV.US": {"call": 256061, "put": 162854}}

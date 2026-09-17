@@ -1,0 +1,475 @@
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 00:12", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 00:27", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 00:42", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 00:57", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 01:12", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 01:27", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 01:42", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 01:58", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 02:13", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 02:28", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 02:43", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 02:58", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 03:13", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 03:28", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 03:43", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 03:58", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 04:13", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 04:28", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 04:43", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 04:58", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 05:13", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 05:28", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 05:43", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 05:58", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 06:13", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 06:28", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 06:43", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 06:58", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 07:13", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 07:28", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 07:43", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 07:58", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 08:13", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 08:29", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 08:44", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 08:59", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 09:14", "oi": {}, "vol": {}, "GLD.US": {"call": 311178, "put": 245309}, "SLV.US": {"call": 254760, "put": 118882}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 09:29", "oi": {}, "vol": {}, "GLD.US": {"call": 0, "put": 0}, "SLV.US": {"call": 0, "put": 0}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 09:44", "oi": {}, "vol": {}, "GLD.US": {"call": 13418, "put": 11932}, "SLV.US": {"call": 15133, "put": 9501}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 09:59", "oi": {}, "vol": {}, "GLD.US": {"call": 25423, "put": 19459}, "SLV.US": {"call": 45147, "put": 16041}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 10:14", "oi": {}, "vol": {}, "GLD.US": {"call": 33593, "put": 26119}, "SLV.US": {"call": 57075, "put": 24831}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 10:29", "oi": {}, "vol": {}, "GLD.US": {"call": 45318, "put": 32753}, "SLV.US": {"call": 68228, "put": 33504}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 10:44", "oi": {}, "vol": {}, "GLD.US": {"call": 53653, "put": 37695}, "SLV.US": {"call": 75206, "put": 42679}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 10:59", "oi": {}, "vol": {}, "GLD.US": {"call": 60962, "put": 41573}, "SLV.US": {"call": 83958, "put": 45861}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 11:14", "oi": {}, "vol": {}, "GLD.US": {"call": 76690, "put": 49929}, "SLV.US": {"call": 89566, "put": 50172}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 11:29", "oi": {}, "vol": {}, "GLD.US": {"call": 82890, "put": 52802}, "SLV.US": {"call": 97353, "put": 50561}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 11:44", "oi": {}, "vol": {}, "GLD.US": {"call": 94448, "put": 59443}, "SLV.US": {"call": 104293, "put": 54139}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 11:59", "oi": {}, "vol": {}, "GLD.US": {"call": 106693, "put": 63226}, "SLV.US": {"call": 134108, "put": 57192}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 12:14", "oi": {}, "vol": {}, "GLD.US": {"call": 110968, "put": 65810}, "SLV.US": {"call": 140852, "put": 57947}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 12:29", "oi": {}, "vol": {}, "GLD.US": {"call": 115978, "put": 68289}, "SLV.US": {"call": 145053, "put": 62840}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 12:44", "oi": {}, "vol": {}, "GLD.US": {"call": 121075, "put": 71426}, "SLV.US": {"call": 160035, "put": 63869}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 12:59", "oi": {}, "vol": {}, "GLD.US": {"call": 127131, "put": 75577}, "SLV.US": {"call": 173294, "put": 67589}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 13:14", "oi": {}, "vol": {}, "GLD.US": {"call": 133488, "put": 79785}, "SLV.US": {"call": 174955, "put": 68652}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 13:29", "oi": {}, "vol": {}, "GLD.US": {"call": 135711, "put": 80741}, "SLV.US": {"call": 183341, "put": 69505}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 13:44", "oi": {}, "vol": {}, "GLD.US": {"call": 141727, "put": 85700}, "SLV.US": {"call": 193092, "put": 72609}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 13:59", "oi": {}, "vol": {}, "GLD.US": {"call": 150333, "put": 92013}, "SLV.US": {"call": 196399, "put": 74955}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 14:14", "oi": {}, "vol": {}, "GLD.US": {"call": 154615, "put": 94889}, "SLV.US": {"call": 201135, "put": 76252}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 14:29", "oi": {}, "vol": {}, "GLD.US": {"call": 156119, "put": 96105}, "SLV.US": {"call": 204235, "put": 77305}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 14:44", "oi": {}, "vol": {}, "GLD.US": {"call": 160366, "put": 98565}, "SLV.US": {"call": 205982, "put": 77757}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 14:59", "oi": {}, "vol": {}, "GLD.US": {"call": 163061, "put": 100215}, "SLV.US": {"call": 209644, "put": 79215}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 15:14", "oi": {}, "vol": {}, "GLD.US": {"call": 173369, "put": 105852}, "SLV.US": {"call": 214520, "put": 81462}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 15:29", "oi": {}, "vol": {}, "GLD.US": {"call": 181809, "put": 114661}, "SLV.US": {"call": 218441, "put": 91263}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 15:44", "oi": {}, "vol": {}, "GLD.US": {"call": 187947, "put": 126613}, "SLV.US": {"call": 224645, "put": 93155}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 15:59", "oi": {}, "vol": {}, "GLD.US": {"call": 195072, "put": 131757}, "SLV.US": {"call": 263213, "put": 100423}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 16:14", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 16:29", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 16:44", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 17:00", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 17:15", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 17:30", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 17:45", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 18:00", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 18:15", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 18:30", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 18:45", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 19:00", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 19:15", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 19:30", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 19:45", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 20:00", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 20:15", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 20:30", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 20:45", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 21:00", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 21:15", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 21:30", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 21:45", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 22:00", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 22:15", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 22:30", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 22:45", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 23:00", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 23:15", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 23:30", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}
+[长桥期权] 第 1 批失败：RuntimeError: longbridge option quote GLD260918P400000.US GLD260918C430000.US GLD260918P420000.US SLV260918C70000.US SLV260918P60000.US 失败：Error: WebSocket error (status=7, code=301604): no quote access
+
+US option quotes require the "OPRA US Options" OpenAPI market data permission.
+OpenAPI permissions are separate from App / PC / Web per
+{"t": "09-14 23:45", "oi": {}, "vol": {}, "GLD.US": {"call": 214537, "put": 133680}, "SLV.US": {"call": 267559, "put": 102512}}

@@ -824,3 +824,109 @@ def pick_sell_wall(snap, today: date, spot: float, kind: str, *,
     if buf < min_buf:
         return None            # 连最大墙都不够厚 → 弃权
     return {**sel, "rule": rule, "buf_pct": buf * 100}
+
+
+# ═══ 墙 × 资金流：静态墙位 + 增量 + 买卖方性质 ═══
+# 用户 2026-09-17：「最好显示最近的几道墙，以及资金在墙上如何移动，买卖方向等。」
+#
+# 起因是一次真实的误报：9/14 报近端支撑「56/55/50」，9/16 报「55/53/50」，
+# 我据此说「位置没动」——用户当场指出不对。查下来 56 其实【还在】(14,315)，
+# 只是被 53 (5,461→17,607) 超过而掉出 top3。**按 OI 排名取 top-N 的展示方式，
+# 会把「排名下降」显示成「消失」，也会把真正的异动（53/52.5/51.5/50 一天合计
+# 新增 28,800 张）整个漏掉。**
+#
+# 所以这里改两件事：
+#   ① 按【距现价远近】取墙，不按 OI 排名 —— 交易关心的是"最近的那道在哪"，
+#      而不是"哪道最厚"。远虚的 70/80/100 那种长期尾部堆积永远排在前面，没有用。
+#   ② 每道墙带上 ΔOI 与买卖方性质（复用 flow._judge 的机构口径细判）——
+#      「56 减 5,192、53 增 12,146」这种防线迁移，才是墙位真正的信息。
+WALL_FLOW_MIN_OI = 3_000     # 档位 OI 下限：低于此不算一道墙，只是零碎
+WALL_FLOW_SIDES = 4          # 上下各取几道
+
+
+@dataclass(frozen=True)
+class WallFlowRow:
+    strike: float
+    side: str                # 阻力 / 支撑
+    oi: int                  # 当前该行权价该侧 OI（近端）
+    d_oi: int                # 较上一快照的变化
+    dist_pct: float
+    judgments: list[str] = field(default_factory=list)   # 该档各腿的买卖方细判
+    note: str = ""
+
+
+def wall_flow(prev, curr, today: date, spot: float, *,
+              lo_dte: int = 1, hi_dte: int = 14,
+              min_oi: int = WALL_FLOW_MIN_OI,
+              n_side: int = WALL_FLOW_SIDES) -> list[WallFlowRow]:
+    """现价上下最近的几道墙 + 资金如何移动 + 买卖方向。
+
+    prev 可为 None（无对照快照时 d_oi 一律 0、judgments 为空）。
+    **按距离取，不按 OI 排名** —— 见模块内注释里的 2026-09-17 误报复盘。
+    """
+    def _agg(snap, day):
+        out: dict[tuple[float, str], int] = {}
+        if snap is None:
+            return out
+        for c in snap.contracts:
+            if not c.open_interest:
+                continue
+            if not (lo_dte <= (c.expiry - day).days <= hi_dte):
+                continue
+            out[(c.strike, c.kind)] = out.get((c.strike, c.kind), 0) + c.open_interest
+        return out
+
+    now = _agg(curr, today)
+    was = _agg(prev, today) if prev is not None else {}
+
+    # 买卖方细判：复用 flow 的逐腿判定（单向 import，flow 不依赖本模块）
+    # ⚠️ 口径对齐：StrikeChange **没有 expiry 字段**，无法在 change 层面按到期过滤，
+    #    所以必须让 analyze_flow 自己只看同一个窗口 —— 传 horizon_days=hi_dte。
+    #    否则它默认 60 天，会把中远月的腿混进近端墙的方向判定里。
+    #    残留差异：flow 侧不剔 0DTE（本函数 lo_dte 默认 1 会剔），当日到期的腿
+    #    可能给出一条多余细判；ΔOI 与 OI 不受影响，只影响文字描述。
+    judg: dict[tuple[float, str], list[str]] = {}
+    if prev is not None:
+        try:
+            from undertow.analyze.flow import analyze_flow
+            fa = analyze_flow(prev, curr, today=today, horizon_days=hi_dte)
+            for ch in getattr(fa, "changes", []):
+                judg.setdefault((ch.strike, ch.kind), []).append(ch.judgment)
+        except Exception:
+            pass          # 资金流分析失败不应拖垮墙位展示
+
+    rows: list[WallFlowRow] = []
+    for side, kind, keep in (("阻力", "C", lambda s: s > spot),
+                             ("支撑", "P", lambda s: s < spot)):
+        cand = [(s, o) for (s, k), o in now.items()
+                if k == kind and keep(s) and o >= min_oi]
+        cand.sort(key=lambda x: abs(x[0] - spot))       # ← 按距离，不按 OI
+        for s, o in cand[:n_side]:
+            rows.append(WallFlowRow(
+                strike=s, side=side, oi=o,
+                d_oi=o - was.get((s, kind), 0) if was else 0,
+                dist_pct=(s / spot - 1) * 100 if spot else 0.0,
+                judgments=judg.get((s, kind), [])))
+    rows.sort(key=lambda r: -r.strike)
+    return rows
+
+
+def render_wall_flow(rows: list[WallFlowRow], spot: float) -> str:
+    """墙 × 资金流的文本呈现。现价那行插在阻力与支撑之间。"""
+    if not rows:
+        return "（无够格的墙）"
+    L = [f"{'':5}{'行权':>7}{'OI':>10}{'ΔOI':>10}{'距现价':>9}  资金动向"]
+    shown = False
+    for r in rows:
+        if r.side == "支撑" and not shown:
+            L.append(f"      ───────── 现价 {spot:.2f} ─────────")
+            shown = True
+        arrow = "→" if r.d_oi == 0 else ("↑建" if r.d_oi > 0 else "↓撤")
+        # 去重保序；只留前 2 条完整细判，不做字符级截断（截一半会变成"买方("这种残句）
+        uniq = [x for x in dict.fromkeys(r.judgments) if x and x != "噪音"]
+        j = "·".join(uniq[:2]) + ("…" if len(uniq) > 2 else "")
+        L.append(f"  {r.side} {r.strike:>7g}{r.oi:>10,}{r.d_oi:>+10,} {arrow}"
+                 f"{r.dist_pct:>+8.1f}%  {j}")
+    if not shown:
+        L.append(f"      ───────── 现价 {spot:.2f} ─────────")
+    return "\n".join(L)

@@ -287,5 +287,22 @@
   "forward_5d": null,
   "forward_10d": null,
   "forward_20d": null
+ },
+ {
+  "instrument": "wti",
+  "date": "2026-09-18",
+  "spot": 96.32,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "偏超买",
+  "regime": "牛",
+  "stretch": 2.4706227802791014,
+  "stretch_pctile": 0.848,
+  "drawdown": -1.573869515366758,
+  "dd_pctile": 0.708,
+  "combo_pctile": 0.778,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
  }
 ]

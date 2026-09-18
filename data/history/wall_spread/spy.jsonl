@@ -9,3 +9,4 @@
 {"date": "2026-09-15", "inst": "spy", "sym": "SPY", "spot": 760.88, "ok": false, "reason": "spy 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-16", "inst": "spy", "sym": "SPY", "spot": 757.39, "ok": false, "reason": "spy 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-17", "inst": "spy", "sym": "SPY", "spot": 754.05, "ok": false, "reason": "spy 未激活（当前只激活：silver）", "params": {}, "candidates": []}
+{"date": "2026-09-18", "inst": "spy", "sym": "SPY", "spot": 762.6, "ok": false, "reason": "spy 未激活（当前只激活：silver）", "params": {}, "candidates": []}

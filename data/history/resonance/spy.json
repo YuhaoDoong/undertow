@@ -274,7 +274,7 @@
  {
   "instrument": "spy",
   "date": "2026-09-21",
-  "spot": 766.52,
+  "spot": 767.0,
   "state": "仅结构",
   "struct_bias": "偏多(弱)",
   "band": "偏超卖",

@@ -270,5 +270,22 @@
   "forward_5d": null,
   "forward_10d": null,
   "forward_20d": null
+ },
+ {
+  "instrument": "iwm",
+  "date": "2026-09-21",
+  "spot": 285.42,
+  "state": "共振看多",
+  "struct_bias": "偏多(弱)",
+  "band": "极超卖",
+  "regime": "牛",
+  "stretch": -2.375242718446606,
+  "stretch_pctile": 0.036,
+  "drawdown": -5.969255663430403,
+  "dd_pctile": 0.008,
+  "combo_pctile": 0.022,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
  }
 ]

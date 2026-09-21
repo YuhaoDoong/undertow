@@ -304,5 +304,22 @@
   "forward_5d": null,
   "forward_10d": null,
   "forward_20d": null
+ },
+ {
+  "instrument": "wti",
+  "date": "2026-09-21",
+  "spot": 94.2,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "中性",
+  "regime": "牛",
+  "stretch": 1.9350444547160102,
+  "stretch_pctile": 0.796,
+  "drawdown": -1.8138067919193002,
+  "dd_pctile": 0.668,
+  "combo_pctile": 0.732,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
  }
 ]

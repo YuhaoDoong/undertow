@@ -509,7 +509,7 @@
   "forward_2d": 0.3173,
   "forward_3d": 0.3051,
   "forward_5d": -1.4277,
-  "forward_10d": null
+  "forward_10d": -0.2074
  },
  {
   "instrument": "tlt",
@@ -942,7 +942,7 @@
   "forward_1d": 0.1114,
   "forward_2d": 0.1857,
   "forward_3d": -0.0867,
-  "forward_5d": null,
+  "forward_5d": 1.2379,
   "forward_10d": null
  },
  {
@@ -1114,7 +1114,7 @@
   "drift_60d": -0.1076,
   "forward_1d": -0.2718,
   "forward_2d": -0.0618,
-  "forward_3d": null,
+  "forward_3d": 1.0503,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -1123,7 +1123,7 @@
   "date": "2026-09-16",
   "prev_date": "2026-09-15",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 80.8697,
   "fired": false,
   "direction": null,
@@ -1194,12 +1194,12 @@
   ],
   "bull_contra_margin": 1.97,
   "bear_contra_margin": 1.03,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
+  "base_date": "2026-09-15",
+  "base_close": 80.71,
+  "regime": "熊",
+  "drift_60d": -0.12021,
+  "forward_1d": 0.2106,
+  "forward_2d": 1.3257,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

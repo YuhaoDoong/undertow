@@ -4102,7 +4102,7 @@
   "forward_2d": 0.9906,
   "forward_3d": -0.7597,
   "forward_5d": -1.5939,
-  "forward_10d": null
+  "forward_10d": -1.0974
  },
  {
   "instrument": "gold",
@@ -4532,7 +4532,7 @@
   "forward_1d": 0.608,
   "forward_2d": -0.8881,
   "forward_3d": -0.5576,
-  "forward_5d": null,
+  "forward_5d": 0.5046,
   "forward_10d": null
  },
  {
@@ -4704,7 +4704,7 @@
   "drift_60d": 0.01809,
   "forward_1d": 0.3335,
   "forward_2d": -0.28,
-  "forward_3d": null,
+  "forward_3d": 1.4052,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -4713,7 +4713,7 @@
   "date": "2026-09-16",
   "prev_date": "2026-09-15",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 397.47,
   "fired": false,
   "direction": null,
@@ -4784,12 +4784,12 @@
   ],
   "bull_contra_margin": 3.0,
   "bear_contra_margin": 0.0,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
+  "base_date": "2026-09-15",
+  "base_close": 394.15,
+  "regime": "熊",
+  "drift_60d": 0.03,
+  "forward_1d": -0.6114,
+  "forward_2d": 1.0681,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null
@@ -4891,7 +4891,7 @@
   "direction": null,
   "level": null,
   "vol_confirms": null,
-  "outlook_bias": "分歧(双向)",
+  "outlook_bias": "偏空(弱)",
   "diverges": null,
   "up_pressure": 8465.8,
   "dn_pressure": 10522.8,

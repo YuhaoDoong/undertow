@@ -321,5 +321,22 @@
   "forward_5d": null,
   "forward_10d": null,
   "forward_20d": null
+ },
+ {
+  "instrument": "qqq",
+  "date": "2026-09-22",
+  "spot": 30770.75,
+  "state": "共振看空",
+  "struct_bias": "偏空(弱)",
+  "band": "强超买",
+  "regime": "牛",
+  "stretch": 2.8072186519205404,
+  "stretch_pctile": 0.9,
+  "drawdown": -0.18308175160663617,
+  "dd_pctile": 0.908,
+  "combo_pctile": 0.904,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null
  }
 ]

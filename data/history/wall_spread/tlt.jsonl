@@ -12,3 +12,4 @@
 {"date": "2026-09-17", "inst": "tlt", "sym": "TLT", "spot": 80.88, "ok": false, "reason": "tlt 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-18", "inst": "tlt", "sym": "TLT", "spot": 81.78, "ok": false, "reason": "tlt 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-21", "inst": "tlt", "sym": "TLT", "spot": 81.25, "ok": false, "reason": "tlt 未激活（当前只激活：silver）", "params": {}, "candidates": []}
+{"date": "2026-09-22", "inst": "tlt", "sym": "TLT", "spot": 81.8, "ok": false, "reason": "tlt 未激活（当前只激活：silver）", "params": {}, "candidates": []}

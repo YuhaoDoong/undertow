@@ -308,9 +308,9 @@
  {
   "instrument": "tlt",
   "date": "2026-09-22",
-  "spot": 81.715,
-  "state": "无信号",
-  "struct_bias": "中性",
+  "spot": 82.1,
+  "state": "仅结构",
+  "struct_bias": "偏空(弱)",
   "band": "中性",
   "regime": "熊",
   "stretch": -0.21232157850551078,

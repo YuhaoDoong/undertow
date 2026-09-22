@@ -291,9 +291,9 @@
  {
   "instrument": "spy",
   "date": "2026-09-22",
-  "spot": 767.0,
-  "state": "仅结构",
-  "struct_bias": "偏多(弱)",
+  "spot": 773.39,
+  "state": "无信号",
+  "struct_bias": "中性",
   "band": "中性",
   "regime": "牛",
   "stretch": 1.2306011038034654,

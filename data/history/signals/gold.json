@@ -77,7 +77,17 @@
   "forward_3d": -0.2923,
   "forward_5d": 2.3467,
   "forward_10d": 2.0435,
-  "forward_2d": -0.2382
+  "forward_2d": -0.2382,
+  "mfe_1d": -0.4655,
+  "mae_1d": -1.7296,
+  "mfe_2d": 0.674,
+  "mae_2d": -1.7296,
+  "mfe_3d": 0.674,
+  "mae_3d": -1.7296,
+  "mfe_5d": 0.674,
+  "mae_5d": -2.9259,
+  "mfe_10d": 0.674,
+  "mae_10d": -3.8272
  },
  {
   "instrument": "gold",
@@ -397,7 +407,17 @@
   "forward_3d": -1.0337,
   "forward_5d": -3.9254,
   "forward_10d": -3.8024,
-  "forward_2d": -2.0098
+  "forward_2d": -2.0098,
+  "mfe_1d": 1.7298,
+  "mae_1d": -0.3847,
+  "mfe_2d": 3.4491,
+  "mae_2d": -0.3847,
+  "mfe_3d": 3.4491,
+  "mae_3d": -0.3847,
+  "mfe_5d": 4.2813,
+  "mae_5d": -0.3847,
+  "mfe_10d": 4.8491,
+  "mae_10d": -0.3847
  },
  {
   "instrument": "gold",
@@ -637,7 +657,17 @@
   "forward_3d": -1.5945,
   "forward_5d": -3.4957,
   "forward_10d": -1.7611,
-  "forward_2d": -2.9219
+  "forward_2d": -2.9219,
+  "mfe_1d": -0.1666,
+  "mae_1d": -1.1846,
+  "mfe_2d": -0.1666,
+  "mae_2d": -3.2815,
+  "mfe_3d": -0.1666,
+  "mae_3d": -3.2815,
+  "mfe_5d": -0.1666,
+  "mae_5d": -3.7363,
+  "mfe_10d": 1.0683,
+  "mae_10d": -3.8553
  },
  {
   "instrument": "gold",
@@ -957,7 +987,17 @@
   "forward_3d": -1.2757,
   "forward_5d": 1.8182,
   "forward_10d": -0.3411,
-  "forward_2d": -1.0581
+  "forward_2d": -1.0581,
+  "mfe_1d": 2.2291,
+  "mae_1d": 1.0528,
+  "mfe_2d": 2.3499,
+  "mae_2d": 0.8433,
+  "mfe_3d": 2.3499,
+  "mae_3d": 0.8433,
+  "mfe_5d": 2.3499,
+  "mae_5d": -2.6507,
+  "mfe_10d": 2.3499,
+  "mae_10d": -2.6507
  },
  {
   "instrument": "gold",
@@ -1436,7 +1476,17 @@
   "forward_3d": -0.2205,
   "forward_5d": -0.0968,
   "forward_10d": 7.1444,
-  "forward_2d": -0.6803
+  "forward_2d": -0.6803,
+  "mfe_1d": 0.9761,
+  "mae_1d": 0.2716,
+  "mfe_2d": 0.9761,
+  "mae_2d": -1.054,
+  "mfe_3d": 1.538,
+  "mae_3d": -1.4439,
+  "mfe_5d": 1.6026,
+  "mae_5d": -1.4439,
+  "mfe_10d": 7.7333,
+  "mae_10d": -1.4439
  },
  {
   "instrument": "gold",
@@ -1675,7 +1725,17 @@
   "forward_3d": 0.5875,
   "forward_5d": 1.2968,
   "forward_10d": 8.5524,
-  "forward_2d": 2.109
+  "forward_2d": 2.109,
+  "mfe_1d": 2.2335,
+  "mae_1d": -0.7689,
+  "mfe_2d": 2.2985,
+  "mae_2d": -0.7689,
+  "mfe_3d": 2.2985,
+  "mae_3d": -0.7689,
+  "mfe_5d": 2.2985,
+  "mae_5d": -0.7689,
+  "mfe_10d": 9.3835,
+  "mae_10d": -0.7689
  },
  {
   "instrument": "gold",
@@ -2632,7 +2692,17 @@
   "forward_3d": 0.1297,
   "forward_5d": -0.6011,
   "forward_10d": 6.7613,
-  "forward_2d": -0.4988
+  "forward_2d": -0.4988,
+  "mfe_1d": -0.5636,
+  "mae_1d": -1.5962,
+  "mfe_2d": 0.6684,
+  "mae_2d": -1.5962,
+  "mfe_3d": 0.6684,
+  "mae_3d": -1.5962,
+  "mfe_5d": 0.7707,
+  "mae_5d": -1.5962,
+  "mfe_10d": 0.7707,
+  "mae_10d": -7.098
  },
  {
   "instrument": "gold",
@@ -3756,7 +3826,17 @@
   "forward_3d": -6.1169,
   "forward_5d": -2.9295,
   "forward_10d": -5.6389,
-  "forward_2d": -3.3554
+  "forward_2d": -3.3554,
+  "mfe_1d": 3.5447,
+  "mae_1d": -0.5182,
+  "mfe_2d": 4.1884,
+  "mae_2d": -0.5182,
+  "mfe_3d": 6.1879,
+  "mae_3d": -0.5182,
+  "mfe_5d": 6.1879,
+  "mae_5d": -0.5182,
+  "mfe_10d": 6.4245,
+  "mae_10d": -0.5182
  },
  {
   "instrument": "gold",
@@ -4188,7 +4268,17 @@
   "forward_2d": -2.5596,
   "forward_3d": -1.6747,
   "forward_5d": -2.7912,
-  "forward_10d": -2.2061
+  "forward_10d": -2.2061,
+  "mfe_1d": 1.526,
+  "mae_1d": 0.5412,
+  "mfe_2d": 2.6181,
+  "mae_2d": 0.5412,
+  "mfe_3d": 2.6181,
+  "mae_3d": 0.5412,
+  "mfe_5d": 3.6005,
+  "mae_5d": 0.5412,
+  "mfe_10d": 5.3215,
+  "mae_10d": 0.5412
  },
  {
   "instrument": "gold",
@@ -4274,7 +4364,7 @@
   "forward_2d": -0.8408,
   "forward_3d": -2.5592,
   "forward_5d": -3.4245,
-  "forward_10d": null
+  "forward_10d": -2.0626
  },
  {
   "instrument": "gold",
@@ -4360,7 +4450,15 @@
   "forward_2d": -0.8406,
   "forward_3d": -0.2377,
   "forward_5d": -1.3935,
-  "forward_10d": null
+  "forward_10d": null,
+  "mfe_1d": 1.7112,
+  "mae_1d": 0.3653,
+  "mfe_2d": 1.7112,
+  "mae_2d": -1.0682,
+  "mfe_3d": 1.7112,
+  "mae_3d": -1.0682,
+  "mfe_5d": 1.7112,
+  "mae_5d": -2.1915
  },
  {
   "instrument": "gold",
@@ -4447,7 +4545,15 @@
   "forward_2d": -1.1355,
   "forward_3d": -2.6057,
   "forward_5d": -2.8784,
-  "forward_10d": null
+  "forward_10d": null,
+  "mfe_1d": 1.9586,
+  "mae_1d": 0.5454,
+  "mfe_2d": 1.9586,
+  "mae_2d": -0.0744,
+  "mfe_3d": 3.0718,
+  "mae_3d": -0.0744,
+  "mfe_5d": 3.7089,
+  "mae_5d": -0.0744
  },
  {
   "instrument": "gold",
@@ -4620,7 +4726,15 @@
   "forward_2d": -1.1586,
   "forward_3d": -1.7629,
   "forward_5d": 0.6019,
-  "forward_10d": null
+  "forward_10d": null,
+  "mfe_1d": 1.9585,
+  "mae_1d": 0.7197,
+  "mfe_2d": 1.9585,
+  "mae_2d": 0.7197,
+  "mfe_3d": 2.603,
+  "mae_3d": -0.4589,
+  "mfe_5d": 2.603,
+  "mae_5d": -1.0984
  },
  {
   "instrument": "gold",
@@ -4705,8 +4819,16 @@
   "forward_1d": 0.3335,
   "forward_2d": -0.28,
   "forward_3d": 1.4052,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": 1.4102,
+  "forward_10d": null,
+  "mfe_1d": 0.6288,
+  "mae_1d": -0.2622,
+  "mfe_2d": 1.9754,
+  "mae_2d": -1.1328,
+  "mfe_3d": 2.1892,
+  "mae_3d": -1.1328,
+  "mfe_5d": 2.6245,
+  "mae_5d": -1.1328
  },
  {
   "instrument": "gold",
@@ -4876,7 +4998,7 @@
   "drift_60d": 0.03071,
   "forward_1d": 1.6899,
   "forward_2d": 2.4072,
-  "forward_3d": null,
+  "forward_3d": 1.695,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -4885,7 +5007,7 @@
   "date": "2026-09-18",
   "prev_date": "2026-09-17",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 401.45,
   "fired": false,
   "direction": null,
@@ -4956,12 +5078,12 @@
   ],
   "bull_contra_margin": 3.09,
   "bear_contra_margin": -0.09,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
+  "base_date": "2026-09-17",
+  "base_close": 398.36,
+  "regime": "熊",
+  "drift_60d": 0.09048,
+  "forward_1d": 0.7054,
+  "forward_2d": 0.005,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

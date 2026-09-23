@@ -38,13 +38,27 @@ class CboeHistorySource:
         if not isinstance(rows, list) or not rows:
             raise DataSourceError(f"CBOE 历史无 data 列表（{sym}）")
 
-        pairs = []
+        # 同时取 high/low：台账的 MFE/MAE（盘中最有利/最不利偏移）需要它们。
+        # 2026-09-23 用户问「盘中跌下去又被拉回来的，统计里算失败吗」——是的，
+        # 旧口径只吃 closes。实测 67 个开火信号：收盘口径 70.1%、盘中极值口径 79.1%，
+        # 其中 6 个（9%）是「盘中到过、收盘回吐」被判失败。
+        # ⚠️ high/low 缺失时整行跳过而不是折成 close —— 折值会让 MAE 系统性偏小，
+        #    而 MAE 正是卖方结构判断「有没有被盘中击穿」的唯一依据（低估风险比高估危险）。
+        rowsc = []
         for r in rows:
             try:
                 d = datetime.strptime(r["date"], "%Y-%m-%d").date()
                 c = float(r["close"])
+                h = float(r["high"])
+                lo = float(r["low"])
             except (KeyError, ValueError, TypeError):
                 continue
-            pairs.append((d, c))
-        pairs.sort(key=lambda x: x[0])
-        return PriceSeries(symbol=sym, dates=[d for d, _ in pairs], closes=[c for _, c in pairs])
+            if not (lo <= c <= h):      # 脏行：极值与收盘矛盾，宁可丢弃不可污染
+                continue
+            rowsc.append((d, c, h, lo))
+        rowsc.sort(key=lambda x: x[0])
+        return PriceSeries(symbol=sym,
+                           dates=[x[0] for x in rowsc],
+                           closes=[x[1] for x in rowsc],
+                           highs=[x[2] for x in rowsc],
+                           lows=[x[3] for x in rowsc])

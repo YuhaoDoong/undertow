@@ -190,6 +190,10 @@ def record(key: str, *, on_date: str, prev_date: str | None, spot: float,
         "base_date": None, "base_close": None,
         "regime": None, "drift_60d": None,
         **{f"forward_{h}d": None for h in HORIZONS},
+        # MFE/MAE：持有期内的盘中最有利/最不利偏移（均已按信号方向取号，
+        # 正=朝信号方向走）。**独立字段，不参与命中率判定**——见 backfill 文档。
+        **{f"mfe_{h}d": None for h in HORIZONS},
+        **{f"mae_{h}d": None for h in HORIZONS},
     }
     rows = [r for r in rows if r.get("date") != on_date] + [row]
     _save(key, rows, root)
@@ -213,12 +217,33 @@ def clear(key: str, root: Path | None = None) -> int:
 
 
 def backfill(key: str, dates: list[date], closes: list[float],
-             root: Path | None = None) -> tuple[int, int]:
-    """回填基准价、前瞻收益、漂移与牛熊制度。返回 (回填行数, 仍待填的前瞻格数)。
+             root: Path | None = None,
+             highs: list[float] | None = None,
+             lows: list[float] | None = None) -> tuple[int, int]:
+    """回填基准价、前瞻收益、MFE/MAE、漂移与牛熊制度。返回 (回填行数, 仍待填的前瞻格数)。
 
     **基准 = 快照日期 D 之前最后一个已知收盘**（信号在 D 开盘才可执行，
     拿 close[D] 当基准就是前视）。且要求价格序列已延伸到 D 之后，
     否则序列滞后时基准会随序列更新而改变，回填结果不确定。
+
+    ## MFE / MAE（2026-09-23 加）
+
+    用户问：「盘中跌下去又被拉回来的，统计里算失败吗？」——**是的**，
+    `forward_Nd` 只吃 closes。实测 67 个开火信号：
+        收盘口径命中 47/67 = 70.1%　｜　盘中极值口径 53/67 = 79.1%
+    其中 6 个（9%）是「盘中到过、收盘回吐」，在台账里全判失败。
+
+    所以补两个字段，**但绝不替换命中率口径**：
+      mfe_Nd  持有期内盘中【最有利】偏移（按信号方向取号，正=朝信号方向）
+      mae_Nd  持有期内盘中【最不利】偏移（负=逆信号方向走过多远）
+
+    ⚠️ **MFE 是事后最优，实盘拿不到**——它假设正好在极值点平仓。
+    拿 79.1% 当战绩就是自欺；命中率一律以 forward_Nd（收盘、可执行、无事后信息）为准。
+    MFE 只回答「这个信号有没有走出来过」，MAE 回答「中途被打到多深」——
+    对卖方结构而言 **MAE 更重要**：它是「有没有被盘中击穿」的唯一依据
+    （SLV 2026-09-18 收 59.93 没穿，但盘中到过 60.37，站上过卖腿，旧台账完全看不见）。
+
+    highs/lows 缺省为 None → 跳过 MFE/MAE，不影响其余回填（向后兼容旧调用）。
     """
     try:
         rows = _load(key, root)
@@ -269,13 +294,29 @@ def backfill(key: str, dates: list[date], closes: list[float],
             ma = sum(closes[i - MA_N + 1:i + 1]) / MA_N
             r["regime"] = "牛" if closes[i] > ma else "熊"
             touched = True
+        # 方向：看涨 +1 / 看跌 −1 / 无方向（未开火）→ None，MFE/MAE 无从取号
+        _dir = {"看涨": 1, "看跌": -1}.get(r.get("direction") or "")
+        base = closes[i]
         for h in HORIZONS:
             if r.get(f"forward_{h}d") is None:
                 if i + h < n:
-                    r[f"forward_{h}d"] = round((closes[i + h] / closes[i] - 1) * 100, 4)
+                    r[f"forward_{h}d"] = round((closes[i + h] / base - 1) * 100, 4)
                     touched = True
                 else:
                     pending += 1
+            # MFE/MAE：窗口 [i+1, i+h]（不含基准日自身——基准是 D 之前的收盘，
+            # 信号在 D 开盘才可执行，把 D-1 的盘中极值算进去就是前视）
+            if (_dir and highs and lows and r.get(f"mfe_{h}d") is None
+                    and i + h < n and i + h < len(highs) and i + h < len(lows)):
+                win_hi = max(highs[i + 1:i + h + 1])
+                win_lo = min(lows[i + 1:i + h + 1])
+                up_pct = (win_hi / base - 1) * 100
+                dn_pct = (win_lo / base - 1) * 100
+                # 按信号方向取号：正 = 朝信号方向
+                fav, adv = (up_pct, dn_pct) if _dir > 0 else (-dn_pct, -up_pct)
+                r[f"mfe_{h}d"] = round(fav, 4)
+                r[f"mae_{h}d"] = round(adv, 4)
+                touched = True
         filled += bool(touched)
     if filled:
         _save(key, rows, root)

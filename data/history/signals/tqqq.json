@@ -249,7 +249,17 @@
   "forward_3d": -3.1315,
   "forward_5d": 0.7237,
   "forward_10d": -3.5908,
-  "forward_2d": -3.7578
+  "forward_2d": -3.7578,
+  "mfe_1d": 0.4175,
+  "mae_1d": -1.4335,
+  "mfe_2d": 0.4175,
+  "mae_2d": -5.0104,
+  "mfe_3d": 0.4175,
+  "mae_3d": -5.0104,
+  "mfe_5d": 1.9346,
+  "mae_5d": -5.0104,
+  "mfe_10d": 1.9346,
+  "mae_10d": -6.277
  },
  {
   "instrument": "tqqq",
@@ -336,7 +346,17 @@
   "forward_2d": -3.2258,
   "forward_3d": 0.1529,
   "forward_5d": 0.3337,
-  "forward_10d": -5.5895
+  "forward_10d": -5.5895,
+  "mfe_1d": 5.1029,
+  "mae_1d": 1.9188,
+  "mfe_2d": 5.1029,
+  "mae_2d": 1.9188,
+  "mfe_3d": 5.1029,
+  "mae_3d": -0.6952,
+  "mfe_5d": 5.1029,
+  "mae_5d": -1.8354,
+  "mfe_10d": 6.3682,
+  "mae_10d": -1.8354
  },
  {
   "instrument": "tqqq",
@@ -683,7 +703,7 @@
   "forward_2d": -1.1331,
   "forward_3d": -4.3665,
   "forward_5d": -4.2835,
-  "forward_10d": null
+  "forward_10d": 9.0369
  },
  {
   "instrument": "tqqq",
@@ -769,7 +789,15 @@
   "forward_2d": -4.0881,
   "forward_3d": -1.6353,
   "forward_5d": -5.9035,
-  "forward_10d": null
+  "forward_10d": null,
+  "mfe_1d": 1.8293,
+  "mae_1d": -0.5266,
+  "mfe_2d": 4.8226,
+  "mae_2d": -0.5266,
+  "mfe_3d": 4.8226,
+  "mae_3d": -0.5266,
+  "mfe_5d": 6.6796,
+  "mae_5d": -0.5266
  },
  {
   "instrument": "tqqq",
@@ -1113,7 +1141,7 @@
   "forward_1d": -1.9778,
   "forward_2d": -1.9345,
   "forward_3d": 3.0461,
-  "forward_5d": null,
+  "forward_5d": 13.9166,
   "forward_10d": null
  },
  {
@@ -1285,7 +1313,7 @@
   "drift_60d": -0.32495,
   "forward_1d": 5.0788,
   "forward_2d": 6.9336,
-  "forward_3d": null,
+  "forward_3d": 16.1637,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -1294,7 +1322,7 @@
   "date": "2026-09-18",
   "prev_date": "2026-09-17",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 72.151,
   "fired": false,
   "direction": null,
@@ -1365,12 +1393,12 @@
   ],
   "bull_contra_margin": 4.46,
   "bear_contra_margin": -1.46,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
+  "base_date": "2026-09-17",
+  "base_close": 71.38,
+  "regime": "牛",
+  "drift_60d": -0.06994,
+  "forward_1d": 1.7652,
+  "forward_2d": 10.5492,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

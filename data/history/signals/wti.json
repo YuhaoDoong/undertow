@@ -476,7 +476,17 @@
   "forward_3d": -0.202,
   "forward_5d": 10.3287,
   "forward_10d": 18.2978,
-  "forward_2d": 0.0826
+  "forward_2d": 0.0826,
+  "mfe_1d": 5.5821,
+  "mae_1d": 1.8638,
+  "mfe_2d": 5.5821,
+  "mae_2d": -0.4958,
+  "mfe_3d": 5.5821,
+  "mae_3d": -1.3129,
+  "mfe_5d": 11.4304,
+  "mae_5d": -1.3129,
+  "mfe_10d": 18.8028,
+  "mae_10d": -1.3129
  },
  {
   "instrument": "wti",
@@ -1114,7 +1124,17 @@
   "forward_3d": 3.4025,
   "forward_5d": 8.4857,
   "forward_10d": 6.5332,
-  "forward_2d": 2.1256
+  "forward_2d": 2.1256,
+  "mfe_1d": 2.2079,
+  "mae_1d": -0.0412,
+  "mfe_2d": 2.2079,
+  "mae_2d": -2.8835,
+  "mfe_3d": 2.2079,
+  "mae_3d": -4.2758,
+  "mfe_5d": 2.2079,
+  "mae_5d": -9.4991,
+  "mfe_10d": 2.3892,
+  "mae_10d": -17.2598
  },
  {
   "instrument": "wti",
@@ -2069,7 +2089,17 @@
   "forward_3d": -5.5603,
   "forward_5d": -11.1592,
   "forward_10d": -1.5544,
-  "forward_2d": -0.1083
+  "forward_2d": -0.1083,
+  "mfe_1d": -0.0773,
+  "mae_1d": -1.856,
+  "mfe_2d": 1.2915,
+  "mae_2d": -1.856,
+  "mfe_3d": 1.2915,
+  "mae_3d": -7.5555,
+  "mfe_5d": 1.2915,
+  "mae_5d": -11.948,
+  "mfe_10d": 1.2915,
+  "mae_10d": -11.948
  },
  {
   "instrument": "wti",
@@ -2708,7 +2738,17 @@
   "forward_3d": -0.7915,
   "forward_5d": 2.3901,
   "forward_10d": -1.1441,
-  "forward_2d": -2.0218
+  "forward_2d": -2.0218,
+  "mfe_1d": 1.3714,
+  "mae_1d": -0.1724,
+  "mfe_2d": 3.4637,
+  "mae_2d": -0.1724,
+  "mfe_3d": 3.4637,
+  "mae_3d": -0.1724,
+  "mfe_5d": 3.4637,
+  "mae_5d": -3.6361,
+  "mfe_10d": 3.4637,
+  "mae_10d": -6.5042
  },
  {
   "instrument": "wti",
@@ -2788,7 +2828,17 @@
   "forward_3d": 2.3488,
   "forward_5d": 2.8358,
   "forward_10d": 0.0393,
-  "forward_2d": -0.5499
+  "forward_2d": -0.5499,
+  "mfe_1d": 3.2286,
+  "mae_1d": 0.2671,
+  "mfe_2d": 3.2286,
+  "mae_2d": 0.2671,
+  "mfe_3d": 3.2286,
+  "mae_3d": -2.5687,
+  "mfe_5d": 3.2286,
+  "mae_5d": -4.7604,
+  "mfe_10d": 3.2286,
+  "mae_10d": -6.7636
  },
  {
   "instrument": "wti",
@@ -3346,7 +3396,17 @@
   "forward_3d": -6.2361,
   "forward_5d": -3.367,
   "forward_10d": 5.6117,
-  "forward_2d": -1.7318
+  "forward_2d": -1.7318,
+  "mfe_1d": 0.4831,
+  "mae_1d": -1.0183,
+  "mfe_2d": 2.5197,
+  "mae_2d": -1.0183,
+  "mfe_3d": 6.2807,
+  "mae_3d": -1.0183,
+  "mfe_5d": 6.7861,
+  "mae_5d": -1.0183,
+  "mfe_10d": 6.7861,
+  "mae_10d": -6.63
  },
  {
   "instrument": "wti",
@@ -3665,7 +3725,17 @@
   "forward_3d": 4.9863,
   "forward_5d": 10.8363,
   "forward_10d": 24.3659,
-  "forward_2d": 1.8453
+  "forward_2d": 1.8453,
+  "mfe_1d": -0.1021,
+  "mae_1d": -2.8347,
+  "mfe_2d": -0.1021,
+  "mae_2d": -2.8347,
+  "mfe_3d": -0.1021,
+  "mae_3d": -5.4888,
+  "mfe_5d": -0.1021,
+  "mae_5d": -11.6451,
+  "mfe_10d": -0.1021,
+  "mae_10d": -24.7585
  },
  {
   "instrument": "wti",
@@ -4271,7 +4341,7 @@
   "forward_2d": 5.6424,
   "forward_3d": 11.5666,
   "forward_5d": 10.355,
-  "forward_10d": null
+  "forward_10d": 4.3674
  },
  {
   "instrument": "wti",
@@ -4615,7 +4685,15 @@
   "forward_2d": 4.4932,
   "forward_3d": 0.8199,
   "forward_5d": -0.6972,
-  "forward_10d": null
+  "forward_10d": null,
+  "mfe_1d": 3.4668,
+  "mae_1d": -0.0839,
+  "mfe_2d": 5.4551,
+  "mae_2d": -0.0839,
+  "mfe_3d": 5.4551,
+  "mae_3d": -0.581,
+  "mfe_5d": 5.4551,
+  "mae_5d": -0.9877
  },
  {
   "instrument": "wti",
@@ -4700,8 +4778,16 @@
   "forward_1d": 3.3193,
   "forward_2d": -0.3128,
   "forward_3d": -0.8617,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": -5.4258,
+  "forward_10d": null,
+  "mfe_1d": -1.0213,
+  "mae_1d": -4.2704,
+  "mfe_2d": 1.6979,
+  "mae_2d": -4.2704,
+  "mfe_3d": 1.832,
+  "mae_3d": -4.2704,
+  "mfe_5d": 6.396,
+  "mae_5d": -4.2704
  },
  {
   "instrument": "wti",
@@ -4873,7 +4959,7 @@
   "drift_60d": 0.54532,
   "forward_1d": -0.5507,
   "forward_2d": -1.5048,
-  "forward_3d": null,
+  "forward_3d": -5.129,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -4882,7 +4968,7 @@
   "date": "2026-09-18",
   "prev_date": "2026-09-17",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 154.21,
   "fired": false,
   "direction": null,
@@ -4954,12 +5040,12 @@
   ],
   "bull_contra_margin": 1.4,
   "bear_contra_margin": 1.6,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
+  "base_date": "2026-09-17",
+  "base_close": 155.31,
+  "regime": "牛",
+  "drift_60d": 0.55747,
+  "forward_1d": -0.9594,
+  "forward_2d": -4.6037,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

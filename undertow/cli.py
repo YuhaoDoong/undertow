@@ -209,6 +209,189 @@ def _realtime_multiplier(inst, spot, *, no_cache):
     return static
 
 
+def cmd_chain(args) -> int:
+    """期权链报价：现价附近各行权价的可成交参考价（选腿用）。
+
+    2026-09-17 用户：「OI 变化是什么？我要看的是期权报价啊。」
+    —— 墙位看 OI，选腿要看【价】，这是两件事。
+
+    ⚠️ 本账户无 OPRA 订阅，长桥 option quote / depth 均返回 no quote access，
+    **拿不到实时期权盘口**。因此这里给两列，口径必须分清：
+        bid/ask —— CBOE 快照，**昨收口径**（早上 ET06:45 抓的前一日收盘），
+                   标的一动就过时；且实测 CBOE 点差比真实宽一倍以上。
+        BS 理论 —— 用【实时标的价】+ 快照 IV 重算，反映今天的价位，
+                   但它是中值，不含点差，实盘成交必然劣于它。
+    **下单价一律以你在券商端看到的实际盘口为准**，这里只用于选腿与结构核算。
+    """
+    from undertow.collect.store import SnapshotStore
+    from undertow.collect.cboe_options import snapshot_from_payload
+    from undertow.collect.longbridge_quote import fetch_stock_quotes, LiveQuotesUnavailable
+    from undertow.analyze import blackscholes as _bs
+    from undertow.analyze import gamma as _G
+    from datetime import date as _date
+
+    cfg = load_config()
+    key = args.instrument
+    inst = cfg.instruments.get(key)
+    if not inst or not inst.options:
+        print(f"[错误] {key} 未配置期权数据源", file=sys.stderr)
+        return 1
+    sym = inst.options.symbol
+    store = SnapshotStore()
+    pair = store.latest_two("options", sym)
+    if not pair:
+        print(f"[错误] {key} 无期权快照", file=sys.stderr)
+        return 1
+    (d_prev, p_prev), (d_curr, p_curr) = pair if len(pair) == 2 else (pair[0], pair[0])
+    curr = snapshot_from_payload(p_curr, key, sym)
+    prev = snapshot_from_payload(p_prev, key, sym) if len(pair) == 2 else None
+
+    spot, src = curr.spot, "快照"
+    try:
+        q = fetch_stock_quotes([f"{sym}.US"]).get(f"{sym}.US")
+        if q:
+            spot, src = q.freshest, q.freshest_kind
+    except LiveQuotesUnavailable:
+        pass
+
+    exps = sorted({c.expiry for c in curr.contracts if (c.expiry - d_curr).days >= 1})
+    exp = (_date.fromisoformat(args.expiry) if args.expiry
+           else next((e for e in exps if (e - d_curr).days >= args.min_dte), exps[0]))
+    dte = (exp - d_curr).days
+    kind = args.side.upper()
+    T = max(dte, 0) / 365.0
+
+    # 墙位标注：同期限层的 ΔOI，用于看"这个行权价上钱在进还是在出"
+    wall = {(r.strike): r for r in _G.wall_flow(prev, curr, d_curr, spot,
+                                                lo_dte=1, hi_dte=max(dte, 14), n_side=99)}
+    lo, hi = spot * (1 - args.band), spot * (1 + args.band)
+    rows = [c for c in curr.contracts
+            if c.kind == kind and c.expiry == exp and lo <= c.strike <= hi]
+    if not rows:
+        print(f"[错误] {exp} 无 {kind} 合约落在 ±{args.band:.0%} 带内", file=sys.stderr)
+        return 1
+    print(f"══ {key}（{sym}）{kind} · 到期 {exp}（DTE {dte}）══")
+    print(f"   标的 {spot:.2f} [{src}]　快照 {d_curr}（bid/ask 为该日收盘口径）")
+    print(f"\n{'行权':>7}{'bid':>7}{'ask':>7}{'点差':>7}{'BS理论':>8}{'Δ':>7}"
+          f"{'IV':>7}{'OI':>9}{'ΔOI':>9}  墙")
+    for c in sorted(rows, key=lambda x: x.strike):
+        iv = c.iv if c.iv and c.iv > 0 else 0.0
+        th = _bs.price(spot, c.strike, T, iv, kind) if iv else 0.0
+        dl = _bs.delta(spot, c.strike, T, iv, kind) if iv else 0.0
+        sp = (c.ask - c.bid) if (c.ask and c.bid) else 0.0
+        w = wall.get(c.strike)
+        tag = ""
+        if w:
+            tag = f"{w.side}{w.oi:,}" + (f" {w.d_oi:+,}" if w.d_oi else "")
+        print(f"{c.strike:>7g}{c.bid:>7.2f}{c.ask:>7.2f}{sp:>7.2f}{th:>8.2f}"
+              f"{dl:>+7.3f}{iv * 100:>6.1f}%{c.open_interest:>9,}"
+              f"{(w.d_oi if w else 0):>+9,}  {tag}")
+    print("\n⚠️ 无 OPRA 订阅 → 无实时期权盘口。bid/ask 是昨收、BS 理论是中值不含点差；"
+          "\n   下单价以券商端实际盘口为准。")
+    return 0
+
+
+def cmd_walls(args) -> int:
+    """期权墙位：最近的几道墙 + ΔOI + 买卖方向 + 商品价换算（全部走现成模块）。
+
+    2026-09-17 用户：「你获取数据应该运行现成的 skill 模块，不要你手动乱写。」
+    在此之前 wall_flow() 只有函数没有入口，于是每次查墙位仍在手写临时脚本——
+    等于没解决问题。本命令把四个现成模块串起来，以后查墙位一律走这里：
+        longbridge_quote.fetch_stock_quotes  → 实时价（含盘前/盘后/夜盘）
+        SnapshotStore.latest_two             → 当日与前一日期权链快照
+        gamma.wall_flow / render_wall_flow   → 墙位 + 增量 + 买卖方性质
+        yahoo_futures.fetch_quote            → 期货价，用于商品口径换算
+    """
+    from undertow.collect.store import SnapshotStore
+    from undertow.collect.cboe_options import snapshot_from_payload
+    from undertow.collect.longbridge_quote import (fetch_stock_quotes,
+                                                   LiveQuotesUnavailable)
+    from undertow.analyze import gamma as _G
+    from datetime import date as _date
+
+    cfg = load_config()
+    keys = args.instruments or [k for k, v in cfg.instruments.items() if v.options]
+    store = SnapshotStore()
+    # 实时价：一次取齐，失败则退回快照 spot（并明确标注）
+    quotes = {}
+    if args.asof:
+        print(f"[回溯] --asof {args.asof}：用当时快照的 spot，不取实时价", file=sys.stderr)
+    else:
+        try:
+            syms = [cfg.instruments[k].options.symbol + ".US"
+                    for k in keys if cfg.instruments.get(k) and cfg.instruments[k].options]
+            quotes = fetch_stock_quotes(syms)
+        except LiveQuotesUnavailable as e:
+            print(f"[提示] 实时报价不可用（{e}）——退回快照 spot", file=sys.stderr)
+
+    layers = ([(1, 14, "近端 ≤14天")] if args.layer == "near"
+              else [(15, 45, "中端 15-45天")] if args.layer == "mid"
+              else [(1, 14, "近端 ≤14天"), (15, 45, "中端 15-45天")])
+    for key in keys:
+        inst = cfg.instruments.get(key)
+        if not inst or not inst.options:
+            print(f"[跳过] {key} 未配置期权数据源", file=sys.stderr)
+            continue
+        sym = inst.options.symbol
+        # --asof：回溯某日的墙（用户 2026-09-20 问「当时 GLD 的墙在哪里」——
+        # 复盘必须能取当时的快照，否则只能拿今天的墙去解释当时的决策，是事后诸葛。
+        # latest_two 的 on_or_before 正是为此设计（codex 2026-08-29 P0：不传会读到未来）。
+        pair = store.latest_two("options", sym,
+                                on_or_before=_date.fromisoformat(args.asof) if args.asof else None)
+        if not pair:
+            print(f"[跳过] {key} 无期权快照", file=sys.stderr)
+            continue
+        (d_prev, p_prev), (d_curr, p_curr) = (pair if len(pair) == 2
+                                              else (pair[0], pair[0]))
+        curr = snapshot_from_payload(p_curr, key, sym)
+        prev = snapshot_from_payload(p_prev, key, sym) if len(pair) == 2 else None
+        q = quotes.get(f"{sym}.US")
+        # --spot：回溯时快照 spot 是【早上抓的】，盘中价格可能已走远——
+        # 2026-09-17 实测：GLD 快照 spot 395.15，而建仓那一刻实时价 400.25（差 1.3%），
+        # 用快照 spot 算距离会把「已被击穿的墙」显示成「上方阻力」，复盘就错了。
+        if args.spot:
+            spot, src = args.spot, "指定"
+        else:
+            spot, src = (q.freshest, q.freshest_kind) if q else (curr.spot, "快照")
+        head = (f"══ {key}（{sym}）现价 {spot:.2f} [{src}]"
+                + (f" 较昨收 {q.change_pct * 100:+.2f}%" if q else "")
+                + f" · 快照 {d_curr}" + (f" vs {d_prev}" if prev else " · 无对照日") + " ══")
+        print(f"\n{head}")
+        # 商品口径换算（可选，需配置期货源）
+        # 商品口径：用【当日实时比值】而非配置里的静态乘数——
+        # config 的 approx_commodity_multiplier 自己注明「随基金费率缓慢漂移，需定期校准」，
+        # 而 commodity 源的注释写明「当日实时比值(GC/GLD)换算期权位点，免静态乘数漂移」。
+        # 实测 2026-09-17：GLD 静态 10.8 vs 实时 11.0046（差 1.9%）；SLV 静态 1.1 vs 实时 1.16。
+        mult = None
+        if args.commodity and inst.commodity:
+            try:
+                from undertow.collect.yahoo_futures import YahooFuturesSource
+                fut, _ = YahooFuturesSource().fetch_quote(inst.commodity.symbol)
+                mult = fut / spot if spot else None
+                stat = inst.options.approx_commodity_multiplier if inst.options else None
+                drift = (f"　配置静态值 {stat:g}（漂移 {(mult / stat - 1) * 100:+.1f}%）"
+                         if stat and mult else "")
+                print(f"   商品口径：{inst.commodity.symbol} {fut:,.2f}"
+                      f"　实时乘数 {mult:.4f}{drift}")
+                print("   ⚠️ ETF 跟踪现货、期货含基差，映射仅定性，不可当精确换算")
+            except Exception as e:
+                print(f"   [提示] 期货报价不可用：{type(e).__name__}", file=sys.stderr)
+        for lo, hi, label in layers:
+            rows = _G.wall_flow(prev, curr, d_curr, spot,
+                                lo_dte=lo, hi_dte=hi, n_side=args.n)
+            print(f"\n── {label} ──")
+            print(_G.render_wall_flow(rows, spot))
+            if mult:
+                print("   商品价： " + "　".join(
+                    f"{r.strike:g}→{r.strike * mult:,.0f}" for r in rows))
+        for side in ("call", "put"):
+            ok, txt = _G.wall_agreement(_G.layered_walls(curr, d_curr, curr.spot), side)
+            print(f"   {side}: {'✅一致' if ok else '❌不一致'} — {txt}")
+    print("\n⛔ 盘前 open_interest 是【前一天】的值（GLD 约 09:39ET / SLV 约 09:44ET "
+          "才刷新）——墙位用的是 CBOE 收盘快照，不受此影响；但要看【当日盘中】OI 变化须等刷新。")
+    return 0
+
+
 def cmd_quote(args) -> int:
     """实时报价（含夜盘/盘后/盘前）—— 一条命令拿"现在到底多少钱"。
 
@@ -2811,7 +2994,9 @@ def cmd_signals(args) -> int:
                 print(f"[警告] {key} 价格序列获取失败，跳过回填：{type(e).__name__} {e}",
                       file=sys.stderr)
                 continue
-            filled, pending = sl.backfill(key, ser.dates, ser.closes)
+            filled, pending = sl.backfill(key, ser.dates, ser.closes,
+                                          highs=getattr(ser, "highs", None) or None,
+                                          lows=getattr(ser, "lows", None) or None)
             print(f"  {key:<8} 回填 {filled} 行，仍有 {pending} 个前瞻格未到期")
 
     rows = sl.load_all(keys)
@@ -3296,6 +3481,25 @@ def build_parser() -> argparse.ArgumentParser:
                       help="近月卖腿目标 |delta|。不给=ATM 日历（同行权价）；"
                            "给值=对角（卖更虚的近月）")
     pcal.set_defaults(func=cmd_cal_spread)
+
+    pch = sub.add_parser("chain", help="期权链报价：现价附近各行权价的参考价（选腿用）")
+    pch.add_argument("instrument", help="品种 key，如 gold / silver")
+    pch.add_argument("--side", choices=("c", "p"), default="c", help="call / put")
+    pch.add_argument("--expiry", help="到期日 YYYY-MM-DD（默认取最近的合格到期）")
+    pch.add_argument("--min-dte", type=int, default=1, help="默认到期的最小 DTE")
+    pch.add_argument("--band", type=float, default=0.06, help="现价上下取值带宽（默认 6%%）")
+    pch.set_defaults(func=cmd_chain)
+
+    pw = sub.add_parser("walls", help="期权墙位：最近几道墙 + ΔOI + 买卖方向（查墙位一律走这里）")
+    pw.add_argument("instruments", nargs="*", help="品种 key，如 gold silver（留空=全部）")
+    pw.add_argument("--layer", choices=("near", "mid", "both"), default="both",
+                    help="期限层：近端 ≤14天 / 中端 15-45天 / 两者（默认）")
+    pw.add_argument("-n", type=int, default=4, help="上下各取几道墙（默认 4）")
+    pw.add_argument("--asof", help="回溯该日及之前的最近快照（YYYY-MM-DD），用于复盘当时的墙")
+    pw.add_argument("--spot", type=float,
+                    help="指定现价（回溯时用当时的成交价，而非早上抓的快照 spot）")
+    pw.add_argument("--commodity", action="store_true", help="附商品期货口径换算")
+    pw.set_defaults(func=cmd_walls)
 
     pq = sub.add_parser("quote", help="实时报价（含夜盘/盘后/盘前）——查价一律走这里")
     pq.add_argument("symbols", nargs="*", help="标的，如 SLV GLD 或 SLV.US（留空=配置里全部）")

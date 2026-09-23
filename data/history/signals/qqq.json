@@ -713,7 +713,17 @@
   "forward_3d": 1.5537,
   "forward_5d": 1.2485,
   "forward_10d": -2.0184,
-  "forward_2d": 0.3926
+  "forward_2d": 0.3926,
+  "mfe_1d": 0.7449,
+  "mae_1d": -0.344,
+  "mfe_2d": 0.7449,
+  "mae_2d": -0.885,
+  "mfe_3d": 0.7449,
+  "mae_3d": -1.8159,
+  "mfe_5d": 0.7449,
+  "mae_5d": -1.9019,
+  "mfe_10d": 2.5206,
+  "mae_10d": -1.9019
  },
  {
   "instrument": "qqq",
@@ -1113,7 +1123,17 @@
   "forward_3d": -2.595,
   "forward_5d": -3.2266,
   "forward_10d": -1.7962,
-  "forward_2d": -1.8894
+  "forward_2d": -1.8894,
+  "mfe_1d": 1.9113,
+  "mae_1d": 1.0605,
+  "mfe_2d": 2.3648,
+  "mae_2d": 1.0605,
+  "mfe_3d": 2.9252,
+  "mae_3d": 1.0605,
+  "mfe_5d": 3.7226,
+  "mae_5d": 1.0605,
+  "mfe_10d": 3.7226,
+  "mae_10d": 0.7878
  },
  {
   "instrument": "qqq",
@@ -1671,7 +1691,17 @@
   "forward_3d": 0.8034,
   "forward_5d": -0.4334,
   "forward_10d": 0.7865,
-  "forward_2d": 1.4619
+  "forward_2d": 1.4619,
+  "mfe_1d": 0.3869,
+  "mae_1d": -0.3236,
+  "mfe_2d": 0.3869,
+  "mae_2d": -1.4957,
+  "mfe_3d": 0.3869,
+  "mae_3d": -1.8854,
+  "mfe_5d": 0.8527,
+  "mae_5d": -1.8854,
+  "mfe_10d": 0.8527,
+  "mae_10d": -1.8854
  },
  {
   "instrument": "qqq",
@@ -1751,7 +1781,17 @@
   "forward_3d": 0.7577,
   "forward_5d": -0.2994,
   "forward_10d": -0.3767,
-  "forward_2d": 0.7113
+  "forward_2d": 0.7113,
+  "mfe_1d": -0.4442,
+  "mae_1d": -1.4029,
+  "mfe_2d": -0.4442,
+  "mae_2d": -1.7923,
+  "mfe_3d": -0.2516,
+  "mae_3d": -1.7923,
+  "mfe_5d": 0.9433,
+  "mae_5d": -1.7923,
+  "mfe_10d": 0.9433,
+  "mae_10d": -1.7923
  },
  {
   "instrument": "qqq",
@@ -2007,7 +2047,17 @@
   "forward_2d": -1.0492,
   "forward_3d": 0.127,
   "forward_5d": 0.2232,
-  "forward_10d": -1.7049
+  "forward_10d": -1.7049,
+  "mfe_1d": 1.6882,
+  "mae_1d": 0.6222,
+  "mfe_2d": 1.6882,
+  "mae_2d": 0.6222,
+  "mfe_3d": 1.6882,
+  "mae_3d": -0.3,
+  "mfe_5d": 1.6882,
+  "mae_5d": -0.7157,
+  "mfe_10d": 1.956,
+  "mae_10d": -0.7157
  },
  {
   "instrument": "qqq",
@@ -2351,7 +2401,7 @@
   "forward_2d": -0.3686,
   "forward_3d": -1.4285,
   "forward_5d": -1.3603,
-  "forward_10d": null
+  "forward_10d": 3.1309
  },
  {
   "instrument": "qqq",
@@ -2437,7 +2487,15 @@
   "forward_2d": -1.3461,
   "forward_3d": -0.4844,
   "forward_5d": -1.9238,
-  "forward_10d": null
+  "forward_10d": null,
+  "mfe_1d": 0.6042,
+  "mae_1d": -0.1865,
+  "mfe_2d": 1.6023,
+  "mae_2d": -0.1865,
+  "mfe_3d": 1.6023,
+  "mae_3d": -0.1865,
+  "mfe_5d": 2.1744,
+  "mae_5d": -0.1865
  },
  {
   "instrument": "qqq",
@@ -2523,7 +2581,15 @@
   "forward_2d": -0.1996,
   "forward_3d": -0.9954,
   "forward_5d": -1.618,
-  "forward_10d": null
+  "forward_10d": null,
+  "mfe_1d": 1.3207,
+  "mae_1d": 0.5933,
+  "mfe_2d": 1.3207,
+  "mae_2d": -0.1843,
+  "mfe_3d": 1.8944,
+  "mae_3d": -0.1843,
+  "mfe_5d": 2.2769,
+  "mae_5d": -0.1843
  },
  {
   "instrument": "qqq",
@@ -2781,8 +2847,16 @@
   "forward_1d": -0.6543,
   "forward_2d": -0.6289,
   "forward_3d": 1.0914,
-  "forward_5d": null,
-  "forward_10d": null
+  "forward_5d": 4.5531,
+  "forward_10d": null,
+  "mfe_1d": 0.7812,
+  "mae_1d": -0.0494,
+  "mfe_2d": 1.2945,
+  "mae_2d": -0.3807,
+  "mfe_3d": 1.2945,
+  "mae_3d": -1.2493,
+  "mfe_5d": 1.2945,
+  "mae_5d": -4.7999
  },
  {
   "instrument": "qqq",
@@ -2953,16 +3027,22 @@
   "drift_60d": -0.07676,
   "forward_1d": 1.7312,
   "forward_2d": 2.374,
-  "forward_3d": null,
+  "forward_3d": 5.2148,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "mfe_1d": 1.8901,
+  "mae_1d": 1.2203,
+  "mfe_2d": 2.4137,
+  "mae_2d": 1.2203,
+  "mfe_3d": 5.4632,
+  "mae_3d": 1.2203
  },
  {
   "instrument": "qqq",
   "date": "2026-09-18",
   "prev_date": "2026-09-17",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 720.11,
   "fired": false,
   "direction": null,
@@ -3034,12 +3114,12 @@
   ],
   "bull_contra_margin": 2.53,
   "bear_contra_margin": 0.47,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
+  "base_date": "2026-09-17",
+  "base_close": 716.92,
+  "regime": "牛",
+  "drift_60d": 0.00762,
+  "forward_1d": 0.6319,
+  "forward_2d": 3.4244,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

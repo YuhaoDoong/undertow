@@ -277,6 +277,12 @@ def backfill(key: str, dates: list[date], closes: list[float],
             continue
         touched = False
         if r.get("base_date") is None:
+            # ⚠️ base_date 有【双重身份】，两者是同一天，但用途不同：
+            #   ① 前瞻收益的基准日（D 之前最后一个已知收盘）
+            #   ② **这一行实际描述的那个交易日** —— 快照 D 的 OI 是 D−1 收盘后结算的，
+            #      所以 diff 描述的是 D 之前最后一个交易日，不是 D 本身。
+            # 与外部分析/他人研报对齐时必须用它，用 r["date"] 会错开一个交易日
+            # （周一的快照描述上周五，跨节假日更远）。
             r["base_date"] = dates[i].isoformat()
             r["base_close"] = closes[i]
             touched = True
@@ -469,6 +475,13 @@ def render_md(rows: list[dict], *, horizon: int = 5) -> str:
         "",
         f"逐日记录 {len(rows)} 天，其中开火 {len(fired)} 次。",
         f"基准价 = 快照日之前最后一个已知收盘（信号在当日开盘才可执行；含隔夜跳空）。",
+        "",
+        "> ⚠️ **`date` 是快照日，不是它描述的交易日。** 快照 D 在 D 盘前抓，"
+        "其 OI 是 OCC 在 D−1 收盘后结算的 → **这一行描述的是 D 之前最后一个交易日**"
+        "（即 `base_date`），可用于交易 D 当天。",
+        "> 周一的快照描述的是**上周五**（周末 OI 不结算），跨节假日同理。"
+        "对比外部分析时必须按 `base_date` 对齐，按 `date` 对齐会错开一个交易日——"
+        "2026-09-23 复盘时就这么错过一次，把「结论一致」读成了「结论相反」。",
         "",
         "| 分组 | 命中/样本(抽稀前) | 准确率 | 二项双尾 p | 可下结论 |",
         "|---|---|---|---|---|",

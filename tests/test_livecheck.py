@@ -316,10 +316,21 @@ def test_daily_update_alerts_on_silent_failure():
     assert "IS_LAST_SLOT" in txt, "缺末班车兜底"
     # 关键：必须能区分「抓取失败」与「OCC 未结算」，后者不得告警
     assert "unchanged)" in txt, "缺 unchanged 分支（OCC 未结算属正常，不得告警）"
-    # unchanged 分支必须是 exit 0 且不调 alert
+    # unchanged 分支必须 exit 0；其中的 alert 只允许【有条件】触发。
+    # 2026-09-24 修订：原断言是 `"alert" not in seg`，守的是「OCC 当天未结算不得告警」——
+    # 这条仍然成立。但那天发现了第三种情况：**源还活着但停止更新**
+    # （CBOE 接口卡在 2026-09-22T15:59:59 超 34 小时，9/23 四个时点全判 unchanged，
+    # 一份没落盘、研报缺一天、零告警）。它伪装成「未结算」，后果却和抓取失败一样。
+    # 所以 unchanged 分支现在允许告警，但**必须被跨交易日判据包着**，
+    # 不能无条件 alert —— 否则就退回每天狼来了。
     seg = txt.split("unchanged)", 1)[1].split(";;", 1)[0]
-    assert "alert" not in seg, "unchanged（OCC未结算）不得告警——否则每天狼来了"
     assert "exit 0" in seg
+    if "alert" in seg:
+        assert "STALE_DAYS" in seg, "unchanged 里的 alert 必须由跨交易日判据守门"
+        i_guard = seg.index("STALE_DAYS")
+        i_alert = seg.index("alert")
+        assert i_guard < i_alert, "判据必须在 alert 之前算出来"
+        assert "weekday() < 5" in seg, "必须按工作日计数——周末本就拿不到，按日历日会每周误报"
     print("PASS test_daily_update_alerts_on_silent_failure")
 
 

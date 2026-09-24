@@ -136,8 +136,39 @@ case "$SNAP_OVERALL" in
   partial)
     alert "⚠️ 部分品种快照失败（ET $ET_NOW）" "${SNAP_NFAIL} 个失败：${SNAP_BAD}（另 ${SNAP_SAVED} 个成功）" ;;
   unchanged)
-    # 全部因「与上一交易日逐行相同」跳过 → OCC 未结算，**正常**，静默重试
-    echo "[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试"
+    # 全部因「与上一交易日逐行相同」跳过 → OCC 未结算，**当天之内属正常**，静默重试。
+    #
+    # ⚠️ 但【连续跨交易日】都 unchanged 就不正常了，那是数据源挂掉的特征。
+    # 2026-09-24 实测：CBOE 接口卡在 2026-09-22T15:59:59 超过 34 小时，
+    # 9/23 四个时点全报「逐行相同」→ 一份没落盘、报告缺一天、**而且零告警**，
+    # 是用户问「9/22 收盘的 OI 呢」才发现的。
+    # 原设计只区分「今天还没结算」（正常）与「抓取失败」（告警），
+    # 漏掉了第三种：「源还活着但停止更新」——它伪装成前者，却和后者一样致命。
+    # 判据：最新快照距今已跨过 STALE_SESSIONS 个交易日仍无新数据 → 告警。
+    LAST_SNAP=$(ls -1 data/snapshots/options/GLD/*.json.gz 2>/dev/null | tail -1 \
+                | sed -E 's#.*/([0-9]{4}-[0-9]{2}-[0-9]{2})\.json\.gz#\1#')
+    if [[ -n "$LAST_SNAP" ]]; then
+        STALE_DAYS=$(python3 - "$LAST_SNAP" "$ET_DATE" <<'PYEOF'
+import sys
+from datetime import date, timedelta
+last = date.fromisoformat(sys.argv[1]); today = date.fromisoformat(sys.argv[2])
+# 数【工作日】而非日历日：周末本就拿不到，不该误报
+n, d = 0, last
+while d < today:
+    d += timedelta(days=1)
+    if d.weekday() < 5:
+        n += 1
+print(n)
+PYEOF
+)
+        if (( STALE_DAYS >= 2 )); then
+            alert "🚨 数据源疑似停更（ET $ET_NOW）" \
+                  "最新快照 ${LAST_SNAP}，已跨 ${STALE_DAYS} 个工作日无新 OI。\
+连续 unchanged 跨交易日 = 源停止更新，不是「今天还没结算」。请人工核对 CBOE 接口。"
+        fi
+    fi
+    echo "[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试"\
+"${LAST_SNAP:+（最新快照 $LAST_SNAP，距今 ${STALE_DAYS:-?} 个工作日）}"
     exit 0 ;;
 esac
 

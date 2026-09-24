@@ -90,10 +90,17 @@ class StockQuote:
     freshest: float           # 最新可得价（优先夜盘/盘后/盘前，否则常规）
     freshest_kind: str        # 夜盘 / 盘后 / 盘前 / 常规
     timestamp: str = ""
+    # 该时段【自己的】基准价。⚠️ 与顶层 prev_close 可能不同：
+    # 2026-09-24 实测 SLV —— 顶层 prev_close=60.73（9/22 收盘），
+    # 而夜盘段的 prev_close=58.16（9/23 收盘，即 last）。
+    # 拿夜盘价 57.95 除以 60.73 得 −4.58%，除以 58.16 才是真实的 −0.36%。
+    # **混用两个时段的基准会把涨跌幅放大一个数量级**，而建仓判断直接吃这个数。
+    freshest_prev: float = 0.0
 
     @property
     def change_pct(self) -> float:
-        return (self.freshest / self.prev_close - 1.0) if self.prev_close else 0.0
+        base = self.freshest_prev or self.prev_close
+        return (self.freshest / base - 1.0) if base else 0.0
 
 
 @dataclass(frozen=True)
@@ -133,14 +140,28 @@ def _freshest(r: dict) -> tuple[float, str]:
     except Exception:
         rth = False
     if rth and last > 0:
-        return last, "常规"
-    for key, label in (("overnight", "夜盘"), ("post_market", "盘后"), ("pre_market", "盘前")):
+        return last, "常规", _f(r, "prev_close")
+    # ⚠️ 非盘中不能写死优先级，要按【时间戳】取最新的那一段。
+    # 2026-09-20 实测：夜盘段 ts=09-18T08:00（周五开盘【前】），
+    # 盘后段 ts=09-18T23:59 —— 盘后明显更新，却被固定优先级里的夜盘盖掉，
+    # 于是周末查价拿到的是比收盘还早 12 小时的数据。
+    cands = []
+    for idx, (key, label) in enumerate(
+            (("overnight", "夜盘"), ("post_market", "盘后"), ("pre_market", "盘前"))):
         sess = r.get(key)
         if isinstance(sess, dict):
             v = _f(sess, "last")
             if v > 0:
-                return v, label
-    return last, "常规"
+                cands.append((str(sess.get("timestamp") or ""), -idx, v, label,
+                              _f(sess, "prev_close")))
+    if cands:
+        # 排序键 (时间戳, −优先级)：时间戳字典序即时序；**缺时间戳时全为 ""，
+        # 退化为按原优先级「夜盘>盘后>盘前」** —— 不能因为加了时间戳逻辑
+        # 就改变没有时间戳时的既有行为（tests/test_longbridge_depth.py 守着这条）。
+        cands.sort(key=lambda x: (x[0], x[1]))
+        _, _, v, label, pc = cands[-1]
+        return v, label, pc
+    return last, "常规", _f(r, "prev_close")
 
 
 def fetch_stock_quotes(symbols: list[str]) -> dict[str, StockQuote]:
@@ -152,10 +173,11 @@ def fetch_stock_quotes(symbols: list[str]) -> dict[str, StockQuote]:
     for r in rows if isinstance(rows, list) else [rows]:
         if not isinstance(r, dict) or not r.get("symbol"):
             continue
-        fresh, kind = _freshest(r)
+        fresh, kind, fresh_prev = _freshest(r)
         out[r["symbol"]] = StockQuote(
             symbol=r["symbol"], last=_f(r, "last"), prev_close=_f(r, "prev_close"),
-            freshest=fresh, freshest_kind=kind, timestamp=str(r.get("timestamp", "")))
+            freshest=fresh, freshest_kind=kind, freshest_prev=fresh_prev,
+            timestamp=str(r.get("timestamp", "")))
     return out
 
 

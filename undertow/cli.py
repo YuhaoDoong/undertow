@@ -415,13 +415,16 @@ def cmd_quote(args) -> int:
     if not quotes:
         print("未取到任何报价", file=sys.stderr)
         return 1
-    print(f"{'标的':<10}{'昨收':>10}{'最新':>10}{'时段':>7}{'涨跌':>9}")
+    print(f"{'标的':<10}{'基准':>10}{'最新':>10}{'时段':>7}{'涨跌':>9}")
     for sym in syms:
         q = quotes.get(sym)
         if not q:
             print(f"{sym:<10}{'—':>10}")
             continue
-        print(f"{q.symbol:<10}{q.prev_close:>10.2f}{q.freshest:>10.2f}"
+        # 「基准」必须是该时段自己的 prev_close，与涨跌幅同源——
+        # 顶层 prev_close 可能是更早一个交易日的，两者混排会让人读错幅度。
+        base = q.freshest_prev or q.prev_close
+        print(f"{q.symbol:<10}{base:>10.2f}{q.freshest:>10.2f}"
               f"{q.freshest_kind:>7}{q.change_pct * 100:>+8.2f}%")
     print("\n⛔ 注意：盘前 open_interest 是【前一天】的值，GLD 约 09:39ET、"
           "SLV 约 09:44ET 才刷新到位 —— 盘前不可用于 OI/墙位结构分析。")

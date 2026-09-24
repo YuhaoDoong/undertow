@@ -83,11 +83,11 @@ def test_freshest_picks_session_by_et_clock():
         _s.modules["datetime"].datetime = _DT       # type: ignore[attr-defined]
         # 盘中（ET 10:44 周四）→ 必须取常规
         _DT._now = real_dt(2026, 8, 27, 10, 44, tzinfo=ET)
-        v, kind = lq._freshest(row)
+        v, kind, _prev = lq._freshest(row)
         assert kind == "常规" and abs(v - 72.27) < 1e-9, (v, kind)
         # 收盘后（ET 18:00）→ 回到夜盘优先
         _DT._now = real_dt(2026, 8, 27, 18, 0, tzinfo=ET)
-        v2, kind2 = lq._freshest(row)
+        v2, kind2, _prev2 = lq._freshest(row)
         assert kind2 == "夜盘" and abs(v2 - 72.19) < 1e-9, (v2, kind2)
         # 周末 → 非盘中
         _DT._now = real_dt(2026, 8, 29, 11, 0, tzinfo=ET)

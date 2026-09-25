@@ -4221,7 +4221,7 @@
   "forward_2d": -3.1497,
   "forward_3d": -2.1054,
   "forward_5d": -3.0992,
-  "forward_10d": null
+  "forward_10d": 2.2907
  },
  {
   "instrument": "silver",
@@ -4307,7 +4307,7 @@
   "forward_2d": -4.2819,
   "forward_3d": -6.39,
   "forward_5d": -6.0441,
-  "forward_10d": null
+  "forward_10d": -4.2161
  },
  {
   "instrument": "silver",
@@ -4659,14 +4659,16 @@
   "forward_1d": -0.8343,
   "forward_2d": 2.503,
   "forward_3d": 4.1717,
-  "forward_5d": null,
+  "forward_5d": 5.5623,
   "forward_10d": null,
   "mfe_1d": 1.912,
   "mae_1d": -2.1728,
   "mfe_2d": 3.8415,
   "mae_2d": -2.1728,
   "mfe_3d": 4.9366,
-  "mae_3d": -2.1728
+  "mae_3d": -2.1728,
+  "mfe_5d": 6.0316,
+  "mae_5d": -2.1728
  },
  {
   "instrument": "silver",
@@ -4752,14 +4754,16 @@
   "forward_1d": 3.3655,
   "forward_2d": 5.0482,
   "forward_3d": 4.5223,
-  "forward_5d": null,
+  "forward_5d": 1.9457,
   "forward_10d": null,
   "mfe_1d": -3.2252,
   "mae_1d": -4.7152,
   "mfe_2d": -3.2252,
   "mae_2d": -5.8195,
   "mfe_3d": -3.2252,
-  "mae_3d": -5.8195
+  "mae_3d": -5.8195,
+  "mfe_5d": -1.7003,
+  "mae_5d": -6.9238
  },
  {
   "instrument": "silver",
@@ -4844,7 +4848,7 @@
   "drift_60d": 0.09423,
   "forward_1d": 1.6279,
   "forward_2d": 1.1192,
-  "forward_3d": null,
+  "forward_3d": 2.9846,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -4853,7 +4857,7 @@
   "date": "2026-09-21",
   "prev_date": "2026-09-18",
   "gap_days": 3,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 59.72,
   "fired": true,
   "direction": "看跌",
@@ -4924,22 +4928,28 @@
   ],
   "bull_contra_margin": 0.26,
   "bear_contra_margin": 2.74,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
-  "forward_3d": null,
+  "base_date": "2026-09-18",
+  "base_close": 59.93,
+  "regime": "熊",
+  "drift_60d": 0.24392,
+  "forward_1d": -0.5006,
+  "forward_2d": 1.3349,
+  "forward_3d": -2.9534,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "mfe_1d": 0.9678,
+  "mae_1d": -0.3671,
+  "mfe_2d": 1.4684,
+  "mae_2d": -1.7854,
+  "mfe_3d": 3.1871,
+  "mae_3d": -1.7854
  },
  {
   "instrument": "silver",
   "date": "2026-09-22",
   "prev_date": "2026-09-21",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 59.02,
   "fired": true,
   "direction": "看涨",
@@ -5011,15 +5021,19 @@
   ],
   "bull_contra_margin": 0.33,
   "bear_contra_margin": 2.67,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
+  "base_date": "2026-09-21",
+  "base_close": 59.63,
+  "regime": "熊",
+  "drift_60d": 0.21693,
+  "forward_1d": 1.8447,
+  "forward_2d": -2.4652,
   "forward_3d": null,
   "forward_5d": null,
-  "forward_10d": null
+  "forward_10d": null,
+  "mfe_1d": 2.2975,
+  "mae_1d": -0.9727,
+  "mfe_2d": 2.2975,
+  "mae_2d": -2.7
  },
  {
   "instrument": "silver",

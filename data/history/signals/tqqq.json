@@ -789,7 +789,7 @@
   "forward_2d": -4.0881,
   "forward_3d": -1.6353,
   "forward_5d": -5.9035,
-  "forward_10d": null,
+  "forward_10d": 12.015,
   "mfe_1d": 1.8293,
   "mae_1d": -0.5266,
   "mfe_2d": 4.8226,
@@ -797,7 +797,9 @@
   "mfe_3d": 4.8226,
   "mae_3d": -0.5266,
   "mfe_5d": 6.6796,
-  "mae_5d": -0.5266
+  "mae_5d": -0.5266,
+  "mfe_10d": 7.7882,
+  "mae_10d": -12.4169
  },
  {
   "instrument": "tqqq",
@@ -884,7 +886,7 @@
   "forward_2d": -0.7966,
   "forward_3d": -3.1866,
   "forward_5d": -5.0594,
-  "forward_10d": null
+  "forward_10d": 9.9371
  },
  {
   "instrument": "tqqq",
@@ -1227,7 +1229,7 @@
   "forward_1d": 0.0442,
   "forward_2d": 5.1252,
   "forward_3d": 6.9809,
-  "forward_5d": null,
+  "forward_5d": 19.0427,
   "forward_10d": null
  },
  {
@@ -1314,7 +1316,7 @@
   "forward_1d": 5.0788,
   "forward_2d": 6.9336,
   "forward_3d": 16.1637,
-  "forward_5d": null,
+  "forward_5d": 15.7957,
   "forward_10d": null
  },
  {
@@ -1399,7 +1401,7 @@
   "drift_60d": -0.06994,
   "forward_1d": 1.7652,
   "forward_2d": 10.5492,
-  "forward_3d": null,
+  "forward_3d": 13.239,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -1408,7 +1410,7 @@
   "date": "2026-09-21",
   "prev_date": "2026-09-18",
   "gap_days": 3,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 74.94,
   "fired": false,
   "direction": null,
@@ -1480,13 +1482,13 @@
   ],
   "bull_contra_margin": 5.37,
   "bear_contra_margin": -2.37,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
-  "forward_3d": null,
+  "base_date": "2026-09-18",
+  "base_close": 72.64,
+  "regime": "牛",
+  "drift_60d": -0.01507,
+  "forward_1d": 8.6316,
+  "forward_2d": 11.2748,
+  "forward_3d": 8.2874,
   "forward_5d": null,
   "forward_10d": null
  },
@@ -1495,7 +1497,7 @@
   "date": "2026-09-22",
   "prev_date": "2026-09-21",
   "gap_days": 1,
-  "trading_gap": null,
+  "trading_gap": 1,
   "spot": 79.39,
   "fired": false,
   "direction": null,
@@ -1566,12 +1568,12 @@
   ],
   "bull_contra_margin": 7.44,
   "bear_contra_margin": -4.44,
-  "base_date": null,
-  "base_close": null,
-  "regime": null,
-  "drift_60d": null,
-  "forward_1d": null,
-  "forward_2d": null,
+  "base_date": "2026-09-21",
+  "base_close": 78.91,
+  "regime": "牛",
+  "drift_60d": 0.08585,
+  "forward_1d": 2.4332,
+  "forward_2d": -0.3168,
   "forward_3d": null,
   "forward_5d": null,
   "forward_10d": null

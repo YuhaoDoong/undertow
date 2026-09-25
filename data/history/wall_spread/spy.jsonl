@@ -13,3 +13,4 @@
 {"date": "2026-09-21", "inst": "spy", "sym": "SPY", "spot": 761.69, "ok": false, "reason": "spy 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-22", "inst": "spy", "sym": "SPY", "spot": 773.5, "ok": false, "reason": "spy 未激活（当前只激活：silver）", "params": {}, "candidates": []}
 {"date": "2026-09-24", "inst": "spy", "sym": "SPY", "spot": 767.81, "ok": false, "reason": "spy 未激活（当前只激活：silver）", "params": {}, "candidates": []}
+{"date": "2026-09-25", "inst": "spy", "sym": "SPY", "spot": 767.18, "ok": false, "reason": "spy 未激活（当前只激活：silver）", "context": {"asof": "2026-09-23", "close_prev": 767.81, "atr14": 6.9557, "atr_expand_5": 1.0732, "atr_pct_250": 0.364, "bb_width_20": 0.0283, "bb_expand_5": 1.1477, "local_wall_P": {"strike": 730.0, "oi": 180913, "buf_pct": 4.846320289892847, "n_exp": 11}, "local_wall_C": {"strike": 785.0, "oi": 177906, "buf_pct": 2.322792564978249, "n_exp": 11}}, "params": {}, "candidates": []}

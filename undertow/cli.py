@@ -27,7 +27,8 @@ from undertow.collect.store import SnapshotStore
 from undertow.collect.faireconomy_cal import FairEconomyCalSource
 from undertow.collect.cftc_cot import CftcCotSource
 from undertow.collect.cboe_options import (CboeOptionsSource, snapshot_from_payload,
-                                          chain_fingerprint, oi_change_total)
+                                          chain_fingerprint, materially_same,
+                                          oi_change_total)
 from undertow.collect.cboe_history import CboeHistorySource
 from undertow.collect.yahoo_futures import YahooFuturesSource
 from undertow.collect.fred_macro import FredMacroSource
@@ -902,7 +903,12 @@ def cmd_snapshot(args) -> int:
                     stale_unresolved.append(inst.key)
                 continue
             if skipped and already:
-                items.append({"instrument": inst.key, "status": "already_present"})
+                # 同日重复：物质内容与已存那份一致，只有延迟报价在动 → 不重写文件。
+                # 说出来而不是静默跳过 —— 否则"今天到底抓到没有"无从分辨。
+                print(f"[去重] {inst.key} 与今日已存快照物质内容一致"
+                      f"（OI/volume/合约集合全同），跳过重写", file=sys.stderr)
+                items.append({"instrument": inst.key, "status": "already_present",
+                              "deduped": True})
             snap = snapshot_from_payload(payload, inst.key, sym)
             n_oi = len(snap.with_oi())
             n_dates = len(store.dates("options", sym))
@@ -1153,21 +1159,38 @@ def _data_source_day(curr_date_s: str, prev_date: str | None,
 
 
 def _save_snapshot_dedup(store, inst, sym, payload, today):
-    """落盘今日期权快照，但若内容与上一份完全相同则跳过（休市/数据未刷新的重复）。
-    返回 (path|None, skipped_bool)。跳过可避免 flow 层日对日 diff 退化成全 0。"""
+    """落盘今日期权快照，两种重复都跳过。返回 (path|None, skipped_bool)。
+
+    ① **跨日重复**（与上一交易日逐行相同）→ 返回 (None, True)。
+       OCC 隔夜结算还没落地，落盘会让次日 diff 把两天的变动记成一天。
+    ② **同日重复**（与今天已存的那份物质内容相同）→ 返回 (既有路径, True)。
+       路径照常回报，跳过的只是"重写文件"这个动作。
+
+    ②是 2026-09-25 新增：daily_update.sh 每天四个时点各跑一次，而盘前四次抓到的
+    OI/volume/合约集合完全一样（实测 GLD 9/22 的四个版本 Σ|ΔOI|=0、Σ|Δvol|=0），
+    只有延迟报价的 spot 在动。后三次因此在 git 里白占三个 417KB 的 blob ——
+    全库多出 71MB（工作区 117MB vs git 历史 188MB）。
+
+    ⚠️ 仍然**允许**同日覆盖，只要物质内容真的变了：早时点可能撞上 OCC 结算
+    只落地了一半的残缺链，晚时点拿到完整的必须写进去。判据交给 materially_same，
+    不是"今天存过就不再写"——那会把残缺链永久钉死在当天。
+    """
     try:
         curr = snapshot_from_payload(payload, inst.key, sym)
         latest = store.latest("options", sym)
         if latest is not None:
             ld, lpayload = latest
-            if ld != today and lpayload is not None:
+            if lpayload is not None:
                 prev = snapshot_from_payload(lpayload, inst.key, sym)
-                # 判据是【已建仓合约的 OI 变动总量】，不是指纹是否相同。
-                # 指纹只看单份快照，判不了"到期合约滚出导致行集合变化、
-                # 而存活合约一张没动"的情形 —— 那正是 OI 未结算的残缺快照
-                # （现价新、OI 旧），落盘后会让次日 diff 把两天变动记成一天。
-                if oi_change_total(prev, curr) == 0:
-                    return None, True
+                if ld != today:
+                    # 判据是【已建仓合约的 OI 变动总量】，不是指纹是否相同。
+                    # 指纹只看单份快照，判不了"到期合约滚出导致行集合变化、
+                    # 而存活合约一张没动"的情形 —— 那正是 OI 未结算的残缺快照
+                    # （现价新、OI 旧），落盘后会让次日 diff 把两天变动记成一天。
+                    if oi_change_total(prev, curr) == 0:
+                        return None, True
+                elif materially_same(prev, curr):
+                    return store.path_of("options", sym, today), True
     except Exception:
         pass  # 判定失败不应阻断落盘（宁可多存）
     return store.save("options", sym, payload, on_date=today), False

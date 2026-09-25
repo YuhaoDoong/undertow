@@ -144,6 +144,42 @@ def oi_change_total(prev: OptionsSnapshot, curr: OptionsSnapshot) -> int:
     return total
 
 
+def materially_same(a: OptionsSnapshot, b: OptionsSnapshot) -> bool:
+    """两份快照的【物质内容】是否完全一致 —— 用于同日重复抓取的去重。
+
+    2026-09-25 实测 GLD 2026-09-22 在 git 里的 4 个版本（ET 04:00/05:00/06:00/06:45
+    四个时点各落盘一次）：
+
+        Σ|ΔOI| = 0 · Σ|Δvolume| = 0 · 合约数差 = 0 · 源 ts 全为 2026-09-21T15:59:59
+        唯一差别：current_price 398.38 → 395.89（延迟报价随盘前走）
+
+    也就是说后三份**没有任何物质增量**，却在 git 里各占一个 417KB 的 blob。
+    全库因此多出 71MB（快照工作区 117MB vs git 历史 188MB）。
+
+    「物质」的定义只含三样 —— 它们是分析层真正吃进去的东西：
+      · 合约集合（新挂/到期滚出都算变化）
+      · 每个合约的 OI（OCC 隔夜结算，日内恒定）
+      · 每个合约的 volume（盘前抓取时已是上一交易日的最终值，同样恒定）
+
+    **spot 刻意不计入。** 它是"抓取时刻的延迟报价，介于 D−1 收盘与 D 盘前之间，
+    不精确等于任一收盘"（见 flow.py 时序约定）—— 四个时点的 spot 没有哪个更对，
+    拿它当差异判据只会让去重永远不生效。
+
+    ⚠️ 只用于【同一天】的重复抓取。跨日去重必须继续用 oi_change_total()：
+    那里要回答的是"OCC 结算到了没有"，是另一个问题。
+    """
+    if len(a.contracts) != len(b.contracts):
+        return False
+    key = lambda c: (c.expiry, c.kind, round(c.strike, 4))
+    am = {key(c): (c.open_interest or 0, c.volume or 0) for c in a.contracts}
+    if len(am) != len(a.contracts):        # 键冲突 → 判不了，宁可当作不同
+        return False
+    for c in b.contracts:
+        if am.get(key(c)) != (c.open_interest or 0, c.volume or 0):
+            return False
+    return True
+
+
 class CboeOptionsSource:
     name = "cboe_etf"
     # 延迟报价日内会变，但对"人工监控"30 分钟缓存够用；调试可 use_cache=False

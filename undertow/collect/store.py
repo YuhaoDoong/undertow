@@ -44,10 +44,25 @@ class SnapshotStore:
     def _path(self, kind: str, symbol: str, on_date: date) -> Path:
         return self._dir(kind, symbol) / f"{on_date.isoformat()}{_SUFFIX}"
 
+    def path_of(self, kind: str, symbol: str, on_date: date) -> Path:
+        """某标的某日快照的落盘路径（文件可能不存在）。
+
+        同日去重要在「跳过写入」时仍能把既有文件的路径回报给调用方 ——
+        否则 CLI 会打印一个 None，看着像出错了。
+        """
+        return self._path(kind, symbol, on_date)
+
     def save(self, kind: str, symbol: str, payload: Any, *, on_date: date,
              captured_at: float | None = None) -> Path:
-        """落盘某标的某日的原始 payload（gzip 无损压缩）。同日重复保存会覆盖
-        （保留当日最新/最全的一份，日内 volume 累积，临近收盘那次最完整）。返回文件路径。"""
+        """落盘某标的某日的原始 payload（gzip 无损压缩）。返回文件路径。
+
+        同日重复保存会**覆盖**。是否该覆盖由调用方判断 ——
+        见 `cli._save_snapshot_dedup`：物质内容（OI/volume/合约集合）相同就
+        不再调用本方法，否则每天四个时点会在 git 里留下四个几乎一样的 blob。
+
+        ⚠️ 旧注释说"日内 volume 累积、临近收盘那次最完整"——
+        这对**盘中**抓取成立，但管线的四个时点全在盘前（ET 04:00~06:45），
+        那时 volume 已是上一交易日的终值，四次完全相同。实测见 materially_same。"""
         d = self._dir(kind, symbol)
         d.mkdir(parents=True, exist_ok=True)
         path = self._path(kind, symbol, on_date)

@@ -342,9 +342,9 @@
  {
   "instrument": "tlt",
   "date": "2026-09-25",
-  "spot": 79.52,
+  "spot": 79.73,
   "state": "仅结构",
-  "struct_bias": "偏多(弱)",
+  "struct_bias": "偏空(弱)",
   "band": "偏超卖",
   "regime": "熊",
   "stretch": -2.709452736318458,

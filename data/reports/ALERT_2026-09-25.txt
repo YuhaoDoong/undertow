@@ -1,0 +1,4 @@
+2026-09-25 | silver ⚡强看涨�qqq ⚡强看涨�iwm ⚡强看涨
+  silver  近中性       中偏空       (可信度中)  ⚡强看涨  · 不做空 · 别追·等回调 · 短线止盈/收紧 · 长线减  → /Users/yhdong/Trading/data/reports/silver_2026-09-24.html
+  qqq     近中性       中偏空       (可信度中)  ⚡强看涨  · 不做空 · 反抽卖·不追 · 短线等反抽 · 长线减  → /Users/yhdong/Trading/data/reports/qqq_2026-09-24.html
+  iwm     近偏多(弱)    中分歧(双向)   (可信度中)  ⚡强看涨  · 不做空 · 追势无依据 · 短线观望 · 长线维持  → /Users/yhdong/Trading/data/reports/iwm_2026-09-23.html

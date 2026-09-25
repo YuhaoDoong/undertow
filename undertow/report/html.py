@@ -1514,9 +1514,19 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         #   而混算会造出实盘不存在的墙（见 render_wall_layers_section），
         #   所以必须先让人看到"这墙属于哪个到期层"，再看汇总表。
         f'{layers_html}'
-        # 墙位历史图紧跟分层卡（用户 2026-08-31：「这个历史墙位图我觉得挺重要，
+        # ② 墙位汇总表紧跟分层卡（用户 2026-09-25：「期权墙得放前面方便看」）。
+        # 此前它排在第 8 位、字符位 68,756 —— 被中间 52KB 的墙位历史图和两个
+        # 停用/空置的价差模块顶下去了。**用户每天问的就是「墙在多少」**，
+        # 而回答这个问题的表要滚过大半篇报告才看得到。
+        # 现在墙位三件套连续：①属于哪个到期层 → ②汇总在哪 → ③历史上守住过没有。
+        f'<div class="card"><h2>② 期权关键点位（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
+        f'<div class="chart">{price_svg}</div>'
+        f'<div class="chart">{oi_svg}</div></div>'
+        # ③ 墙位历史图（用户 2026-08-31：「这个历史墙位图我觉得挺重要，
         # 可以放进研报里，期权结构的下面」）。它回答静态墙位表答不了的问题：
         # 这道墙守住过没有、被破过几次、破的时候有没有信号。
+        # 体积最大（约 52KB 图表），所以排在两张速查表之后 —— 要看的人会往下翻，
+        # 只想知道墙在哪的人不该先滚过它。
         f'{wall_hist_html}'
         # 技术面第二视角紧跟墙位历史 —— 两者都在回答"关键位在哪"，
         # 一个用持仓、一个用 K 线结构，放一起便于对照（但不合并计票）
@@ -1525,9 +1535,6 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         # 「在研报里加上我们刚做的模块，就在期权结构下面」）
         f'{wall_spread_html}'
         f'{credit_wall_html}'
-        f'<div class="card"><h2>③ 期权关键点位（吸附/支撑/阻力/翻转）</h2>{_levels_table(o)}'
-        f'<div class="chart">{price_svg}</div>'
-        f'<div class="chart">{oi_svg}</div></div>'
         f'{summary_html}'
         f'{verdict_html}'
         + (f'<div class="card">{indicators_html}</div>' if indicators_html else "") +
@@ -1786,7 +1793,7 @@ def render_summary_card(it: dict) -> str:
         labels_div = _pills(it["labels"], _esc, scores=it.get("scores"))
     return (
         '<div class="card">'
-        '<h2>② 综合研判（与索引页同源）</h2>'
+        '<h2>④ 综合研判（与索引页同源）</h2>'
         f'<span class="badge" style="background:'
         f'{"#bf8700" if (split or near_edge) else _near_color(ns)}">'
         f'近端 {_esc(nb or "—")}{_f(ns)} ｜ 中期 {_esc(mb or "—")}{_f(ms)}'
@@ -2726,7 +2733,7 @@ def render_wall_history(rows: list[dict], display_name: str = "") -> str:
     n_fired = sum(1 for r in rows if (r.get("sig") or [None, None, False])[2:3] == [True])
     n_mark = sum(1 for r in rows if r.get("sig"))
     return (
-        '<div class="card"><h2>② 墙位历史 · 这墙守住过没有</h2>'
+        '<div class="card"><h2>③ 墙位历史 · 这墙守住过没有</h2>'
         '<div class="sub" style="line-height:1.7">'
         '墙取自 <code>structural_walls()</code>：全行权价范围内、近端到期占比 ≥15% '
         '的 OI 堆积（滤掉长期对冲与尾部保险的堆积）。'
@@ -2762,7 +2769,7 @@ def render_wall_spread(v, display_name: str = "", events=None) -> str:
         '<b>整套东西未经跌市验证。</b>'
         '</div>')
     if not v.ok:
-        return ('<div class="card"><h2>② 墙位卖方价差 <b>v3</b> · 今日无候选</h2>'
+        return ('<div class="card"><h2>墙位卖方价差 <b>v3</b> · 今日无候选</h2>'
                 f'<div class="sub" style="line-height:1.8">{_esc(v.reason)}</div>'
                 f'{warn}</div>')
 
@@ -2795,7 +2802,7 @@ def render_wall_spread(v, display_name: str = "", events=None) -> str:
         return "".join(out)
 
     return (
-        '<div class="card"><h2>② 墙位卖方价差 <b>v3</b> · 今日候选</h2>'
+        '<div class="card"><h2>墙位卖方价差 <b>v3</b> · 今日候选</h2>'
         f'<div class="sub" style="line-height:1.75">{_esc(v.reason)}。'
         'put 与 call 分开列出，<b>不合成铁鹰</b> —— 长桥的组合保证金只认 '
         'Covered Call/Put，铁鹰收两份保证金、资金效率腰斩，且即便按标准一份'

@@ -600,13 +600,35 @@ def test_report_section_order_and_summary_source():
     # 用 h2 标签锚定，不能用纯文字 —— 板块顺序注释里也写了同样的标题，
     # src.index 会命中注释而不是真正的渲染位置（本测试自己踩过）。
     i_cw = src.index("f'{credit_wall_html}'")
-    i_lv = src.index("<h2>③ 期权关键点位")
+    i_lv = src.index("<h2>② 期权关键点位")
+    i_hist = src.index("f'{wall_hist_html}'")
     i_sum = src.index("f'{summary_html}'")
     i_tldr = src.index("f'{tldr_html}'")
     i_exp = src.index("expiry_html2}</div>")
-    # 卖方价差紧跟分层卡：它直接拿那张卡的墙位下单（用户 2026-08-31）
-    assert i_layer < i_cw < i_lv < i_sum < i_tldr < i_exp, \
-        "板块顺序：到期分层→卖方价差→关键点位→综合研判→大白话→到期拆分"
+    # 2026-09-25 用户：「期权墙得放前面方便看」。
+    # 此前汇总表排第 8 位（字符位 68,756）—— 中间隔着 52KB 的墙位历史图，
+    # 以及两个【全品种已停用】的卖方价差模块（只渲染「今日无候选」和
+    # 「⛔失败记录」）。用户每天问的就是「墙在多少」，答这个问题的表却要滚过
+    # 大半篇报告。
+    #
+    # ⚠️ 这覆盖了 2026-08-31 的「卖方价差紧跟分层卡」约定。当时的理由是
+    # 「它直接拿那张卡的墙位下单」——，而该策略此后已停用（见 wall_spread v1
+    # 的失败记录），一个不再下单的模块没有理由占着墙位汇总表前面的位置。
+    assert i_layer < i_lv < i_hist < i_cw, \
+        "墙位三件套必须连续且在最前：①按到期分层 → ②汇总表 → ③墙位历史，" \
+        "之后才是（已停用的）卖方价差模块"
+    assert i_cw < i_sum < i_tldr < i_exp, \
+        "其后顺序不变：价差模块→综合研判→大白话→到期拆分"
+    # 编号必须与实际顺序一致。原先三个不同板块都叫「②」—— 序号在骗人，
+    # 读者按编号找板块会找错。
+    for n, tag in [("①", "期权结构 · 按到期分层"), ("②", "期权关键点位"),
+                   ("③", "墙位历史"), ("④", "综合研判")]:
+        assert f"<h2>{n} {tag}" in src or f"<h2>{n} {tag}" in src.replace("'", ""), \
+            f"编号 {n} 应对应「{tag}」"
+    nums = [src[m - 8:m + 2] for m in range(len(src))
+            if src[m:m + 2] in ("① ", "② ", "③ ", "④ ") and src[m - 4:m] == "<h2>"]
+    heads = [x[-2] for x in nums]
+    assert len(heads) == len(set(heads)), f"编号重复：{heads}"
     # 分层卡必须真的按到期切开并给出跨层一致性，否则它只是把混算换个地方摆
     gsrc = (Path(__file__).resolve().parents[1] / "undertow" / "analyze"
             / "gamma.py").read_text("utf-8")

@@ -592,7 +592,9 @@ def cmd_gamma(args) -> int:
         return 0
 
     blocks = [report_mod.render_gamma(ga, inst.display_name) for inst, ga in results]
-    print(report_mod.render_gamma_all(blocks))
+    # 只挂本次真正涉及的代理提示 —— 单跑 googl 不该看到「用 ETF 代理 COMEX 商品」
+    print(report_mod.render_gamma_all(
+        blocks, {ga.proxy_quality for _, ga in results}))
     return 0
 
 

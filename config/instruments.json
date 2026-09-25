@@ -1,243 +1,264 @@
 {
-  "_comment": "Instrument registry. Each instrument declares the data-source keys needed to pull its data. Add new instruments here without touching code. CFTC contract codes verified against publicreporting.cftc.gov Disaggregated report (dataset 72hh-3qpy).",
-  "instruments": {
-    "gold": {
-      "display_name": "黄金 Gold (COMEX)",
-      "asset_class": "metal",
-      "vol_index": "GVZ",
-      "cot": {
-        "report": "disaggregated_fut",
-        "contract_market_code": "088691",
-        "market_name": "GOLD - COMMODITY EXCHANGE INC."
-      },
-      "options": {
-        "source": "cboe_etf",
-        "symbol": "GLD",
-        "approx_commodity_multiplier": 10.8,
-        "proxy_quality": "good",
-        "note": "GLD≈1/10oz黄金(扣费后)。行权价以GLD计，×≈10.8≈现货黄金。乘数随基金费率缓慢漂移，需定期校准。"
-      },
-      "price": {
-        "source": "cboe_history",
-        "symbol": "GLD",
-        "quality": "good",
-        "note": "GLD日线作黄金价格代理；日收益≈现货黄金，跟踪误差极小。"
-      },
-      "commodity": {
-        "source": "yahoo_futures",
-        "symbol": "GC=F",
-        "quality": "good",
-        "note": "COMEX黄金期货=真实金价。当日实时比值(GC/GLD)换算期权位点，免静态乘数漂移。"
-      }
-    },
-    "silver": {
-      "display_name": "白银 Silver (COMEX)",
-      "asset_class": "metal",
-      "vol_index": "VXSLV",
-      "cot": {
-        "report": "disaggregated_fut",
-        "contract_market_code": "084691",
-        "market_name": "SILVER - COMMODITY EXCHANGE INC."
-      },
-      "options": {
-        "source": "cboe_etf",
-        "symbol": "SLV",
-        "approx_commodity_multiplier": 1.1,
-        "proxy_quality": "good",
-        "note": "SLV≈1oz白银(扣费后)。行权价×≈1.1≈现货白银。需定期校准。"
-      },
-      "price": {
-        "source": "cboe_history",
-        "symbol": "SLV",
-        "quality": "good",
-        "note": "SLV日线作白银价格代理；日收益≈现货白银。"
-      },
-      "commodity": {
-        "source": "yahoo_futures",
-        "symbol": "SI=F",
-        "quality": "good",
-        "note": "COMEX白银期货=真实银价。当日实时比值(SI/SLV)换算期权位点。"
-      }
-    },
-    "wti": {
-      "display_name": "原油 WTI Crude (NYMEX)",
-      "asset_class": "energy",
-      "vol_index": "OVX",
-      "cot": {
-        "report": "disaggregated_fut",
-        "contract_market_code": "067651",
-        "market_name": "CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE"
-      },
-      "options": {
-        "source": "cboe_etf",
-        "symbol": "USO",
-        "approx_commodity_multiplier": null,
-        "proxy_quality": "weak",
-        "note": "USO持有近月期货、长期受展期损耗影响，与WTI非线性，无稳定乘数。行权价仅作USO自身的位点/Gamma参考，映射WTI仅定性。"
-      },
-      "price": {
-        "source": "cboe_history",
-        "symbol": "USO",
-        "quality": "weak",
-        "note": "USO受展期损耗，多周收益≈WTI但有负向漂移偏差，方向研究可用、绝对幅度偏低。"
-      },
-      "commodity": {
-        "source": "yahoo_futures",
-        "symbol": "CL=F",
-        "quality": "weak",
-        "note": "NYMEX WTI期货=真实油价(显示用)。但USO与WTI价格量级不同且非线性，USO期权位点换算WTI仅当日近似、漂移大。"
-      }
-    },
-    "dxy": {
-      "display_name": "美元指数 US Dollar Index (ICE)",
-      "asset_class": "fx",
-      "cot": {
-        "report": "legacy_fut",
-        "contract_market_code": "098662",
-        "market_name": "USD INDEX - ICE FUTURES U.S."
-      },
-      "commodity": {
-        "source": "yahoo_futures",
-        "symbol": "DX=F",
-        "quality": "good",
-        "note": "ICE美元指数期货=真实DXY。金融期货不在Disaggregated报告，持仓走Legacy(非商业=大投机/商业=套保)。暂无合适的免费期权代理(UUP弱)，故只走持仓+价格+宏观三层。"
-      }
-    },
-    "qqq": {
-      "display_name": "纳斯达克100 (QQQ)",
-      "asset_class": "equity_index",
-      "vol_index": "VXN",
-      "cot": {
-        "report": "legacy_fut",
-        "contract_market_code": "209742",
-        "market_name": "NASDAQ-100 STOCK INDEX (MINI) - CHICAGO MERCANTILE EXCHANGE"
-      },
-      "options": {
-        "source": "cboe_etf",
-        "symbol": "QQQ",
-        "approx_commodity_multiplier": null,
-        "proxy_quality": "good",
-        "note": "QQQ=纳斯达克100 ETF，纳指最直接、最流动的代理(非隔层代理，本身即主战场)。行权价以QQQ计；QQQ×≈41≈NDX点位但随分红/费用漂移，故不设静态乘数，位点直接用QQQ口径。"
-      },
-      "price": {
-        "source": "cboe_history",
-        "symbol": "QQQ",
-        "quality": "good",
-        "note": "QQQ日线=纳指100价格代理，跟踪误差极小。"
-      },
-      "commodity": {
-        "source": "yahoo_futures",
-        "symbol": "NQ=F",
-        "quality": "good",
-        "note": "CME E-mini纳斯达克100期货=真实纳指。QQQ×≈41≈NQ，量级不同故位点不换算，仅显示真实纳指走势。COT持仓待补(E-mini Nasdaq-100 Legacy)。"
-      }
-    },
-    "tqqq": {
-      "display_name": "纳指3倍做多 (TQQQ)",
-      "asset_class": "equity_index",
-      "vol_index": "VXN",
-      "cot": {
-        "report": "legacy_fut",
-        "contract_market_code": "209742",
-        "market_name": "NASDAQ-100 STOCK INDEX (MINI) - CHICAGO MERCANTILE EXCHANGE"
-      },
-      "options": {
-        "source": "cboe_etf",
-        "symbol": "TQQQ",
-        "approx_commodity_multiplier": null,
-        "proxy_quality": "weak",
-        "note": "⚠️3倍杠杆ETF：每日再平衡，震荡市有波动损耗(实测23天/IV18%约0.61%，IV30%约1.70%)。IV约为QQQ的3倍。行权价以TQQQ计，与纳指点位无固定比例——位点须换算回QQQ口径再与纳指结构对照。单位优势：1张TQQQ≈0.30张QQQ的等效敞口(小3.4倍)，小账户可参与。"
-      },
-      "price": {
-        "source": "cboe_history",
-        "symbol": "TQQQ",
-        "quality": "weak",
-        "note": "3倍日收益复合，多周收益≠3×QQQ；方向可用，幅度会偏离。"
-      },
-      "commodity": {
-        "source": "yahoo_futures",
-        "symbol": "NQ=F",
-        "quality": "weak",
-        "note": "用CME纳指期货作真实纳指基准显示；TQQQ与NQ非线性(3倍复合+损耗)，不做位点换算。"
-      }
-    },
-    "tlt": {
-      "key": "tlt",
-      "display_name": "20年美债 (TLT)",
-      "asset_class": "rates",
-      "cot": {
-        "report": "legacy_fut",
-        "contract_market_code": "020604",
-        "market_name": "ULTRA UST BOND - CHICAGO BOARD OF TRADE"
-      },
-      "options": {
-        "source": "cboe_etf",
-        "symbol": "TLT",
-        "approx_commodity_multiplier": null,
-        "proxy_quality": "good",
-        "note": "TLT=20年以上美债ETF，本身即主战场（非隔层代理）。行权价以TLT计。COT 用 ULTRA UST BOND(超长债期货)——久期最接近 TLT，但**不是同一标的**：TLT 是现券组合、期货是特定交割篮子，持仓结构可参考、不可等同。"
-      },
-      "price": {
-        "source": "cboe_history",
-        "symbol": "TLT",
-        "quality": "good",
-        "note": "TLT 日线，2002 年至今；美债 ETF 自身即定价对象，无代理误差。"
-      },
-      "commodity": null,
-      "vol_index": "VXTLT"
-    },
-    "spy": {
-      "key": "spy",
-      "display_name": "标普500 (SPY)",
-      "asset_class": "equity",
-      "cot": {
-        "report": "legacy_fut",
-        "contract_market_code": "13874+",
-        "market_name": "S&P 500 Consolidated - CHICAGO MERCANTILE EXCHANGE"
-      },
-      "options": {
-        "source": "cboe_etf",
-        "symbol": "SPY",
-        "approx_commodity_multiplier": null,
-        "proxy_quality": "good",
-        "note": "SPY=标普500 ETF，全球最深的期权链，其偏斜是**市场整体对冲需求**的基准表。与 QQQ 的日收益相关 0.95（价格冗余），但**持仓层完全独立**：实测投机资金在标普长期净空(均值-4.2%、160周仅18周为正)、纳指长期净多(+5.1%、131周为正)，周变化相关仅 -0.07。故 SPY 的价值在 COT 与偏斜，不在价格。"
-      },
-      "price": {
-        "source": "cboe_history",
-        "symbol": "SPY",
-        "quality": "good",
-        "note": "SPY 日线=标普500代理，跟踪误差极小。"
-      },
-      "commodity": null,
-      "vol_index": "VIX"
-    },
-    "iwm": {
-      "key": "iwm",
-      "display_name": "罗素2000 (IWM)",
-      "asset_class": "equity",
-      "cot": {
-        "report": "legacy_fut",
-        "contract_market_code": "239742",
-        "market_name": "RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE"
-      },
-      "options": {
-        "source": "cboe_etf",
-        "symbol": "IWM",
-        "approx_commodity_multiplier": null,
-        "proxy_quality": "good",
-        "note": "IWM=罗素2000小盘ETF，本身即主战场。行权价以IWM计。⚠️ 与 SPY 相关 0.89、与 QQQ 0.82——信息大部分被 SPY 覆盖，故定位是【将来资金够时的交易候选】而非独立分析源。加它的主因是提前攒期权链历史（链不可再生）+ 点差仅 5%（TQQQ 是 20%）。"
-      },
-      "price": {
-        "source": "cboe_history",
-        "symbol": "IWM",
-        "quality": "good",
-        "note": "IWM 日线=罗素2000代理，跟踪误差极小。"
-      },
-      "commodity": null,
-      "vol_index": "RVX"
-    }
+ "_comment": "Instrument registry. Each instrument declares the data-source keys needed to pull its data. Add new instruments here without touching code. CFTC contract codes verified against publicreporting.cftc.gov Disaggregated report (dataset 72hh-3qpy).",
+ "instruments": {
+  "gold": {
+   "display_name": "黄金 Gold (COMEX)",
+   "asset_class": "metal",
+   "vol_index": "GVZ",
+   "cot": {
+    "report": "disaggregated_fut",
+    "contract_market_code": "088691",
+    "market_name": "GOLD - COMMODITY EXCHANGE INC."
+   },
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "GLD",
+    "approx_commodity_multiplier": 10.8,
+    "proxy_quality": "good",
+    "note": "GLD≈1/10oz黄金(扣费后)。行权价以GLD计，×≈10.8≈现货黄金。乘数随基金费率缓慢漂移，需定期校准。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "GLD",
+    "quality": "good",
+    "note": "GLD日线作黄金价格代理；日收益≈现货黄金，跟踪误差极小。"
+   },
+   "commodity": {
+    "source": "yahoo_futures",
+    "symbol": "GC=F",
+    "quality": "good",
+    "note": "COMEX黄金期货=真实金价。当日实时比值(GC/GLD)换算期权位点，免静态乘数漂移。"
+   }
   },
-  "defaults": {
-    "lookback_weeks": 156
+  "silver": {
+   "display_name": "白银 Silver (COMEX)",
+   "asset_class": "metal",
+   "vol_index": "VXSLV",
+   "cot": {
+    "report": "disaggregated_fut",
+    "contract_market_code": "084691",
+    "market_name": "SILVER - COMMODITY EXCHANGE INC."
+   },
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "SLV",
+    "approx_commodity_multiplier": 1.1,
+    "proxy_quality": "good",
+    "note": "SLV≈1oz白银(扣费后)。行权价×≈1.1≈现货白银。需定期校准。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "SLV",
+    "quality": "good",
+    "note": "SLV日线作白银价格代理；日收益≈现货白银。"
+   },
+   "commodity": {
+    "source": "yahoo_futures",
+    "symbol": "SI=F",
+    "quality": "good",
+    "note": "COMEX白银期货=真实银价。当日实时比值(SI/SLV)换算期权位点。"
+   }
+  },
+  "wti": {
+   "display_name": "原油 WTI Crude (NYMEX)",
+   "asset_class": "energy",
+   "vol_index": "OVX",
+   "cot": {
+    "report": "disaggregated_fut",
+    "contract_market_code": "067651",
+    "market_name": "CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE"
+   },
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "USO",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "weak",
+    "note": "USO持有近月期货、长期受展期损耗影响，与WTI非线性，无稳定乘数。行权价仅作USO自身的位点/Gamma参考，映射WTI仅定性。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "USO",
+    "quality": "weak",
+    "note": "USO受展期损耗，多周收益≈WTI但有负向漂移偏差，方向研究可用、绝对幅度偏低。"
+   },
+   "commodity": {
+    "source": "yahoo_futures",
+    "symbol": "CL=F",
+    "quality": "weak",
+    "note": "NYMEX WTI期货=真实油价(显示用)。但USO与WTI价格量级不同且非线性，USO期权位点换算WTI仅当日近似、漂移大。"
+   }
+  },
+  "dxy": {
+   "display_name": "美元指数 US Dollar Index (ICE)",
+   "asset_class": "fx",
+   "cot": {
+    "report": "legacy_fut",
+    "contract_market_code": "098662",
+    "market_name": "USD INDEX - ICE FUTURES U.S."
+   },
+   "commodity": {
+    "source": "yahoo_futures",
+    "symbol": "DX=F",
+    "quality": "good",
+    "note": "ICE美元指数期货=真实DXY。金融期货不在Disaggregated报告，持仓走Legacy(非商业=大投机/商业=套保)。暂无合适的免费期权代理(UUP弱)，故只走持仓+价格+宏观三层。"
+   }
+  },
+  "qqq": {
+   "display_name": "纳斯达克100 (QQQ)",
+   "asset_class": "equity_index",
+   "vol_index": "VXN",
+   "cot": {
+    "report": "legacy_fut",
+    "contract_market_code": "209742",
+    "market_name": "NASDAQ-100 STOCK INDEX (MINI) - CHICAGO MERCANTILE EXCHANGE"
+   },
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "QQQ",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "good",
+    "note": "QQQ=纳斯达克100 ETF，纳指最直接、最流动的代理(非隔层代理，本身即主战场)。行权价以QQQ计；QQQ×≈41≈NDX点位但随分红/费用漂移，故不设静态乘数，位点直接用QQQ口径。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "QQQ",
+    "quality": "good",
+    "note": "QQQ日线=纳指100价格代理，跟踪误差极小。"
+   },
+   "commodity": {
+    "source": "yahoo_futures",
+    "symbol": "NQ=F",
+    "quality": "good",
+    "note": "CME E-mini纳斯达克100期货=真实纳指。QQQ×≈41≈NQ，量级不同故位点不换算，仅显示真实纳指走势。COT持仓待补(E-mini Nasdaq-100 Legacy)。"
+   }
+  },
+  "tqqq": {
+   "display_name": "纳指3倍做多 (TQQQ)",
+   "asset_class": "equity_index",
+   "vol_index": "VXN",
+   "cot": {
+    "report": "legacy_fut",
+    "contract_market_code": "209742",
+    "market_name": "NASDAQ-100 STOCK INDEX (MINI) - CHICAGO MERCANTILE EXCHANGE"
+   },
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "TQQQ",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "weak",
+    "note": "⚠️3倍杠杆ETF：每日再平衡，震荡市有波动损耗(实测23天/IV18%约0.61%，IV30%约1.70%)。IV约为QQQ的3倍。行权价以TQQQ计，与纳指点位无固定比例——位点须换算回QQQ口径再与纳指结构对照。单位优势：1张TQQQ≈0.30张QQQ的等效敞口(小3.4倍)，小账户可参与。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "TQQQ",
+    "quality": "weak",
+    "note": "3倍日收益复合，多周收益≠3×QQQ；方向可用，幅度会偏离。"
+   },
+   "commodity": {
+    "source": "yahoo_futures",
+    "symbol": "NQ=F",
+    "quality": "weak",
+    "note": "用CME纳指期货作真实纳指基准显示；TQQQ与NQ非线性(3倍复合+损耗)，不做位点换算。"
+   }
+  },
+  "tlt": {
+   "key": "tlt",
+   "display_name": "20年美债 (TLT)",
+   "asset_class": "rates",
+   "cot": {
+    "report": "legacy_fut",
+    "contract_market_code": "020604",
+    "market_name": "ULTRA UST BOND - CHICAGO BOARD OF TRADE"
+   },
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "TLT",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "good",
+    "note": "TLT=20年以上美债ETF，本身即主战场（非隔层代理）。行权价以TLT计。COT 用 ULTRA UST BOND(超长债期货)——久期最接近 TLT，但**不是同一标的**：TLT 是现券组合、期货是特定交割篮子，持仓结构可参考、不可等同。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "TLT",
+    "quality": "good",
+    "note": "TLT 日线，2002 年至今；美债 ETF 自身即定价对象，无代理误差。"
+   },
+   "commodity": null,
+   "vol_index": "VXTLT"
+  },
+  "spy": {
+   "key": "spy",
+   "display_name": "标普500 (SPY)",
+   "asset_class": "equity",
+   "cot": {
+    "report": "legacy_fut",
+    "contract_market_code": "13874+",
+    "market_name": "S&P 500 Consolidated - CHICAGO MERCANTILE EXCHANGE"
+   },
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "SPY",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "good",
+    "note": "SPY=标普500 ETF，全球最深的期权链，其偏斜是**市场整体对冲需求**的基准表。与 QQQ 的日收益相关 0.95（价格冗余），但**持仓层完全独立**：实测投机资金在标普长期净空(均值-4.2%、160周仅18周为正)、纳指长期净多(+5.1%、131周为正)，周变化相关仅 -0.07。故 SPY 的价值在 COT 与偏斜，不在价格。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "SPY",
+    "quality": "good",
+    "note": "SPY 日线=标普500代理，跟踪误差极小。"
+   },
+   "commodity": null,
+   "vol_index": "VIX"
+  },
+  "iwm": {
+   "key": "iwm",
+   "display_name": "罗素2000 (IWM)",
+   "asset_class": "equity",
+   "cot": {
+    "report": "legacy_fut",
+    "contract_market_code": "239742",
+    "market_name": "RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE"
+   },
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "IWM",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "good",
+    "note": "IWM=罗素2000小盘ETF，本身即主战场。行权价以IWM计。⚠️ 与 SPY 相关 0.89、与 QQQ 0.82——信息大部分被 SPY 覆盖，故定位是【将来资金够时的交易候选】而非独立分析源。加它的主因是提前攒期权链历史（链不可再生）+ 点差仅 5%（TQQQ 是 20%）。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "IWM",
+    "quality": "good",
+    "note": "IWM 日线=罗素2000代理，跟踪误差极小。"
+   },
+   "commodity": null,
+   "vol_index": "RVX"
+  },
+  "googl": {
+   "key": "googl",
+   "display_name": "谷歌 Alphabet A (GOOGL)",
+   "asset_class": "single_stock",
+   "cot": null,
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "GOOGL",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "direct",
+    "note": "GOOGL 个股期权，**非代理**：期权标的就是这只股票本身，行权价直接是股价，不存在 ETF/商品换算问题（比 USO≈WTI 干净得多）。⚠️ 三条与 ETF 品种不同的边界：①A/C 双类别 —— GOOGL(A类,有投票权) 与 GOOG(C类) 是两条独立期权链，实测 GOOGL 4,766 合约 / GOOG 2,408，A 类才是主战场，别混读；②个股期权的 OI 堆积受【财报日】主导，财报周的墙会整体重构，而 ETF 的墙更多由月度 OPEX 决定 —— 墙位持久性判读不能照搬 ETF 的经验；③本项目所有回测/校准样本（signal_ledger）里没有任何个股，命中率数字一概不适用于本品种，墙位只作描述性参考。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "GOOGL",
+    "quality": "direct",
+    "note": "GOOGL 日线，标的自身即定价对象，无跟踪误差。"
+   },
+   "commodity": null,
+   "vol_index": null
   }
+ },
+ "defaults": {
+  "lookback_weeks": 156
+ }
 }

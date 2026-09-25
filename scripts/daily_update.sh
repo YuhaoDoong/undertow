@@ -213,6 +213,12 @@ fi
 RPT_ST="data/logs/.status_report_${ET_DATE}.json"
 rm -f "$RPT_ST"
 set +e
+# ⚠️ 这里是【显式列出】而非跑全部品种，有意为之：
+# 综合研判的方向票里 COT 是一层，而个股（googl）结构性地没有 CFTC 持仓报告
+# —— 不是"待补"，是永远不会有。把它塞进来只会每天多一条 [警告] 与 partial 告警。
+# 个股走 walls / gamma / flow（墙位层），不出综合研判。
+# 快照层相反：EXPECTED 从 config 派生，个股会自动纳入每日抓取，
+# 这样 ΔOI 与买卖方向才攒得起来。
 REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq tlt spy iwm \
              --no-snapshot --status-file "$RPT_ST" 2>&1)
 RPT_RC=$?

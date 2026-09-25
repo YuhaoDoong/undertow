@@ -105,12 +105,37 @@ def render_all(blocks: list[str]) -> str:
 # 期权 Gamma 报告
 # ——————————————————————————————————————————————————————————
 
-GAMMA_DISCLAIMER = (
-    "> ⚠️ **代理 & 假设双重提示**：数据用 **ETF 期权**（GLD/SLV/USO）作 COMEX 商品期权的"
-    "**代理**——位点以 ETF 计，×乘数≈商品价仅近似（USO 与 WTI 非线性，仅定性）。"
+# GEX 的假设对所有品种都一样；代理提示**不是** —— 混在一句里写死，
+# 结果是给 GOOGL 这种「期权标的就是它自己」的品种也挂上「用 ETF 代理 COMEX 商品」
+# 的说明（2026-09-25 加入个股时发现）。张冠李戴的免责声明比没有更糟：
+# 它教读者忽略提示，于是真正适用的那次也被跳过。
+_GEX_ASSUMPTION = (
     "GEX 正负依赖\"做市商净多 call、净空 put\"这一**行业惯用但不确定**的假设；"
     "**OI 墙不依赖该假设，最可靠**。延迟数据、日内会变。"
 )
+_PROXY_NOTE = {
+    "proxy": "数据用 **ETF 期权**（GLD/SLV/USO）作 COMEX 商品期权的**代理**——"
+             "位点以 ETF 计，×乘数≈商品价仅近似（USO 与 WTI 非线性，仅定性）。",
+    # 期权标的就是它自己（个股、以及 QQQ/SPY 这类本身即主战场的 ETF）：
+    # 没有换算，但**校准样本里没有个股**，这一点必须说出来。
+    "direct": "本品种期权标的即其自身，行权价就是标价，无代理换算；"
+              "但本项目的回测/校准样本（signal_ledger）里**没有个股**，"
+              "个股墙位只作描述性参考，不可套用 ETF 品种的命中率。",
+}
+
+
+def gamma_disclaimer(qualities: set[str] | None = None) -> str:
+    """按本次涉及的品种拼提示：只说适用的那几条。"""
+    parts = []
+    if not qualities or qualities - {"direct"}:
+        parts.append(_PROXY_NOTE["proxy"])
+    if qualities and "direct" in qualities:
+        parts.append(_PROXY_NOTE["direct"])
+    head = "代理 & 假设双重提示" if len(parts) > 1 or not qualities else "提示"
+    return f"> ⚠️ **{head}**：" + "".join(parts) + _GEX_ASSUMPTION
+
+
+GAMMA_DISCLAIMER = gamma_disclaimer()      # 兼容旧调用（全品种口径）
 
 
 def _commodity_hint(ga: GammaAnalysis, etf_level: float | None) -> str:
@@ -206,9 +231,13 @@ def render_gamma(ga: GammaAnalysis, display_name: str) -> str:
     return "\n".join(L)
 
 
-def render_gamma_all(blocks: list[str]) -> str:
-    header = "# 期权 Gamma / OI 结构速览（CBOE 延迟数据，ETF 代理）\n"
-    return header + "\n" + GAMMA_DISCLAIMER + "\n\n" + "\n---\n\n".join(blocks)
+def render_gamma_all(blocks: list[str], qualities: set[str] | None = None) -> str:
+    """qualities = 本次涉及品种的 proxy_quality 集合，用来只说适用的提示。"""
+    kind = ("个股/直接标的" if qualities == {"direct"}
+            else "ETF 代理" if not qualities or "direct" not in qualities
+            else "ETF 代理 + 个股")
+    header = f"# 期权 Gamma / OI 结构速览（CBOE 延迟数据，{kind}）\n"
+    return header + "\n" + gamma_disclaimer(qualities) + "\n\n" + "\n---\n\n".join(blocks)
 
 
 # ——————————————————————————————————————————————————————————

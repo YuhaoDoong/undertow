@@ -141,20 +141,31 @@ def build(ser):
         vals["超买超卖"] = s.pctile
         if any(v is None for v in vals.values()) or not atr[i]:
             continue
-        out = {}
-        for k in KS:
-            fwd = c[i + 1:i + k + 1]
-            lo, hi = min(fwd), max(fwd)
-            for b in PCT_BUFS:
-                out[("down", k, f"{b:.0%}")] = lo < c[i] * (1 - b)
-                out[("up", k, f"{b:.0%}")] = hi > c[i] * (1 + b)
-            for m in ATR_BUFS:
-                out[("down", k, f"{m:g}ATR")] = lo < c[i] - m * atr[i]
-                out[("up", k, f"{m:g}ATR")] = hi > c[i] + m * atr[i]
+        out = breach_outcomes(c, atr[i], i)
         rows.append({"i": i, "date": ser.dates[i], "regime": s.regime, "vals": vals,
                      "states": {n: INDICATORS[n][0](v) for n, v in vals.items()},
                      "out": out, "expand": vals["带宽扩张比"]})
     return rows
+
+
+def breach_outcomes(closes, atr_i, i, *, ks=KS, pct_bufs=PCT_BUFS, atr_bufs=ATR_BUFS):
+    """第 i 根的前瞻突破结果：只看 i+1..i+k，**不含第 i 根自己**（含了就是前视）。
+
+    step4_filters 与 step4_sweep 共用这一个实现（AGENTS.md：同一个量不许算两遍）。
+    键：(side, k, 缓冲标签)；缓冲标签 "5%" 或 "2ATR"。
+    """
+    out = {}
+    c0 = closes[i]
+    for k in ks:
+        fwd = closes[i + 1:i + k + 1]
+        lo, hi = min(fwd), max(fwd)
+        for b in pct_bufs:
+            out[("down", k, f"{b:.0%}")] = lo < c0 * (1 - b)
+            out[("up", k, f"{b:.0%}")] = hi > c0 * (1 + b)
+        for m in atr_bufs:
+            out[("down", k, f"{m:g}ATR")] = lo < c0 - m * atr_i
+            out[("up", k, f"{m:g}ATR")] = hi > c0 + m * atr_i
+    return out
 
 
 def rate(rows, key):

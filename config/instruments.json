@@ -255,7 +255,7 @@
     "symbol": "GOOGL",
     "approx_commodity_multiplier": null,
     "proxy_quality": "direct",
-    "note": "GOOGL = Alphabet A 类（有投票权）。⚠️ 与 GOOG（C 类）是两条独立期权链，别混读。2026-09-25 实测：C 类 OI 只有 A 类的 58%（≤45天 56.5万 vs 96.9万），归一化 OI 剖面相关 r=0.825 —— 结构同向，但**主墙会错开一档**（A 类 call 墙 360=现价+5.4%，C 类 350=现价+3.6%）。取 A 类因为它更厚、墙更清晰；C 类未纳入注册表，需要时只作交叉验证。共同边界见顶层 _single_stock。"
+    "note": "GOOGL = Alphabet A 类（有投票权）。⚠️ 与 GOOG（C 类）是两条独立期权链，别混读。2026-09-25 实测：C 类 OI 只有 A 类的 58%（≤45天 56.5万 vs 96.9万），归一化 OI 剖面相关 r=0.825 —— 结构同向，但**主墙会错开一档**（A 类 call 墙 360=现价+5.4%，C 类 350=现价+3.6%）。取 A 类因为它更厚、墙更清晰；C 类未纳入注册表，需要时只作交叉验证。共同边界见顶层 _single_stock。 vol_index=VXGOG：CBOE 个股波动率指数（2011 起），供 VRP 检验；不进研报波动率栏。"
    },
    "price": {
     "source": "cboe_history",
@@ -264,7 +264,7 @@
     "note": "GOOGL 日线，标的自身即定价对象，无跟踪误差。"
    },
    "commodity": null,
-   "vol_index": null
+   "vol_index": "VXGOG"
   },
   "tsla": {
    "key": "tsla",
@@ -381,7 +381,7 @@
     "symbol": "AAPL",
     "approx_commodity_multiplier": null,
     "proxy_quality": "direct",
-    "note": "近端主墙 350（37,831）/330（17,193），档距 2.50（0.74%）；整数关口（300/350/400）墙位尤其厚，是个股里 pin 效应最常被观察到的标的之一。 共同边界见顶层 _single_stock。"
+    "note": "近端主墙 350（37,831）/330（17,193），档距 2.50（0.74%）；整数关口（300/350/400）墙位尤其厚，是个股里 pin 效应最常被观察到的标的之一。 共同边界见顶层 _single_stock。 vol_index=VXAPL：CBOE 个股波动率指数（2011 起），供 VRP 检验；不进研报波动率栏。"
    },
    "price": {
     "source": "cboe_history",
@@ -390,7 +390,7 @@
     "note": "AAPL 日线，标的自身即定价对象，无跟踪误差。"
    },
    "commodity": null,
-   "vol_index": null
+   "vol_index": "VXAPL"
   }
  },
  "defaults": {

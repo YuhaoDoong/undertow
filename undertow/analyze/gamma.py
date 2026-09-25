@@ -511,7 +511,8 @@ def _layer_walls(snap, today: date, spot: float, lo: int, hi: int,
 
 
 def local_wall(snap, today: date, spot: float, kind: str, *, band: float = 0.05,
-               lo_dte: int = 0, hi_dte: int = 14, min_oi: int | None = None) -> dict | None:
+               lo_dte: int = 0, hi_dte: int = 14, min_oi: int | None = None,
+               mode: str = "max") -> dict | None:
     """近价【局部】墙：≤hi_dte 天到期、现价 band 以内、该侧累计 OI 最大的行权价。
 
     与 `pick_sell_wall` 的「结构主墙」是两个东西（2026-09-25 用户三笔手动交易复现）：
@@ -542,8 +543,13 @@ def local_wall(snap, today: date, spot: float, kind: str, *, band: float = 0.05,
     cands = [(k, v[0], len(v[1])) for k, v in by.items() if v[0] >= min_oi]
     if not cands:
         return None
-    k, oi, n_exp = max(cands, key=lambda x: x[1])
-    return {"strike": k, "oi": oi, "buf_pct": abs(k / spot - 1) * 100, "n_exp": n_exp}
+    # mode="max"：带内累计 OI 最大的档（默认）；mode="nearest"：带内离现价最近、且 ≥min_oi 的档。
+    # 用户 2026-09-25 问「墙是最近的还是最大的」—— 两种都给，由 step5_wall_hold 实测哪种更难破。
+    if mode == "nearest":
+        k, oi, n_exp = min(cands, key=lambda x: abs(x[0] - spot))
+    else:
+        k, oi, n_exp = max(cands, key=lambda x: x[1])
+    return {"strike": k, "oi": oi, "buf_pct": abs(k / spot - 1) * 100, "n_exp": n_exp, "mode": mode}
 
 
 def layered_walls(snap, today: date, spot: float) -> dict[str, WallLayer]:

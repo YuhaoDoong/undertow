@@ -63,3 +63,13 @@ def test_mc_p_is_two_sided_and_bounded():
     assert s5.mc_p([0.05] * 30, 12, sims=2000) < 0.01, "远超期望必须显著"
     assert s5.mc_p([0.6] * 30, 3, sims=2000) < 0.01, "远低于期望同样显著（守住率高于随机）"
     print("PASS test_mc_p_is_two_sided_and_bounded")
+
+
+def test_local_wall_nearest_mode():
+    """mode=nearest 取带内离现价最近且 ≥min_oi 的档；max 取带内 OI 最大档。两者不同时必须给不同答案。"""
+    cs = [_C("P", 57.5, T0 + timedelta(days=2), 3500), _C("P", 56.0, T0 + timedelta(days=2), 9000),
+          _C("P", 57.9, T0 + timedelta(days=2), 100)]           # 100 张不够厚，不算墙
+    assert local_wall(_Snap(cs), T0, 58.12, "P", mode="max")["strike"] == 56.0
+    w = local_wall(_Snap(cs), T0, 58.12, "P", mode="nearest")
+    assert w["strike"] == 57.5 and w["mode"] == "nearest"
+    print("PASS test_local_wall_nearest_mode")

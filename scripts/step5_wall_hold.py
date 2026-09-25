@@ -96,7 +96,7 @@ def load_days(store, key, sym, tdays):
     return by_T, dropped
 
 
-def run(key, inst, store, src):
+def run(key, inst, store, src, mode="max"):
     ser = src.fetch_series(inst)
     tdays, c = list(ser.dates), list(ser.closes)
     idx = {d: i for i, d in enumerate(tdays)}
@@ -111,7 +111,7 @@ def run(key, inst, store, src):
         snap = snapshot_from_payload(by_T[T][1], key, inst.options.symbol)
         iT = idx[T]; spot = c[iT - 1]
         for kind in ("P", "C"):
-            w = local_wall(snap, T, spot, kind)
+            w = local_wall(snap, T, spot, kind, mode=mode)
             if not w:
                 continue
             b = w["buf_pct"] / 100
@@ -163,13 +163,15 @@ def summarize(res):
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--emit", action="store_true"); args = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--emit", action="store_true")
+    ap.add_argument("--mode", default="max", choices=("max", "nearest"), help="墙定义：带内最大 OI / 带内最近一堵")
+    args = ap.parse_args()
     cfg = load_config(); store = SnapshotStore(); src = CboeHistorySource()
     results = {}
     for key, inst in cfg.instruments.items():
         if inst.options is None or inst.price is None:
             continue
-        r = run(key, inst, store, src)
+        r = run(key, inst, store, src, mode=args.mode)
         if r:
             results[key] = r
     print("近墙 = ≤14 天到期、现价 ±5% 内该侧累计 OI 最大档（gamma.local_wall）。零假设：墙只是个价位，破墙率 = 同距离任意价位。")
@@ -192,7 +194,7 @@ def main():
                      "terciles": {f"{kd}|{nm}": v for (kd, nm), v in tr.items()}}
         print()
     if args.emit:
-        out = ROOT / "data" / "history" / "wall_spread" / "wall_hold.json"
+        out = ROOT / "data" / "history" / "wall_spread" / ("wall_hold.json" if args.mode == "max" else f"wall_hold_{args.mode}.json")
         out.write_text(json.dumps({"schema": 1, "asof": date.today().isoformat(), "sims": SIMS,
                                    "definition": "local_wall band=5% dte<=14 min_oi=WALL_FLOW_MIN_OI",
                                    "instruments": emit}, ensure_ascii=False, indent=1), encoding="utf-8")

@@ -1111,6 +1111,47 @@ def cmd_fib(args) -> int:
     return 0
 
 
+def _data_source_day(curr_date_s: str, prev_date: str | None,
+                     px_dates, inst_key: str) -> str:
+    """研报的身份日 = **数据来源日** = 快照日之前最后一个【真实交易日】。
+
+    用户 2026-09-25：「用数据来源日的日期，作为研报的名字」。
+
+    为什么这么定（而不是快照日、也不是生成日）：
+    快照 D 在 D 盘前抓，其 OI 是 OCC 在 **D−1 收盘后**结算的 —— 数据来自 D−1。
+    按 D 命名，和外部分析对齐时必然错开一个交易日：我在 2026-09-23 就这么错过
+    一次，拿 date=2026-09-21（实际描述 9/18）去比对方的 9/21 分析，
+    把「结论一致」读成了「结论相反」；被提醒后 **又错了第二次**。
+    名字里放数据来源日，这一类错位就结构性地不可能发生了。
+
+    ⚠️ 算法必须与 `signal_ledger` 的 `base_date` **完全一致**（都取"日线序列里
+    早于快照日的最后一个交易日"），否则研报文件名与台账行对不上，
+    交叉引用时错位会以另一种形式回来。所以基准取【日线序列】而不是：
+      · `prev_date`（上一份快照日）—— 中间漏抓过就会偏早。实测 CBOE 停更那次
+        快照是 (9/22, 9/24)，prev_date=9/22，而 9/24 的 OI 其实来自 9/23 收盘。
+      · `curr − 1 天` / 上一个工作日 —— 不认识节假日，休市日会被当成交易日。
+
+    取不到日线时逐级降级，**每次降级都出声**：默默换口径正是本仓库最贵的 bug 类别。
+    """
+    if not curr_date_s:
+        return prev_date or ""
+    if px_dates:
+        try:
+            cd = date.fromisoformat(curr_date_s)
+            earlier = [d for d in px_dates if d < cd]
+            if earlier:
+                return max(earlier).isoformat()
+        except (ValueError, TypeError):
+            pass
+    if prev_date:
+        print(f"⚠️ {inst_key} 取不到日线序列，研报日期退回上一份快照日 {prev_date}"
+              f"（若中间漏抓过，这个日期会偏早）", file=sys.stderr)
+        return prev_date
+    print(f"⚠️ {inst_key} 既无日线也无上一份快照，研报日期只能用快照日 {curr_date_s}"
+          f"（它比数据来源日晚一个交易日，与外部分析对齐时请注意）", file=sys.stderr)
+    return curr_date_s
+
+
 def _save_snapshot_dedup(store, inst, sym, payload, today):
     """落盘今日期权快照，但若内容与上一份完全相同则跳过（休市/数据未刷新的重复）。
     返回 (path|None, skipped_bool)。跳过可避免 flow 层日对日 diff 退化成全 0。"""
@@ -1574,6 +1615,10 @@ def cmd_report(args) -> int:
             hint = "持仓分析请用 `analyze`" if inst.cot is not None else "暂无可分析层"
             print(f"[跳过] {inst.key} 无期权数据源，不出综合 HTML 报告（{hint}）", file=sys.stderr)
             continue
+        # 先初始化：研报日期名要用它，而它在下面的分支里才赋值。
+        # 不初始化的话某个分支没走到就是 NameError —— 会被外层 except 接住变成
+        # 「整份研报失败」，为一个命名用的变量丢掉一份研报不值。
+        px_dates: list = []
         try:
             history = cot_src.fetch_history(inst, lookback=lookback, use_cache=not args.no_cache)
             an = analyze(history)
@@ -2173,13 +2218,15 @@ def cmd_report(args) -> int:
                                       wall_spread_html=_ws_html,
                                       smc_html=_smc_html,
                                       credit_wall_html=credit_wall_html)
-            # ⚠️ 文件名用【可交易日】（= 快照日期），不是生成日期。
-            # 时点约定：快照 D 于 D 凌晨捕获，OI 是 D−1 收盘的 OCC 结算，
-            # diff 描述交易日 D−1，**D 开盘才可执行** —— D 就是这份研报的身份。
-            # 工作日两者相同看不出来；周末/数据延迟时就错位：2026-08-29（周六）
-            # 生成的报告装着描述 8/27 的数据，却被命名成 gold_2026-08-29.html
-            # （用户 2026-08-29 指出）。研报的名字必须回答"这份东西哪天能用"。
-            fn = f"{inst.key}_{curr_date_s or today.isoformat()}.html"
+            # ⚠️ 文件名用【数据来源日】（用户 2026-09-25），不是快照日、更不是生成日。
+            # 演进：生成日 →（2026-08-29）快照日/可交易日 →（今天）数据来源日。
+            # 前一版把名字定在"这份东西哪天能用"，能防住"周六生成写周六"那个坑，
+            # 但防不住与外部分析对齐时的错位 —— 数据来自 D−1，名字却写 D。
+            # 我在 2026-09-23 因此错过一次，被提醒后又错第二次。
+            # 现在名字回答的是"这份东西讲的是哪天"，可交易日 = 名字的下一个交易日，
+            # 报告内的 vintage 横幅照旧同时给出两者。
+            _data_day = _data_source_day(curr_date_s, prev_date, px_dates, inst.key)
+            fn = f"{inst.key}_{_data_day or today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
             (reports_dir / fn).write_text(html, encoding="utf-8")
             try:
@@ -2189,8 +2236,10 @@ def cmd_report(args) -> int:
                 print(f"⚠️ {inst.key} 索引事实块生成失败：{type(e).__name__}: {e}",
                       file=sys.stderr)
                 _facts = {}
+            # ⚠️ 这个元组在下面有 6 处位置解包。本次追加 _data_day 时全部报
+            # ValueError —— 所以那 6 处一律改成尾部 `*_`，以后加字段不再连坐。
             written.append((inst, outlook, fn, strong_sig, verdict, stretch_read,
-                            curr_date_s or "", _facts, _labels, _scores))
+                            curr_date_s or "", _facts, _labels, _scores, _data_day))
         except Exception as e:
             failed.append(inst.key)
             print(f"[警告] {inst.key} 研判报告失败: {e}", file=sys.stderr)
@@ -2210,7 +2259,7 @@ def cmd_report(args) -> int:
         return 1
 
     if args.json:
-        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, _, _, _, _, _, _, _, _ in written],
+        print(json.dumps([dataclasses.asdict(o) | {"instrument": inst.key} for inst, o, *_ in written],
                          ensure_ascii=False, indent=2, default=str))
         return 0
 
@@ -2219,7 +2268,7 @@ def cmd_report(args) -> int:
     try:
         from undertow.analyze.ratio_watch import build as _rw_build, save as _rw_save
         _snaps, _futs, _etfs, _mults = {}, {}, {}, {}
-        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb, _sc in written:
+        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb, _sc, *_ in written:
             k = _inst.key
             _cs = _td2 or today.isoformat()
             _p = store.load("options", _inst.options.symbol, date.fromisoformat(_cs))
@@ -2277,10 +2326,10 @@ def cmd_report(args) -> int:
                       "facts": _fx | {"bias": o.bias, "mid_bias": o.mid_bias},
                       "spot": o.spot,
                       "labels": _lb, "scores": _sc}
-                     for _, o, fn, ss, v, sr, td, _fx, _lb, _sc in written]
+                     for _, o, fn, ss, v, sr, td, _fx, _lb, _sc, *_ in written]
         # 同族一致性：金银同向、QQQ/TQQQ 同向 —— 不一致时并排摆出来（用户 2026-08-29）
         _views = {}
-        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb, _sc in written:
+        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb, _sc, *_ in written:
             _stale = bool(_td2 and _td2 < today.isoformat())
             _views[_inst.key] = {
                 "near": _o.near_bias or "", "mid": _o.mid_bias or "", "bias": _o.bias,
@@ -2289,8 +2338,11 @@ def cmd_report(args) -> int:
             }
         idx_family = _family_check(_views)
 
-        # 索引页同理：用各品种里最新的可交易日，不用生成日期
+        # 索引页：**文件名**用数据来源日（与各品种研报同口径），
+        # 而页内展示仍用可交易日 —— 两者是不同的问题，不能共用一个变量。
         _idx_day = max((w[6] for w in written if w[6]), default="") or today.isoformat()
+        _idx_data_day = (max((w[10] for w in written if w[10]), default="")
+                         or _idx_day)
         _ratio_html = ""
         if _ratio_rows:
             from undertow.analyze.ratio_watch import render as _rw_render
@@ -2299,13 +2351,14 @@ def cmd_report(args) -> int:
         index_html = render_index_html(idx_items, _idx_day, family_notes=idx_family,
                                        ratio_html=_ratio_html,
                                        events=all_events, today=today)
-        index_path = reports_dir / f"index_{_idx_day}.html"
+        index_path = reports_dir / f"index_{_idx_data_day}.html"
         _archive_existing(index_path)
         index_path.write_text(index_html, encoding="utf-8")
 
     # 标题写【可交易日】不写生成日期 —— 否则周六生成的报告写着 2026-08-29，
     # 装的却是 8/28 可交易的数据（用户 2026-08-29 指出的同一个坑）。
     _hd = max((w[6] for w in written if w[6]), default="") or today.isoformat()
+    _hdd = max((w[10] for w in written if w[10]), default="") or ""
     _gen = f"（生成于 {today}）" if _hd != today.isoformat() else ""
     if replay:
         print("⚠️ 回放模式的已知限制（codex 2026-08-29 P0-2）：")
@@ -2315,8 +2368,10 @@ def cmd_report(args) -> int:
         print("   → 🏦大资金 / 🌍宏观 两层、以及事件雷达，在回放里含未来信息，不可信。")
         print("   → 💰增仓 / 🧱结构 / 🌊波动 / 📈价格 四层是干净的。")
         print()
-    print(f"已生成综合研判报告 · 可交易日 {_hd}{_gen}:")
-    for inst, o, fn, ss, v, _sr, _td, _fx, _lb, _sc in written:
+    # 两个日期都印出来 —— 文件名是数据日，看的人必须一眼知道哪个是哪个。
+    print(f"已生成综合研判报告 · 数据日 {_hdd or '?'}（文件名）· "
+          f"可交易日 {_hd}{_gen}:")
+    for inst, o, fn, ss, v, _sr, _td, _fx, _lb, _sc, *_ in written:
         # 低置信 / 已过期 的强信号在摘要里也必须降级，不能和可执行告警长得一样。
         # ⚠️ 报告横幅、索引页、CLI 摘要**三处口径必须同步** —— 2026-08-28 实测：
         # SPY 的 ⚡强看涨 在报告里已正确标注"本告警已过期"，CLI 摘要却仍是满格 ⚡，
@@ -2356,7 +2411,7 @@ def cmd_report(args) -> int:
     #    研报是入公开库的，账户持仓不能出现在里面。
     try:
         _sig_by_sym = {}
-        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb, _sc in written:
+        for _inst, _o, _fn, _ss, _v, _sr, _td2, _fx, _lb, _sc, *_ in written:
             if _ss is not None and not (_td2 and _td2 < today.isoformat()):
                 _sig_by_sym[_inst.options.symbol.upper()] = _ss
         if _sig_by_sym and not replay:

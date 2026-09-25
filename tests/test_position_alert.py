@@ -159,20 +159,30 @@ def test_family_same_direction_is_silent():
     print("PASS test_family_same_direction_is_silent")
 
 
-def test_report_filename_uses_tradable_day_not_generation_day():
-    """研报文件名必须回答「这份东西哪天能用」，不是「哪天生成的」。
+def test_report_filename_is_never_the_generation_day():
+    """研报文件名绝不能是【生成日】—— 这条从 2026-08-29 起就成立，至今未变。
 
-    2026-08-29（周六）生成的报告装着描述 8/27 交易日的数据、可交易日是 8/28，
-    却被命名成 gold_2026-08-29.html —— 工作日两者相同看不出来，周末就错位。
+    2026-08-29（周六）生成的报告装着描述 8/27 的数据，却被命名成
+    gold_2026-08-29.html —— 工作日看不出来，周末就错位。
+
+    ⚠️ 具体该用哪个日期已经改过一次：
+      2026-08-29 定为【可交易日】= 快照日；
+      2026-09-25 改为【数据来源日】= 快照日的上一个交易日（用户指定），
+      因为可交易日仍会与外部分析错开一天（数据来自 D−1，名字写 D）。
+    新口径的完整断言在 tests/test_report_naming.py（含节假日、漏抓、
+    与台账 base_date 同源等边界）。本测试只守住"不得退回生成日"这条底线。
     """
     src = (Path(__file__).resolve().parents[1] / "undertow" / "cli.py").read_text("utf-8")
-    assert 'fn = f"{inst.key}_{curr_date_s or today.isoformat()}.html"' in src, \
-        "研报文件名须用快照日期（可交易日），不得用 today"
-    assert 'index_path = reports_dir / f"index_{_idx_day}.html"' in src, \
+    assert '_data_day = _data_source_day(' in src, "文件名须走 _data_source_day 派生"
+    assert 'fn = f"{inst.key}_{_data_day or today.isoformat()}.html"' in src, \
+        "研报文件名须用数据来源日，today 只能作为最后兜底"
+    assert 'index_path = reports_dir / f"index_{_idx_data_day}.html"' in src, \
         "索引页同理"
+    # 反向守门：不得出现"直接拿 today 当文件名"的写法
+    assert 'f"{inst.key}_{today' not in src, "文件名不得直接用生成日"
     assert "今天（" in src and "没有新数据" in src, \
         "数据非当日时必须明说，否则看着像当日研报"
-    print("PASS test_report_filename_uses_tradable_day_not_generation_day")
+    print("PASS test_report_filename_is_never_the_generation_day")
 
 
 def test_replay_truncates_future_prices():

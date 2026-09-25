@@ -67,9 +67,11 @@ PYEOF
   elif [[ "${READY:-0}" -ge 1 ]]; then
     say "✅ $READY 个品种 OI 已结算 —— 开抓"
     if "$PY" -m undertow.cli --no-cache report >> "$LOG" 2>&1; then
+      # ⚠️ 文件名是【数据来源日】（2026-09-25 起），不是可交易日 ——
+      # 之前这里把它当可交易日播报，改了命名口径后那句话就是错的。
       DAY=$(ls -t data/reports/index_*.html 2>/dev/null | head -1 | sed 's/.*index_//;s/\.html//')
-      say "✅ 研报已出：可交易日 $DAY"
-      /usr/bin/osascript -e "display notification \"周五美盘数据已结算，研报已更新（可交易日 $DAY）\" with title \"📊 结算落地\" sound name \"Glass\"" 2>/dev/null
+      say "✅ 研报已出：数据日 $DAY（可交易日为其下一个交易日）"
+      /usr/bin/osascript -e "display notification \"周五美盘数据已结算，研报已更新（数据日 $DAY）\" with title \"📊 结算落地\" sound name \"Glass\"" 2>/dev/null
     else
       say "⚠️ 研报生成失败 —— 见上方日志"
       /usr/bin/osascript -e 'display notification "结算已到但研报生成失败" with title "⚠️ undertow" sound name "Basso"' 2>/dev/null

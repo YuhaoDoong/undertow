@@ -330,7 +330,11 @@ def test_daily_update_alerts_on_silent_failure():
         i_guard = seg.index("STALE_DAYS")
         i_alert = seg.index("alert")
         assert i_guard < i_alert, "判据必须在 alert 之前算出来"
-        assert "weekday() < 5" in seg, "必须按工作日计数——周末本就拿不到，按日历日会每周误报"
+        # 断言「调用共用实现」而非某段具体算法：工作日差已收敛到
+        # core.clock.sessions_between（cmd_snapshot 的降级开关用的是同一份），
+        # 钉死 "weekday() < 5" 反而会拦住这次正确的共用化改动。
+        assert "sessions_between" in seg, \
+            "必须按交易日计数，且走 core.clock 共用实现（周末本就拿不到，按日历日会每周误报）"
     print("PASS test_daily_update_alerts_on_silent_failure")
 
 

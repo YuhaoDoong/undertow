@@ -16,10 +16,12 @@ import pathlib
 import subprocess
 import json
 import sys
+import time
 from datetime import date, timedelta
 
 from undertow.core.config import load_config, DATA_DIR
-from undertow.core.clock import market_today
+from undertow.core.clock import (STALE_SESSIONS, market_today,
+                                 sessions_between)
 from undertow.core.calendar import load_events, upcoming, merge as merge_events, CATEGORY_LABEL
 from undertow.collect.store import SnapshotStore
 from undertow.collect.faireconomy_cal import FairEconomyCalSource
@@ -765,6 +767,74 @@ def _write_status(path: str | None, payload: dict) -> None:
         print(f"[警告] 状态文件写入失败 {path}: {type(e).__name__} {e}", file=sys.stderr)
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# 主源停更 → 自动切备份源
+# ═══════════════════════════════════════════════════════════════════════════
+# 2026-09-22~24 的教训：CBOE 停更 34 小时，管线每个时点都判「与上一交易日逐行
+# 相同」。那次只加了【告警】，用户得手动补抓 —— 而 9/22 收盘那份 OI 已经永久
+# 丢失，因为等人看到告警时源已经跳到 9/23 了。期权链不可再生，**告警不够，
+# 必须当场换源**。
+#
+# 降级的两个前提，缺一不可：
+#   ① CBOE 判 unchanged（Σ|ΔOI| = 0，确实没有新数据）
+#   ② 已跨过 STALE_SESSIONS 个交易日（区分「今天还没结算」与「源停止更新」）
+# 只有 ① 的话每天凌晨早时点都会触发降级 —— 那是设计内的正常 unchanged，
+# 长桥那时候同样拿不到新结算，白跑 2~4 分钟还会把告警变成狼来了。
+
+
+def _source_asof(payload: dict) -> date | None:
+    """payload 自报的数据时点。取不到返回 None。
+
+    CBOE 把它放在 `data.last_trade_time`（延迟报价的最后成交时刻）——
+    停更时这个字段会**原地不动**，是比我们自己的落盘状态更直接的证据：
+    它说的是「源侧没动」，而落盘状态只说「我们没拿到新的」。
+    """
+    for v in ((payload.get("data") or {}).get("last_trade_time"),
+              payload.get("timestamp")):
+        if isinstance(v, str) and v[:4].isdigit():
+            try:
+                return date.fromisoformat(v[:10])
+            except ValueError:
+                continue
+    return None
+
+
+def _stale_sessions(payload: dict, store, sym: str, today: date) -> int:
+    """主源已经停更几个交易日。0/1 = 正常，≥STALE_SESSIONS = 停更。"""
+    asof = _source_asof(payload)
+    if asof is None:                      # 源没给时点 → 退回用我们自己的落盘状态
+        latest = store.latest("options", sym)
+        if latest is None:
+            return 0                      # 从来没落过盘，谈不上停更
+        asof = latest[0]
+    return sessions_between(asof, today)
+
+
+def _fallback_snapshot(store, inst, sym, today, *, max_expiries: int | None):
+    """主源停更时用长桥补抓一份。返回 (path|None, skipped, note)。
+
+    note 里说明为什么没成，**绝不静默返回 None** —— 静默失败是本仓库
+    最严重的 bug 类别（AGENTS.md 第四节）。
+    """
+    from undertow.collect.longbridge_options import LongbridgeOptionsSource
+    src = LongbridgeOptionsSource()
+    t0 = time.time()
+    try:
+        payload = src.fetch_raw(inst, max_expiries=max_expiries)
+    except Exception as e:
+        return None, False, f"备份源也失败：{type(e).__name__} {str(e)[:120]}"
+    cost = time.time() - t0
+    path, skipped = _save_snapshot_dedup(store, inst, sym, payload, today)
+    if skipped:
+        # 两个独立的源同时说「没有新 OI」——这就不是源的问题了，是真的还没结算。
+        return None, True, f"备份源同样无新 OI（{cost:.0f}s）——两源一致，判定确实未结算"
+    n_bad = len(payload.get("_missing_quote") or [])
+    note = f"已由长桥补抓（{cost:.0f}s）"
+    if n_bad:
+        note += f"，{n_bad} 个合约取不到报价（已记入 _missing_quote）"
+    return path, False, note
+
+
 def cmd_snapshot(args) -> int:
     """把当前期权链【原始 payload 全字段】按日落盘——攒 flow 层所需的历史。"""
     cfg = load_config()
@@ -779,6 +849,10 @@ def cmd_snapshot(args) -> int:
 
     saved = []
     items: list[dict] = []          # 逐品种状态，供 --status-file
+    fallback_used: list[str] = []   # 主源停更、由长桥补上的品种
+    stale_unresolved: list[str] = []  # 主源停更且【没能】补上的 —— 必须告警
+    use_fallback = not getattr(args, "no_fallback", False)
+    fallback_expiries = getattr(args, "fallback_expiries", None)
     for inst in instruments:
         if inst.options is None:
             print(f"[跳过] {inst.key} 未配置期权数据源", file=sys.stderr)
@@ -790,9 +864,40 @@ def cmd_snapshot(args) -> int:
             already = store.load("options", sym, today) is not None
             path, skipped = _save_snapshot_dedup(store, inst, sym, payload, today)
             if skipped and not already:
+                n_stale = _stale_sessions(payload, store, sym, today)
+                if use_fallback and n_stale >= STALE_SESSIONS:
+                    print(f"[降级] {inst.key} 主源已停更 {n_stale} 个交易日"
+                          f"（源时点 {_source_asof(payload)}）→ 切长桥备份源…",
+                          file=sys.stderr)
+                    fb_path, fb_skipped, note = _fallback_snapshot(
+                        store, inst, sym, today, max_expiries=fallback_expiries)
+                    print(f"[降级] {inst.key} {note}", file=sys.stderr)
+                    if fb_path:
+                        fb_snap = snapshot_from_payload(
+                            store.load("options", sym, today), inst.key, sym)
+                        saved.append((inst, sym, fb_path, len(fb_snap.contracts),
+                                      len(fb_snap.with_oi()),
+                                      len(store.dates("options", sym))))
+                        items.append({"instrument": inst.key, "status": "saved",
+                                      "source": "longbridge_options",
+                                      "fallback": True, "stale_sessions": n_stale,
+                                      "contracts": len(fb_snap.contracts),
+                                      "with_oi": len(fb_snap.with_oi())})
+                        fallback_used.append(inst.key)
+                        continue
+                    items.append({"instrument": inst.key,
+                                  "status": "unchanged" if fb_skipped else "failed",
+                                  "fallback": True, "stale_sessions": n_stale,
+                                  "error": None if fb_skipped else note})
+                    if not fb_skipped:
+                        stale_unresolved.append(inst.key)
+                    continue
                 print(f"[提示] {inst.key} 期权数据与上一交易日逐行相同（休市重复），跳过落盘",
                       file=sys.stderr)
-                items.append({"instrument": inst.key, "status": "unchanged"})
+                items.append({"instrument": inst.key, "status": "unchanged",
+                              "stale_sessions": n_stale})
+                if n_stale >= STALE_SESSIONS:
+                    stale_unresolved.append(inst.key)
                 continue
             if skipped and already:
                 items.append({"instrument": inst.key, "status": "already_present"})
@@ -819,7 +924,11 @@ def cmd_snapshot(args) -> int:
         overall = "failed"
     _write_status(getattr(args, "status_file", None), {
         "command": "snapshot", "date": str(today), "overall": overall,
-        "n_saved": n_saved, "n_failed": n_fail, "items": items})
+        "n_saved": n_saved, "n_failed": n_fail,
+        # 降级是「成功了，但用的是精度较低的备份源」——overall 仍是 complete，
+        # 而这两个数组让调度层能分别告警「已自动兜住」与「兜不住」。
+        "fallback_used": fallback_used, "stale_unresolved": stale_unresolved,
+        "items": items})
 
     if not saved:
         print("没有保存任何快照。", file=sys.stderr)
@@ -3368,6 +3477,11 @@ def build_parser() -> argparse.ArgumentParser:
     psn.add_argument("instruments", nargs="*", help="品种 key（留空=全部）")
     psn.add_argument("--status-file", help="把本次运行的机器可读状态原子写入该 JSON 文件"
                                           "（供定时脚本消费，避免 grep 人读文案）")
+    psn.add_argument("--no-fallback", action="store_true",
+                     help=f"主源停更（跨 ≥{STALE_SESSIONS} 个交易日无新 OI）时"
+                          "也不切长桥备份源")
+    psn.add_argument("--fallback-expiries", type=int, metavar="N",
+                     help="降级抓取时只取最近 N 个到期（默认全链；全链单品种 2~4 分钟）")
     psn.set_defaults(func=cmd_snapshot)
 
     pf = sub.add_parser("flow", help="期权资金流/持仓异动：单快照异常活跃 + 两日 ΔOI/ΔIV")

@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
@@ -76,3 +76,36 @@ def decision_session(unix_ts: float, trading_days: list[date]) -> date | None:
         if x > d:
             return x
     return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 数据源「停更」判据
+# ═══════════════════════════════════════════════════════════════════════════
+# 2026-09-24：CBOE 接口卡在 2026-09-22T15:59:59 超过 34 小时。管线每个时点都
+# 判「与上一交易日逐行相同」→ 一份没落盘、研报缺两天、**零告警**，因为
+# 「今天还没结算」（正常）与「源停止更新」（致命）共用同一个表象。
+#
+# 判据只能数【交易日】不能数日历日：周五收盘的 OI 要等周一凌晨才结算，
+# 周末数日历日必然误报（见 AGENTS.md「周末拿不到周五的 OI」）。
+#
+# ⚠️ 本函数是 cli.cmd_snapshot 的降级开关与 scripts/daily_update.sh 的告警
+# **共用的唯一实现**。两处各写一遍必然漂移（AGENTS.md：同一个量不许算两遍）。
+STALE_SESSIONS = 2      # 跨过这么多个交易日仍无新 OI → 判定源停更
+
+
+def sessions_between(last: date, today: date) -> int:
+    """从 last（不含）到 today（含）之间有几个交易日。
+
+    正常状态是 **1**：今天凌晨拿到的是上一交易日收盘结算的 OI。
+    ≥2 意味着中间整整跳过了一个交易日 —— 那一天的 OI 已经永久丢失。
+
+    近似：只排除周末，不排除美股节假日（config/calendar.json 只有宏观事件，
+    没有交易所休市表）。节假日会让计数偏大 1，方向是【更容易告警】，
+    对「宁可多叫一次也不能漏」的用途是可接受的偏保守。
+    """
+    n, d = 0, last
+    while d < today:
+        d += timedelta(days=1)
+        if d.weekday() < 5:
+            n += 1
+    return n

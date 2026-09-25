@@ -117,15 +117,35 @@ try:
     if d.get("schema") != 1:
         raise ValueError("schema")
     bad = ",".join(i["instrument"] for i in d.get("items", []) if i.get("status") == "failed")
-    print(f"{d.get('overall','crashed')}|{d.get('n_saved',0)}|{d.get('n_failed',0)}|{bad}")
+    fb = ",".join(d.get("fallback_used") or [])       # 主源停更、已由长桥兜住
+    su = ",".join(d.get("stale_unresolved") or [])    # 主源停更且【没能】兜住
+    print(f"{d.get('overall','crashed')}|{d.get('n_saved',0)}|{d.get('n_failed',0)}|{bad}|{fb}|{su}")
 except Exception:
-    print("crashed|0|0|")
+    print("crashed|0|0|||")
 PYEOF
 )
 SNAP_OVERALL="${SNAP_JSON%%|*}"; _R="${SNAP_JSON#*|}"
 SNAP_SAVED="${_R%%|*}"; _R="${_R#*|}"
-SNAP_NFAIL="${_R%%|*}"; SNAP_BAD="${_R#*|}"
-echo "[状态] snapshot overall=$SNAP_OVERALL saved=$SNAP_SAVED failed=$SNAP_NFAIL rc=$SNAP_RC"
+SNAP_NFAIL="${_R%%|*}"; _R="${_R#*|}"
+SNAP_BAD="${_R%%|*}"; _R="${_R#*|}"
+SNAP_FB="${_R%%|*}"; SNAP_STALE="${_R#*|}"
+echo "[状态] snapshot overall=$SNAP_OVERALL saved=$SNAP_SAVED failed=$SNAP_NFAIL rc=$SNAP_RC"\
+"${SNAP_FB:+ fallback=$SNAP_FB}${SNAP_STALE:+ stale=$SNAP_STALE}"
+
+# 降级成功【也要】出声：数据是补上了，但 Greeks 是本地 BS 自算的
+# （主翼 |Δ| 最大偏差 0.22，足以把一条腿踢出/拉进方向判定的主翼区间）。
+# 「兜住了」不等于「和平常一样」，读研报的人有权知道今天这份是备份源。
+if [[ -n "$SNAP_FB" ]]; then
+    alert "🔁 主源停更，已自动切长桥备份源（ET $ET_NOW）" \
+          "品种：${SNAP_FB}。数据已补上、研报照常出，但 delta/gamma 为本地 BS 自算\
+（主翼最大偏差 0.22），bid/ask 为 0。请留意主源是否恢复。"
+fi
+# 兜不住才是真事故：主源停更 + 备份源也拿不到 → 这一天的 OI 会永久丢失
+if [[ -n "$SNAP_STALE" ]]; then
+    alert "🚨 主源停更且备份源也失败（ET $ET_NOW）" \
+          "品种：${SNAP_STALE}。两个独立源都拿不到新 OI —— 期权链不可再生，\
+请立即人工核对 CBOE 接口与长桥 CLI。"
+fi
 case "$SNAP_OVERALL" in
   crashed)
     alert "🚨 快照进程异常（ET $ET_NOW）" "rc=$SNAP_RC 且状态文件缺失/损坏——无法确认当日是否有数据"
@@ -148,20 +168,21 @@ case "$SNAP_OVERALL" in
     LAST_SNAP=$(ls -1 data/snapshots/options/GLD/*.json.gz 2>/dev/null | tail -1 \
                 | sed -E 's#.*/([0-9]{4}-[0-9]{2}-[0-9]{2})\.json\.gz#\1#')
     if [[ -n "$LAST_SNAP" ]]; then
+        # ⚠️ 工作日差与阈值都来自 undertow.core.clock —— cmd_snapshot 的降级开关
+        # 用的是同一份实现。这里再写一遍 while 循环必然与那边漂移。
         STALE_DAYS=$(python3 - "$LAST_SNAP" "$ET_DATE" <<'PYEOF'
 import sys
-from datetime import date, timedelta
-last = date.fromisoformat(sys.argv[1]); today = date.fromisoformat(sys.argv[2])
-# 数【工作日】而非日历日：周末本就拿不到，不该误报
-n, d = 0, last
-while d < today:
-    d += timedelta(days=1)
-    if d.weekday() < 5:
-        n += 1
-print(n)
+from datetime import date
+from undertow.core.clock import sessions_between
+print(sessions_between(date.fromisoformat(sys.argv[1]),
+                       date.fromisoformat(sys.argv[2])))
 PYEOF
 )
-        if (( STALE_DAYS >= 2 )); then
+        STALE_SESSIONS=$(python3 -c 'from undertow.core.clock import STALE_SESSIONS; print(STALE_SESSIONS)')
+        # ⚠️ 只在 CLI 没报 stale_unresolved 时才用这条 —— 否则同一个事件告警两次。
+        # 保留它是因为它**不依赖状态文件解析**：CLI 太旧、字段改名、JSON 损坏时，
+        # 这条仍然能响。两条判据同源（sessions_between），不会给出矛盾结论。
+        if [[ -z "$SNAP_STALE" ]] && (( STALE_DAYS >= ${STALE_SESSIONS:-2} )); then
             alert "🚨 数据源疑似停更（ET $ET_NOW）" \
                   "最新快照 ${LAST_SNAP}，已跨 ${STALE_DAYS} 个工作日无新 OI。\
 连续 unchanged 跨交易日 = 源停止更新，不是「今天还没结算」。请人工核对 CBOE 接口。"

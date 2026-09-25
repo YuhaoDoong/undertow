@@ -51,6 +51,18 @@ signal_ledger 全链路零改动，两个源可以互为替补、落盘文件也
    OI 只能靠 `option quote` 逐批取。SLV 28 个到期 5,064 合约、GLD 32 个到期
    9,188 合约，单品种全链 2~4 分钟。
 
+## 怎么被用上（2026-09-25 接进管线）
+
+`cli.cmd_snapshot` 在 CBOE 判 unchanged 时检查源自报时点，跨 ≥`STALE_SESSIONS`
+个交易日仍无新 OI 就自动切到本源。**两个前提缺一不可** —— 只看 unchanged 的话，
+每天凌晨早时点（OCC 正常还没结算）都会白跑几十分钟全链。
+
+降级成功后 `--status-file` 的 `fallback_used` 会列出品种，`daily_update.sh` 据此
+推送「已切备份源」提醒（不是报错：数据补上了，但 Greeks 精度降了，读研报的人有权知道）。
+两个源都拿不到新 OI 时进 `stale_unresolved` —— 那才是真事故。
+
+副产品：有了第二个独立源，「源挂了」与「确实还没结算」第一次可以分辨了。
+
 ## 边界
 
 只读。只用 `option chain` / `option quote` 两个子命令，绝不触碰下单接口。
@@ -158,6 +170,22 @@ class LongbridgeOptionsSource:
     """长桥期权链 → CBOE 格式 payload。"""
 
     name = "longbridge_options"
+
+    def fetch_raw(self, instrument, *, use_cache: bool = True,
+                  max_expiries: int | None = None) -> dict:
+        """与 `CboeOptionsSource.fetch_raw` **同签名**的适配器。
+
+        管线（`cli._save_snapshot_dedup` / `snapshot_from_payload` / flow / gamma）
+        只认这一个协议，所以降级切源时上层零改动 —— 换的是对象，不是代码路径。
+
+        `use_cache` 被**故意忽略**：长桥走本地 CLI 实时取数，没有 HTTP 缓存层。
+        接受这个参数只为满足协议；静默忽略在这里是正确的，因为缓存缺失不会
+        让数据变错，只会变慢。
+        """
+        if instrument.options is None:
+            raise DataSourceError(f"{instrument.key} 未配置 options 数据源")
+        return self.fetch_payload(instrument.options.symbol,
+                                  max_expiries=max_expiries)
 
     def fetch_payload(self, symbol: str, *, max_expiries: int | None = None,
                       today: date | None = None) -> dict:

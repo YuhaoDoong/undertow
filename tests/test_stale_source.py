@@ -16,22 +16,24 @@
 """
 import subprocess
 import sys
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 
+from undertow.core.clock import STALE_SESSIONS, sessions_between   # noqa: E402
+
+
 def _stale_workdays(last: str, today: str) -> int:
-    """复刻 daily_update.sh 里的工作日差算法。"""
-    n, d = 0, date.fromisoformat(last)
-    t = date.fromisoformat(today)
-    while d < t:
-        d += timedelta(days=1)
-        if d.weekday() < 5:
-            n += 1
-    return n
+    """⚠️ 直接调被测实现，**不复刻**。
+
+    本文件原先自己写了一遍 while 循环 —— 那意味着 shell 一份、测试一份、
+    后来 cmd_snapshot 的降级开关又一份，三处漂移只是时间问题
+    （AGENTS.md：同一个量不许在两处各算一遍）。
+    """
+    return sessions_between(date.fromisoformat(last), date.fromisoformat(today))
 
 
 def test_same_day_no_update_stays_silent():
@@ -65,7 +67,11 @@ def test_script_has_stale_guard_in_unchanged_branch():
     branch = tail.split("esac")[0]
     assert "STALE_DAYS" in branch, "停更判据必须在 unchanged 分支内"
     assert "alert" in branch, "跨交易日停更必须走 alert（推送 + 落兜底文件）"
-    assert "weekday() < 5" in branch, "必须按工作日计数，不能用日历日"
+    # 断言的是【调用共用实现】，而不是某段具体算法 ——
+    # 从前这里断言 "weekday() < 5"，等于把实现细节钉死在 shell 里，
+    # 共用化之后反而会拦住正确的改动。
+    assert "sessions_between" in branch, "工作日差必须走 core.clock 的共用实现"
+    assert "STALE_SESSIONS" in branch, "阈值必须来自 core.clock，不许在 shell 里写死"
 
 
 def test_script_syntax_valid():

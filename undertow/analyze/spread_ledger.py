@@ -29,11 +29,45 @@ def _path(inst: str) -> pathlib.Path:
     return DIR / f"{inst}.jsonl"
 
 
+def decision_context(highs, lows, closes, dates, session: date) -> dict:
+    """决策日的波动率状态 —— 只记录，不过滤（用户 2026-09-25：「先不带入期权实盘」）。
+
+    第四步在 15 品种 20 年日线上测出：唯一跨簇复现的破墙提示是 **ATR 短回看扩张**
+    （5% 口径约 2×，ATR 口径仍 >1）；ATR 分位在 % 口径有效但 ATR 口径反号（缩放效应）；
+    布林带宽扩张无效。它们都没过 Bonferroni，所以不能进过滤器 —— 但要攒前瞻样本，
+    就得从今天起把决策日的读数记下来。
+
+    ⚠️ 只用 date < session 的 bar：决策日是可交易日的上一交易日，含 session 当天就是前视。
+    """
+    from undertow.analyze.stretch import _atr_series
+    from undertow.analyze.stretch_backtest import _pct_rank_series
+    from undertow.analyze.technicals import bb_width_series
+    idx = [i for i, d in enumerate(dates) if d < session]
+    if len(idx) < 30:
+        return {"asof": None, "note": "日线不足 30 根，无法算上下文"}
+    n = idx[-1] + 1
+    h, l, c = list(highs[:n]), list(lows[:n]), list(closes[:n])
+    atr = _atr_series(h, l, c, 14)
+    bw = bb_width_series(c, 20, 2.0)
+    pct = _pct_rank_series(atr)
+    def _ratio(xs, k=5):
+        a, b = xs[-1], xs[-1 - k] if len(xs) > k else None
+        return round(a / b, 4) if a and b else None
+    def _r(x, nd=4):
+        return round(x, nd) if x is not None else None
+    return {"asof": dates[n - 1].isoformat(), "close_prev": _r(c[-1]),
+            "atr14": _r(atr[-1]), "atr_expand_5": _ratio(atr),
+            "atr_pct_250": _r(pct[-1]),
+            "bb_width_20": _r(bw[-1]), "bb_expand_5": _ratio(bw)}
+
+
 def record(inst: str, sym: str, session: date, spot: float, verdict,
-           *, root: pathlib.Path | None = None) -> pathlib.Path:
+           *, root: pathlib.Path | None = None, context: dict | None = None) -> pathlib.Path:
     """落盘某品种某可交易日的推荐。同日重复调用会覆盖该日记录（研报可能重跑）。
 
     spot 必须是决策价（C[可交易日前一交易日] 收盘），与回测口径一致。
+    context 是决策日的波动率状态与近墙（decision_context + gamma.local_wall），
+    只记录不参与判定；旧行没有这个字段，load/backfill 照常。
     """
     d = root or DIR
     d.mkdir(parents=True, exist_ok=True)
@@ -42,6 +76,7 @@ def record(inst: str, sym: str, session: date, spot: float, verdict,
         "date": session.isoformat(), "inst": inst, "sym": sym,
         "spot": round(float(spot), 4),
         "ok": bool(verdict.ok), "reason": verdict.reason,
+        "context": dict(context or {}),
         "params": {k: (list(v) if isinstance(v, tuple) else v)
                    for k, v in (verdict.params or {}).items()},
         "candidates": [

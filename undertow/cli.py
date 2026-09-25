@@ -2208,8 +2208,22 @@ def cmd_report(args) -> int:
                 # 能回答"照着做结果会怎样"。
                 try:
                     from undertow.analyze import spread_ledger as _sl
+                    from undertow.analyze.gamma import local_wall as _lw
+                    # 决策日上下文：波动率状态 + 近价局部墙。只记录、不过滤（第四步结论：
+                    # 没有指标过 Bonferroni；第五步要攒的正是这些前瞻样本）。
+                    _ctx: dict = {}
+                    try:
+                        _ser = px_src.fetch_series(inst, use_cache=not args.no_cache)
+                        _ctx = _sl.decision_context(_ser.highs, _ser.lows, _ser.closes,
+                                                    _ser.dates, _exec_day)
+                        for _k in ("P", "C"):
+                            _ctx[f"local_wall_{_k}"] = _lw(curr, _exec_day, _ws_spot, _k)
+                    except Exception as e:      # 上下文失败不该拖垮台账，但必须出声
+                        print(f"⚠️ {inst.key} 台账上下文失败：{type(e).__name__}: {e}",
+                              file=sys.stderr)
+                        _ctx["error"] = f"{type(e).__name__}: {e}"[:120]
                     _sl.record(inst.key, inst.options.symbol, _exec_day,
-                               _ws_spot, _ws_v)
+                               _ws_spot, _ws_v, context=_ctx)
                 except Exception as e:
                     print(f"⚠️ {inst.key} 价差台账落盘失败：{type(e).__name__}: {e}",
                           file=sys.stderr)

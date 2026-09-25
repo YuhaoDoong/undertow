@@ -510,6 +510,42 @@ def _layer_walls(snap, today: date, spot: float, lo: int, hi: int,
     )
 
 
+def local_wall(snap, today: date, spot: float, kind: str, *, band: float = 0.05,
+               lo_dte: int = 0, hi_dte: int = 14, min_oi: int | None = None) -> dict | None:
+    """近价【局部】墙：≤hi_dte 天到期、现价 band 以内、该侧累计 OI 最大的行权价。
+
+    与 `pick_sell_wall` 的「结构主墙」是两个东西（2026-09-25 用户三笔手动交易复现）：
+    结构主墙按 ±25% 内 OI 份额选，趋势市里离现价 5~15%，DTE 2~4 没有权利金；
+    用户实际卖的是 1~5% 内的近墙。停用记录里的前提②「拆结构主墙与局部 pin」就是这一刀。
+    聚合口径与 `_layer_walls` 完全一致（跨到期按行权价累加 OI，只算有 OI 的合约）。
+
+    返回 {"strike", "oi", "buf_pct", "n_exp"}；该侧 band 内没有 ≥min_oi 的档位则 None。
+    ⚠️ 本函数只定义"墙在哪"，不断言"墙有支撑"—— 后者由 scripts/step5_wall_hold.py 检验。
+    """
+    if min_oi is None:
+        min_oi = WALL_FLOW_MIN_OI        # 定义在本文件更靠后，不能当默认参数直接引用
+    lo, hi = (spot * (1 - band), spot) if kind == "P" else (spot, spot * (1 + band))
+    by: dict[float, list] = {}
+    for c in snap.with_oi():
+        if c.kind != kind:
+            continue
+        d = (c.expiry - today).days
+        if not (lo_dte <= d <= hi_dte):
+            continue
+        if kind == "P" and not (lo <= c.strike < spot):
+            continue
+        if kind == "C" and not (spot < c.strike <= hi):
+            continue
+        slot = by.setdefault(c.strike, [0, set()])
+        slot[0] += c.open_interest
+        slot[1].add(c.expiry)
+    cands = [(k, v[0], len(v[1])) for k, v in by.items() if v[0] >= min_oi]
+    if not cands:
+        return None
+    k, oi, n_exp = max(cands, key=lambda x: x[1])
+    return {"strike": k, "oi": oi, "buf_pct": abs(k / spot - 1) * 100, "n_exp": n_exp}
+
+
 def layered_walls(snap, today: date, spot: float) -> dict[str, WallLayer]:
     return {k: _layer_walls(snap, today, spot, lo, hi, k, lab)
             for k, lab, lo, hi in WALL_LAYERS}

@@ -1,5 +1,14 @@
 {
  "_comment": "Instrument registry. Each instrument declares the data-source keys needed to pull its data. Add new instruments here without touching code. CFTC contract codes verified against publicreporting.cftc.gov Disaggregated report (dataset 72hh-3qpy).",
+ "_single_stock": {
+  "scope": "asset_class == single_stock 的所有品种共同适用。各品种 note 只写自己特有的。",
+  "no_cot": "个股没有 CFTC 持仓报告 —— 不是「待补」，是结构性缺失（COT 是期货市场的产物）。所以个股走 walls / gamma / flow（墙位层），**不出综合研判**（方向票里 COT 是一层）。daily_update.sh 的 report 行因此显式列 ETF 品种。",
+  "not_a_proxy": "期权标的就是股票本身，行权价直接是股价，无 ETF/商品换算 —— 比 USO≈WTI 干净得多。proxy_quality 记 direct。",
+  "earnings_drive_walls": "个股 OI 堆积受【财报日】主导，财报周的墙会整体重构；ETF 的墙更多由月度 OPEX 决定。**墙位持久性的经验不能从 ETF 照搬。**",
+  "not_calibrated": "signal_ledger 里没有任何个股样本 —— 黄金 72%/白银 71% 那些命中率一概不适用。个股墙位只作描述性参考，不得据此重仓。",
+  "cross_stock_not_independent": "⚠️ 这批个股彼此高度相关（NVDA/AMD/INTC 同为半导体；MSFT/AAPL/GOOGL 同为大盘科技），且与已有的 QQQ/TQQQ/SPY 重叠。**跨品种合并统计必须做日期聚类 bootstrap** —— 把 N 只个股的同一天当成 N 份独立证据，就是 2026-08-29 那个「138 个品种日」的错误（见 AGENTS.md「单品种时序 vs 跨品种合并」）。单品种时序检验不受此限。",
+  "liquidity_screen": "入选判据用项目已有的 WALL_FLOW_MIN_OI=3000（墙位流可读的最低 OI），不另立阈值。2026-09-25 实测近端主墙 OI：NVDA 120,765/88,044 · AAPL 37,831/17,193 · TSLA 35,697/10,967 · MSFT 25,422/12,821 · INTC 22,359/20,249 · GOOGL 20,718/9,708 · AMD 9,034/13,348。全部远超阈值，最薄的 AMD 也比已在交易的 TQQQ（全链 1,746 合约）厚得多。近价行权价档距 0.22%~0.79%，密度足够。"
+ },
  "instruments": {
   "gold": {
    "display_name": "黄金 Gold (COMEX)",
@@ -246,13 +255,139 @@
     "symbol": "GOOGL",
     "approx_commodity_multiplier": null,
     "proxy_quality": "direct",
-    "note": "GOOGL 个股期权，**非代理**：期权标的就是这只股票本身，行权价直接是股价，不存在 ETF/商品换算问题（比 USO≈WTI 干净得多）。⚠️ 三条与 ETF 品种不同的边界：①A/C 双类别 —— GOOGL(A类,有投票权) 与 GOOG(C类) 是两条独立期权链，实测 GOOGL 4,766 合约 / GOOG 2,408，A 类才是主战场，别混读；②个股期权的 OI 堆积受【财报日】主导，财报周的墙会整体重构，而 ETF 的墙更多由月度 OPEX 决定 —— 墙位持久性判读不能照搬 ETF 的经验；③本项目所有回测/校准样本（signal_ledger）里没有任何个股，命中率数字一概不适用于本品种，墙位只作描述性参考。"
+    "note": "GOOGL = Alphabet A 类（有投票权）。⚠️ 与 GOOG（C 类）是两条独立期权链，别混读。2026-09-25 实测：C 类 OI 只有 A 类的 58%（≤45天 56.5万 vs 96.9万），归一化 OI 剖面相关 r=0.825 —— 结构同向，但**主墙会错开一档**（A 类 call 墙 360=现价+5.4%，C 类 350=现价+3.6%）。取 A 类因为它更厚、墙更清晰；C 类未纳入注册表，需要时只作交叉验证。共同边界见顶层 _single_stock。"
    },
    "price": {
     "source": "cboe_history",
     "symbol": "GOOGL",
     "quality": "direct",
     "note": "GOOGL 日线，标的自身即定价对象，无跟踪误差。"
+   },
+   "commodity": null,
+   "vol_index": null
+  },
+  "tsla": {
+   "key": "tsla",
+   "display_name": "特斯拉 (TSLA)",
+   "asset_class": "single_stock",
+   "cot": null,
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "TSLA",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "direct",
+    "note": "个股期权里最典型的高 IV 标的，墙位受散户投机与整数关口影响大；近端主墙 400（35,697）/370（10,967），档距 2.50（0.66%）。 共同边界见顶层 _single_stock。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "TSLA",
+    "quality": "direct",
+    "note": "TSLA 日线，标的自身即定价对象，无跟踪误差。"
+   },
+   "commodity": null,
+   "vol_index": null
+  },
+  "nvda": {
+   "key": "nvda",
+   "display_name": "英伟达 (NVDA)",
+   "asset_class": "single_stock",
+   "cot": null,
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "NVDA",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "direct",
+    "note": "本批最厚的一条链：近端主墙 230（120,765）/200（88,044），是 GLD 近端墙的 10 倍量级；档距 0.50（0.22%），墙位分辨率最高。财报对全半导体板块有溢出，读它的墙要连 AMD 一起看。 共同边界见顶层 _single_stock。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "NVDA",
+    "quality": "direct",
+    "note": "NVDA 日线，标的自身即定价对象，无跟踪误差。"
+   },
+   "commodity": null,
+   "vol_index": null
+  },
+  "intc": {
+   "key": "intc",
+   "display_name": "英特尔 (INTC)",
+   "asset_class": "single_stock",
+   "cot": null,
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "INTC",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "direct",
+    "note": "低价股（127）→ 单张权利金小、散户 OI 重，近端主墙 130（22,359）/110（20,249）；档距 1.00（0.79%），本批最粗，位点精度略低于其它几只。 共同边界见顶层 _single_stock。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "INTC",
+    "quality": "direct",
+    "note": "INTC 日线，标的自身即定价对象，无跟踪误差。"
+   },
+   "commodity": null,
+   "vol_index": null
+  },
+  "amd": {
+   "key": "amd",
+   "display_name": "AMD (AMD)",
+   "asset_class": "single_stock",
+   "cot": null,
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "AMD",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "direct",
+    "note": "本批最薄（近端主墙 9,034/13,348）但仍远超 WALL_FLOW_MIN_OI；高价（629）+ 档距 2.50（0.40%），近价档数 25 为本批最多。与 NVDA 同板块，勿当独立样本。 共同边界见顶层 _single_stock。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "AMD",
+    "quality": "direct",
+    "note": "AMD 日线，标的自身即定价对象，无跟踪误差。"
+   },
+   "commodity": null,
+   "vol_index": null
+  },
+  "msft": {
+   "key": "msft",
+   "display_name": "微软 (MSFT)",
+   "asset_class": "single_stock",
+   "cot": null,
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "MSFT",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "direct",
+    "note": "近端主墙 505（25,422）/490（12,821），档距 2.50（0.50%）；大盘科技权重股，墙位与 QQQ/SPY 的结构层有重叠，跨品种统计须注意。 共同边界见顶层 _single_stock。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "MSFT",
+    "quality": "direct",
+    "note": "MSFT 日线，标的自身即定价对象，无跟踪误差。"
+   },
+   "commodity": null,
+   "vol_index": null
+  },
+  "aapl": {
+   "key": "aapl",
+   "display_name": "苹果 (AAPL)",
+   "asset_class": "single_stock",
+   "cot": null,
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "AAPL",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "direct",
+    "note": "近端主墙 350（37,831）/330（17,193），档距 2.50（0.74%）；整数关口（300/350/400）墙位尤其厚，是个股里 pin 效应最常被观察到的标的之一。 共同边界见顶层 _single_stock。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "AAPL",
+    "quality": "direct",
+    "note": "AAPL 日线，标的自身即定价对象，无跟踪误差。"
    },
    "commodity": null,
    "vol_index": null

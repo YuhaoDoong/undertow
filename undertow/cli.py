@@ -405,9 +405,21 @@ def cmd_quote(args) -> int:
     """
     from undertow.collect.longbridge_quote import (fetch_stock_quotes,
                                                    LiveQuotesUnavailable)
-    syms = [s if "." in s else f"{s}.US" for s in (args.symbols or [])]
+    # 既接受品种 key（gold / silver，与其它命令一致），也接受代码（GLD / GLD.US）。
+    # 2026-09-25 实测 `undertow quote gold silver` 打出「未取到任何报价」——
+    # 它把 key 拼成了 gold.US 去查，长桥自然查不到；而这个命令是"查价唯一入口"，
+    # 唯一入口对最自然的用法静默失败，等于没有入口。
+    cfg = load_config()
+    syms = []
+    for s in (args.symbols or []):
+        inst = cfg.instruments.get(s.lower())
+        if inst is not None and inst.options and inst.options.symbol:
+            syms.append(f"{inst.options.symbol}.US")
+        elif inst is not None:
+            print(f"[跳过] {s} 未配置期权/ETF 代码，无实时报价", file=sys.stderr)
+        else:
+            syms.append(s if "." in s else f"{s.upper()}.US")
     if not syms:
-        cfg = load_config()
         syms = [f"{i.options.symbol}.US" for i in cfg.instruments.values()
                 if i.options and i.options.symbol]
     try:

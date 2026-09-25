@@ -78,3 +78,22 @@ def test_intraday_always_uses_regular_session():
 def test_all_sessions_absent_degrades_to_regular():
     v, kind, prev = _freshest(_row(42.0, 41.0))
     assert kind == "常规" and abs(v - 42.0) < 1e-9 and abs(prev - 41.0) < 1e-9
+
+
+def test_quote_command_accepts_instrument_keys(monkeypatch, capsys):
+    """`undertow quote gold silver` 必须查 GLD.US / SLV.US，不能拼成 gold.US。
+
+    2026-09-25 实测该用法打出「未取到任何报价」—— 查价唯一入口对最自然的用法静默失败。
+    """
+    from undertow import cli
+    from undertow.collect import longbridge_quote as lq
+    asked = []
+    def fake(syms):
+        asked.extend(syms)
+        return {s: lq.StockQuote(symbol=s, last=1.0, prev_close=1.0, freshest=1.0,
+                                  freshest_kind="常规", freshest_prev=1.0) for s in syms}
+    monkeypatch.setattr(lq, "fetch_stock_quotes", fake)
+    class A: symbols = ["gold", "SLV", "qqq.US"]
+    assert cli.cmd_quote(A()) == 0
+    assert asked == ["GLD.US", "SLV.US", "qqq.US"], asked
+    print("PASS test_quote_command_accepts_instrument_keys")

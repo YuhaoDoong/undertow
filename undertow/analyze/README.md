@@ -46,6 +46,7 @@
 | `strategy.py` | 方向性情景参数化（期货）：方向随研判、位点随结构、缓冲随 ATR、实时层否决票。<br>Directional futures scenarios. |
 | `credit_spread.py` | 方向性信用价差：偏空→熊市看涨价差 / 偏多→牛市看跌价差（跟近端 bias）。<br>Directional credit spreads. |
 | `condor.py` | 铁鹰：区间震荡 + 偏卖方环境的规则化结构映射。<br>Iron condor for range/seller regimes. |
+| `wall_spread.py` | **墙位卖方价差 v3**（三步法定版，只激活白银；候选 ≠ 建议下单，生死线未过，见文件头）<br>**第四步（2026-09-25）**：技术指标能否提示破墙 —— `scripts/step4_filters.py` 在 15 品种 20 年日线上测，结论：方向类指标只是波动率代理、布林带宽扩张无效、只有 ATR 5 日扩张比 ≥1.3 跨簇复现（约 2×）；**未进模块、未设阈值**。详见 `docs/wall_spread_3steps.md` 第四步。 |
 
 ## Trade planning / 交易计划（盈亏比 + 斐波，波段交易纪律落地）
 
@@ -67,7 +68,7 @@
 |---|---|
 | `portfolio.py` | **实盘持仓理论评价**：解析长桥期权代码 → 按(品种,到期)识别**组合期权**（垂直/跨式/铁鹰/日历/对角/风险反转）→ 逐笔对研判语境复盘（顺逆、行权 vs Gamma 墙、被指派风险、净 Delta、浮盈亏）+ **整品种策略姿态** + **资金约束**（够不够接货）。有实时期权价则用真实市价估值，否则 BS。<br>Combo-aware review of live positions; deterministic, read-only. |
 | `healthcheck.py` | **持仓/拟开仓体检**：确定性规则分级预警（高/中/低）——近到期×资金不够接货、卖方盈亏比过低（折算所需胜率）、窄价差+近到期 gamma、裸卖未封顶、逆势、单品种集中度。<br>Rule-based position health checks. |
-| `technicals.py` | **技术指标层**：从价序确定性算 均线排列/RSI/KDJ/MACD/布林/CCI/BIAS + 多窗口涨幅 → 短线过热度综合分 + 趋势结构。与期权结构层正交，作短线过热度/趋势交叉印证。<br>⚠️ 过热分五个分量彼此相关 0.79~0.93（同一信息数了四遍），"强超买"占 20.5% 的时间，且 98% 落在 MA20 之上——它更接近趋势强度的写法。超买超卖请以 `stretch.py` 为准。<br>Classic TA indicators; overheat score is collinear — prefer `stretch.py`. |
+| `technicals.py` | **技术指标层**：从价序确定性算 均线排列/RSI/KDJ/MACD/布林/CCI/BIAS + 多窗口涨幅 → 短线过热度综合分 + 趋势结构。与期权结构层正交，作短线过热度/趋势交叉印证。<br>⚠️ 过热分五个分量彼此相关 0.79~0.93（同一信息数了四遍），"强超买"占 20.5% 的时间，且 98% 落在 MA20 之上——它更接近趋势强度的写法。超买超卖请以 `stretch.py` 为准。<br>Classic TA indicators; overheat score is collinear — prefer `stretch.py`.<br>2026-09-25 加**序列版** `rsi_series / pctb_series / macd_hist_series / bb_width_series`（与末值版逐点一致，`test_no_drift` 钉住），供 `scripts/step4_filters.py` 做长历史检验。 |
 | `stretch.py` | **超买超卖（回测校准，两个正交维度）**：<br>① 偏离度 `(现价−MA20)/ATR14` —— 离常态多远；② 回撤度 `(现价−60日最高)/ATR14` —— 从近期高点掉多少。两者分位序列相关仅 **0.73**，是真正互补的；而回撤20日/20日区间位置与偏离度相关 **0.91/0.95**（同一件事换个写法），故不采用。档位由两维分位均值决定，合并后 t 从 3.99/4.67 升到 **4.86**。<br>每个读数强制带上该 (档位 × regime) 的回测边缘/跑赢率/n/Welch t，不输出未校准的裸标签；两维分歧时给出专门提示（分歧组边缘只有一致组的四成且不显著）。<br>实测边界：14 格里 5 格 \|t\|≥2、其中 4 格在超卖侧；超买侧只能读作「追高性价比差」，不可读作「要反转」；**1H/4H 是噪音，仅日线成立**。⚠️ 「跑赢率 60~69%」不是「上涨概率」——绝对方向准确率仅 56~60%（基准 55~56%）。<br>Two orthogonal ATR-normalised dimensions, each reading carrying its own backtested edge. |
 | `stretch_backtest.py` | 重跑上表（`undertow backtest-stretch --emit --compare`），支持 combo/stretch/drawdown 三种口径对照 + 两维一致/分歧统计。方法学三要点：**局部去趋势**（减过去60日漂移，而非全样本均值，否则牛市把上涨白送给抄底信号）、**同 regime 内比较**（熊市中性桶 +0.46 / 牛市 −0.42，跨 regime 直接比会误判）、**不重叠子样本 + Welch 双样本 t**（边缘与 t 必须同源）。<br>Regenerates the calibration; local detrend + within-regime + non-overlapping Welch t. |
 | `resonance.py` | **共振层**：期权结构（主，近端 bias=Gamma墙位+资金流）× 超买超卖（辅）是否同向 → 共振/背离/单边/无信号，并把每日联合状态落盘 `data/history/resonance/`。<br>⚠️ **本层未校准，且有一处反证**：期权结构快照仅 22~46 天，样本不足以回测；唯一有长历史的 COT 层上测下来共振**没有增益**——超卖单独 +0.885pp/t=2.42 显著，叠加 COT 低分位后样本从 1213 降到 491、边缘仅升到 +0.988pp、**t 反而掉到 0.97**。故共振标记**只用于分配注意力，不作为入场理由，不据此放大仓位**。<br>只有极超卖/强超卖与极超买/强超买参与判定；偏超卖/偏超买触发率各 15% 且实测无方向价值，被排除。<br>Structure×stretch agreement; **uncalibrated**, attention-allocation only. |

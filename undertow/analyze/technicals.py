@@ -172,6 +172,81 @@ def _bollinger(closes, n=20, k=2.0):
     return ma, up, lo, pctb
 
 
+# ── 序列版（逐根、无前视）───────────────────────────────────────────────
+# 上面的 _rsi/_bollinger/_macd 只返回【末值】，够研报用，但回测要每一根的读数。
+# 逐根重算末值版是 O(n²)，5,000 根 × 3 个指标还行，再多就不行；更要紧的是
+# 回测脚本自己再写一遍 RSI 必然与这里漂移（BetaGold 仓库里 _stoch_rsi 有三份
+# 实现、阈值各自漂移的教训）。所以序列版放在同一个文件里，并由
+# tests/test_no_drift.py 钉住「序列版第 i 位 == 末值版喂前 i+1 根」。
+#
+# 2026-09-25 首个用途：scripts/step4_filters.py —— 检验技术指标能否预测
+# 「2~4 天内逆向走超过卖墙缓冲」，即卖方价差的亏损机制。
+
+
+def rsi_series(closes: list[float], n: int = 14) -> list[float | None]:
+    """通达信口径 RSI 逐根序列。第 i 位 == `_rsi(closes[:i+1], n)`。"""
+    m = len(closes)
+    out: list[float | None] = [None] * m
+    if m <= n:
+        return out
+    gains = [max(closes[i] - closes[i - 1], 0.0) for i in range(1, m)]
+    losses = [max(closes[i - 1] - closes[i], 0.0) for i in range(1, m)]
+    sg = sum(gains[:n]); sl = sum(losses[:n])
+    for i in range(n, m):                       # gains[i-n .. i-1] 对应 closes[i-n .. i]
+        if i > n:
+            sg += gains[i - 1] - gains[i - 1 - n]
+            sl += losses[i - 1] - losses[i - 1 - n]
+        ag, al = sg / n, sl / n
+        out[i] = 50.0 if ag + al == 0 else 100.0 * ag / (ag + al)
+    return out
+
+
+def pctb_series(closes: list[float], n: int = 20, k: float = 2.0) -> list[float | None]:
+    """布林 %B 逐根序列。第 i 位 == `_bollinger(closes[:i+1], n, k)[3]`。"""
+    m = len(closes)
+    out: list[float | None] = [None] * m
+    for i in range(n - 1, m):
+        w = closes[i - n + 1:i + 1]
+        ma = statistics.fmean(w); sd = statistics.pstdev(w)
+        up, lo = ma + k * sd, ma - k * sd
+        out[i] = (closes[i] - lo) / (up - lo) if up > lo else 0.5
+    return out
+
+
+def bb_width_series(closes: list[float], n: int = 20, k: float = 2.0) -> list[float | None]:
+    """布林带宽逐根序列：(上轨 − 下轨) / 中轨。第 i 位与 `_bollinger(closes[:i+1])` 同源。
+
+    用户 2026-09-25：「布林带突然扩大的时候，可能行情走向极端，破墙概率变大？」
+    带宽本身是波动率状态，带宽的变化率是波动率的变化 —— 两者分开测。
+    """
+    m = len(closes)
+    out: list[float | None] = [None] * m
+    for i in range(n - 1, m):
+        w = closes[i - n + 1:i + 1]
+        ma = statistics.fmean(w); sd = statistics.pstdev(w)
+        out[i] = (2 * k * sd) / ma if ma > 0 else None
+    return out
+
+
+def macd_hist_series(closes: list[float], fast: int = 12, slow: int = 26,
+                     signal: int = 9) -> list[float | None]:
+    """MACD 柱逐根序列。第 i 位 == `_macd(closes[:i+1], ...)[2]`。
+
+    `_ema_series` 是因果的（每一位只依赖过去），所以全序列上第 i 位的 EMA
+    与只喂前 i+1 根算出的末值相同 —— 序列版不需要逐前缀重算。
+    """
+    m = len(closes)
+    out: list[float | None] = [None] * m
+    if m < slow:
+        return out
+    ef, es = _ema_series(closes, fast), _ema_series(closes, slow)
+    dif = [a - b for a, b in zip(ef, es)]
+    dea = _ema_series(dif, signal)
+    for i in range(slow - 1, m):
+        out[i] = 2 * (dif[i] - dea[i])
+    return out
+
+
 def _atr(highs, lows, closes, n=14):
     if len(closes) < n + 1:
         return None

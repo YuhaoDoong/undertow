@@ -83,3 +83,26 @@ if __name__ == "__main__":
     for fn in fns:
         fn()
     print(f"\n{len(fns)} tests passed.")
+
+
+def test_indicator_series_match_last_value_versions():
+    """序列版第 i 位必须等于末值版喂前 i+1 根 —— 否则回测与研报读的是两套指标。
+
+    2026-09-25 为 step4_filters 加的序列版。若有人只改末值版（比如把 RSI 从
+    通达信口径换成 Wilder 口径），这里立刻挂。
+    """
+    h, l, c = _series(n=200, seed=7)
+    rs = technicals.rsi_series(c, 14)
+    pb = technicals.pctb_series(c, 20, 2.0)
+    mh = technicals.macd_hist_series(c, 12, 26, 9)
+    for i in range(30, len(c), 5):
+        pre = c[:i + 1]
+        assert abs(rs[i] - technicals._rsi(pre, 14)) < 1e-9, ("rsi", i)
+        assert abs(pb[i] - technicals._bollinger(pre, 20, 2.0)[3]) < 1e-9, ("pctb", i)
+        assert abs(mh[i] - technicals._macd(pre, 12, 26, 9)[2]) < 1e-9, ("macd", i)
+        ma, up, lo, _ = technicals._bollinger(pre, 20, 2.0)
+        assert abs(technicals.bb_width_series(c, 20, 2.0)[i] - (up - lo) / ma) < 1e-9, ("bbw", i)
+    # 序列版在数据不足时必须给 None，不能给 0（0 是合法读数，会被当成真信号）
+    assert technicals.rsi_series(c[:10], 14) == [None] * 10
+    assert technicals.macd_hist_series(c[:20], 12, 26, 9) == [None] * 20
+    print("PASS test_indicator_series_match_last_value_versions")

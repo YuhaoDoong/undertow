@@ -26,7 +26,7 @@
 |---|---|
 | `macro.py` | 宏观背景：实际利率/美元/通胀预期 + 波动率指数 → 金银基本面驱动。<br>Real rates / USD / breakeven + vol index. |
 | `volregime.py` | 波动率环境：期权偏贵/偏便宜 → 波段级买方/卖方倾向。<br>Rich/cheap vol regime. |
-| `vrp_history.py` | 波动率溢价 VRP 跨周期稳定性检验（"这个卖方 edge 能否穿越牛熊"，只落盘存档、不进日报）。<br>Cross-regime VRP stability check (archived, not in daily report). |
+| `vrp_history.py` | 波动率溢价 VRP 跨周期稳定性检验（"这个卖方 edge 能否穿越牛熊"，只落盘存档、不进日报）。<br>Cross-regime VRP stability check (archived, not in daily report).<br>2026-09-25 `scripts/step6_vrp.py` 复用本模块按波动率状态拆：溢价在 ATR 扩张日均值≈0、尾巴恶化 4~8 倍；ATR 低分位是风险调整后最好的卖方环境；短到期（3~10 DTE）溢价比 30 天指数大一倍以上。见 `docs/wall_spread_3steps.md` 第六步。 |
 
 ## Backtest & aggregation / 回测与综合
 

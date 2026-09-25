@@ -21,6 +21,32 @@ venv/
 # macOS
 .DS_Store
 
+# ══════════════════════════════════════════════════════════════════════
+# 同步原则（用户 2026-09-25）：只同步【不可再生】的东西
+# ══════════════════════════════════════════════════════════════════════
+# 快照不可再生 → 入库即备份。研报/可视化/回测中间产物可由快照+代码重算 → 不入库。
+#
+# 实测这条原则值多少（2026-09-25）：
+#   data/reports  工作区 157MB（archive 100MB + replay 30MB）· git 历史 32MB
+#   data/snapshots 工作区 117MB · git 历史 188MB
+#   .git 合计 248MB
+# 研报是纯派生物，却占了 git 历史的 13% 和工作区的 57%。
+#
+# ⚠️ 两个例外必须继续跟踪 —— 它们不是研报，是【失败的唯一凭证】：
+#   FAILURE_<date>.txt / ALERT_<date>.txt
+# AGENTS.md 第四节：「失败必须推送 + 落兜底文件，纳入 git」。
+# 只弹通知不够（launchd 下 osascript 未必弹得出），所以这个文件就是事后唯一能
+# 证明"那天确实失败过"的东西。把它一起忽略掉，等于把静默失败又造回来一次。
+data/reports/*
+!data/reports/FAILURE_*.txt
+!data/reports/ALERT_*.txt
+
+# 回测中间网格：可由 scripts/backtest_credit_wall.py 从快照重算（工作区 9MB）。
+# 同目录下小体积的 credit_wall_*.jsonl 逐笔账本【保留】——
+# 它是已停用策略的失败证据，report/html.py 直接引用它。
+data/backtest/step2_grid.jsonl
+data/backtest/step4_holding.jsonl
+
 # 注意：data/snapshots/ 【不忽略】——期权链快照不可再生，入库即等于备份。
 .humanize/
 

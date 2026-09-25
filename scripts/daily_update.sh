@@ -282,12 +282,16 @@ else
     alert "⚠️ 台账回填失败（ET $ET_NOW）" "rc=$BF_RC：$(printf '%s' "$BF_OUT" | tail -1)"
 fi
 
-git add data/snapshots data/reports data/history
+# 只提交【不可再生】的：快照（期权链）+ 台账（data/history）。
+# data/reports 里的 HTML/PDF 已 gitignore（可由快照+代码重算），
+# 这一行留着是为了捞同目录下的 FAILURE_*/ALERT_* —— .gitignore 的两条 ! 例外，
+# 它们是"那天确实失败过"的唯一凭证，漏掉就等于把静默失败造回来。
+git add data/snapshots data/history data/reports
 if git diff --cached --quiet; then
     echo "[跳过] 无变更可提交"
     exit 0
 fi
-git commit -m "每日自动更新 $(TZ=America/New_York date +%F)：期权链快照+四品种报告（launchd 定时任务）
+git commit -m "每日自动更新 $(TZ=America/New_York date +%F)：期权链快照+台账（launchd 定时任务）
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 git push

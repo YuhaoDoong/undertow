@@ -79,3 +79,47 @@ def test_script_syntax_valid():
     r = subprocess.run(["zsh", "-n", str(ROOT / "scripts" / "daily_update.sh")],
                        capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_only_irreproducible_data_is_tracked():
+    """同步原则（用户 2026-09-25）：只入库不可再生的东西。
+
+    研报 HTML/PDF 是纯派生物（快照 + 代码即可重算），实测却占了工作区 57%
+    （157MB，其中 archive 100MB + replay 30MB）与 git 历史 13%（32MB）。
+
+    ⚠️ 但 FAILURE_*/ALERT_* 必须继续跟踪 —— 它们不是研报，是【失败的唯一凭证】。
+    AGENTS.md 第四节：只弹通知不够（launchd 下 osascript 未必弹得出），
+    这个落盘文件是事后唯一能证明"那天确实失败过"的东西。
+    一起忽略掉 = 把静默失败亲手造回来。
+    """
+    import subprocess as sp
+
+    def ignored(path: str) -> bool:
+        # check-ignore 退出码 0 = 被忽略
+        return sp.run(["git", "check-ignore", "-q", path],
+                      cwd=ROOT).returncode == 0
+
+    assert ignored("data/reports/gold_2026-09-24.html"), "研报 HTML 应忽略（可再生）"
+    assert ignored("data/reports/index_2026-09-24.html"), "索引页应忽略（可再生）"
+    assert ignored("data/reports/archive/x.html"), "归档研报应忽略"
+    assert ignored("data/backtest/step2_grid.jsonl"), "回测中间网格应忽略（可重算）"
+
+    assert not ignored("data/reports/FAILURE_2026-09-24.txt"), \
+        "FAILURE 文件是失败的唯一凭证，必须入库"
+    assert not ignored("data/reports/ALERT_2026-09-24.txt"), \
+        "ALERT 文件是失败的唯一凭证，必须入库"
+    assert not ignored("data/snapshots/options/GLD/2026-09-24.json.gz"), \
+        "期权链快照不可再生，必须入库"
+    assert not ignored("data/history/signals/ledger.jsonl"), \
+        "台账是本项目唯一认可的统计口径，必须入库"
+    assert not ignored("data/backtest/sell_put_wall_best.jsonl"), \
+        "逐笔账本是已停用策略的失败证据，report/html.py 直接引用，必须入库"
+
+    # 无人值守脚本必须真的会 add 到那两个凭证 —— 光有 ! 例外没用，
+    # 如果脚本不 add data/reports，FAILURE 文件永远进不了 git。
+    sh = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
+    add_line = next(l for l in sh.splitlines() if l.startswith("git add "))
+    assert "data/snapshots" in add_line and "data/history" in add_line
+    assert "data/reports" in add_line, \
+        "必须仍 add data/reports，否则 FAILURE_/ALERT_ 凭证进不了 git"
+    print("PASS test_only_irreproducible_data_is_tracked")

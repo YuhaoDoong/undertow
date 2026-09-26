@@ -80,18 +80,30 @@ class TradePlan:
 
 
 def load_plans(path: Path | None = None) -> list[TradePlan]:
+    """不存在 → []；损坏/不可读/结构不符 → PrivateStoreError（不再当作「没有计划」）。"""
+    from undertow.soul._store import build, read_json
     p = Path(path) if path else DEFAULT_PATH
-    if not p.exists():
+    raw = read_json(p)
+    if raw is None:
         return []
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return []
+    return build(p, lambda: _plans(raw))
+
+
+def _level(r: dict) -> float:
+    """触发价必填且有限。旧实现缺失时默认 0：「涨到」方向的计划因此永远显示已触发。"""
+    import math
+    x = float(r["level"])
+    if not math.isfinite(x) or x <= 0:
+        raise ValueError(f"计划 {r.get('id', '?')} 的触发价无效：{r['level']!r}")
+    return x
+
+
+def _plans(raw: dict) -> list[TradePlan]:
     out = []
     for r in raw.get("plans", []):
         out.append(TradePlan(
             id=r.get("id", ""), underlying=r.get("underlying", ""),
-            structure=r.get("structure", ""), level=float(r.get("level", 0) or 0),
+            structure=r.get("structure", ""), level=_level(r),
             direction=r.get("direction", "below"),
             legs=[Leg(**l) for l in r.get("legs", [])],
             exits=Exits(**r.get("exits", {})), gate=r.get("gate", ""),
@@ -101,10 +113,12 @@ def load_plans(path: Path | None = None) -> list[TradePlan]:
 
 
 def save_plans(plans: list[TradePlan], path: Path | None = None) -> Path:
+    """原子写；现有文件损坏 → 抛错、原件不动。"""
+    from undertow.soul._store import atomic_write_json, locked, read_json
     p = Path(path) if path else DEFAULT_PATH
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"plans": [asdict(x) for x in plans]},
-                            ensure_ascii=False, indent=2), encoding="utf-8")
+    with locked(p):
+        read_json(p)
+        atomic_write_json(p, {"plans": [asdict(x) for x in plans]}, indent=2)
     return p
 
 

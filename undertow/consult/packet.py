@@ -188,7 +188,8 @@ def _thesis_brief(th) -> dict | None:
 
 def build_consult_packet(*, review, health, contexts, capital=None,
                          question: str = "", mode: str = "review",
-                         pre_trade=None, news=None, soul=None, thesis=None, asof: date) -> dict:
+                         pre_trade=None, news=None, soul=None, soul_status: str = "ok", thesis=None,
+                         asof: date) -> dict:
     """组装咨询包。
 
     review：当前持仓 PortfolioReview；health：list[HealthFinding]；
@@ -211,6 +212,8 @@ def build_consult_packet(*, review, health, contexts, capital=None,
         "healthcheck": [_jsonable(f) for f in (health or [])],
         "news": _news_brief(news),
         "soul": _soul_brief(*(soul if soul else (None, None))),
+        # ok / absent（未建档）/ error: …（档案存在但不可用）。非 ok 时纪律层【未核查】，不是「没有违规」
+        "soul_status": soul_status if soul else (soul_status if soul_status != "ok" else "absent"),
         "thesis": _thesis_brief(thesis),
     }
     if pre_trade is not None:
@@ -232,6 +235,11 @@ def render_prompt(packet: dict) -> str:
         L.append(f"  - {g}")
     L.append("")
     sl = packet.get("soul")
+    st_ = packet.get("soul_status", "ok")
+    if not sl:
+        why = "用户尚未建立灵魂档案" if st_ == "absent" else f"档案不可用（{st_}）"
+        L.append(f"【纪律层：未完成核查】{why}。不得把「没有列出违规」理解为「没有违规」。")
+        L.append("")
     if sl:
         L.append("【用户专属交易体系（灵魂档案）—— 回答必须遵守这些规则，不得建议破戒】")
         if sl.get("north_star"):

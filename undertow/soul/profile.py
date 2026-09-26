@@ -124,15 +124,13 @@ def init_from_template(dest: Path | None = None, template: Path | None = None) -
 
 
 def load_profile(path: Path | None = None) -> SoulProfile | None:
-    """读档案；不存在返回 None（调用方优雅降级）。"""
+    """读档案。不存在 → None（尚未建档）；损坏/不可读/结构不符 → PrivateStoreError（不再当作「没有档案」）。"""
+    from undertow.soul._store import build, read_json
     p = Path(path) if path else DEFAULT_PATH
-    if not p.exists():
+    raw = read_json(p)
+    if raw is None:
         return None
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-    return SoulProfile(
+    return build(p, lambda: SoulProfile(
         schema=raw.get("schema", SCHEMA),
         updated=raw.get("updated", ""),
         owner=raw.get("owner", ""),
@@ -145,14 +143,16 @@ def load_profile(path: Path | None = None) -> SoulProfile | None:
         open_questions=[OpenQuestion(**q) for q in raw.get("open_questions", [])],
         limits=Limits(**raw.get("limits", {})),
         notes=raw.get("notes", ""),
-    )
+    ))
 
 
 def save_profile(profile: SoulProfile, path: Path | None = None) -> Path:
-    """写档案（含敏感个人内容，路径须在 gitignore 的 data/soul/ 下）。"""
+    """写档案（含敏感个人内容，路径须在 gitignore 的 data/soul/ 下）。原子写；现有文件损坏则拒绝覆盖。"""
+    from undertow.soul._store import atomic_write_json, locked, read_json
     p = Path(path) if path else DEFAULT_PATH
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(asdict(profile), ensure_ascii=False, indent=2), encoding="utf-8")
+    with locked(p):
+        read_json(p)                    # 现有文件损坏 → 抛错，不覆盖
+        atomic_write_json(p, asdict(profile), indent=2)
     return p
 
 
@@ -168,6 +168,17 @@ class SoulViolation:
     scope: str = ""
 
 
+def _pct(x: float, net: float) -> float:
+    """占净资产 %。净资产 ≤0 时任何正风险都是无穷大（旧实现 `and net` 把 0 当成跳过检查）。"""
+    if net > 0:
+        return x / net * 100
+    return float("inf") if x > 0 else 0.0
+
+
+def _pct_s(p: float) -> str:
+    return "净资产 ≤0" if p == float("inf") else f"净资产 {p:.0f}%"
+
+
 def check_against_profile(review, capital, profile: SoulProfile | None) -> list[SoulViolation]:
     """把当前持仓/拟开仓对照【用户自己的限额】做确定性检查。
 
@@ -178,41 +189,63 @@ def check_against_profile(review, capital, profile: SoulProfile | None) -> list[
     lim = profile.limits
     out: list[SoulViolation] = []
     net = capital.net_assets if capital else None
+    if net is None and (lim.max_concentration_pct is not None or lim.max_risk_per_trade_pct is not None
+                        or getattr(lim, "max_loss_per_trade_pct", None) is not None):
+        # 资金未知时所有「占净资产 %」的检查都做不了；旧实现静默跳过，返回的空列表像「全部合规」
+        out.append(SoulViolation(severity="未完成核查", rule_id="capital_unknown",
+                                 title="净资产未知：按净资产比例的纪律检查未执行",
+                                 detail="集中度、单笔止损风险、单笔最大亏损三项都没有核查；这不是通过。"))
 
     for g in review.groups:
         # 单品种集中度
-        risk = sum((c.capital_at_risk or 0) for c in g.combos)
-        if lim.max_concentration_pct is not None and net:
-            pct = risk / net * 100
+        # 未知风险资金（日历/对角等算不出的组合）不折成 0：已知部分超限照报；未超限但有未知成员 → 未完成核查
+        unknown = [c for c in g.combos if c.capital_at_risk is None]
+        risk = sum(c.capital_at_risk for c in g.combos if c.capital_at_risk is not None)
+        if lim.max_concentration_pct is not None and net is not None:
+            pct = _pct(risk, net)
             if pct > lim.max_concentration_pct:
                 out.append(SoulViolation(
                     severity="违反铁律", rule_id="max_concentration_pct",
                     title="单品种集中度超过自定上限",
-                    detail=f"{g.display_name} 风险资金 ${risk:,.0f} ≈ 净资产 {pct:.0f}%，"
-                           f"超过你设的 {lim.max_concentration_pct:.0f}%。",
+                    detail=f"{g.display_name} 风险资金 ${risk:,.0f} ≈ {_pct_s(pct)}，"
+                           f"超过你设的 {lim.max_concentration_pct:.0f}%。"
+                           + (f"另有 {len(unknown)} 个组合风险未知，实际只会更高。" if unknown else ""),
+                    scope=g.underlying))
+            elif unknown:
+                out.append(SoulViolation(
+                    severity="未完成核查", rule_id="max_concentration_pct",
+                    title="单品种集中度无法完整核查",
+                    detail=f"{g.display_name} 有 {len(unknown)} 个组合的风险资金算不出（如日历/对角价差）；"
+                           f"已知部分 ${risk:,.0f} ≈ {_pct_s(pct)}，不代表通过。",
                     scope=g.underlying))
 
         for c in g.combos:
             # 双层：①止损风险(正常行情，决定仓位) ②最大亏损(跳空硬上限)
             from undertow.analyze.healthcheck import stop_risk
             sr = stop_risk(c)
-            if lim.max_risk_per_trade_pct is not None and net and sr:
-                pct = sr / net * 100
+            if lim.max_risk_per_trade_pct is not None and net is not None and sr:
+                pct = _pct(sr, net)
                 if pct > lim.max_risk_per_trade_pct:
                     out.append(SoulViolation(
                         severity="违反铁律", rule_id="max_risk_per_trade_pct",
                         title="单笔止损风险超过上限",
-                        detail=f"{c.label} 按预设止损了结约亏 ${sr:,.0f} ≈ 净资产 {pct:.0f}%，"
+                        detail=f"{c.label} 按预设止损了结约亏 ${sr:,.0f} ≈ {_pct_s(pct)}，"
                                f"超过你设的 {lim.max_risk_per_trade_pct:.0f}%。",
                         scope=f"{g.underlying} · {c.label}"))
             cap = c.capital_at_risk
-            if lim.max_loss_per_trade_pct is not None and net and cap:
-                pct = cap / net * 100
+            if lim.max_loss_per_trade_pct is not None and net is not None and cap is None:
+                out.append(SoulViolation(
+                    severity="未完成核查", rule_id="max_loss_per_trade_pct",
+                    title="单笔最大亏损算不出（跳空口径未核查）",
+                    detail=f"{c.label} 的最大亏损/风险资金未知（如跨期结构）；这不是通过。",
+                    scope=f"{g.underlying} · {c.label}"))
+            if lim.max_loss_per_trade_pct is not None and net is not None and cap:
+                pct = _pct(cap, net)
                 if pct > lim.max_loss_per_trade_pct:
                     out.append(SoulViolation(
                         severity="违反铁律", rule_id="max_loss_per_trade_pct",
                         title="单笔最大亏损超过硬上限（跳空口径）",
-                        detail=f"{c.label} 最大亏 ${cap:,.0f} ≈ 净资产 {pct:.0f}%，"
+                        detail=f"{c.label} 最大亏 ${cap:,.0f} ≈ {_pct_s(pct)}，"
                                f"超过你设的 {lim.max_loss_per_trade_pct:.0f}%。"
                                f"止损可能因跳空失效，这条是最后防线。",
                         scope=f"{g.underlying} · {c.label}"))

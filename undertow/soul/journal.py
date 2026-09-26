@@ -81,13 +81,16 @@ class JournalEntry:
 
 
 def load_journal(path: Path | None = None) -> list[JournalEntry]:
+    """不存在 → []（尚未记日记）；损坏/不可读/结构不符 → PrivateStoreError（不再当作空日记）。"""
+    from undertow.soul._store import build, read_json
     p = Path(path) if path else DEFAULT_PATH
-    if not p.exists():
+    raw = read_json(p)
+    if raw is None:
         return []
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return []
+    return build(p, lambda: _entries(raw))
+
+
+def _entries(raw: dict) -> list[JournalEntry]:
     out = []
     for r in raw.get("entries", []):
         out.append(JournalEntry(
@@ -105,27 +108,41 @@ def load_journal(path: Path | None = None) -> list[JournalEntry]:
 
 
 def save_journal(entries: list[JournalEntry], path: Path | None = None,
-                 theses: list | None = None) -> Path:
+                 theses: list | None = None, *, _locked: bool = False) -> Path:
+    """原子写。现有文件损坏 → 抛错、原件不动（旧实现会读成空再覆盖整本历史）。
+
+    theses=None 时保留文件里现有的 theses —— 读取同样严格，坏档不会被写成空。
+    _locked=True 表示调用方已持有 journal_lock()（读改写整段互斥）。
+    """
+    from undertow.soul._store import atomic_write_json, locked, read_json
     p = Path(path) if path else DEFAULT_PATH
-    p.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"entries": [asdict(e) for e in entries]}
-    if theses is not None:
-        payload["theses"] = [asdict(t) for t in theses]
+
+    def _do():
+        read_json(p)                                      # 损坏 → PrivateStoreError
+        payload = {"entries": [asdict(e) for e in entries]}
+        payload["theses"] = [asdict(t) for t in (theses if theses is not None else load_theses(p))]
+        atomic_write_json(p, payload, indent=2)
+    if _locked:
+        _do()
     else:
-        payload["theses"] = [asdict(t) for t in load_theses(p)]
-    p.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        with locked(p):
+            _do()
     return p
 
 
+def journal_lock(path: Path | None = None):
+    """读 → 改 → 写 整段互斥（capture 用）。"""
+    from undertow.soul._store import locked
+    return locked(Path(path) if path else DEFAULT_PATH)
+
+
 def load_theses(path: Path | None = None) -> list[Thesis]:
+    from undertow.soul._store import build, read_json
     p = Path(path) if path else DEFAULT_PATH
-    if not p.exists():
+    raw = read_json(p)
+    if raw is None:
         return []
-    try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return []
-    return [Thesis(**t) for t in raw.get("theses", [])]
+    return build(p, lambda: [Thesis(**t) for t in raw.get("theses", [])])
 
 
 def _hit(ts):

@@ -1529,10 +1529,13 @@ def cmd_live(args) -> int:
                         last=(q.last if q else None))
 
     # 按计划单里的腿分组：同一计划的腿算作一个组合；未被计划覆盖的腿单独成组
+    plan_warning = None
     try:
         plans = [p for p in load_plans() if p.status == "active"]
-    except Exception:
-        plans = []
+    except Exception as e:
+        # 旧实现静默当作「没有计划」：止损/目标线没套上，报告却照常给出（Codex 008 G02）
+        plans, plan_warning = [], f"{type(e).__name__}: {e}"[:300]
+        print(f"⚠️ 计划档不可用，本次体检未套用任何计划的止损/目标：{plan_warning}", file=sys.stderr)
     grouped, seen, cost_note = [], set(), []
     for pl in plans:
         legs = [mk(l.symbol) for l in pl.legs if l.symbol in held]
@@ -1579,6 +1582,8 @@ def cmd_live(args) -> int:
             c = replace(c, warnings=list(c.warnings) + [f"⚠️ {mismatch}"])
         checks.append(c)
     # 净资产 0 是合法值（旧写法 `or None` 会把它当成缺失）
+    if plan_warning:
+        print(f"> ⚠️ **计划档不可用：本表未套用任何止损/目标线**（{plan_warning}）\n")
     print(render_md(checks, net_assets=assets.net_assets))
     if cost_note:
         print(f"\n> ⚠️ 以下持仓的成本用了**券商成本价**（计划里缺实际成交价）："
@@ -2963,7 +2968,12 @@ def cmd_soul(args) -> int:
         else:
             print(f"档案已存在，未覆盖 → {path}")
         return 0
-    prof = load_profile()
+    from undertow.soul._store import PrivateStoreError
+    try:
+        prof = load_profile()
+    except PrivateStoreError as e:
+        print(f"[灵魂档案不可用] {e}", file=sys.stderr)
+        return 2
     if getattr(args, "json", False):
         import dataclasses as _dc
         print(json.dumps(_dc.asdict(prof) if prof else {}, ensure_ascii=False, indent=2))
@@ -3000,7 +3010,12 @@ def cmd_journal(args) -> int:
     from undertow.soul.journal import (load_journal, save_journal, capture_trades,
                                        JournalEntry, render_journal_md, render_entry_md,
                                        load_theses, render_theses_md)
-    entries = load_journal()
+    from undertow.soul._store import PrivateStoreError
+    try:
+        entries = load_journal()
+    except PrivateStoreError as e:
+        print(f"[日记不可用，未做任何写入] {e}", file=sys.stderr)
+        return 2
     if getattr(args, "theses", False):
         print(render_theses_md(load_theses()))
         return 0
@@ -3027,8 +3042,14 @@ def cmd_journal(args) -> int:
                          net_assets_after=(assets.net_assets if assets else None),
                          buy_power_after=(assets.buy_power if assets else None),
                          analysis="（待复盘）", verdict="", mood="")
-        entries = [x for x in entries if x.date != day] + [e]
-        save_journal(sorted(entries, key=lambda x: x.date, reverse=True))
+        from undertow.soul.journal import journal_lock
+        try:
+            with journal_lock():                  # 读 → 改 → 写 整段互斥；读到坏档即停，不覆盖
+                entries = [x for x in load_journal() if x.date != day] + [e]
+                save_journal(sorted(entries, key=lambda x: x.date, reverse=True), _locked=True)
+        except PrivateStoreError as err:
+            print(f"[日记不可用，未写入] {err}", file=sys.stderr)
+            return 2
         print(render_entry_md(e))
         print("\n> 已抓取落盘。复盘/定论/心情可直接编辑 data/soul/journal.json，或让我帮你写。")
         return 0
@@ -3165,7 +3186,12 @@ def asdict_es(es):
 def cmd_plan(args) -> int:
     """计划交易：记录/监控触发与出场条件，输出可照抄的下单参数。**只读，绝不下单。**"""
     from undertow.soul.plan import (load_plans, check_plans, render_plans_md, render_orders)
-    plans = load_plans()
+    from undertow.soul._store import PrivateStoreError
+    try:
+        plans = load_plans()
+    except PrivateStoreError as e:
+        print(f"[计划档不可用] {e}", file=sys.stderr)
+        return 2
     if getattr(args, "orders", None):
         hit = [p for p in plans if p.id == args.orders]
         if not hit:
@@ -3526,15 +3552,18 @@ def cmd_consult(args) -> int:
         print(f"[提示] 事件感知跳过：{str(e)[:80]}", file=sys.stderr)
 
     # 灵魂档案：用户专属交易体系 + 当前纪律核查（优先于一切建议）
-    soul = None
+    soul, soul_status = None, "absent"
     try:
         from undertow.soul.profile import load_profile, check_against_profile
         prof = load_profile()
         if prof is not None:
             target = pre_trade["review"] if pre_trade else review
             soul = (prof, check_against_profile(target, capital, prof))
+            soul_status = "ok"
     except Exception as e:
-        print(f"[提示] 灵魂档案跳过：{str(e)[:80]}", file=sys.stderr)
+        # 纪律层没读成必须写进上下文，不能只是省略（省略 = 看起来像「没有违规」）
+        soul_status = f"error: {type(e).__name__}: {e}"[:300]
+        print(f"⚠️ 灵魂档案不可用，纪律层未核查：{str(e)[:120]}", file=sys.stderr)
 
     # 事前判断：--thesis ID 从 journal 取，供 AI 逐条检验（先独立判读再对照）
     thesis = None
@@ -3553,7 +3582,7 @@ def cmd_consult(args) -> int:
     packet = build_consult_packet(
         review=review, health=health, contexts=contexts, capital=capital,
         question=(args.question or ""), mode=mode, pre_trade=pre_trade,
-        news=news, soul=soul, thesis=thesis, asof=today)
+        news=news, soul=soul, soul_status=soul_status, thesis=thesis, asof=today)
 
     if getattr(args, "json", False):
         print(json.dumps(packet, ensure_ascii=False, indent=2))

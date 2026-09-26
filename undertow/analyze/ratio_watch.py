@@ -115,7 +115,12 @@ def build(on_date: date, snaps: dict, futs: dict, etfs: dict,
 
 
 def save(rows: list[RatioRow]) -> int:
-    """按日期覆盖写入。返回本次写入行数。"""
+    """首份发布冻结（Codex 005 S04）：同 (日期, 比值对) 首份保留，之后不同内容写修订。
+
+    原为「按日期覆盖」：2026-09-26 一次只跑白银的手动研报把 9/25 金银比记录的黄金侧写成 null。
+    坏文件仍隔离为 .corrupt（原逻辑），但从空表重建时同样走冻结。返回本次新写入行数。
+    """
+    from undertow.collect.asof_history import append_revisions, atomic_write_json, freeze_merge
     STORE.parent.mkdir(parents=True, exist_ok=True)
     old = []
     if STORE.exists():
@@ -126,12 +131,13 @@ def save(rows: list[RatioRow]) -> int:
             STORE.rename(q)
             print(f"[比值观察] 台账损坏（{type(e).__name__}），已隔离为 {q.name}，从空表重建")
             old = []
-    keys = {(r["date"], r["pair"]) for r in map(asdict, rows)}
-    kept = [r for r in old if (r.get("date"), r.get("pair")) not in keys]
-    allrows = kept + [asdict(r) for r in rows]
-    allrows.sort(key=lambda r: (r.get("date", ""), r.get("pair", "")))
-    STORE.write_text(json.dumps(allrows, ensure_ascii=False, indent=1), encoding="utf-8")
-    return len(rows)
+    new = [asdict(r) for r in rows]
+    before = {(r.get("date"), r.get("pair")) for r in old}
+    merged, revs = freeze_merge(old, new, key=lambda r: (r.get("date"), r.get("pair")))
+    merged.sort(key=lambda r: (r.get("date", ""), r.get("pair", "")))
+    atomic_write_json(STORE, merged)
+    append_revisions(STORE, revs)
+    return sum(1 for r in new if (r.get("date"), r.get("pair")) not in before)
 
 
 def render(rows: list[RatioRow], esc) -> str:

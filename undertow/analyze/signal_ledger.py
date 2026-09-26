@@ -195,9 +195,30 @@ def record(key: str, *, on_date: str, prev_date: str | None, spot: float,
         **{f"mfe_{h}d": None for h in HORIZONS},
         **{f"mae_{h}d": None for h in HORIZONS},
     }
-    rows = [r for r in rows if r.get("date") != on_date] + [row]
+    # S04 首份冻结（Codex 005）：原为「同日覆盖」—— 同日重跑会用一行空白前瞻字段的新行
+    # 替换旧行，连已回填的 forward_*/MFE/MAE 一起抹掉；手动运行还会改写当时发布的 outlook_bias。
+    # 现在：同日已有 → 事前字段相同则原样保留（含回填结果）；不同则保留首发、新内容写修订。
+    # 显式重建（signals --rebuild）先 clear() 再 record()，不受影响。
+    old_row = next((r for r in rows if r.get("date") == on_date), None)
+    if old_row is not None:
+        if _pre_fields(old_row) != _pre_fields(row):
+            from undertow.collect.asof_history import append_revisions
+            from datetime import datetime as _dt, timezone as _tz
+            append_revisions(_path(key, root), [{"key": [key, on_date], "revised_at": _dt.now(_tz.utc).isoformat(),
+                                                  "revision": row}])
+        return old_row
+    rows = rows + [row]
     _save(key, rows, root)
     return row
+
+
+_POST_HOC = ("trading_gap", "base_date", "base_close", "regime", "drift_60d")
+
+
+def _pre_fields(row: dict) -> dict:
+    """事前字段：去掉 backfill 事后填入的部分。"""
+    return {k: v for k, v in row.items()
+            if k not in _POST_HOC and not k.startswith(("forward_", "mfe_", "mae_"))}
 
 
 def clear(key: str, root: Path | None = None) -> int:

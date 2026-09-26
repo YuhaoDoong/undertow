@@ -143,14 +143,29 @@ def test_unknown_outlook_never_becomes_diverges_true(tmp_path):
     print("PASS test_unknown_outlook_never_becomes_diverges_true")
 
 
-def test_record_upserts_same_date(tmp_path):
+def test_record_freezes_first_publication_same_date(tmp_path):
+    """S04（Codex 005）：同日首份冻结，取代原「同日覆盖」。
+
+    原断言钉的是覆盖（第二次 spot 719.77 胜出）—— 那正是 2026-09-26 手动运行改写
+    已发布记录的机制。现在：一天一行不变，首发保留；不同内容进 .revisions.jsonl；
+    已回填的前瞻字段不会被同日重跑抹掉。
+    """
     p = probe_strong_signal(_bearish_fa())
     for spot in (700.0, 719.77):
         sl.record("qqq", on_date="2026-08-27", prev_date="2026-08-26", spot=spot,
                   probe=p, signal=None, root=tmp_path)
     rows = sl.load_all(["qqq"], root=tmp_path)
-    assert len(rows) == 1 and rows[0]["spot"] == 719.77
-    print("PASS test_record_upserts_same_date")
+    assert len(rows) == 1 and rows[0]["spot"] == 700.0, "首发必须保留"
+    revs = list(tmp_path.rglob("*.revisions.jsonl"))
+    assert revs and "719.77" in revs[0].read_text(), "不同内容必须写修订，不能丢"
+    # 回填后的同日重跑：前瞻字段不得被抹掉
+    import json
+    f = next(tmp_path.rglob("qqq.json")); data = json.loads(f.read_text())
+    data[0]["forward_1d"] = 0.5; f.write_text(json.dumps(data))
+    sl.record("qqq", on_date="2026-08-27", prev_date="2026-08-26", spot=700.0,
+              probe=p, signal=None, root=tmp_path)
+    assert sl.load_all(["qqq"], root=tmp_path)[0]["forward_1d"] == 0.5
+    print("PASS test_record_freezes_first_publication_same_date")
 
 
 def test_clear_enables_true_rebuild(tmp_path):

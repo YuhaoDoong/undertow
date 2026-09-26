@@ -1350,14 +1350,10 @@ def _drop_incomplete_bar(series, today: date):
 
 def _score_trend(inst_key: str, date_s: str, score: float) -> str:
     """记录每日综合分并给出对昨趋势短句（同向比强弱、异向报翻转）。入 git 留痕。"""
+    from undertow.collect.asof_history import (append_revisions, atomic_write_json,
+                                                load_json)
     hist_path = DATA_DIR / "history" / "outlook_scores.json"
-    hist_path.parent.mkdir(parents=True, exist_ok=True)
-    data: dict = {}
-    if hist_path.exists():
-        try:
-            data = json.loads(hist_path.read_text())
-        except Exception:
-            data = {}
+    data: dict = load_json(hist_path, {})     # 坏文件抛错，不再当空表覆盖
     hist = data.setdefault(inst_key, {})
     prev_dates = sorted(d for d in hist if d < date_s)
     trend = ""
@@ -1374,8 +1370,14 @@ def _score_trend(inst_key: str, date_s: str, score: float) -> str:
                 trend = f"{arrow}，强度持平"
         elif score == 0 or pv == 0 or pv * score < 0:
             trend = f"{arrow}，方向较昨发生翻转/中性化"
-    hist[date_s] = round(score, 2)
-    hist_path.write_text(json.dumps(data, ensure_ascii=False, indent=1))
+    # S04 首份冻结：同日已发布且分数不同 → 不覆盖，写修订
+    new = round(score, 2)
+    if date_s in hist and hist[date_s] != new:
+        append_revisions(hist_path, [{"key": [inst_key, date_s], "published": hist[date_s],
+                                      "revision": new, "revised_at": __import__("datetime").datetime.now().astimezone().isoformat()}])
+    else:
+        hist[date_s] = new
+        atomic_write_json(hist_path, data)
     return trend
 
 
@@ -1435,20 +1437,15 @@ def _persist_resonance(row: dict) -> None:
     远不够回测。与事件快照同一思路：不可再生的横截面，先落盘再说。
     forward_* 留空，日后由校准脚本按真实价格回填。
     """
-    d = DATA_DIR / "history" / "resonance"
-    d.mkdir(parents=True, exist_ok=True)
-    p = d / f"{row['instrument']}.json"
-    rows = []
-    if p.exists():
-        try:
-            rows = json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            rows = []
-    rows = [r for r in rows if r.get("date") != row["date"]]
-    rows.append(row)
-    rows.sort(key=lambda r: r.get("date", ""))
-    p.write_text(json.dumps(rows, ensure_ascii=False, indent=1, default=str),
-                 encoding="utf-8")
+    from undertow.collect.asof_history import (append_revisions, atomic_write_json,
+                                                freeze_merge, load_json)
+    p = DATA_DIR / "history" / "resonance" / f"{row['instrument']}.json"
+    rows = load_json(p, [])                   # 坏文件抛错，不再当空表覆盖
+    # S04 首份冻结（原为「同日覆盖」：9/26 一次手动运行把 9/25 盘前记录改成了盘后值）
+    merged, revs = freeze_merge(rows, [row], key=lambda r: r.get("date"))
+    merged.sort(key=lambda r: r.get("date", ""))
+    atomic_write_json(p, merged)
+    append_revisions(p, revs)
 
 
 def cmd_live(args) -> int:
@@ -2419,7 +2416,10 @@ def cmd_report(args) -> int:
             except Exception:
                 pass
         _ratio_rows = _rw_build(today, _snaps, _futs, _etfs, _mults)
-        n = _rw_save(_ratio_rows)
+        # S04：首份冻结之后，第一次写入就是永久的发布版本 —— 所以
+        #   · 回放（--as-of）绝不写正式台账（原先没有这道保护）；
+        #   · 比值不完整的行（如只跑了白银，黄金侧缺失）不写，否则残缺行会成为「首发」被钉住。
+        n = 0 if replay else _rw_save([r for r in _ratio_rows if r.ratio is not None])
         for r in _ratio_rows:
             if r.ratio is not None:
                 _in = ("区间内" if r.inside else

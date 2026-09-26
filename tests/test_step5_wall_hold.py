@@ -34,6 +34,8 @@ def test_local_wall_picks_max_oi_within_band_and_dte():
           _C("C", 59.0, T0 + timedelta(days=2), 7000)]
     w = local_wall(_Snap(cs), T0, 58.12, "P")
     assert w["strike"] == 57.0 and w["oi"] == 9000 and w["n_exp"] == 2, w
+    assert w["oi_by_expiry"] == {"2026-09-16": 5000, "2026-09-23": 4000}
+    assert sum(w["oi_by_expiry"].values()) == w["oi"]
     assert abs(w["buf_pct"] - (1 - 57 / 58.12) * 100) < 1e-9
     assert local_wall(_Snap(cs), T0, 58.12, "C")["strike"] == 59.0
     assert local_wall(_Snap(cs), T0, 58.12, "P", min_oi=20000) is None, "不够厚就不叫墙"

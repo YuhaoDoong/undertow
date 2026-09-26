@@ -110,7 +110,7 @@ def wall_of(snap, spot, kind, obs, mode):
 
 
 def run(snaps, closes, dates, kind, *, mode, width_pct, dte,
-        min_credit_mult=ws.MIN_CREDIT_MULT):
+        min_credit_mult):
     out, skip = [], defaultdict(int)
     for d in sorted(snaps):
         snap, file_day = snaps[d]
@@ -237,7 +237,10 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--symbol", default="SLV")
     ap.add_argument("--detail", action="store_true")
+    ap.add_argument("--min-credit-mult", type=float, required=True,
+                    help="旧版描述性研究需显式指定权利金/费用门槛；不是v3策略验证入口")
     a = ap.parse_args()
+    print("⚠ 旧版持有到期模型研究；非v3逐日退出验证，参数与收益不得作为启用依据。")
     for sym in a.symbol.split(","):
         snaps, closes, dates, drop = load(sym)
         ds = sorted(snaps)
@@ -250,11 +253,12 @@ def main():
                 for wp in (0.02, 0.03, 0.05):
                     for dte, dl in (((4, 11), "4~11d"), ((12, 25), "12~25d")):
                         rows, skip = run(snaps, closes, dates, kind,
-                                         mode=mode, width_pct=wp, dte=dte)
+                                         mode=mode, width_pct=wp, dte=dte,
+                                         min_credit_mult=a.min_credit_mult)
                         report(sym, rows, skip, f"{kl} {ml} {wp*100:.0f}% {dl}")
         if a.detail:
             rows, _ = run(snaps, closes, dates, "P", mode="structural",
-                          width_pct=0.03, dte=(4, 11))
+                          width_pct=0.03, dte=(4, 11), min_credit_mult=a.min_credit_mult)
             print(f"\n  真墙 put 3% 4~11d 明细")
             for r in rows:
                 print(f"    {r['d']} 决策价{r['spot']:>7.2f} 墙{r['wall']:>6g}"

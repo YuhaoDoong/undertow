@@ -520,7 +520,9 @@ def local_wall(snap, today: date, spot: float, kind: str, *, band: float = 0.05,
     用户实际卖的是 1~5% 内的近墙。停用记录里的前提②「拆结构主墙与局部 pin」就是这一刀。
     聚合口径与 `_layer_walls` 完全一致（跨到期按行权价累加 OI，只算有 OI 的合约）。
 
-    返回 {"strike", "oi", "buf_pct", "n_exp"}；该侧 band 内没有 ≥min_oi 的档位则 None。
+    返回 strike/oi/buf_pct/n_exp 与 oi_by_expiry（逐到期贡献），便于核对
+    持有期内墙的主要 OI 是否先行到期；该字段只记录，不改变选墙或加入阈值。
+    该侧 band 内没有 ≥min_oi 的档位则 None。
     ⚠️ 本函数只定义"墙在哪"，不断言"墙有支撑"—— 后者由 scripts/step5_wall_hold.py 检验。
     """
     if min_oi is None:
@@ -537,9 +539,9 @@ def local_wall(snap, today: date, spot: float, kind: str, *, band: float = 0.05,
             continue
         if kind == "C" and not (spot < c.strike <= hi):
             continue
-        slot = by.setdefault(c.strike, [0, set()])
+        slot = by.setdefault(c.strike, [0, {}])
         slot[0] += c.open_interest
-        slot[1].add(c.expiry)
+        slot[1][c.expiry] = slot[1].get(c.expiry, 0) + c.open_interest
     cands = [(k, v[0], len(v[1])) for k, v in by.items() if v[0] >= min_oi]
     if not cands:
         return None
@@ -549,7 +551,9 @@ def local_wall(snap, today: date, spot: float, kind: str, *, band: float = 0.05,
         k, oi, n_exp = min(cands, key=lambda x: abs(x[0] - spot))
     else:
         k, oi, n_exp = max(cands, key=lambda x: x[1])
-    return {"strike": k, "oi": oi, "buf_pct": abs(k / spot - 1) * 100, "n_exp": n_exp, "mode": mode}
+    return {"strike": k, "oi": oi, "buf_pct": abs(k / spot - 1) * 100,
+            "n_exp": n_exp, "mode": mode,
+            "oi_by_expiry": {d.isoformat(): value for d, value in sorted(by[k][1].items())}}
 
 
 def layered_walls(snap, today: date, spot: float) -> dict[str, WallLayer]:

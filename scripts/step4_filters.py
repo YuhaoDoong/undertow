@@ -173,6 +173,18 @@ def rate(rows, key):
     return (sum(1 for r in rows if r["out"][key]) / n) if n else float("nan")
 
 
+def _relative_rate(a, b, key):
+    denominator = rate(b, key)
+    return rate(a, key) / denominator if denominator > 0 else float("nan")
+
+
+def test_mark(test, buffer):
+    """只有主检验的缓冲才有 p；描述性缓冲不能借用另一结果变量的星号。"""
+    if buffer != f"{ATR_PRIMARY:g}ATR":
+        return ""
+    return "**" if test["bonf"] else ("*" if test["p"] < 0.05 else "")
+
+
 def analyse(rows):
     """一个品种：基准率 + 主检验（k=3, 2×ATR）+ 全 (k, buf) 比值矩阵。"""
     keys = [(s, k, b) for s in ("down", "up") for k in KS
@@ -180,6 +192,7 @@ def analyse(rows):
     base = {key: rate(rows, key) for key in keys}
     first = rows[0]["i"]
     sub = [r for r in rows if (r["i"] - first) % K_PRIMARY == 0]          # 不重叠
+    by_horizon = {k: [r for r in rows if (r["i"] - first) % k == 0] for k in KS}
     tests = {}
     for name, (_, tails) in INDICATORS.items():
         for st in tails:
@@ -190,13 +203,25 @@ def analyse(rows):
                 ka, ko = sum(r["out"][key] for r in a), sum(r["out"][key] for r in o)
                 z, p = two_prop(ka, len(a), ko, len(o))
                 full = [r for r in rows if r["states"][name] == st]
+                ratios = {}
+                for horizon, sampled in by_horizon.items():
+                    state = [r for r in sampled if r["states"][name] == st]
+                    rest = [r for r in sampled if r["states"][name] != st]
+                    for s, k, b in keys:
+                        if k == horizon:
+                            ratios[f"{s}|k{k}|{b}"] = _relative_rate(state, rest, (s, k, b))
                 tests[(name, st, side)] = {
-                    "n_state": len(a), "rate_state": ka / len(a) if a else float("nan"),
+                    "n_state": len(a), "n_rest": len(o), "events_state": ka, "events_rest": ko,
+                    "rate_state": ka / len(a) if a else float("nan"),
                     "rate_rest": ko / len(o) if o else float("nan"), "z": z, "p": p,
                     "bonf": p < ALPHA_BONF,
-                    "ratio": (rate(full, key) / base[key]) if base[key] else float("nan"),
+                    "ratio": _relative_rate(a, o, key),
+                    "sample": "nonoverlap_state_vs_rest",
                     "n_full": len(full),
-                    "ratios_all": {f"{s}|k{k}|{b}": (rate(full, (s, k, b)) / base[(s, k, b)]
+                    "raw_rate_state": rate(full, key), "raw_rate_base": base[key],
+                    "raw_ratio": (rate(full, key) / base[key]) if base[key] else float("nan"),
+                    "ratios_all": ratios,
+                    "raw_ratios_all": {f"{s}|k{k}|{b}": (rate(full, (s, k, b)) / base[(s, k, b)]
                                                      if base[(s, k, b)] else float("nan"))
                                    for (s, k, b) in keys},
                 }
@@ -217,11 +242,14 @@ def analyse(rows):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--emit", action="store_true")
+    ap.add_argument("--output", type=Path, help="配合 --emit 指定新产物路径，保留原研究结果")
     ap.add_argument("--detail", action="store_true", help="金银逐 (k,buf) 明细")
     ap.add_argument("--buffer", default=f"{ATR_PRIMARY:g}ATR",
                     help="矩阵 B 的缓冲口径：2ATR（默认，跨品种可比）或 5%% / 3%% / 7%%（策略实际口径）")
     ap.add_argument("--sections", default="ABCDE", help="只打印哪些章节，如 BE")
     args = ap.parse_args()
+    if args.output is not None and not args.emit:
+        ap.error("--output 需要 --emit")
     SEC = set(args.sections.upper())
     cfg = load_config(); src = CboeHistorySource()
     keys = [k for k, v in cfg.instruments.items() if v.price is not None]
@@ -252,7 +280,7 @@ def main():
 
     # ── B. 跨品种矩阵 ──
     if "B" in SEC:
-        print(f"\n{'═'*110}\nB. 指标尾部状态下的突破率 ÷ 基准率（k=3, 缓冲 {bk}）。>1 更危险 <1 更安全；* p<0.05  ** 过 Bonferroni（检验口径 {pk}，品种内不重叠子样本）\n{'═'*110}")
+        print(f"\n{'═'*110}\nB. 指标尾部状态突破率 ÷ 其余状态突破率（k=3, 缓冲 {bk}；同一不重叠子样本）。>1 更危险 <1 更安全；星号只用于 {pk} 主检验：* p<0.05  ** 过 Bonferroni\n{'═'*110}")
         print(f"{'指标·状态·侧':24s}" + "".join(f"{res[k]['symbol']:>7s}" for k in keys) + "   ≥1.25 ≤0.80 中位  簇复现")
     summary = []
     for name, (_, tails) in INDICATORS.items():
@@ -263,7 +291,7 @@ def main():
                 for k in keys:
                     t = res[k]["tests"][(name, st, side)]
                     r = t["ratios_all"][f"{side}|k{K_PRIMARY}|{bk}"]; ratios.append(r)
-                    mark = "**" if t["bonf"] else ("*" if t["p"] < 0.05 else "")
+                    mark = test_mark(t, bk)
                     line += f"{(f'{r:.2f}{mark}' if not math.isnan(r) else '—'):>7s}"
                 up = sum(1 for r in ratios if r >= 1.25); dn = sum(1 for r in ratios if r <= 0.80)
                 med = statistics.median([r for r in ratios if not math.isnan(r)])
@@ -280,8 +308,9 @@ def main():
                 summary.append({"indicator": name, "state": st, "side": side, "median_ratio": med,
                                 "n_ge_1_25": up, "n_le_0_80": dn, "clusters_up": cu, "clusters_down": cd,
                                 "buffer": bk,
+                                "sample": "nonoverlap_state_vs_rest", "tested": bk == pk,
                                 "ratios": {res[k]["symbol"]: res[k]["tests"][(name, st, side)]["ratios_all"][f"{side}|k{K_PRIMARY}|{bk}"] for k in keys},
-                                "bonf_pass": [res[k]["symbol"] for k in keys if res[k]["tests"][(name, st, side)]["bonf"]]})
+                                "bonf_pass": [res[k]["symbol"] for k in keys if bk == pk and res[k]["tests"][(name, st, side)]["bonf"]]})
 
     # ── C. 带宽扩张比 剂量-反应 ──
     if "C" in SEC: print(f"\n{'═'*110}\nC. 布林带宽 5 日扩张比 五分位 → 突破率（k=3, {pk}）。Q1 最收缩 … Q5 最扩张。回答「突然扩大是否更危险」\n{'═'*110}")
@@ -298,7 +327,7 @@ def main():
 
     # ── E. 波动率状态四行的稳健性：全 (k, 缓冲) 下 15 品种比值的中位数 ──
     if "E" in SEC:
-        print(f"\n{'═'*110}\nE. 稳健性：各指标尾部状态在全部 (k, 缓冲) 下【15 品种比值的中位数】。同一格里 3%/5%/7% 与 ATR 口径若反号 = 缩放效应，不是信号\n{'═'*110}")
+        print(f"\n{'═'*110}\nE. 描述性稳健性：每个 k 用其不重叠子样本，状态 / 其余状态比值的品种中位数。仅 k=3、2ATR 有主检验；其余格无显著性结论\n{'═'*110}")
         combos = [(k, b) for k in KS for b in ["3%", "5%", "7%", "1.5ATR", "2ATR", "3ATR"]]
         print(f"{'指标·状态·侧':24s}" + "".join(f"{f'k{k} {b}':>9s}" for k, b in combos))
         for name, (_, tails) in INDICATORS.items():
@@ -335,17 +364,18 @@ def main():
             for name, (_, tails) in INDICATORS.items():
                 for st in tails:
                     t = res[key]["tests"][(name, st, "down")]
-                    print(f"{(name+'·'+st)[:22]:22s}" + "".join(f"{t['ratios_all'][x]:11.2f}" for x in ks_) + f"  n={t['n_full']}")
+                    print(f"{(name+'·'+st)[:22]:22s}" + "".join(f"{t['raw_ratios_all'][x]:11.2f}" for x in ks_) + f"  n={t['n_full']}")
 
     if args.emit:
-        out = ROOT / "data" / "history" / "wall_spread" / "filter_test.json"
-        payload = {"schema": 2, "asof": date.today().isoformat(),
+        out = args.output or ROOT / "data" / "history" / "wall_spread" / "filter_test_v3.json"
+        payload = {"schema": 3, "asof": date.today().isoformat(),
                    "primary": {"k": K_PRIMARY, "buffer": pk}, "family": FAMILY, "alpha_bonf": ALPHA_BONF,
                    "clusters": CLUSTERS, "summary": summary,
+                   "sample": "nonoverlap_state_vs_rest", "raw_sample": "overlapping_state_vs_all",
                    # 两套口径都落盘：2ATR 是跨品种可比的，5% 是策略实际用的。
                    # 同一格在两套口径下反号 = 缩放效应（波动大所以 % 移动大），不是信号。
                    "summary_by_buffer": {bb: [
-                       {"indicator": n, "state": st, "side": sd,
+                       {"indicator": n, "state": st, "side": sd, "tested": bb == pk,
                         "median_ratio": statistics.median([v for v in
                             (res[k]["tests"][(n, st, sd)]["ratios_all"][f"{sd}|k{K_PRIMARY}|{bb}"] for k in keys)
                             if not math.isnan(v)]),

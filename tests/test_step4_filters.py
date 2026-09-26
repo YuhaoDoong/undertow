@@ -55,6 +55,34 @@ def test_ratio_series():
     print("PASS test_ratio_series")
 
 
+def test_effect_and_test_use_same_observations_and_comparator():
+    """全样本给正效应、固定抽样却给负效应时，主比值必须跟检验走。"""
+    keys = [(side, k, b) for side in ("down", "up") for k in s4.KS
+            for b in ("3%", "5%", "7%", "1.5ATR", "2ATR", "3ATR")]
+    rows = []
+    for i in range(60):
+        state = i % 6 < 3
+        breach = (i % 6 in (1, 2, 3)) or i == 0
+        rows.append({"i": i, "expand": float(i),
+                     "states": {n: tails[0 if state else 1] for n, (_, tails) in s4.INDICATORS.items()},
+                     "out": {key: breach for key in keys}})
+    _, tests, _, n = s4.analyse(rows)
+    t = tests[("RSI14", "超卖≤30", "down")]
+    assert n == 20 and t["n_state"] == t["n_rest"] == 10
+    assert t["events_state"] == 1 and t["events_rest"] == 10
+    assert t["raw_ratio"] > 1, "原始描述必须保留，供审计差异"
+    assert t["ratio"] == pytest.approx(0.1) and t["z"] < 0
+    assert t["ratio"] == t["ratios_all"]["down|k3|2ATR"]
+    assert t["ratio"] == t["rate_state"] / t["rate_rest"]
+
+
+def test_unexamined_buffer_cannot_borrow_primary_p():
+    t = {"bonf": True, "p": 0.000001}
+    assert s4.test_mark(t, "2ATR") == "**"
+    assert s4.test_mark(t, "5%") == ""
+    assert s4.test_mark(t, "3ATR") == ""
+
+
 class _Ser:
     def __init__(self, closes):
         self.symbol = "SYN"; self.closes = closes
@@ -94,9 +122,15 @@ def test_emitted_artifact_is_consistent():
     if not p.exists():
         pytest.skip("尚未 --emit")
     d = json.loads(p.read_text("utf-8"))
-    assert d["schema"] == 2 and d["family"] == s4.FAMILY
+    # schema 2 是保留的历史产物，修正脚本不会自动覆盖旧研究证据。
+    assert d["schema"] in (2, 3) and d["family"] == s4.FAMILY
     assert set(d["summary_by_buffer"]) == {"2ATR", "5%"}, "两套口径都必须在，缺一套就没法识别缩放效应"
     for bb, rows in d["summary_by_buffer"].items():
         assert len(rows) == s4.FAMILY, (bb, len(rows))
     assert len(d["instruments"]) >= 15
+    if d["schema"] == 3:
+        for inst in d["instruments"].values():
+            for t in inst["tests"].values():
+                if t["rate_rest"] > 0:
+                    assert t["ratio"] == pytest.approx(t["rate_state"] / t["rate_rest"])
     print("PASS test_emitted_artifact_is_consistent")

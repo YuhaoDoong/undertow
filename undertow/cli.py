@@ -1578,8 +1578,8 @@ def cmd_live(args) -> int:
         if mismatch:
             c = replace(c, warnings=list(c.warnings) + [f"⚠️ {mismatch}"])
         checks.append(c)
-    net = assets.net_assets or None
-    print(render_md(checks, net_assets=net))
+    # 净资产 0 是合法值（旧写法 `or None` 会把它当成缺失）
+    print(render_md(checks, net_assets=assets.net_assets))
     if cost_note:
         print(f"\n> ⚠️ 以下持仓的成本用了**券商成本价**（计划里缺实际成交价）："
               f"{'、'.join(cost_note)}。券商成本价在部分减仓后会被改写成该轮打平价，"
@@ -2841,19 +2841,27 @@ def _load_account_review(no_cache):
     except Exception as e:
         print(f"[提示] 实时报价获取跳过，回退快照价：{str(e)[:100]}", file=sys.stderr)
     contexts, today = _build_contexts(positions, no_cache, live_quotes=live_quotes)
-    assets = None
+    assets, assets_error = None, None
     try:
         assets = lb.fetch_assets()
-    except lb.LongbridgeUnavailable:
-        pass
+    except lb.LongbridgeUnavailable as e:
+        # 旧实现在这里 pass：资金没读到时，集中度/购买力检查被静默跳过，看起来像「全部通过」（Codex 008 G01/G03）
+        assets_error = f"{type(e).__name__}: {e}"[:300]
     capital = None
     if assets is not None:
         capital = AccountCapital(buy_power=assets.buy_power, net_assets=assets.net_assets,
                                  cash_usd=assets.cash_by_ccy.get("USD", 0.0))
     review = review_portfolio(positions, contexts, asof=today, capital=capital)
     health = run_healthcheck(review, capital)
+    if assets_error:
+        from undertow.analyze.healthcheck import HealthFinding
+        health = [HealthFinding(
+            severity="高", code="capital_unknown", title="账户资金未读到：资金类检查未执行（不是通过）",
+            detail=f"读取净资产/购买力失败：{assets_error}",
+            suggestion="集中度、购买力、接货能力检查都没有做；在券商端核对资金后再看本报告。")] + health
     return {"positions": positions, "contexts": contexts, "review": review,
-            "health": health, "capital": capital, "assets": assets, "today": today}
+            "health": health, "capital": capital, "assets": assets, "assets_error": assets_error,
+            "today": today}
 
 
 def cmd_account(args) -> int:

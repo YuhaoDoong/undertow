@@ -88,7 +88,9 @@ def ratio(fr, st, name, side, k, buf):
 
 
 def main():
-    ap = argparse.ArgumentParser(); ap.add_argument("--emit", action="store_true"); args = ap.parse_args()
+    ap = argparse.ArgumentParser(); ap.add_argument("--emit", action="store_true")
+    ap.add_argument("--output", type=Path, default=None, help="--emit 的产物路径（默认旧路径；重算请指定新路径，不覆盖旧产物）")
+    args = ap.parse_args()
     cfg = load_config(); src = CboeHistorySource()
     keys = [k for k, v in cfg.instruments.items() if v.price is not None]
     frames = {k: frame(src.fetch_series(cfg.get(k))) for k in keys}
@@ -151,7 +153,8 @@ def main():
         if len(rows_s) > 6: print("  （…中间省略，最后一行是最差格；全部格子见 --emit 落盘）")
 
     if args.emit:
-        out = ROOT / "data" / "history" / "wall_spread" / "filter_sweep.json"
+        out = args.output or (ROOT / "data" / "history" / "wall_spread" / "filter_sweep.json")
+        out.parent.mkdir(parents=True, exist_ok=True)
         payload = {"schema": 1, "asof": date.today().isoformat(), "k": K_MAIN,
                    "grid_sizes": {f: len(v) for f, v in GRID.items()},
                    "results": {f: [{**r, "cfg": list(r["cfg"])} for r in rows] for f, rows in results.items()}}

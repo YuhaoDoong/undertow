@@ -165,6 +165,7 @@ def summarize(res):
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--emit", action="store_true")
     ap.add_argument("--mode", default="max", choices=("max", "nearest"), help="墙定义：带内最大 OI / 带内最近一堵")
+    ap.add_argument("--output", type=Path, default=None, help="--emit 的产物路径（重算请指定新路径）")
     args = ap.parse_args()
     cfg = load_config(); store = SnapshotStore(); src = CboeHistorySource()
     results = {}
@@ -194,7 +195,8 @@ def main():
                      "terciles": {f"{kd}|{nm}": v for (kd, nm), v in tr.items()}}
         print()
     if args.emit:
-        out = ROOT / "data" / "history" / "wall_spread" / ("wall_hold.json" if args.mode == "max" else f"wall_hold_{args.mode}.json")
+        out = args.output or (ROOT / "data" / "history" / "wall_spread" / ("wall_hold.json" if args.mode == "max" else f"wall_hold_{args.mode}.json"))
+        out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(json.dumps({"schema": 1, "asof": date.today().isoformat(), "sims": SIMS,
                                    "definition": "local_wall band=5% dte<=14 min_oi=WALL_FLOW_MIN_OI",
                                    "instruments": emit}, ensure_ascii=False, indent=1), encoding="utf-8")

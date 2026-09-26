@@ -1,0 +1,419 @@
+{
+ "schema": 2,
+ "generated_at": "2026-09-26T03:16:47.717930+00:00",
+ "config": {
+  "version": "shadow-v2-20260926",
+  "dte": [
+   2,
+   4
+  ],
+  "width_n": 2,
+  "wall": {
+   "def": "local_max",
+   "band": 0.05,
+   "hi_dte": 14
+  },
+  "b_rules": {
+   "B1": {
+    "atr": 1.0
+   },
+   "B2": {
+    "atr": 2.0
+   },
+   "B3": {
+    "delta": 0.2
+   }
+  },
+  "primary_b": "B1",
+  "stops": [
+   1.0,
+   2.0
+  ],
+  "term_structure": {
+   "atm_band": 0.02,
+   "far_dte": [
+    20,
+    45
+   ]
+  },
+  "sides": [
+   "P",
+   "C"
+  ],
+  "primary_basis": "hold_quote_conservative",
+  "fee_round_trip": 3.2,
+  "mid_give": 0.25
+ },
+ "config_hash": "c7edc8cf8a54b1c4",
+ "mode": "replay",
+ "n_rows": 40,
+ "n_main": 40,
+ "summaries": {
+  "snapshot_model|B1|两侧": {
+   "basis": "snapshot_model",
+   "b_rule": "B1",
+   "mode": "replay",
+   "sides": [
+    "P",
+    "C"
+   ],
+   "flow_aligned_only": false,
+   "coverage": {
+    "opportunities": 64,
+    "a_priced": 61,
+    "pairs": 57,
+    "identical_pairs": 11
+   },
+   "n_dates_A": 9,
+   "n_dates_pairs": 9,
+   "A_mean_norm": 0.016969421127860457,
+   "A_ci": [
+    -0.07785155926101348,
+    0.1518250577088442
+   ],
+   "A_verdict": "未决",
+   "AminusB_mean_norm": -0.0012067339652292919,
+   "AminusB_ci": [
+    -0.09631486563863553,
+    0.1002259705415857
+   ],
+   "AminusB_verdict": "未决",
+   "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"
+  },
+  "snapshot_model|B1|put": {
+   "basis": "snapshot_model",
+   "b_rule": "B1",
+   "mode": "replay",
+   "sides": [
+    "P"
+   ],
+   "flow_aligned_only": false,
+   "coverage": {
+    "opportunities": 32,
+    "a_priced": 30,
+    "pairs": 29,
+    "identical_pairs": 4
+   },
+   "n_dates_A": 9,
+   "n_dates_pairs": 9,
+   "A_mean_norm": 0.11070910381413875,
+   "A_ci": [
+    0.012105050038847135,
+    0.21337963606938687
+   ],
+   "A_verdict": "支持",
+   "AminusB_mean_norm": -0.006157550904232615,
+   "AminusB_ci": [
+    -0.12206596639892328,
+    0.08304519001027032
+   ],
+   "AminusB_verdict": "未决",
+   "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"
+  },
+  "snapshot_model|B1|call": {
+   "basis": "snapshot_model",
+   "b_rule": "B1",
+   "mode": "replay",
+   "sides": [
+    "C"
+   ],
+   "flow_aligned_only": false,
+   "coverage": {
+    "opportunities": 32,
+    "a_priced": 31,
+    "pairs": 28,
+    "identical_pairs": 7
+   },
+   "n_dates_A": 9,
+   "n_dates_pairs": 9,
+   "A_mean_norm": -0.0737464008266024,
+   "A_ci": [
+    -0.26691423417176907,
+    0.15034738647196164
+   ],
+   "A_verdict": "未决",
+   "AminusB_mean_norm": 0.003920897864452722,
+   "AminusB_ci": [
+    -0.16335935788287004,
+    0.1808675119392174
+   ],
+   "AminusB_verdict": "未决",
+   "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"
+  },
+  "snapshot_model|B1|顺增仓方向": {
+   "basis": "snapshot_model",
+   "b_rule": "B1",
+   "mode": "replay",
+   "sides": [
+    "P",
+    "C"
+   ],
+   "flow_aligned_only": true,
+   "coverage": {
+    "opportunities": 32,
+    "a_priced": 30,
+    "pairs": 27,
+    "identical_pairs": 5
+   },
+   "n_dates_A": 9,
+   "n_dates_pairs": 9,
+   "A_mean_norm": 0.03019643195009413,
+   "A_ci": [
+    -0.16309607326989078,
+    0.23582992109780274
+   ],
+   "A_verdict": "未决",
+   "AminusB_mean_norm": -0.05950114527958604,
+   "AminusB_ci": [
+    -0.16789835250321913,
+    0.05827943503505804
+   ],
+   "AminusB_verdict": "未决",
+   "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"
+  },
+  "snapshot_model|B2|两侧": {
+   "basis": "snapshot_model",
+   "b_rule": "B2",
+   "mode": "replay",
+   "sides": [
+    "P",
+    "C"
+   ],
+   "flow_aligned_only": false,
+   "coverage": {
+    "opportunities": 64,
+    "a_priced": 61,
+    "pairs": 57,
+    "identical_pairs": 1
+   },
+   "n_dates_A": 9,
+   "n_dates_pairs": 9,
+   "A_mean_norm": 0.016969421127860457,
+   "A_ci": [
+    -0.07785155926101348,
+    0.1518250577088442
+   ],
+   "A_verdict": "未决",
+   "AminusB_mean_norm": -0.0220379737835125,
+   "AminusB_ci": [
+    -0.09356054485179809,
+    0.052939062320881296
+   ],
+   "AminusB_verdict": "未决",
+   "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"
+  },
+  "snapshot_model|B2|put": {
+   "basis": "snapshot_model",
+   "b_rule": "B2",
+   "mode": "replay",
+   "sides": [
+    "P"
+   ],
+   "flow_aligned_only": false,
+   "coverage": {
+    "opportunities": 32,
+    "a_priced": 30,
+    "pairs": 28,
+    "identical_pairs": 0
+   },
+   "n_dates_A": 9,
+   "n_dates_pairs": 9,
+   "A_mean_norm": 0.11070910381413875,
+   "A_ci": [
+    0.012105050038847135,
+    0.21337963606938687
+   ],
+   "A_verdict": "支持",
+   "AminusB_mean_norm": 0.015734717358524535,
+   "AminusB_ci": [
+    -0.12124092317917387,
+    0.12553259056483723
+   ],
+   "AminusB_verdict": "未决",
+   "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"
+  },
+  "snapshot_model|B2|call": {
+   "basis": "snapshot_model",
+   "b_rule": "B2",
+   "mode": "replay",
+   "sides": [
+    "C"
+   ],
+   "flow_aligned_only": false,
+   "coverage": {
+    "opportunities": 32,
+    "a_priced": 31,
+    "pairs": 29,
+    "identical_pairs": 1
+   },
+   "n_dates_A": 9,
+   "n_dates_pairs": 9,
+   "A_mean_norm": -0.0737464008266024,
+   "A_ci": [
+    -0.26691423417176907,
+    0.15034738647196164
+   ],
+   "A_verdict": "未决",
+   "AminusB_mean_norm": -0.05850815833444481,
+   "AminusB_ci": [
+    -0.25022449966705734,
+    0.1334295961084155
+   ],
+   "AminusB_verdict": "未决",
+   "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"
+  },
+  "snapshot_model|B2|顺增仓方向": {
+   "basis": "snapshot_model",
+   "b_rule": "B2",
+   "mode": "replay",
+   "sides": [
+    "P",
+    "C"
+   ],
+   "flow_aligned_only": true,
+   "coverage": {
+    "opportunities": 32,
+    "a_priced": 30,
+    "pairs": 27,
+    "identical_pairs": 1
+   },
+   "n_dates_A": 9,
+   "n_dates_pairs": 9,
+   "A_mean_norm": 0.03019643195009413,
+   "A_ci": [
+    -0.16309607326989078,
+    0.23582992109780274
+   ],
+   "A_verdict": "未决",
+   "AminusB_mean_norm": -0.026379040449966064,
+   "AminusB_ci": [
+    -0.20974865288269934,
+    0.17416402728349897
+   ],
+   "AminusB_verdict": "未决",
+   "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"
+  },
+  "snapshot_model|B3|两侧": {
+   "basis": "snapshot_model",
+   "b_rule": "B3",
+   "mode": "replay",
+   "sides": [
+    "P",
+    "C"
+   ],
+   "flow_aligned_only": false,
+   "coverage": {
+    "opportunities": 64,
+    "a_priced": 61,
+    "pairs": 60,
+    "identical_pairs": 10
+   },
+   "n_dates_A": 9,
+   "n_dates_pairs": 9,
+   "A_mean_norm": 0.016969421127860457,
+   "A_ci": [
+    -0.07785155926101348,
+    0.1518250577088442
+   ],
+   "A_verdict": "未决",
+   "AminusB_mean_norm": -0.28028736542245675,
+   "AminusB_ci": [
+    -0.8798990160218003,
+    0.02694065010122818
+   ],
+   "AminusB_verdict": "未决",
+   "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"
+  },
+  "snapshot_model|B3|put": {
+   "basis": "snapshot_model",
+   "b_rule": "B3",
+   "mode": "replay",
+   "sides": [
+    "P"
+   ],
+   "flow_aligned_only": false,
+   "coverage": {
+    "opportunities": 32,
+    "a_priced": 30,
+    "pairs": 29,
+    "identical_pairs": 4
+   },
+   "n_dates_A": 9,
+   "n_dates_pairs": 9,
+   "A_mean_norm": 0.11070910381413875,
+   "A_ci": [
+    0.012105050038847135,
+    0.21337963606938687
+   ],
+   "A_verdict": "支持",
+   "AminusB_mean_norm": -0.03322302199691886,
+   "AminusB_ci": [
+    -0.14883805165608988,
+    0.06580460791391012
+   ],
+   "AminusB_verdict": "未决",
+   "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"
+  },
+  "snapshot_model|B3|call": {
+   "basis": "snapshot_model",
+   "b_rule": "B3",
+   "mode": "replay",
+   "sides": [
+    "C"
+   ],
+   "flow_aligned_only": false,
+   "coverage": {
+    "opportunities": 32,
+    "a_priced": 31,
+    "pairs": 31,
+    "identical_pairs": 6
+   },
+   "n_dates_A": 9,
+   "n_dates_pairs": 9,
+   "A_mean_norm": -0.0737464008266024,
+   "A_ci": [
+    -0.26691423417176907,
+    0.15034738647196164
+   ],
+   "A_verdict": "未决",
+   "AminusB_mean_norm": -0.5114120737882826,
+   "AminusB_ci": [
+    -1.5399746206679152,
+    0.06794043842260583
+   ],
+   "AminusB_verdict": "未决",
+   "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"
+  },
+  "snapshot_model|B3|顺增仓方向": {
+   "basis": "snapshot_model",
+   "b_rule": "B3",
+   "mode": "replay",
+   "sides": [
+    "P",
+    "C"
+   ],
+   "flow_aligned_only": true,
+   "coverage": {
+    "opportunities": 32,
+    "a_priced": 30,
+    "pairs": 30,
+    "identical_pairs": 6
+   },
+   "n_dates_A": 9,
+   "n_dates_pairs": 9,
+   "A_mean_norm": 0.03019643195009413,
+   "A_ci": [
+    -0.16309607326989078,
+    0.23582992109780274
+   ],
+   "A_verdict": "未决",
+   "AminusB_mean_norm": -0.5378462258040478,
+   "AminusB_ci": [
+    -1.5693974298423625,
+    -0.00817505961006228
+   ],
+   "AminusB_verdict": "不支持",
+   "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"
+  }
+ }
+}

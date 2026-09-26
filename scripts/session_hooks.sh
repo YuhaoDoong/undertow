@@ -219,7 +219,7 @@ if (( ET_MIN >= 600 && ET_MIN <= 608 )); then
     LOCK4="$LOG_DIR/.lock_shadow_quote_${ET_DATE}"
     if ! mkdir "$LOCK4" 2>/dev/null; then hb "④影子报价：撞锁，跳过"
     else
-      if RES4=$("$PY" -m undertow.cli shadow quote 2>&1); then
+      if RES4=$("$PY" -m undertow.cli shadow quote --window open 2>&1); then
         : > "$OK4"; hb "④影子报价：✅ $(printf '%s' "$RES4" | grep -c '更新') 个品种"
       else
         hb "④影子报价：❌ 失败，等下次唤醒重试"
@@ -230,12 +230,34 @@ if (( ET_MIN >= 600 && ET_MIN <= 608 )); then
   fi
 fi
 
+# ── ⑤ 影子账收盘前标记（ET 15:30–15:38）：持仓两腿盘口，供「k×权利金止损」口径 ──
+# P1（2026-09-26）：只有开盘一个时点时，价差止损无法前瞻检验；外部回测显示短期限信用价差
+# 的成败几乎由止损决定。一天两个标记点仍是离散监控，结论里必须写明。
+if (( ET_MIN >= 930 && ET_MIN <= 938 )); then
+  OK5="$LOG_DIR/.shadow_mark_${ET_DATE}.ok"
+  if [[ -f "$OK5" ]]; then hb "⑤影子标记：今日已完成，跳过"
+  else
+    LOCK5="$LOG_DIR/.lock_shadow_mark_${ET_DATE}"
+    if ! mkdir "$LOCK5" 2>/dev/null; then hb "⑤影子标记：撞锁，跳过"
+    else
+      if RES5=$("$PY" -m undertow.cli shadow quote --window close 2>&1); then
+        : > "$OK5"; hb "⑤影子标记：✅ $(printf '%s' "$RES5" | grep -c '更新') 个品种"
+      else
+        hb "⑤影子标记：❌ 失败，等下次唤醒重试"
+        notify "⚠️ 影子账收盘标记失败" "$(printf '%s' "$RES5" | grep '⚠️' | head -1)"
+      fi
+      rmdir "$LOCK5" 2>/dev/null
+    fi
+  fi
+fi
+
 # ── 不在任何窗口：也要留痕 ────────────────────────────────────────
 # 没有这一行，「launchd 根本没唤醒」和「唤醒了但不在窗口」看起来一模一样。
 # 5 分钟轮询一次，不在窗口就别往日志里灌（一天 288 行没人看）。
 # 改成只 touch 一个心跳文件：mtime 就是"上次被唤醒的时刻"，
 # 一眼能看出调度是死是活，日志又不会涨。
 if ! (( (ET_MIN >= 540 && ET_MIN <= 555) || (ET_MIN >= 580 && ET_MIN <= 595) \
-     || (ET_MIN >= 600 && ET_MIN <= 608) || (ET_MIN >= 610 && ET_MIN <= 625) )); then
+     || (ET_MIN >= 600 && ET_MIN <= 608) || (ET_MIN >= 610 && ET_MIN <= 625) \
+     || (ET_MIN >= 930 && ET_MIN <= 938) )); then
   : > "$LOG_DIR/.session_alive"
 fi

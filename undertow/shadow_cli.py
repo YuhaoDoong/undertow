@@ -1,7 +1,8 @@
 """`undertow shadow ...` 编排（W05）：唯一把 collect 与 analyze.shadow 接起来的地方。
 
   capture  盘前：冻结当日机会（A/B1/B2 × P/C），无候选也记原因。--as-of 回放写 replay/。
-  quote    盘中：抓两腿实时盘口 → 入场情景；已触发退出的腿 → 退出报价。非盘中默认拒绝。
+  quote    盘中两个时点（--window open ET 10:00 / close ET 15:30）：开盘窗做入场、已触发退出、持仓标记；
+           收盘窗只做持仓标记（止损口径用）。非盘中默认拒绝。
   settle   收盘后：认证 session、监控收盘触发、到期结算（三种突破 × 多种损益口径）。
   report   配对统计：A 绝对收益、A−B 差，按日期分块区间；披露覆盖与身份构成。
 
@@ -19,12 +20,17 @@ from undertow.collect import jsonl_ledger as jl
 from undertow.core.clock import ET, is_before_open, market_today
 
 DIR = Path("data/history/shadow")
-REPLAY_DIR = DIR / "replay"
 KEY = "key"
 
 
+def _vdir(replay: bool) -> Path:
+    """账本按配置版本分目录：不同版本的样本绝不混入同一主检验（v1 只有回放行，留在原位作历史）。"""
+    d = DIR / sh.CONFIG["version"]
+    return d / "replay" if replay else d
+
+
 def _path(inst, replay):
-    return (REPLAY_DIR if replay else DIR) / f"{inst}.jsonl"
+    return _vdir(replay) / f"{inst}.jsonl"
 
 
 def _instruments(cfg, names):
@@ -119,23 +125,28 @@ def cmd_quote(args) -> int:
     if phase != "rth" and not args.allow_off_hours:
         print("非盘中：盘口不可作为可成交报价。加 --allow-off-hours 可记录（标 executable=false）。", file=sys.stderr)
         return 2
-    cfg = load_config(); today = market_today(); issues, done = [], []
+    cfg = load_config(); today = market_today().isoformat(); issues, done = [], []
+    window = args.window
+
+    def wants(r, l):
+        """(需要入场报价, 需要退出报价, 需要标记)"""
+        entry = window == "open" and r["session"] == today and r["entry"] is None
+        trig = next((m for m in r.get("monitor", []) if m["leg_id"] == l["leg_id"]), None)
+        exit_ = (window == "open" and trig is not None and l["leg_id"] not in r["exits"]
+                 and trig["trigger_date"] < today <= l["expiry"])
+        mark = (r["entry"] is not None or (window == "close" and r["session"] == today)) \
+            and r["session"] <= today <= l["expiry"] and r["outcome"] is None
+        return entry, exit_, mark
+
     for inst in _instruments(cfg, args.instruments):
         p = _path(inst.key, False)
         if not p.exists():
             continue
         root = inst.options.symbol
-        rows = jl.load(p, KEY)
         need = {}
-        for r in rows:
+        for r in jl.load(p, KEY):
             for l in r["legs"]:
-                if l["status"] != "candidate":
-                    continue
-                entry_needed = r["session"] == today.isoformat() and r["entry"] is None
-                trig = next((m for m in r.get("monitor", []) if m["leg_id"] == l["leg_id"]), None)
-                exit_needed = trig and l["leg_id"] not in r["exits"] and trig["trigger_date"] < today.isoformat() \
-                    and today.isoformat() <= l["expiry"]
-                if entry_needed or exit_needed:
+                if l["status"] == "candidate" and any(wants(r, l)):
                     for K in (l["sell"], l["buy"]):
                         need[(l["side"], K, l["expiry"])] = _lb_symbol(root, date.fromisoformat(l["expiry"]), l["side"], K)
         if not need:
@@ -147,29 +158,31 @@ def cmd_quote(args) -> int:
         obs = _now_iso()
 
         def q(side, K, exp):
-            d = dep.get(need[(side, K, exp)])
+            d = dep.get(need.get((side, K, exp)))
             return None if d is None else {"bid": d.bid, "ask": d.ask, "bid_size": d.bid_size,
                                            "ask_size": d.ask_size, "error": d.error}
 
         def fn(r):
             ch = False
-            if r["session"] == today.isoformat() and r["entry"] is None:
-                depth = {(l["side"], K): q(l["side"], K, l["expiry"]) for l in r["legs"] if l["status"] == "candidate"
-                         for K in (l["sell"], l["buy"])}
+            depth = {(l["side"], K): q(l["side"], K, l["expiry"]) for l in r["legs"]
+                     if l["status"] == "candidate" for K in (l["sell"], l["buy"])}
+            legs = [l for l in r["legs"] if l["status"] == "candidate"]
+            if any(wants(r, l)[0] for l in legs):
                 r["entry"] = sh.price_legs(r, depth, observed_at=obs, phase=phase); ch = True
-            for m in r.get("monitor", []):
-                l = next(x for x in r["legs"] if x["leg_id"] == m["leg_id"])
-                if l["leg_id"] in r["exits"] or m["trigger_date"] >= today.isoformat() or today.isoformat() > l["expiry"]:
-                    continue
-                sq, bq = q(l["side"], l["sell"], l["expiry"]), q(l["side"], l["buy"], l["expiry"])
-                r["exits"][l["leg_id"]] = {"observed_at": obs, "phase": phase, "trigger_date": m["trigger_date"],
-                                           "sell": sq, "buy": bq,
-                                           "cost_conservative": sh.exit_cost(sq, bq, l["width_usd"]) if phase == "rth" else None}
-                ch = True
+            elif any(wants(r, l)[2] for l in legs):
+                r.setdefault("marks", []).append(sh.mark_legs(r, depth, observed_at=obs, phase=phase, window=window)); ch = True
+            for l in legs:
+                if wants(r, l)[1]:
+                    m = next(m for m in r["monitor"] if m["leg_id"] == l["leg_id"])
+                    sq, bq = depth.get((l["side"], l["sell"])), depth.get((l["side"], l["buy"]))
+                    r["exits"][l["leg_id"]] = {"observed_at": obs, "phase": phase, "trigger_date": m["trigger_date"],
+                                               "sell": sq, "buy": bq,
+                                               "cost_conservative": sh.exit_cost(sq, bq, l["width_usd"]) if phase == "rth" else None}
+                    ch = True
             return ch
         n = jl.update(p, fn, key_field=KEY, frozen=sh.frozen_part)
-        done.append(inst.key); print(f"  {inst.key:7s} 更新 {n} 行（{len(need)} 个合约盘口，phase={phase}）")
-    _status(args, "quote", done, issues)
+        done.append(inst.key); print(f"  {inst.key:7s} 更新 {n} 行（{len(need)} 个合约盘口，window={window}，phase={phase}）")
+    _status(args, f"quote-{window}", done, issues)
     return 1 if issues else 0
 
 
@@ -213,7 +226,8 @@ def cmd_settle(args) -> int:
                         el = ((r.get("entry") or {}).get("legs") or {}).get(l["leg_id"])
                         if el and not (r["entry"] or {}).get("executable"):
                             el = None                     # 非盘中报价不作可执行入场
-                        o = sh.settle_leg(l, session=T, bars=bars, entry_leg=el, exit_info=r["exits"].get(l["leg_id"]))
+                        o = sh.settle_leg(l, session=T, bars=bars, entry_leg=el, exit_info=r["exits"].get(l["leg_id"]),
+                                          marks=r.get("marks"), entry_at=(r.get("entry") or {}).get("observed_at"))
                         if o is None:
                             complete = False; break
                         res[l["leg_id"]] = o
@@ -238,30 +252,36 @@ def prospective_ok(r: dict) -> bool:
 def cmd_report(args) -> int:
     from undertow.core.config import load_config
     cfg = load_config(); rows = []
-    base = REPLAY_DIR if args.replay else DIR
+    base = _vdir(args.replay)
     for inst in _instruments(cfg, args.instruments):
         p = base / f"{inst.key}.jsonl"
         if p.exists():
             rows += jl.load(p, KEY)
     mode = "replay" if args.replay else "prospective"
-    if not args.replay:
-        late = [r for r in rows if not prospective_ok(r)]   # 未认证/迟到：不进主样本，但要数出来
-        rows_main = [r for r in rows if prospective_ok(r)]
-    else:
-        late, rows_main = [], rows
-    print(f"影子账 {mode}：共 {len(rows)} 行，主样本 {len(rows_main)} 行，排除（未认证/迟到/回放）{len(late)} 行")
+    other_ver = [r for r in rows if r.get("config_version") != sh.CONFIG["version"]]
+    rows = [r for r in rows if r.get("config_version") == sh.CONFIG["version"]]
+    rows_main = rows if args.replay else [r for r in rows if prospective_ok(r)]
+    print(f"影子账 {mode}（{sh.CONFIG['version']}，hash {sh.config_hash()}）：共 {len(rows)} 行，主样本 {len(rows_main)} 行，"
+          f"排除（未认证/迟到）{len(rows) - len(rows_main)} 行，其它配置版本 {len(other_ver)} 行")
+    fmt = lambda x: "—" if x is None else f"{x:+.3f}"
     out = {}
-    for basis in (args.basis or [sh.CONFIG["primary_basis"], "exit_rule_quote_conservative", "snapshot_model"]):
+    bases = args.basis or [sh.CONFIG["primary_basis"], "exit_rule_quote_conservative",
+                           "stop1x_quote_conservative", "stop2x_quote_conservative", "snapshot_model"]
+    subsets = [("两侧", None, False), ("put", ["P"], False), ("call", ["C"], False), ("顺增仓方向", None, True)]
+    for basis in bases:
         for b in sh.CONFIG["b_rules"]:
-            s = sh.paired_summary(rows_main, basis=basis, b_rule=b, mode=mode)
-            out[f"{basis}|{b}"] = s
-            c = s["coverage"]
-            fmt = lambda x: "—" if x is None else f"{x:+.3f}"
-            print(f"  {basis:30s} vs {b}: 机会 {c['opportunities']} A有价 {c['a_priced']} 配对 {c['pairs']}（同腿 {c['identical_pairs']}）"
-                  f" 日期 {s['n_dates_pairs']}  A={fmt(s['A_mean_norm'])} [{fmt(s['A_ci'][0])},{fmt(s['A_ci'][1])}] {s['A_verdict']}"
-                  f"  A−B={fmt(s['AminusB_mean_norm'])} [{fmt(s['AminusB_ci'][0])},{fmt(s['AminusB_ci'][1])}] {s['AminusB_verdict']}")
+            for lab, sides, fa in subsets:
+                sm = sh.paired_summary(rows_main, basis=basis, b_rule=b, mode=mode, sides=sides, flow_aligned_only=fa)
+                out[f"{basis}|{b}|{lab}"] = sm
+                c = sm["coverage"]
+                if lab != "两侧" and not args.detail:
+                    continue
+                print(f"  {basis:30s} vs {b} [{lab}]: 机会 {c['opportunities']} A有价 {c['a_priced']} 配对 {c['pairs']}"
+                      f"（同腿 {c['identical_pairs']}）日期 {sm['n_dates_pairs']}  "
+                      f"A={fmt(sm['A_mean_norm'])} [{fmt(sm['A_ci'][0])},{fmt(sm['A_ci'][1])}] {sm['A_verdict']}  "
+                      f"A−B={fmt(sm['AminusB_mean_norm'])} [{fmt(sm['AminusB_ci'][0])},{fmt(sm['AminusB_ci'][1])}] {sm['AminusB_verdict']}")
     if args.output:
-        Path(args.output).write_text(json.dumps({"schema": 1, "generated_at": _now_iso(), "config": sh.CONFIG,
+        Path(args.output).write_text(json.dumps({"schema": 2, "generated_at": _now_iso(), "config": sh.CONFIG,
                                                  "config_hash": sh.config_hash(), "mode": mode,
                                                  "n_rows": len(rows), "n_main": len(rows_main), "summaries": out},
                                                 ensure_ascii=False, indent=1, default=str), "utf-8")
@@ -285,9 +305,12 @@ def register(sub):
     c.set_defaults(func=cmd_capture)
     q = ss.add_parser("quote", help="盘中抓两腿盘口（入场/退出）"); q.add_argument("instruments", nargs="*")
     q.add_argument("--allow-off-hours", action="store_true"); q.add_argument("--status-file")
+    q.add_argument("--window", choices=("open", "close"), default="open",
+                   help="open=ET 10:00 入场/退出/标记；close=ET 15:30 仅持仓标记（止损口径）")
     q.set_defaults(func=cmd_quote)
     s = ss.add_parser("settle", help="收盘后监控与到期结算"); s.add_argument("instruments", nargs="*")
     s.add_argument("--status-file"); s.set_defaults(func=cmd_settle)
     r = ss.add_parser("report", help="配对统计"); r.add_argument("instruments", nargs="*")
     r.add_argument("--replay", action="store_true"); r.add_argument("--basis", nargs="*")
-    r.add_argument("--output"); r.set_defaults(func=cmd_report)
+    r.add_argument("--output"); r.add_argument("--detail", action="store_true", help="同时输出 put/call/顺增仓方向 子集")
+    r.set_defaults(func=cmd_report)

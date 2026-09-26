@@ -1,0 +1,113 @@
+{
+ "schema": 1,
+ "tag": "20260926",
+ "generated_at": "2026-09-26T02:48:14.736488+00:00",
+ "code_version": "c98e4ad092d15999f705a46b0d9a927ac6e4bf39",
+ "code_dirty": false,
+ "interpreter": "/Users/yhdong/miniconda3/bin/python3",
+ "inputs_before": {
+  "price_cache": {
+   "data/cache/cboehist_AAPL.json": "fe3165ecc1b3877c75ab2cbd295aa3554faefc914d7532f1186f902d8c7ec399",
+   "data/cache/cboehist_AMD.json": "63814174c10d1c3e3e9d6b208d1d63d593cfbd6ccbb2fddcaf04597b8f44ac22",
+   "data/cache/cboehist_GLD.json": "94e74ec8e56cc03c58a62b1a36e477354815bd6c4a5a142d45994eee5715e2cb",
+   "data/cache/cboehist_GOOGL.json": "bb8b7ceab8725aa326825089210d702e2f9d34baa9f62a2223a5bb67fe5d2618",
+   "data/cache/cboehist_INTC.json": "163879578a9ba62bb367cf044ef88e2d6718f4cf8fb848781039f0bdac106204",
+   "data/cache/cboehist_IWM.json": "916928483cb7e857fd3599809806abca8a91c1eab6c1944c7350308f3e37a42f",
+   "data/cache/cboehist_MSFT.json": "9c5ea3a7f83646206c9d4dfc30b74ddda0a762ba36d01271f04c14b9b750c80e",
+   "data/cache/cboehist_NVDA.json": "2093fda81149a05f3a6b4741d8fad3289feb53ca8cffa4c6b5a47f5b395e2674",
+   "data/cache/cboehist_QQQ.json": "9e6f7aea45dce5582be7f3cd9c612c65c46b3a1a61a82e13e74b3b1e84ca84a1",
+   "data/cache/cboehist_SLV.json": "b49de3e6041decec5da330c13a117b69b73484457d03874ff96c346f4139e295",
+   "data/cache/cboehist_SPY.json": "8a0e3d65236d46c137635430d829e687c71e2d230676deca765d2e366c63f279",
+   "data/cache/cboehist_TLT.json": "b8c6f40bf6b6f55f013fc6e4600cf58f7093f2bf0cb25d8dfd54d8ff7dfe1012",
+   "data/cache/cboehist_TQQQ.json": "dc4d82efcfd083babc98b3450b27070866c561125b3652d46972eb066fdf590c",
+   "data/cache/cboehist_TSLA.json": "80ba7958da9c0cc78c47bca3ddbecb0acf2edb0a6ccea9f1ad21caeebe6d7855",
+   "data/cache/cboehist_USO.json": "2413c872d4469f70f44b630250cc45e35430d15c1e23f1004979c087132794d3"
+  },
+  "vol_cache": {
+   "data/cache/cboevol_GVZ.json": "9f9900da1ba77b751c03176bbf601e4186b8dda6fca2760ff4b25cf13e92861f",
+   "data/cache/cboevol_OVX.json": "0a7ce013515dd011907ac37bddb68817ca4bd90272e4d7216a22c3a37d6e4571",
+   "data/cache/cboevol_RVX.json": "7f5d5ba01f93824f0c90e458b2142c3173431c2d0f5de17697933168446f265a",
+   "data/cache/cboevol_VIX.json": "6f806bc245d591beccd4b471c3b0ed0412e3974a2139b484e5c6c1c568ef4fd2",
+   "data/cache/cboevol_VXAPL.json": "e17e5669293bd6dc72e25c3391d9277429810fdbcbab19bd90b9b67fae8e74f2",
+   "data/cache/cboevol_VXAZN.json": "f6933e1915cca289a3b5233b224272ea3e930535b5eb82e01b75ce2e02c55f03",
+   "data/cache/cboevol_VXGOG.json": "1a9b2fc2d5fa3df9da8963fb9ce85106a544acda6be3cb69c65d3e02db81a5b1",
+   "data/cache/cboevol_VXGS.json": "2165302941b81e308f13e3b6c4aec94853a04b9965819363306d8fd954df4f28",
+   "data/cache/cboevol_VXIBM.json": "3b0a2fcadccf4aac62cddfbd35c73540cfcf39d1287343737afa1d03d4c4b077",
+   "data/cache/cboevol_VXN.json": "1d51a933053f96272f999f33f22e85b30aee2e509eace694513a317b4304ae98",
+   "data/cache/cboevol_VXSLV.json": "400668a372ba47d57c770fe439fb242cb25ece5e5cf201ba9f689d4ceeba5a02",
+   "data/cache/cboevol_VXTLT.json": "d19736cbfd1bfc3c71081e28c01caf1e31b4e838cfb9bd7bf681fe15f2749aca"
+  },
+  "signal_ledger": {
+   "data/history/signals/gold.json": "878723c0e10c9e3ab0dc5d5d310fc8e35c8ad3bab946debc5e97e0a2c906daea",
+   "data/history/signals/iwm.json": "15926b3f8a2696ca27a8bf38571885187049396fc283e1d381d9b66e930ee744",
+   "data/history/signals/qqq.json": "cad6a9248182e6dca4687d9256c57836bef63b8ff4040beb918ea884356daecf",
+   "data/history/signals/silver.json": "db2e06c9da311c3beebba7aa2b39fe0d9b744b1e01b9a000a6fc8129d96682c5",
+   "data/history/signals/spy.json": "3bd77d483d28da517d1e33ee43f4a8ef3ec0c67924d62559c91736d3bc62fa16",
+   "data/history/signals/tlt.json": "f23f2cca17e4c27ea6f83b44e8ac424743ba5a85707980f4f81981987256f89f",
+   "data/history/signals/tqqq.json": "43127f9dedb05512ccc5967a13cb0a723a016323053e828e258e0b6b59e278c7",
+   "data/history/signals/wti.json": "c2feefbd50b455b065045a94a3d121b2a4c5f9fe8421c6d60c5f8fd37313df6c"
+  },
+  "options_snapshots": {
+   "n_files": 335,
+   "combined_sha256": "0c09e95bf107067eea522271e2032e3c15c585c89593daa0e48a93ab7343e6f4",
+   "last": "data/snapshots/options/USO/2026-09-25.json.gz"
+  }
+ },
+ "inputs_changed_during_run": false,
+ "runs": {
+  "step4": {
+   "cmd": "scripts/step4_filters.py --emit --output /Users/yhdong/Trading/data/history/wall_spread/rerun_20260926/filter_test.json",
+   "rc": 0,
+   "started_at": "2026-09-26T02:45:18.631724+00:00",
+   "seconds": 13.4
+  },
+  "step4_5pct": {
+   "cmd": "scripts/step4_filters.py --buffer 5% --sections BE",
+   "rc": 0,
+   "started_at": "2026-09-26T02:45:32.035000+00:00",
+   "seconds": 12.6
+  },
+  "step4_sweep": {
+   "cmd": "scripts/step4_sweep.py --emit --output /Users/yhdong/Trading/data/history/wall_spread/rerun_20260926/filter_sweep.json",
+   "rc": 0,
+   "started_at": "2026-09-26T02:45:44.638589+00:00",
+   "seconds": 46.4
+  },
+  "step5_max": {
+   "cmd": "scripts/step5_wall_hold.py --emit --mode max --output /Users/yhdong/Trading/data/history/wall_spread/rerun_20260926/wall_hold_max.json",
+   "rc": 0,
+   "started_at": "2026-09-26T02:46:30.989911+00:00",
+   "seconds": 14.0
+  },
+  "step5_nearest": {
+   "cmd": "scripts/step5_wall_hold.py --emit --mode nearest --output /Users/yhdong/Trading/data/history/wall_spread/rerun_20260926/wall_hold_nearest.json",
+   "rc": 0,
+   "started_at": "2026-09-26T02:46:44.950140+00:00",
+   "seconds": 14.1
+  },
+  "step6": {
+   "cmd": "scripts/step6_vrp.py --emit --output /Users/yhdong/Trading/data/history/wall_spread/rerun_20260926/vrp_states.json",
+   "rc": 0,
+   "started_at": "2026-09-26T02:46:59.058520+00:00",
+   "seconds": 13.3
+  },
+  "step7": {
+   "cmd": "scripts/step7_atr_filter.py",
+   "rc": 0,
+   "started_at": "2026-09-26T02:47:12.394795+00:00",
+   "seconds": 35.6
+  },
+  "step8": {
+   "cmd": "scripts/step8_direction_x_wall.py --emit --output /Users/yhdong/Trading/data/history/wall_spread/rerun_20260926/direction_x_wall.json",
+   "rc": 0,
+   "started_at": "2026-09-26T02:47:47.980846+00:00",
+   "seconds": 26.6
+  }
+ },
+ "limitations": [
+  "全部结果为研究模型：价格突破率、IV−RV 点差、快照盘口估价；不是可成交收益。",
+  "期权快照仅约 60 个可交易日、单一样本期；个股快照仅数日。",
+  "跨品种不合并；簇复现是探索佐证，不是独立重复。",
+  "输入若在运行中变化（自动任务），本次结果作废需重跑（见 inputs_changed_during_run）。"
+ ]
+}

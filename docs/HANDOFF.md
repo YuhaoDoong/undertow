@@ -1,5 +1,13 @@
 # undertow 交接说明（2026-09-01 晚间重写）
 
+> **2026-09-26 最新入口（本节优先于下文；下文为 09-01 历史状态，版本/参数/数据量可能过期）**
+> - 协作方式：Codex（GPT）负责策略规划与书面审查，Claude Code 负责实施；沟通、交付、审查全部在本地 `GPTcom/`（不入公开仓库）。
+> - 墙位卖方价差：仍未启用。9/25 研究结论已按 Codex 审查更正（见 `docs/wall_spread_3steps.md` 顶部更正注记）；
+>   修后重算见 `data/history/wall_spread/rerun_20260926/`（含 COMPARISON.md 与输入 manifest）。
+> - 现行主实验：前瞻配对影子账 `undertow shadow ...`（墙选腿 A vs 无 OI 距离 B），已接入 daily_update.sh（capture/settle）
+>   与 session_hooks.sh 窗口④（ET 10:00 quote）。配置 `analyze/shadow.CONFIG`，改动须升版本。
+> - 日报→台账时间契约（W02）：session 由 captured_at 认证（certified/provisional/unmappable），回放写 replay/，失败进状态文件并告警。
+
 给**其他会话/其他人**快速接手用。按「现在能不能用 → 怎么跑 → 已知的坑」组织。
 
 ## 0. 一句话现状

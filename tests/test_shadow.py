@@ -758,3 +758,69 @@ def test_primary_pool_windows_inside_option_hours():
     assert sh.windows_inside_option_hours("TQQQ", date(2026, 9, 28)) is None
     assert sh.windows_inside_option_hours("GLD", date(2026, 11, 26)) is None      # 休市
     assert op.option_close_minutes("USO", early=False) == 960 and op.option_close_minutes("GLD", early=True) == 795
+
+
+# ═══════════════════ S05：账户可执行账（Codex 008）═══════════════════
+
+def _exec_row(inst="silver", session="2026-09-14"):
+    r = _row(); r["instrument"] = inst; r["key"] = f"{session}|{inst}"; r["session"] = session
+    r["windows"] = {f"{session}|open": {"attempts": [_att(f"{session}|open", {
+        **{sh.qkey(l["side"], l["sell"]): _q(0.30, 0.32) for l in r["legs"] if l["status"] == "candidate"},
+        **{sh.qkey(l["side"], l["buy"]): _q(0.08, 0.10) for l in r["legs"] if l["status"] == "candidate"}})]}}
+    return r
+
+
+def test_s05_executable_when_budget_allows():
+    from undertow.analyze import shadow_exec as sx
+    res = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=1000.0, account_open_max_loss=0.0,
+                      account_cluster_open={}, prior=[])
+    a = next(x for x in res if x["leg_id"] == "P-A")
+    assert a["max_loss"] == pytest.approx(a["width"] - a["credit"] + 3.2)
+    assert (a["verdict"] == "可执行") == (a["n"] >= 1) and "disposition" in a
+    assert any("未核实" in v for v in a["disposition"].values())
+
+
+def test_s05_current_account_cannot_open():
+    from undertow.analyze import shadow_exec as sx
+    res = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=0.05, account_open_max_loss=0.0,
+                      account_cluster_open={}, prior=[])
+    assert all(x["n"] == 0 and x["verdict"] != "可执行" for x in res), "研究有候选 ≠ 账户可承受一组"
+
+
+def test_s05_unknown_account_risk_blocks():
+    from undertow.analyze import shadow_exec as sx
+    res = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=10000.0, account_open_max_loss=None,
+                      account_cluster_open=None, prior=[])
+    assert all(x["verdict"] != "可执行" for x in res)
+    assert any("最大亏损未知" in x["notes"][0] for x in res if x["verdict"] == "暂不可执行")
+
+
+def test_s05_cross_day_occupancy_consumes_cluster_room():
+    from undertow.analyze import shadow_exec as sx
+    prior = [{"rule": "A", "verdict": "可执行", "expiry": "2026-09-16", "session": "2026-09-11",
+              "cluster": "贵金属", "max_loss": 300.0, "n": 1}]
+    fresh = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=2000.0, account_open_max_loss=0.0,
+                        account_cluster_open={}, prior=[])
+    held = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=2000.0, account_open_max_loss=0.0,
+                       account_cluster_open={}, prior=prior)
+    fa = next(x for x in fresh if x["leg_id"] == "P-A"); ha = next(x for x in held if x["leg_id"] == "P-A")
+    assert fa["max_loss"] == pytest.approx(183.2) and fa["n"] == 1, "收 20、宽 200、费 3.2；止损层 200//183.2=1"
+    assert ha["n"] == 0 and ha["verdict"] == "暂不可执行", "同簇已占 300，剩 100 < 183.2"
+    assert sx.open_occupancy(prior, date(2026, 9, 14)) == {"贵金属": 300.0}
+    assert sx.open_occupancy(prior, date(2026, 9, 17)) == {}, "已到期不再占用"
+
+
+def test_s05_no_entry_quote_not_executable():
+    from undertow.analyze import shadow_exec as sx
+    r = _exec_row(); r["windows"] = {}
+    res = sx.evaluate([r], session="2026-09-14", net_assets=10000.0, account_open_max_loss=0.0,
+                      account_cluster_open={}, prior=[])
+    assert all(x["verdict"] in ("暂不可执行", "无候选") and x["n"] == 0 for x in res)
+
+
+def test_s05_exec_output_is_private():
+    from undertow import shadow_cli as sc
+    assert str(sc.EXEC_DIR).startswith("data/account/")
+    import subprocess
+    r = subprocess.run(["git", "check-ignore", "-q", "data/account/shadow_exec/x.json"], cwd=ROOT)
+    assert r.returncode == 0, "可执行账含账户金额，必须 gitignore"

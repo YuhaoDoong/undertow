@@ -2115,6 +2115,8 @@ def render_account_html(review, assets=None, health=None) -> str:
 
         for g in review.groups:
             d = "—" if g.net_delta is None else f"{g.net_delta:+.0f}"
+            if getattr(g, "incomplete", None):
+                d += "（缺腿·汇总未知）"
             pnl = "—" if g.total_pnl is None else f"{g.total_pnl:+,.0f}"
             bcol = _BIAS_COLOR.get(g.bias, "#6e7781")
             rows = []
@@ -2580,15 +2582,18 @@ def render_credit_wall(verdicts: dict, spot: float = 0.0, conv=None,
                 import math as _m
                 _n_ruin = max(1, _m.ceil(net_assets / _occ))
                 _rp = ruin_probability(t["win_rate"], _n_ruin)
-                _c = "#1a7f37" if _v2.over_kelly <= 1.5 else "#bc4c00"
+                _c = "#1a7f37" if (_v2.ok and _v2.over_kelly <= 1.5) else "#bc4c00"
+                # Codex 008 G07：旧分支忽略 SizeVerdict.ok，且把「连续 n 次全损的概率」标成「概率上限」
+                # （它不是破产概率，更不是上限）。本分支当前被 STRATEGY_VALIDATED=False 挡住，恢复前已修。
+                _verdict = (f'可下 {_v2.n_units} 组' if _v2.ok else f'<b>不可下</b>：{_esc(_v2.reason)}')
                 kel = (f'<div style="margin:5px 0;padding:6px 9px;background:#f6f8fa;'
                        f'border-radius:5px;font-size:12.5px">'
-                       f'<b>仓位</b>　盈亏比 {_k.odds:.2f}　Kelly {_k.kelly:.0%}'
+                       f'<b>仓位</b>　{_verdict}　·　盈亏比 {_k.odds:.2f}　Kelly {_k.kelly:.0%}'
                        f'（${net_assets * _k.kelly:.0f}）　'
                        f'<span style="color:{_c}">1 组 ${_occ:.0f} = 净资产 '
                        f'{_occ / net_assets:.0%}，Kelly 的 {_v2.over_kelly:.1f} 倍</span>'
-                       f'　·　连续 {_n_ruin} 次全损打光的概率上限 '
-                       f'<b>{_rp:.2%}</b></div>')
+                       f'　·　恰好连续 {_n_ruin} 次全损的概率 {_rp:.2%}'
+                       f'（不是破产概率，也不是它的上限）</div>')
             except Exception:
                 kel = ""
         cfg = (f'<span class="sub">卖腿{"墙内" if t["offset"] < 0 else "墙外"}'

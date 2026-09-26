@@ -83,29 +83,28 @@ def test_short_only_position():
 
 
 def test_total_exposure_flags_incomplete():
-    """任一持仓算不出可平仓价时，总敞口必须显式标为【不完整的下界】。
+    """任一持仓算不出可平仓价时，净清算价值必须显式标为不完整。
 
-    这是第一轮修复（None 传播）引入的新风险：TQQQ 缺价时总敞口只算了 SLV 的 $19，
-    显示「净资产 4.5%」，看着还有大量加仓空间——而真实敞口还要加上那笔约 $70。
-    **低估敞口比高估危险**。
+    旧版文案称它是「总敞口的下界」—— Codex 008 G03 指出这不成立：缺的那笔若是空头，
+    全平还要再付钱，已算部分既不是上界也不是下界。
     """
     good = check_position("有价", _tqqq(), cost=90.0)
     bad = check_position("缺价", [LegQuote("A", 1, bid=None, ask=1.0, last=1.0)], cost=50.0)
     md = render_md([good, bad], net_assets=436.77)
-    assert "总敞口不完整" in md and "缺价" in md
-    assert "这是下界，不是实际敞口" in md
-    # 全部有价时不应出现该告警
+    assert "净清算价值不完整" in md and "缺价" in md
+    assert "既不是上界也不是下界" in md and "这是下界" not in md
     md2 = render_md([good], net_assets=436.77)
-    assert "总敞口不完整" not in md2 and "总敞口（可平仓口径）" in md2
+    assert "净清算价值不完整" not in md2 and "净清算价值（现在全平，有符号）" in md2
     print("PASS test_total_exposure_flags_incomplete")
 
 
-def test_zero_value_position_counted_in_total():
-    """价值恰好为 0 的持仓要计入总敞口，不能被真值判断跳过。"""
-    z = check_position("零值", [LegQuote("A", 1, bid=0.0, ask=0.0, last=0.0)], cost=10.0)
-    md = render_md([z], net_assets=100.0)
-    assert "总敞口不完整" not in md, "0 值不是缺价，不该报不完整"
-    print("PASS test_zero_value_position_counted_in_total")
+def test_signed_liquidation_value_is_not_called_exposure():
+    """Codex 008 复现：卖方结构全平要付 $50，旧版显示「总敞口 −5%」。"""
+    short = check_position("卖方", [LegQuote("S", -1, bid=0.45, ask=0.50, last=0.48)], cost=-60.0)
+    md = render_md([short], net_assets=1000.0)
+    assert "总敞口" not in md and "$-50" in md and "不是风险敞口" in md
+    md0 = render_md([short], net_assets=0.0)
+    assert "净资产 " not in md0.split("净清算价值")[1].split("\n")[0], "净资产 ≤0 不给比例"
 
 
 def test_render_contains_exit_basis_warning():
@@ -114,7 +113,7 @@ def test_render_contains_exit_basis_warning():
     # 这条指引必须始终在场（休市版是"不得据本表判止损"）。
     assert "真实可平仓" in md
     assert ("止损判定用本表" in md) or ("不得据本表判止损" in md)
-    assert "总敞口" in md
+    assert "净清算价值" in md and "不是风险敞口" in md
     print("PASS test_render_contains_exit_basis_warning")
 
 

@@ -104,6 +104,7 @@ OVER_KELLY_HARD = 3.0
 
 def size(net_assets: float, unit_occupancy: float, k: KellyResult,
          *, buying_power: float | None = None,
+         unit_max_loss: float | None = None, unit_stop_loss: float | None = None,
          max_over_kelly: float = OVER_KELLY_SOFT,
          hard_over_kelly: float = OVER_KELLY_HARD,
          allow_over: bool = False) -> SizeVerdict:
@@ -117,11 +118,23 @@ def size(net_assets: float, unit_occupancy: float, k: KellyResult,
         return SizeVerdict(False, 0, 0.0, unit_occupancy, 0.0, 0.0, 0.0,
                            f"负优势（p·b−q = {k.edge:+.2f}）—— 这个策略本身不该做，"
                            f"仓位再小也是慢慢亏。")
+    import math
+    from undertow.analyze import risk_policy as rp
+    vals = (net_assets, unit_occupancy, k.kelly) + ((buying_power,) if buying_power is not None else ())
+    if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in vals):
+        return SizeVerdict(False, 0, 0.0, unit_occupancy, 0.0, 0.0, 0.0, "输入含非有限数值 —— 不给组数")
     if net_assets <= 0 or unit_occupancy <= 0:
         return SizeVerdict(False, 0, 0.0, unit_occupancy, 0.0, k.kelly, 0.0,
                            "净资产或占用无效")
     kd = net_assets * k.kelly
     n = int(kd // unit_occupancy)
+    # Codex 008 G07：旧实现只检查「一组是否超过购买力」，总组数不受购买力与风控上限约束
+    # （复现：净资产 1000、每组 100、Kelly .5、购买力 100 → ok=True、5 组、占用 500）。
+    # 现在组数 = min(Kelly, 购买力, 风控政策)；Kelly 只能往下收，不能放宽政策上限。
+    n_pol, pol_notes = rp.max_units(
+        net_assets=net_assets, unit_max_loss=(unit_max_loss if unit_max_loss is not None else unit_occupancy),
+        unit_stop_loss=unit_stop_loss,
+        buying_power=(buying_power if buying_power is not None else net_assets), unit_occupancy=unit_occupancy)
     frac1 = unit_occupancy / net_assets
     over = frac1 / k.kelly if k.kelly > 0 else float("inf")
     cap = buying_power if buying_power is not None else net_assets
@@ -129,10 +142,17 @@ def size(net_assets: float, unit_occupancy: float, k: KellyResult,
         return SizeVerdict(False, 0, kd, unit_occupancy, frac1, k.kelly, over,
                            f"1 组占用 ${unit_occupancy:.0f} 超过可用 ${cap:.0f} —— "
                            f"做不了。{MIN_UNIT_NOTE}。")
+    policy_block = SizeVerdict(False, 0, kd, unit_occupancy, frac1, k.kelly, over,
+                               f"风控政策/购买力不允许开 1 组：{'；'.join(pol_notes)}。{MIN_UNIT_NOTE}，"
+                               f"不上调风险去凑整数张。")
+    if n >= 1 and n_pol < 1:
+        return policy_block
     if n >= 1:
-        return SizeVerdict(True, n, kd, unit_occupancy, n * frac1, k.kelly,
-                           n * frac1 / k.kelly,
-                           f"Kelly ${kd:.0f} → {n} 组（每组 ${unit_occupancy:.0f}）。"
+        m = min(n, n_pol)
+        cut = f"（Kelly 给 {n} 组，受政策/购买力截到 {m} 组：{pol_notes[0]}）" if m < n else ""
+        return SizeVerdict(True, m, kd, unit_occupancy, m * frac1, k.kelly,
+                           m * frac1 / k.kelly,
+                           f"Kelly ${kd:.0f} → {m} 组（每组 ${unit_occupancy:.0f}）{cut}。"
                            f"盈亏比 {k.odds:.2f}、优势 {k.edge:+.2f}。")
     # 1 组已超 Kelly
     base = (f"Kelly 只允许 ${kd:.0f}，但 1 组要 ${unit_occupancy:.0f}"
@@ -147,6 +167,8 @@ def size(net_assets: float, unit_occupancy: float, k: KellyResult,
                            base + f" —— 超过 {max_over_kelly:g} 倍软上限。"
                                   f"要下需显式确认（allow_over），"
                                   f"否则按不做处理。")
+    if n_pol < 1:                          # allow_over 只豁免 Kelly 软上限，不豁免风控政策
+        return policy_block
     return SizeVerdict(True, 1, kd, unit_occupancy, frac1, k.kelly, over,
                        base + f" —— 在 {max_over_kelly:g} 倍软上限内，可按 1 组做，"
                               f"但要知道这是超配。")

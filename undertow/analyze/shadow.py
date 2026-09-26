@@ -1071,12 +1071,20 @@ CLUSTERS = {"贵金属": ("gold", "silver"), "股指": ("qqq", "tqqq", "spy", "i
             "科技股": ("googl", "tsla", "nvda", "intc", "amd", "msft", "aapl")}
 
 
-def contracts_allowed(max_loss_per_contract: float, equity: float, *, hard_frac: float = 0.20,
-                      cluster_used: float = 0.0, cluster_frac: float = 0.20) -> int:
-    """按 AGENTS.md 双层限额的「最大亏损」一层：单笔最大亏损 ≤ hard_frac×净值；
-    同簇（如金银，相关 0.89）同日同侧合计最大亏损 ≤ cluster_frac×净值。返回可开张数（可为 0）。"""
-    if max_loss_per_contract <= 0 or equity <= 0:
-        return 0
-    single = int((hard_frac * equity) // max_loss_per_contract)
-    room = max(0.0, cluster_frac * equity - cluster_used)
-    return max(0, min(single, int(room // max_loss_per_contract)))
+def contracts_allowed(max_loss_per_contract: float, equity: float, *, hard_frac: float | None = None,
+                      cluster_used: float = 0.0, cluster_frac: float | None = None) -> int:
+    """最大亏损一层的可开张数 —— 委托 analyze.risk_policy（唯一来源，Codex 008 G07）。
+
+    hard_frac / cluster_frac 仅供测试覆盖；缺省读政策。止损情景按最大亏损计（保守）。"""
+    from undertow.analyze import risk_policy as rp
+    pol = dict(rp.POLICY)
+    if hard_frac is not None:
+        pol["max_loss_frac"] = hard_frac
+        pol["max_stop_risk_frac"] = max(pol["max_stop_risk_frac"], hard_frac)
+    else:
+        pol["max_stop_risk_frac"] = pol["max_loss_frac"]      # 本函数只管最大亏损一层
+    if cluster_frac is not None:
+        pol["cluster_max_loss_frac"] = cluster_frac
+    n, _ = rp.max_units(net_assets=equity, unit_max_loss=max_loss_per_contract,
+                        cluster_open_max_loss=cluster_used, policy=pol)
+    return n

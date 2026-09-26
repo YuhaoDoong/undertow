@@ -352,6 +352,9 @@ class UnderlyingGroup:
     price_note: str = ""          # 报价源说明
     net_gamma: float | None = None   # 组合净 Gamma：这个 Delta 有多脆
     net_theta: float | None = None   # 组合净 Theta：每天收/付多少
+    # Codex 008 G03：任一腿缺值 → 该项为 None（未知），这里记缺了哪些腿。
+    # 旧实现只加已知腿、不标注，缺一条短腿的 Delta 看起来就像完整的净 Delta。
+    incomplete: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -672,7 +675,10 @@ def _book_stance(combos, ctx, capital) -> tuple[str, str]:
     # 资金够不够接货
     if capital is not None:
         naked_puts = [c for c in combos if "单腿卖put" in c.label]
-        need = sum((c.capital_at_risk or 0) for c in naked_puts)
+        unknown_need = [c for c in naked_puts if c.capital_at_risk is None]
+        need = sum(c.capital_at_risk for c in naked_puts if c.capital_at_risk is not None)
+        if unknown_need:
+            parts.append(f"⚠ {len(unknown_need)} 笔裸卖 put 的接货金额算不出——够不够接货未核查")
         if need > 0 and capital.buy_power < need:
             parts.append(f"⚠ 购买力 ${capital.buy_power:,.0f} < 裸卖 put 接货全额 ${need:,.0f}，"
                          f"资金不足接货——这些腿只能到期前平仓/展期，不能走接货路径")
@@ -793,17 +799,13 @@ def review_portfolio(positions, contexts: dict, asof: date,
             ctx = contexts[und]
             combos = _classify_underlying(legs, ctx)
             legs = _reclassify_combo_legs(legs, combos)
-            deltas = [lg.pos_delta for lg in legs if lg.pos_delta is not None]
-            pnls = [lg.pnl for lg in legs if lg.pnl is not None]
             stance, cap_note = _book_stance(combos, ctx, capital)
+            agg = {k: complete_sum(legs, k) for k in ("pos_delta", "pos_gamma", "pos_theta", "pnl")}
             groups.append(UnderlyingGroup(
                 underlying=und, display_name=ctx.display_name,
-                net_delta=sum(deltas) if deltas else None,
-                net_gamma=(sum(x.pos_gamma for x in legs if x.pos_gamma is not None)
-                           if any(x.pos_gamma is not None for x in legs) else None),
-                net_theta=(sum(x.pos_theta for x in legs if x.pos_theta is not None)
-                           if any(x.pos_theta is not None for x in legs) else None),
-                total_pnl=sum(pnls) if pnls else None,
+                net_delta=agg["pos_delta"][0], net_gamma=agg["pos_gamma"][0],
+                net_theta=agg["pos_theta"][0], total_pnl=agg["pnl"][0],
+                incomplete={k: v[1] for k, v in agg.items() if v[1]},
                 bias=ctx.bias, verdict_head=ctx.verdict_head,
                 legs=legs, combos=combos, stance=stance, capital_note=cap_note,
                 summary=_group_summary(und, legs, combos, ctx),
@@ -816,6 +818,14 @@ def review_portfolio(positions, contexts: dict, asof: date,
                                headline=headline)
     finally:
         _TODAY = None
+
+
+def complete_sum(legs, attr: str) -> tuple[float | None, list[str]]:
+    """有符号求和：任一成员缺值 → (None, 缺失成员名)。不只加已知部分（那会冒充完整值）。"""
+    missing = [getattr(lg, "name", "?") for lg in legs if getattr(lg, attr, None) is None]
+    if missing or not legs:
+        return None, missing
+    return sum(getattr(lg, attr) for lg in legs), []
 
 
 def _portfolio_headline(groups: list[UnderlyingGroup], unmapped: list[PositionReview]) -> str:

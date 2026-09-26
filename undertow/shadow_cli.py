@@ -490,6 +490,74 @@ def cmd_report(args) -> int:
     return 0
 
 
+EXEC_DIR = Path("data/account/shadow_exec")      # 私有：gitignore；研究账在 data/history/shadow/（公开）
+
+
+def cmd_exec(args) -> int:
+    """S05：账户可执行账。读本账户资金与现有持仓风险 → 对当日每个候选给出「可执行 n 组 / 暂不可执行（原因）」。
+
+    只读、从不下单。结果含账户金额，只写 data/account/shadow_exec/（gitignore），不进公开仓库。
+    """
+    from undertow.analyze import shadow_exec as sx
+    from undertow.analyze.risk_aggregate import aggregate
+    from undertow.collect import longbridge_account as lb
+    from undertow.collect.asof_history import atomic_write_json, load_json
+    from undertow.core.config import load_config
+    from undertow.cli import _load_account_review
+    session = args.session or market_today().isoformat()
+    cfg = load_config()
+    rows = []
+    for inst in _instruments(cfg, args.instruments):
+        p = _path(inst.key, False)
+        if p.exists():
+            rows += [r for r in jl.load(p, KEY) if r["session"] == session and prospective_ok(r)]
+    net, acct_ml, acct_cl, acct_note = None, None, None, ""
+    try:
+        b = _load_account_review(no_cache=False)
+        if b["review"] is None:
+            acct_ml, acct_cl = 0.0, {}
+            a = lb.fetch_assets(); net = a.net_assets
+        else:
+            net = b["capital"].net_assets if b["capital"] is not None else None
+            agg = aggregate(b["review"], b["capital"], asof=session)
+            tot = agg["totals"]["max_loss"]
+            acct_ml = tot["value"]                               # 有未知/无上限成员 → None
+            root_to_key = {i.options.symbol.upper(): i.key for i in cfg.instruments.values() if i.options}
+            if acct_ml is not None:
+                acct_cl = {}
+                for it in agg["items"]:
+                    k = sx.cluster_of(root_to_key.get(it["group"], it["group"]))
+                    acct_cl[k] = acct_cl.get(k, 0.0) + (it["max_loss"] or 0.0)
+            else:
+                acct_note = f"现有持仓最大亏损未知：缺 {len(tot['missing'])} 项"
+    except lb.LongbridgeUnavailable as e:
+        acct_note = f"账户不可用：{e}"[:200]
+    out_dir = EXEC_DIR / sh.CONFIG["version"]
+    prior = []
+    for f in sorted(out_dir.glob("*.json")) if out_dir.exists() else []:
+        if f.stem < session:
+            prior += load_json(f, {}).get("candidates", [])
+    res = sx.evaluate(rows, session=session, net_assets=net, account_open_max_loss=acct_ml,
+                      account_cluster_open=acct_cl, prior=prior)
+    if net is None:
+        res = [{**r, "verdict": "暂不可执行", "n": 0, "notes": [acct_note or "净资产未知"] + r.get("notes", [])}
+               if r["verdict"] == "可执行" else r for r in res]
+    body = {"schema": 1, "session": session, "computed_at": _now_iso(), "exec_version": sx.VERSION,
+            "config_version": sh.CONFIG["version"], "net_assets": net, "account_open_max_loss": acct_ml,
+            "account_note": acct_note, "candidates": res}
+    atomic_write_json(out_dir / f"{session}.json", body)
+    n_ok = sum(r["verdict"] == "可执行" for r in res)
+    print(f"账户可执行账 {session}（{sx.VERSION}）：候选 {len(res)}，可执行 {n_ok}"
+          + (f"；{acct_note}" if acct_note else ""))
+    for r in res:
+        if r["verdict"] == "无候选":
+            continue
+        econ = (f"收 ${r['credit']:.0f} 最大亏 ${r['max_loss']:.0f}" if r.get("max_loss") is not None else "")
+        print(f"  {r['instrument']:7s} {r['leg_id']:5s} {r['verdict']} {r['n']} 组  {econ}  {r['notes'][0]}")
+    print(f"  （结果含账户金额，只写 {out_dir}/，已 gitignore）")
+    return 0
+
+
 def _status(args, cmd, done, issues, *, overall=None, counts=None):
     # 失败必须当场可见：只写状态文件 = 没人知道（AGENTS.md 静默失败第 1 条；本模块首次冒烟就犯了）
     for i in issues:
@@ -515,6 +583,9 @@ def register(sub):
                         "13:00 收市日 12:30–12:45）持仓标记与到期前平仓")
     q.set_defaults(func=cmd_quote)
     w = ss.add_parser("windows", help="打印今天 ET 的影子账窗口（供调度脚本）"); w.set_defaults(func=cmd_windows)
+    e = ss.add_parser("exec", help="S05 账户可执行账（私有，写 data/account/；只读，从不下单）")
+    e.add_argument("instruments", nargs="*"); e.add_argument("--session", help="YYYY-MM-DD，默认今天 ET")
+    e.set_defaults(func=cmd_exec)
     s = ss.add_parser("settle", help="收盘后监控与到期结算"); s.add_argument("instruments", nargs="*")
     s.add_argument("--rederive", action="store_true",
                    help="对已全部成熟的行也按当前派生逻辑重算 outcome（原始观测不动；变化时记 rederived_at）")

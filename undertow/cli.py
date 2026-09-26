@@ -2864,9 +2864,10 @@ def _load_account_review(no_cache):
             severity="高", code="capital_unknown", title="账户资金未读到：资金类检查未执行（不是通过）",
             detail=f"读取净资产/购买力失败：{assets_error}",
             suggestion="集中度、购买力、接货能力检查都没有做；在券商端核对资金后再看本报告。")] + health
+    from undertow.analyze.risk_aggregate import aggregate
     return {"positions": positions, "contexts": contexts, "review": review,
             "health": health, "capital": capital, "assets": assets, "assets_error": assets_error,
-            "today": today}
+            "risk": aggregate(review, capital, asof=today), "today": today}
 
 
 def cmd_account(args) -> int:
@@ -2891,6 +2892,8 @@ def cmd_account(args) -> int:
     today = bundle["today"]
 
     print(render_account_md(review, assets, health))
+    from undertow.analyze.risk_aggregate import render_md as _risk_md
+    print("\n" + _risk_md(bundle["risk"]))
 
     # —— 每次评价落一份数据快照：持仓+资产+资金流水+成交，为将来历史复盘攒数据 ——
     # 全部 gitignore（data/account/），不入公开仓库；失败不阻断评价。

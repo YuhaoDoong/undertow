@@ -1075,8 +1075,14 @@ def test_sizing_is_kelly_not_fixed_pct():
     assert v2.over_kelly > 1.0
     if v2.over_kelly > OVER_KELLY_SOFT:
         assert not v2.ok, "超软上限且未显式确认 → 必须拒绝"
-        assert size(264.0, 96.0, kc, buying_power=153.0, allow_over=True).ok, \
-            "显式确认后应可下 —— 小账户不能被仓位规则完全禁止交易"
+    # Codex 008 G07：allow_over 只豁免 Kelly 软上限，不豁免 AGENTS.md 的风控政策（单笔最大亏损 ≤20%）。
+    # 净资产 264、每组最大亏 96（36%）→ 政策 0 组。用户 8/31 反对固定百分比的意见与现行政策冲突，
+    # 已报告给用户与 Codex 决定；在政策改变前，代码按现行政策执行，不自行放宽。
+    vx = size(264.0, 96.0, kc, buying_power=153.0, allow_over=True)
+    assert not vx.ok and "风控政策" in vx.reason
+    assert not size(600.0, 96.0, kc, buying_power=600.0).ok, "未给止损情景 → 按最大亏损计，96 > 600×10%"
+    assert size(600.0, 96.0, kc, buying_power=600.0, unit_stop_loss=40.0).ok, \
+        "最大亏 96 ≤ 120（20%）、止损情景 40 ≤ 60（10%）→ 可下"
     # 6 倍超配（顺向买方实测）必须硬拒绝，不得靠文字提示了事
     kb = kelly(0.23, 17.8, 250.0)
     v_big = size(264.0, 240.0, kb, buying_power=264.0, allow_over=True)

@@ -128,6 +128,7 @@ def _portfolio_brief(review) -> dict:
         groups.append({
             "underlying": g.underlying, "display_name": g.display_name,
             "net_delta": g.net_delta, "total_pnl": g.total_pnl,
+            "incomplete": getattr(g, "incomplete", {}),       # 非空 = 对应汇总为 None（未知），不是 0
             "bias": g.bias, "verdict_head": g.verdict_head,
             "stance": g.stance, "capital_note": g.capital_note,
             "combos": [_jsonable(c) for c in g.combos],
@@ -177,6 +178,16 @@ def _soul_brief(profile, violations) -> dict | None:
     }
 
 
+def _risk_brief(review, capital, asof) -> dict | None:
+    """分口径风险汇总（Codex 008 G03）：未知成员不折零；overall=incomplete 永远不是通过。"""
+    if review is None:
+        return None
+    from undertow.analyze.risk_aggregate import aggregate
+    a = aggregate(review, capital, asof=asof)
+    return {"overall": a["overall"], "policy_version": a["policy_version"], "account_limit": a["account_limit"],
+            "totals": a["totals"], "not_passed": [c for c in a["checks"] if c["status"] != "pass"]}
+
+
 def _thesis_brief(th) -> dict | None:
     """用户的事前判断（开仓前落盘，供 AI 逐条检验；AI 须先独立判读再对照）。"""
     if not th:
@@ -211,6 +222,7 @@ def build_consult_packet(*, review, health, contexts, capital=None,
         "portfolio": _portfolio_brief(review),
         "healthcheck": [_jsonable(f) for f in (health or [])],
         "news": _news_brief(news),
+        "risk": _risk_brief(review, capital, asof),
         "soul": _soul_brief(*(soul if soul else (None, None))),
         # ok / absent（未建档）/ error: …（档案存在但不可用）。非 ok 时纪律层【未核查】，不是「没有违规」
         "soul_status": soul_status if soul else (soul_status if soul_status != "ok" else "absent"),
@@ -259,6 +271,16 @@ def render_prompt(packet: dict) -> str:
             L.append("  ⚠️ 当前持仓已触碰的自定纪律：")
             for v in sl["violations"]:
                 L.append(f"    · [{v['severity']}] {v['title']}：{v['detail']}")
+        L.append("")
+    rk = packet.get("risk")
+    if rk:
+        word = {"pass": "通过", "fail": "超限", "incomplete": "未完成核查（不是通过）"}[rk["overall"]]
+        L.append(f"【风险汇总·{rk['policy_version']}】{word}；全账户上限：{rk['account_limit']}")
+        for k, lab in (("max_loss", "最大亏损合计"), ("stop_loss", "止损情景合计")):
+            tt = rk["totals"][k]
+            L.append(f"  {lab}：" + (f"${tt['value']:,.0f}" if tt["complete"]
+                                    else f"未知（已知部分 ${tt['known_part']:,.0f}，缺 {len(tt['missing'])} 项）"))
+        L.append("  「净清算价值」不是风险；未知项不得当作 0。")
         L.append("")
     if packet.get("account"):
         a = packet["account"]

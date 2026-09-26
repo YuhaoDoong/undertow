@@ -618,6 +618,8 @@ def render_account_md(review, assets=None, health=None) -> str:
     for g in review.groups:
         L.append(f"## {g.display_name}（{g.underlying}）")
         d = "—" if g.net_delta is None else f"{g.net_delta:+.0f}"
+        if getattr(g, "incomplete", None):
+            d += "（" + "；".join(f"{k} 缺 {len(v)} 腿" for k, v in g.incomplete.items()) + "，汇总未知）"
         L.append(f"- 综合：净 Delta {d}{_greeks_text(g, assets)} · "
                  f"浮动盈亏 {_money(g.total_pnl)} · 综合研判 **{g.bias}**"
                  + (f" · 决策：{g.verdict_head}" if g.verdict_head else ""))

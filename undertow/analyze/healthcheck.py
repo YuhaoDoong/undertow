@@ -443,14 +443,29 @@ def check_group(g, capital) -> list[HealthFinding]:
             scope=g.underlying))
 
     # —— 单品种集中度 ——
-    if capital is not None and capital.net_assets > 0:
-        risk = sum((c.capital_at_risk or 0) for c in g.combos)
-        if risk >= CONC_HIGH_FRAC * capital.net_assets:
+    # 旧实现：只在净资产 >0 时检查，且 `capital_at_risk or 0` 把算不出的风险折成 0（Codex 008 G03）
+    if capital is not None:
+        unknown = [c.label for c in g.combos if c.capital_at_risk is None]
+        risk = sum(c.capital_at_risk for c in g.combos if c.capital_at_risk is not None)
+        na = capital.net_assets
+        if na <= 0 and (risk > 0 or unknown):
+            out.append(HealthFinding(
+                severity="高", code="CONCENTRATION", title="净资产 ≤0 仍有风险敞口",
+                detail=f"{g.display_name} 已知风险资金 ${risk:,.0f}，净资产 ${na:,.2f}：任何亏损都没有缓冲。",
+                suggestion="先处理账户资金问题，再看其它结论。", scope=g.underlying))
+        elif na > 0 and risk >= CONC_HIGH_FRAC * na:
             out.append(HealthFinding(
                 severity="中", code="CONCENTRATION", title="单品种集中度偏高",
-                detail=f"{g.display_name} 风险资金 ${risk:,.0f} ≈ 净资产 {risk/capital.net_assets*100:.0f}%。",
+                detail=f"{g.display_name} 风险资金 ${risk:,.0f} ≈ 净资产 {risk/na*100:.0f}%。"
+                       + (f"另有 {len(unknown)} 个组合风险算不出，实际更高。" if unknown else ""),
                 suggestion="单一标的占比过高，一次逆行冲击全账户；分散或降规模可控回撤。",
                 scope=g.underlying))
+        elif unknown:
+            out.append(HealthFinding(
+                severity="中", code="CONCENTRATION_UNKNOWN", title="单品种集中度未完成核查",
+                detail=f"{g.display_name} 有 {len(unknown)} 个组合风险资金算不出（{'、'.join(unknown[:3])}）；"
+                       f"已知部分 ${risk:,.0f} 不代表通过。",
+                suggestion="跨期等结构需要单独估算最坏损失。", scope=g.underlying))
     return out
 
 

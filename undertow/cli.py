@@ -3812,6 +3812,9 @@ def build_parser() -> argparse.ArgumentParser:
     plv = sub.add_parser("live", help="持仓实时体检：长桥实时盘口 → 真实可平仓价（只读）")
     plv.set_defaults(func=cmd_live)
 
+    from undertow.shadow_cli import register as _shadow_register
+    _shadow_register(sub)
+
     psig = sub.add_parser("signals",
                           help="强信号台账：重建/回填/统计（这层从未回测过，靠向前累积）")
     psig.add_argument("instruments", nargs="*", help="品种键（留空=全部有期权源的）")

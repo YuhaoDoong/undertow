@@ -289,6 +289,21 @@ else
     alert "⚠️ 台账回填失败（ET $ET_NOW）" "rc=$BF_RC：$(printf '%s' "$BF_OUT" | tail -1)"
 fi
 
+# —— 前瞻配对影子账（W05，Codex 004 蓝图）：盘前冻结当日机会 + 收盘后结算 ——
+# 只读：只读快照/日线/盘口，写 data/history/shadow/；从不下单。
+# capture 必须在研报之后（快照已落盘、session 已认证）且在开盘前 —— 迟到的记录会被
+# report 归为 late_record、不进主样本（prospective_ok 按 recorded_at < 09:30 ET 判）。
+set +e
+SH_ST="data/logs/.status_shadow_${ET_DATE}.json"
+SH_OUT=$(python3 -m undertow shadow capture --status-file "$SH_ST" 2>&1); SH_RC=$?
+SH_OUT2=$(python3 -m undertow shadow settle 2>&1); SH_RC2=$?
+set -e
+printf '%s\n%s\n' "$SH_OUT" "$SH_OUT2" | grep -E "候选腿|更新|⚠️" | head -20 || true
+if (( SH_RC != 0 || SH_RC2 != 0 )); then
+    alert "⚠️ 影子账采集/结算失败（ET $ET_NOW）" \
+          "capture rc=$SH_RC settle rc=$SH_RC2：$(printf '%s\n%s' "$SH_OUT" "$SH_OUT2" | grep '⚠️' | head -2 | tr '\n' ' ')"
+fi
+
 # 只提交【不可再生】的：快照（期权链）+ 台账（data/history）。
 # data/reports 里的 HTML/PDF 已 gitignore（可由快照+代码重算），
 # 这一行留着是为了捞同目录下的 FAILURE_*/ALERT_* —— .gitignore 的两条 ! 例外，

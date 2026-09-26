@@ -427,6 +427,20 @@ def window_bounds(day: date, wname: str) -> tuple[int, int] | None:
     return _m(ct) - before_lo, _m(ct) - before_hi
 
 
+def windows_inside_option_hours(root: str, day: date) -> bool | None:
+    """两个观察窗是否都在该根代码期权的交易时段内（9:30 之后、期权收市之前）。未认证/非交易日 → None。
+    产品时段来自 core.option_products（主池已认证，扩展池 None）。"""
+    from undertow.core import option_products as op
+    ct = mc.close_time(day)
+    if ct is None:
+        return None
+    close_m = op.option_close_minutes(root, early=(ct != mc.REGULAR_CLOSE))
+    if close_m is None:
+        return None
+    return all(bd is not None and 9 * 60 + 30 <= bd[0] and bd[1] < close_m
+               for bd in (window_bounds(day, "open"), window_bounds(day, "close")))
+
+
 def window_end(wkey: str) -> datetime | None:
     day, wname = wkey.split("|")
     bd = window_bounds(date.fromisoformat(day), wname)

@@ -743,3 +743,18 @@ def test_formal_freeze_keeps_first_and_appends_revision(tmp_path, monkeypatch):
     f = tmp_path / sh.CONFIG["version"] / "formal" / "formal_result.json"
     assert json.loads(f.read_text())["summaries"] == {"a": 1}
     assert len((f.parent / "formal_result.json.revisions.jsonl").read_text().splitlines()) == 1
+
+
+def test_primary_pool_windows_inside_option_hours():
+    """Codex 007：观察窗须落在各主池品种期权交易时段内（正常日、13:00 收市日都查）；扩展池未认证 → None。"""
+    from undertow.core import option_products as op
+    from undertow.core.config import load_config
+    cfg = load_config()
+    roots = [cfg.get(k).options.symbol for k in sh.CONFIG["pools"]["etf"]]
+    assert sorted(roots) == sorted(r for r, c in op.ROOTS.items() if c is not None)
+    for d in (date(2026, 9, 28), date(2026, 11, 27), date(2026, 12, 24)):
+        for r in roots:
+            assert sh.windows_inside_option_hours(r, d) is True, (r, d)
+    assert sh.windows_inside_option_hours("TQQQ", date(2026, 9, 28)) is None
+    assert sh.windows_inside_option_hours("GLD", date(2026, 11, 26)) is None      # 休市
+    assert op.option_close_minutes("USO", early=False) == 960 and op.option_close_minutes("GLD", early=True) == 795

@@ -11,6 +11,7 @@
 >   三池（ETF/杠杆 ETF/个股）分开报告；交易日与窗口来自 `core/market_calendar.py`（NYSE，覆盖至 2027-03-31，到期前需续）；
 >   出场两腿都须合格；各终点独立成熟；块 bootstrap 沿日历；12/31 前一切判定为探索。
 >   配置 `analyze/shadow.CONFIG`，改动须升版本；首个前瞻样本 2026-09-28。
+> - S03 研究纠偏（2026-09-26）：W04 改 Garwood × 基准误差传播，旧「16 格排除实用增量」→ 0 格；pin 降为探索、改逐日配对；完整旧→新对照表在 `docs/wall_spread_3steps.md` 顶部。
 > - 日度历史首份发布冻结（S04）：`outlook_scores / resonance / ratio_watch / signal_ledger` 同日重跑不覆盖，差异追加到 `*.revisions.jsonl`。
 > - 日报→台账时间契约（W02）：session 由 captured_at 认证（certified/provisional/unmappable），回放写 replay/，失败进状态文件并告警。
 

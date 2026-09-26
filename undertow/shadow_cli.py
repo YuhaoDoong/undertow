@@ -505,28 +505,80 @@ CHAIN_WINDOW = ("10:15", "10:35")
 CHAIN_MAX_DTE, CHAIN_BAND = 14, 0.10
 
 
-def filter_chain(payload: dict, today: date, *, max_dte: int = CHAIN_MAX_DTE, band: float = CHAIN_BAND) -> dict:
-    """纯函数：保留近价、近期合约，原样字段不改；附过滤说明与前后条数。现价缺失 → ValueError（不猜）。"""
+class ChainSchemaError(ValueError):
+    """CBOE 返回的结构不对（缺 data / options 不是列表 / 缺现价）—— 不是「0 个合约」。"""
+
+
+CHAIN_QUOTE_WINDOW = ("10:00", "10:20")      # 认证为「开盘窗报价」所需的报价时刻（= 影子账入场窗）
+
+
+def chain_quote_time(payload: dict):
+    """报价实际时刻的最佳代理：标的最后成交时间（ET，CBOE 延迟约 15 分钟）。取不到 → None（未知）。
+
+    payload['timestamp'] 是文件生成时刻（UTC），不是报价时刻，另存为 source_timestamp_raw 备查。
+    """
+    t = ((payload.get("data") or {}).get("last_trade_time"))
+    try:
+        return datetime.fromisoformat(str(t)) if t else None
+    except ValueError:
+        return None
+
+
+def filter_chain(payload: dict, today: date, *, max_dte: int = CHAIN_MAX_DTE, band: float = CHAIN_BAND,
+                 purpose: str = "scheduled_open_window") -> dict:
+    """纯函数：保留近价、近期合约，原样字段不改；附过滤说明、状态与时间认证。
+
+    状态（Codex 009 N02）：ok / empty（合法但 0 个合约）/ no_match（有合约但都不在范围内）；
+    结构不对 → ChainSchemaError，不当成 0 个合约的正常结果。
+    时间认证：标的最后成交时间落在当天 ET 10:00–10:20 → open_window_certified=True；
+    落在别处 → False；取不到 → None（未知，不认证为开盘报价）。
+    过滤按当时现价截断：≤max_dte 天、|K/现价−1|≤band 的有限近价链，更远的保护腿/到期不在其中。
+    """
     import re
-    data = dict(payload.get("data") or {})
+    if not isinstance(payload, dict) or not isinstance(payload.get("data"), dict):
+        raise ChainSchemaError("CBOE payload 缺 data")
+    data = dict(payload["data"])
+    opts = data.get("options")
+    if not isinstance(opts, list):
+        raise ChainSchemaError("CBOE payload 的 options 缺失或不是列表")
     spot = data.get("current_price")
     if not isinstance(spot, (int, float)) or spot <= 0:
-        raise ValueError("CBOE payload 缺现价，无法按价位过滤")
+        raise ChainSchemaError("CBOE payload 缺现价，无法按价位过滤")
     pat = re.compile(r"^([A-Z]+)(\d{6})([CP])(\d{8})$")
-    opts = data.get("options") or []
-    keep = []
+    keep, bad = [], 0
     for o in opts:
-        m = pat.match(str(o.get("option", "")))
+        m = pat.match(str((o or {}).get("option", "")))
         if not m:
+            bad += 1
             continue
         exp = date(2000 + int(m.group(2)[:2]), int(m.group(2)[2:4]), int(m.group(2)[4:]))
         k = int(m.group(4)) / 1000
         if 0 <= (exp - today).days <= max_dte and abs(k / spot - 1) <= band:
             keep.append(o)
     data["options"] = keep
+    qt = chain_quote_time(payload)
+    lo, hi = (int(x[:2]) * 60 + int(x[3:]) for x in CHAIN_QUOTE_WINDOW)
+    cert = None if qt is None else (qt.date() == today and lo <= qt.hour * 60 + qt.minute <= hi)
+    status = "empty" if not opts else ("no_match" if not keep else "ok")
     return {**payload, "data": data,
-            "undertow_filter": {"max_dte": max_dte, "band": band, "n_full": len(opts), "n_kept": len(keep),
-                                "source": "cboe delayed ~15min", "purpose": "开盘后近价全链（研究用报价）"}}
+            "undertow_filter": {"max_dte": max_dte, "band": band, "spot_at_capture": spot,
+                                "n_full": len(opts), "n_kept": len(keep), "n_unparsed": bad, "status": status,
+                                "quote_time_et_proxy": qt.isoformat() if qt else None,
+                                "quote_time_basis": "标的 last_trade_time（CBOE 延迟约 15 分钟）",
+                                "source_timestamp_raw": payload.get("timestamp"),
+                                "open_window": list(CHAIN_QUOTE_WINDOW), "open_window_certified": cert,
+                                "purpose": purpose, "source": "cboe delayed ~15min",
+                                "scope": f"有限近价链：≤{max_dte} 天到期、按当时现价 ±{band:.0%}；更远的保护腿/到期不在内"}}
+
+
+def _chain_file_ok(payload, sym: str) -> bool:
+    """当日已有文件是否是一份完整有效的近价链（不是只看存在）。"""
+    try:
+        f = payload["undertow_filter"]
+        return (payload["symbol"].upper() == sym.upper() and isinstance(payload["data"]["options"], list)
+                and f["status"] == "ok" and f["n_kept"] == len(payload["data"]["options"]))
+    except (KeyError, TypeError, AttributeError):
+        return False
 
 
 def _in_chain_window() -> bool:
@@ -539,33 +591,59 @@ def _in_chain_window() -> bool:
 
 
 def cmd_chain(args) -> int:
-    """开盘后近价全链快照 → data/snapshots/options_open/<SYM>/<日期>.json.gz（入 git，不可再生）。只读。"""
+    """开盘后近价全链快照 → data/snapshots/options_open/<SYM>/<日期>.json.gz（入 git，不可再生）。只读。
+
+    成败判据（Codex 009 N02）：结构错 / 空链 / 全不匹配 / 时间未认证 各自记录；当日已有文件要严格读回并校验
+    （损坏由 store.load 隔离后重抓；能读但内容不对 → 另存隔离副本再重抓），不是「存在即跳过」。
+    """
     import time as _time
     from undertow.collect.cboe_options import CboeOptionsSource
     from undertow.collect.store import SnapshotStore
     from undertow.core.config import load_config
+    off = bool(args.allow_off_hours) and not _in_chain_window()
     if not args.allow_off_hours and not _in_chain_window():
-        print(f"不在开盘后全链窗口 ET {CHAIN_WINDOW[0]}–{CHAIN_WINDOW[1]}（交易日）；加 --allow-off-hours 可强制。",
-              file=sys.stderr)
+        print(f"不在开盘后全链窗口 ET {CHAIN_WINDOW[0]}–{CHAIN_WINDOW[1]}（交易日）；加 --allow-off-hours 可强制"
+              "（记为窗外研究用途，不认证为开盘报价）。", file=sys.stderr)
         return 2
     cfg = load_config(); today = market_today(); src = CboeOptionsSource(); store = SnapshotStore()
-    done, issues, skipped = [], [], []
+    done, issues, skipped, uncert = [], [], [], []
     for inst in _instruments(cfg, args.instruments):
         sym = inst.options.symbol
-        if store.path_of("options_open", sym, today).exists():
-            skipped.append(inst.key); continue            # 幂等：当日已有
+        path = store.path_of("options_open", sym, today)
+        if path.exists():
+            old = store.load("options_open", sym, today)          # 损坏 → 已隔离、返回 None
+            if old is not None and _chain_file_ok(old, sym):
+                skipped.append(inst.key); continue
+            if old is not None:                                    # 能读但内容不对：保留原件副本再重抓
+                q = path.with_name(path.name + f".invalid-{int(_time.time())}")
+                path.rename(q)
+                issues.append({"instrument": inst.key, "error": f"已有文件内容无效，已隔离为 {q.name}，重抓"})
+            else:
+                issues.append({"instrument": inst.key, "error": "已有文件损坏，已隔离，重抓"})
         try:
             raw = src.fetch_raw(inst, use_cache=False)
-            f = filter_chain(raw, today)
+            f = filter_chain(raw, today, purpose=("research_offwindow" if off else "scheduled_open_window"))
+            meta = f["undertow_filter"]
+            if meta["status"] != "ok":
+                issues.append({"instrument": inst.key, "error": f"{meta['status']}：原链 {meta['n_full']} 个合约、"
+                                                                f"范围内 {meta['n_kept']} 个，未保存"})
+                continue
             store.save("options_open", sym, f, on_date=today, captured_at=_time.time())
             done.append(inst.key)
-            print(f"  {inst.key:7s} {f['undertow_filter']['n_kept']}/{f['undertow_filter']['n_full']} 个合约")
+            if meta["open_window_certified"] is not True:
+                uncert.append(inst.key)
+            print(f"  {inst.key:7s} {meta['n_kept']}/{meta['n_full']} 个合约  报价时刻≈{meta['quote_time_et_proxy']}"
+                  f"  开盘窗认证={meta['open_window_certified']}")
         except Exception as e:
             issues.append({"instrument": inst.key, "error": f"{type(e).__name__}: {e}"[:200]})
-    overall = "failed" if issues and not done else ("partial" if issues else ("complete" if done else "unchanged"))
+    if uncert:
+        issues.append({"instrument": ",".join(uncert), "error": "已保存但报价时刻未落在 ET 10:00–10:20（或未知）：只作研究用途"})
+    overall = ("failed" if issues and not done else
+               "partial" if issues else ("complete" if done else "unchanged"))
     _status(args, "chain", done, issues, overall=overall,
-            counts={"saved": len(done), "skipped_existing": len(skipped), "failed": len(issues)})
-    print(f"  开盘后全链：保存 {len(done)}，已有跳过 {len(skipped)}，失败 {len(issues)} → {overall}")
+            counts={"saved": len(done), "skipped_existing_valid": len(skipped), "failed_or_flagged": len(issues),
+                    "saved_uncertified": len(uncert)})
+    print(f"  开盘后全链：保存 {len(done)}，已有有效跳过 {len(skipped)}，问题 {len(issues)} → {overall}")
     return 0 if overall in ("complete", "unchanged") else 1
 
 
@@ -573,7 +651,8 @@ EXEC_DIR = Path("data/account/shadow_exec")      # 私有：gitignore；研究�
 
 
 def cmd_exec(args) -> int:
-    """S05：账户可执行账。读本账户资金与现有持仓风险 → 对当日每个候选给出「可执行 n 组 / 暂不可执行（原因）」。
+    """S05：账户风险预算账。读本账户资金与现有持仓风险 → 对当日每个候选给出理论风险预算（pass/fail/unknown）。
+    券商执行性（实际保证金、单腿退出、到期处置）未核实；各候选互为备选，n 不可相加（Codex 009 N03）。
 
     只读、从不下单。结果含账户金额，只写 data/account/shadow_exec/（gitignore），不进公开仓库。
     """
@@ -619,20 +698,21 @@ def cmd_exec(args) -> int:
     res = sx.evaluate(rows, session=session, net_assets=net, account_open_max_loss=acct_ml,
                       account_cluster_open=acct_cl, prior=prior)
     if net is None:
-        res = [{**r, "verdict": "暂不可执行", "n": 0, "notes": [acct_note or "净资产未知"] + r.get("notes", [])}
-               if r["verdict"] == "可执行" else r for r in res]
+        res = [{**r, "budget_status": "unknown", "n": 0, "notes": [acct_note or "净资产未知"] + r.get("notes", [])}
+               if r["budget_status"] == "pass" else r for r in res]
     body = {"schema": 1, "session": session, "computed_at": _now_iso(), "exec_version": sx.VERSION,
             "config_version": sh.CONFIG["version"], "net_assets": net, "account_open_max_loss": acct_ml,
             "account_note": acct_note, "candidates": res}
     atomic_write_json(out_dir / f"{session}.json", body)
-    n_ok = sum(r["verdict"] == "可执行" for r in res)
-    print(f"账户可执行账 {session}（{sx.VERSION}）：候选 {len(res)}，可执行 {n_ok}"
+    n_ok = sum(r["budget_status"] == "pass" for r in res)
+    print(f"账户风险预算账 {session}（{sx.VERSION}）：候选 {len(res)}，理论预算通过 {n_ok}"
+          f"（互斥备选、不可相加；券商执行性未核实）"
           + (f"；{acct_note}" if acct_note else ""))
     for r in res:
-        if r["verdict"] == "无候选":
+        if r["budget_status"] == "no_candidate":
             continue
         econ = (f"收 ${r['credit']:.0f} 最大亏 ${r['max_loss']:.0f}" if r.get("max_loss") is not None else "")
-        print(f"  {r['instrument']:7s} {r['leg_id']:5s} {r['verdict']} {r['n']} 组  {econ}  {r['notes'][0]}")
+        print(f"  {r['instrument']:7s} {r['leg_id']:5s} 预算 {r['budget_status']} {r['n']} 组  {econ}  {r['notes'][0]}")
     print(f"  （结果含账户金额，只写 {out_dir}/，已 gitignore）")
     return 0
 
@@ -665,7 +745,7 @@ def register(sub):
     ch = ss.add_parser("chain", help="开盘后近价全链快照（ET 10:15–10:35，入 git；只读）")
     ch.add_argument("instruments", nargs="*"); ch.add_argument("--allow-off-hours", action="store_true")
     ch.add_argument("--status-file"); ch.set_defaults(func=cmd_chain)
-    e = ss.add_parser("exec", help="S05 账户可执行账（私有，写 data/account/；只读，从不下单）")
+    e = ss.add_parser("exec", help="S05 账户风险预算账（私有，写 data/account/；理论预算，券商执行性未核实；只读）")
     e.add_argument("instruments", nargs="*"); e.add_argument("--session", help="YYYY-MM-DD，默认今天 ET")
     e.set_defaults(func=cmd_exec)
     s = ss.add_parser("settle", help="收盘后监控与到期结算"); s.add_argument("instruments", nargs="*")

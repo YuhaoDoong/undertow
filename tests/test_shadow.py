@@ -774,52 +774,57 @@ def _exec_row(inst="silver", session="2026-09-14"):
     return r
 
 
-def test_s05_executable_when_budget_allows():
+def test_s05_budget_status_split():
     from undertow.analyze import shadow_exec as sx
-    res = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=1000.0, account_open_max_loss=0.0,
+    res = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=2000.0, account_open_max_loss=0.0,
                       account_cluster_open={}, prior=[])
     a = next(x for x in res if x["leg_id"] == "P-A")
     assert a["max_loss"] == pytest.approx(a["width"] - a["credit"] + 3.2)
-    assert (a["verdict"] == "可执行") == (a["n"] >= 1) and "disposition" in a
-    assert any("未核实" in v for v in a["disposition"].values())
+    assert a["budget_status"] == "pass" and a["n"] >= 1
+    assert a["broker_status"] == "unverified" and a["selection_status"] == "independent_alternative", \
+        "Codex 009 N03：理论预算通过 ≠ 可执行；互斥备选不可相加"
+    assert "verdict" not in a
 
 
 def test_s05_current_account_cannot_open():
     from undertow.analyze import shadow_exec as sx
     res = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=0.05, account_open_max_loss=0.0,
                       account_cluster_open={}, prior=[])
-    assert all(x["n"] == 0 and x["verdict"] != "可执行" for x in res), "研究有候选 ≠ 账户可承受一组"
+    assert all(x["n"] == 0 and x["budget_status"] != "pass" for x in res)
 
 
-def test_s05_unknown_account_risk_blocks():
+def test_s05_unknown_account_risk_is_unknown():
     from undertow.analyze import shadow_exec as sx
     res = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=10000.0, account_open_max_loss=None,
                       account_cluster_open=None, prior=[])
-    assert all(x["verdict"] != "可执行" for x in res)
-    assert any("最大亏损未知" in x["notes"][0] for x in res if x["verdict"] == "暂不可执行")
+    priced = [x for x in res if x["budget_status"] != "no_candidate"]
+    assert priced and all(x["budget_status"] == "unknown" and x["n"] == 0 for x in priced)
 
 
-def test_s05_cross_day_occupancy_consumes_cluster_room():
+def test_s05_hypothetical_prior_reported_not_consumed():
+    """此前候选的假设占用只列出、不扣额度；按 v5 退出日（到期前一交易日）释放。"""
     from undertow.analyze import shadow_exec as sx
-    prior = [{"rule": "A", "verdict": "可执行", "expiry": "2026-09-16", "session": "2026-09-11",
+    prior = [{"rule": "A", "budget_status": "pass", "expiry": "2026-09-16", "session": "2026-09-11",
               "cluster": "贵金属", "max_loss": 300.0, "n": 1}]
     fresh = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=2000.0, account_open_max_loss=0.0,
                         account_cluster_open={}, prior=[])
     held = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=2000.0, account_open_max_loss=0.0,
                        account_cluster_open={}, prior=prior)
     fa = next(x for x in fresh if x["leg_id"] == "P-A"); ha = next(x for x in held if x["leg_id"] == "P-A")
-    assert fa["max_loss"] == pytest.approx(183.2) and fa["n"] == 1, "收 20、宽 200、费 3.2；止损层 200//183.2=1"
-    assert ha["n"] == 0 and ha["verdict"] == "暂不可执行", "同簇已占 300，剩 100 < 183.2"
-    assert sx.open_occupancy(prior, date(2026, 9, 14)) == {"贵金属": 300.0}
-    assert sx.open_occupancy(prior, date(2026, 9, 17)) == {}, "已到期不再占用"
+    assert ha["n"] == fa["n"] and ha["hypothetical_prior_occupancy"] == 300.0
+    assert sx.hypothetical_prior_occupancy(prior, date(2026, 9, 15)) == {"贵金属": 300.0}
+    assert sx.hypothetical_prior_occupancy(prior, date(2026, 9, 16)) == {}, "v5 在到期前一交易日退出后释放"
+    real = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=2000.0, account_open_max_loss=300.0,
+                       account_cluster_open={"贵金属": 300.0}, prior=[])
+    assert next(x for x in real if x["leg_id"] == "P-A")["n"] == 0, "真实持仓才扣额度"
 
 
-def test_s05_no_entry_quote_not_executable():
+def test_s05_no_entry_quote_is_unknown():
     from undertow.analyze import shadow_exec as sx
     r = _exec_row(); r["windows"] = {}
     res = sx.evaluate([r], session="2026-09-14", net_assets=10000.0, account_open_max_loss=0.0,
                       account_cluster_open={}, prior=[])
-    assert all(x["verdict"] in ("暂不可执行", "无候选") and x["n"] == 0 for x in res)
+    assert all(x["budget_status"] in ("unknown", "no_candidate") and x["n"] == 0 for x in res)
 
 
 def test_s05_exec_output_is_private():
@@ -845,3 +850,66 @@ def test_open_chain_filter_and_schedule():
         filter_chain({"data": {"options": []}}, date(2026, 9, 28))
     src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
     assert 'shadow chain --status-file' in src and 'shadow_window chain' in src
+
+
+# —— Codex 009 N02：开盘后全链快照的数据完整性 ——
+from undertow.collect.store import SnapshotStore as _REAL_STORE   # noqa: E402
+
+def _chain_env(tmp_path, monkeypatch, payload_fn):
+    import argparse
+    from undertow import shadow_cli as sc
+    from undertow.collect import cboe_options as co
+    from undertow.collect import store as st_mod
+    real = _REAL_STORE
+    monkeypatch.setattr(st_mod, "SnapshotStore", lambda: real(root=tmp_path / "snap"))
+    monkeypatch.setattr(sc, "_in_chain_window", lambda: True)
+    monkeypatch.setattr(sc, "market_today", lambda: date(2026, 9, 28))
+    monkeypatch.setattr(co.CboeOptionsSource, "fetch_raw", lambda self, inst, use_cache=True: payload_fn())
+    stf = tmp_path / "st.json"
+    run = lambda: sc.cmd_chain(argparse.Namespace(instruments=["silver"], allow_off_hours=False, status_file=str(stf)))
+    return run, stf, real(root=tmp_path / "snap")
+
+
+def _pl(opts, ltt="2026-09-28T10:05:00"):
+    return {"symbol": "SLV", "timestamp": "2026-09-28 14:20:00",
+            "data": {"current_price": 58.0, "last_trade_time": ltt, "options": opts}}
+
+
+GOOD_OPTS = [{"option": "SLV261002P00057000", "bid": 0.3}, {"option": "SLV261002C00060000", "bid": 0.2}]
+
+
+@pytest.mark.parametrize("payload,frag", [
+    ({"symbol": "SLV", "data": {"current_price": 58.0}}, "options"),           # 缺 options：不是 0 合约
+    (_pl([]), "empty"),
+    (_pl([{"option": "SLV270115P00030000"}]), "no_match"),
+])
+def test_n02_bad_or_empty_chain_is_not_success(tmp_path, monkeypatch, payload, frag):
+    run, stf, store = _chain_env(tmp_path, monkeypatch, lambda: payload)
+    assert run() == 1
+    s_ = json.loads(stf.read_text())
+    assert s_["overall"] == "failed" and frag in json.dumps(s_["issues"], ensure_ascii=False)
+    assert not store.path_of("options_open", "SLV", date(2026, 9, 28)).exists()
+
+
+def test_n02_certified_vs_uncertified_quote_time(tmp_path, monkeypatch):
+    run, stf, store = _chain_env(tmp_path, monkeypatch, lambda: _pl(GOOD_OPTS))
+    assert run() == 0 and json.loads(stf.read_text())["overall"] == "complete"
+    f = store.load("options_open", "SLV", date(2026, 9, 28))["undertow_filter"]
+    assert f["open_window_certified"] is True and f["n_kept"] == 2 and "有限近价链" in f["scope"]
+    run2, stf2, store2 = _chain_env(tmp_path / "b", monkeypatch, lambda: _pl(GOOD_OPTS, ltt="2026-09-28T11:30:00"))
+    assert run2() == 1 and json.loads(stf2.read_text())["overall"] == "partial"
+    assert store2.load("options_open", "SLV", date(2026, 9, 28))["undertow_filter"]["open_window_certified"] is False
+    run3, _, store3 = _chain_env(tmp_path / "c", monkeypatch, lambda: _pl(GOOD_OPTS, ltt=None))
+    run3()
+    assert store3.load("options_open", "SLV", date(2026, 9, 28))["undertow_filter"]["open_window_certified"] is None
+
+
+def test_n02_existing_file_validated_not_just_exists(tmp_path, monkeypatch):
+    run, stf, store = _chain_env(tmp_path, monkeypatch, lambda: _pl(GOOD_OPTS))
+    assert run() == 0
+    assert run() == 0 and json.loads(stf.read_text())["overall"] == "unchanged", "有效文件 → 跳过"
+    p = store.path_of("options_open", "SLV", date(2026, 9, 28))
+    p.write_bytes(b"not gzip")                                              # 损坏
+    assert run() == 1 and json.loads(stf.read_text())["overall"] == "partial"
+    assert list(p.parent.glob("*.corrupt-*")), "坏文件隔离保留"
+    assert store.load("options_open", "SLV", date(2026, 9, 28))["undertow_filter"]["status"] == "ok", "已重抓"

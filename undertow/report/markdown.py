@@ -266,6 +266,11 @@ def render_backtest(bt, display_name: str, price_quality: str) -> str:
     L.append(f"## {display_name} — 信号回测")
     L.append(f"价格代理 **{bt.price_symbol}**（质量：{price_quality}）  ·  "
              f"样本 {bt.n_events} 周（{bt.date_from} → {bt.date_to}）")
+    if getattr(bt, "release_rule", "") == "cftc_calendar":
+        L.append(f"入场 = COT 实际可用日（{bt.n_delayed_release} 周因联邦假日顺延；"
+                 f"{bt.n_excluded_unknown_release} 周因停摆等发布时刻未知已排除，不猜）")
+    elif getattr(bt, "release_rule", ""):
+        L.append(f"⚠️ 入场按固定滞后（{bt.release_rule}），假日/停摆周可能早于公开时刻 —— 仅作敏感性对照")
     L.append("")
 
     hs = bt.horizons

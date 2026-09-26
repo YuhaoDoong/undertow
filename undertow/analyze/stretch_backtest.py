@@ -58,6 +58,15 @@ def _pct_rank_series(xs, window=PCT_WINDOW):
     return out
 
 
+def welch(a: list, b: list):
+    """(均值差, 标准误, t)；样本不足或方差为 0 → (差或 None, None, 0.0)。差与 t 来自同一批样本。"""
+    if len(a) < 3 or len(b) < 3:
+        return (statistics.fmean(a) - statistics.fmean(b) if a and b else None), None, 0.0
+    se = math.sqrt(statistics.variance(a) / len(a) + statistics.variance(b) / len(b))
+    d = statistics.fmean(a) - statistics.fmean(b)
+    return d, (se if se > 0 else None), (d / se if se > 0 else 0.0)
+
+
 def welch_t(a: list, b: list) -> float:
     """Welch 双样本 t（不假设等方差）。样本不足返回 0。"""
     if len(a) < 3 or len(b) < 3:
@@ -133,10 +142,14 @@ def diverge_stats(samples: list, *, horizon: int = 5,
         nov = [s.excess[horizon] - neu[s.regime] for s in t if s.i % horizon == 0]
         base = [s.excess[horizon] - neu[s.regime] for s in samples
                 if 0.4 <= s.pctile <= 0.6 and s.i % horizon == 0]
-        return {"label": label, "n": len(t), "edge_pp": statistics.fmean(ex),
+        # Codex 008 G06：边缘与 t 必须同源 —— 都用不重叠子样本；全样本均值另列为描述
+        d, se, tt = welch(nov, base)
+        return {"label": label, "n": len(t), "n_nov": len(nov), "n_base_nov": len(base),
+                "edge_pp": d, "edge_pp_all": statistics.fmean(ex),
+                "ci95": ([d - 1.96 * se, d + 1.96 * se] if (d is not None and se) else None),
                 # 同 calibrate：这是「跑赢局部漂移」，不是「跑赢中性桶」
-                "beat_drift": sum(1 for x in ex if x > 0) / len(ex) * 100,
-                "t": welch_t(nov, base)}
+                "beat_drift": sum(1 for x in nov if x > 0) / len(nov) * 100 if nov else None,
+                "t": tt}
 
     rows = [
         stat(lambda s: s.p_dd <= extreme and s.p_stretch <= extreme, "两维都超卖（一致）"),
@@ -170,19 +183,27 @@ def calibrate(samples: list, *, horizon: int = 5, min_n: int = 50) -> dict:
                 continue
             ex = [s.excess[horizon] for s in tgt]
             tgt_nov = [s.excess[horizon] for s in tgt if s.i % horizon == 0]
+            if not tgt_nov:
+                continue
+            # Codex 008 G06：旧版 edge_pp 用全部【重叠】触发、t 用【不重叠】子样本 —— 两套估计可以方向相反
+            # （合成复现：edge +4.000pp、t −2.449、检验 n=3，表里仍「✅ 显著」）。现在主推断全部来自
+            # 同一批不重叠样本：edge_pp、t、beat_neutral、区间与两组 n；全样本均值差另列 edge_pp_all（描述）。
+            neu_nov_mean = statistics.fmean(neu_nov)
+            d, se, tt = welch(tgt_nov, neu_nov) if band != NEUTRAL else (0.0, None, 0.0)
             out[(band, regime)] = {
                 "n": len(tgt),
+                "n_nov": len(tgt_nov), "n_neu_nov": len(neu_nov),
                 "mean_excess": statistics.fmean(ex),
-                # 边缘与 t 同源：都是"本桶 vs 同 regime 中性桶"的均值差
-                "edge_pp": statistics.fmean(ex) - neu_mean,
+                "edge_pp": d,
+                "edge_pp_all": statistics.fmean(ex) - neu_mean,
+                "ci95": ([d - 1.96 * se, d + 1.96 * se] if se else None),
                 # ⚠️ 两个胜率口径必须分开列，它们回答不同问题（codex review 2026-08-26）：
-                #   beat_drift —— 超额 > 0，即跑赢【局部漂移】（原「跑赢率」就是这个）
-                #   beat_neutral —— 超额 > 同 regime 中性桶均值，与 edge_pp 同源
+                #   beat_drift —— 超额 > 0，即跑赢【局部漂移】
+                #   beat_neutral —— 超额 > 同 regime 中性桶均值，与 edge_pp 同源（同为不重叠样本）
                 # 熊市中性桶均值为正，用 beat_drift 冒充「跑赢基准」会系统性高估。
-                "beat_drift": sum(1 for x in ex if x > 0) / len(ex) * 100,
-                "beat_neutral": sum(1 for x in ex if x > neu_mean) / len(ex) * 100,
-                "t": 0.0 if band == NEUTRAL else welch_t(tgt_nov, neu_nov),
-                "n_nov": len(tgt_nov),
+                "beat_drift": sum(1 for x in tgt_nov if x > 0) / len(tgt_nov) * 100,
+                "beat_neutral": sum(1 for x in tgt_nov if x > neu_nov_mean) / len(tgt_nov) * 100,
+                "t": tt,
             }
     return out
 
@@ -191,12 +212,13 @@ def render_table_md(cal: dict, *, horizon: int = 5, total: int = 0, span: str = 
     L = [f"### 拉伸度校准表（+{horizon} 日）", ""]
     if total:
         L.append(f"*样本 {total:,}{('，' + span) if span else ''}；"
-                 f"边缘 = 本桶 − 同 regime 中性桶（局部去趋势后）；t = Welch 双样本、不重叠子样本*")
+                 f"边缘 = 本桶 − 同 regime 中性桶（局部去趋势后）；边缘、t、跑赢率都来自同一批不重叠子样本；"
+                 f"「全样本边缘」是重叠计数下的描述值，不参与判定*")
         L.append("")
     # 触发 = 重叠计数；检验 = 不重叠子样本（约为触发的 1/horizon）。两者相差数倍，
     # 只列前者会把证据规模夸大——必须并列。（codex review 2026-08-26）
-    L.append("| 档位 | regime | 触发 | 检验n | 边缘 | 跑赢中性 | 跑赢漂移 | t | 判定 |")
-    L.append("|---|---|---:|---:|---:|---:|---:|---:|---|")
+    L.append("| 档位 | regime | 触发 | 检验n | 边缘 | 95%区间 | 全样本边缘(描述) | 跑赢中性 | 跑赢漂移 | t | 判定 |")
+    L.append("|---|---|---:|---:|---:|---|---:|---:|---:|---:|---|")
     order = [b for _, b in BANDS]
     for regime in ("牛", "熊"):
         for band in order:
@@ -205,14 +227,15 @@ def render_table_md(cal: dict, *, horizon: int = 5, total: int = 0, span: str = 
                 continue
             if band == NEUTRAL:
                 verdict = "基准"
-            elif abs(r["t"]) >= 2.0:
-                verdict = "✅ 显著"
-            elif abs(r["t"]) >= 1.5:
-                verdict = "~ 边缘"
             else:
-                verdict = "❌ 不显著"
+                from .stretch import reliability
+                v = reliability(r["t"], r.get("n_nov", 0), r["edge_pp"])
+                verdict = {"显著": "✅ 显著", "边缘": "~ 边缘", "不显著": "❌ 不显著"}.get(v, f"⚠️ {v}")
+            ci = r.get("ci95")
+            cis = f"[{ci[0]:+.2f},{ci[1]:+.2f}]" if ci else "—"
             L.append(f"| {band} | {regime}市 | {r['n']} | {r.get('n_nov', 0)} | "
-                     f"**{r['edge_pp']:+.3f}pp** | {r.get('beat_neutral', 0):.0f}% | "
+                     f"**{r['edge_pp']:+.3f}pp** | {cis} | {r.get('edge_pp_all', r['edge_pp']):+.3f} | "
+                     f"{r.get('beat_neutral', 0):.0f}% | "
                      f"{r.get('beat_drift', 0):.0f}% | {r['t']:+.2f} | {verdict} |")
     L.append("")
     L.append("> 「触发」是重叠计数，「检验n」才是 Welch t 实际用的不重叠子样本量——"

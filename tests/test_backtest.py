@@ -91,3 +91,35 @@ if __name__ == "__main__":
         fn()
         print(f"PASS {fn.__name__}")
     print(f"\n{len(fns)} tests passed.")
+
+
+def test_cot_release_rule_matches_cftc_2026_schedule():
+    """Codex 008 G08：官方 2026 日程的 6 个非周五发布日全部由规则推出；停摆期未知。"""
+    from undertow.core.cot_release import available_date
+    cases = {"2025-12-30": "2026-01-05", "2026-06-16": "2026-06-22", "2026-06-30": "2026-07-06",
+             "2026-11-10": "2026-11-16", "2026-11-24": "2026-11-30", "2026-12-22": "2026-12-28",
+             "2026-01-20": "2026-01-23", "2026-09-22": "2026-09-25"}
+    for asof, want in cases.items():
+        assert str(available_date(date.fromisoformat(asof))[0]) == want, asof
+    assert available_date(date(2025, 10, 7))[0] is None and available_date(date(2019, 1, 8))[0] is None
+
+
+def test_backtest_does_not_use_report_before_release():
+    """11-10 报告（11-16 公布）不得在 11-13 周五收盘就入场。"""
+    from undertow.core.cot_release import available_date
+    d, why = available_date(date(2026, 11, 10))
+    assert d == date(2026, 11, 16) and why == "联邦假日顺延"
+    start = date(2023, 1, 3)
+    history = [_report(start + timedelta(weeks=i), 1000 + i * 500, CategoryChange(long=500, short=0))
+               for i in range(200)]
+    pdates, pcloses, p = [], [], 100.0
+    for i in range(1600):
+        dd = date(2022, 12, 1) + timedelta(days=i)
+        if dd.weekday() < 5:
+            p *= 1.0005; pdates.append(dd); pcloses.append(p)
+    ps = PriceSeries(symbol="T", dates=pdates, closes=pcloses)
+    bt = run_backtest(history, ps, horizons=(5,), min_lookback=52)
+    assert bt.release_rule == "cftc_calendar" and bt.n_delayed_release > 0
+    assert bt.n_excluded_unknown_release > 0, "2025 停摆期的报告必须排除"
+    legacy = run_backtest(history, ps, horizons=(5,), min_lookback=52, release_lag_days=3)
+    assert legacy.release_rule == "fixed_lag_3d" and legacy.n_events > bt.n_events

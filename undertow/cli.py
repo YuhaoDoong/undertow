@@ -3438,11 +3438,14 @@ def cmd_backtest_stretch(args) -> int:
     dv = sb.diverge_stats(samples, horizon=args.horizon)
     if dv["rows"]:
         print(f"\n### 两维一致 vs 分歧（+{args.horizon} 日）\n")
-        print("| 组合 | 触发 | 边缘 | 跑赢漂移 | t |")
-        print("|---|---:|---:|---:|---:|")
+        from undertow.analyze.stretch import reliability
+        print("| 组合 | 触发 | 检验n | 边缘(不重叠) | 全样本边缘(描述) | 跑赢漂移 | t | 判定 |")
+        print("|---|---:|---:|---:|---:|---:|---:|---|")
         for r in dv["rows"]:
-            print(f"| {r['label']} | {r['n']} | **{r['edge_pp']:+.3f}pp** | "
-                  f"{r.get('beat_drift', 0):.0f}% | {r['t']:+.2f} |")
+            e = r["edge_pp"]
+            print(f"| {r['label']} | {r['n']} | {r['n_nov']} | "
+                  f"**{(e if e is not None else float('nan')):+.3f}pp** | {r['edge_pp_all']:+.3f} | "
+                  f"{(r.get('beat_drift') or 0):.0f}% | {r['t']:+.2f} | {reliability(r['t'], r['n_nov'], e)} |")
 
     if args.compare:
         print(f"\n### 三种口径对照（最低/最高 10%，+{args.horizon} 日）\n")

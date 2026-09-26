@@ -71,6 +71,10 @@ class BacktestResult:
     signals: list[SignalBacktest]
     mm_percentile_buckets: list[BucketStat]  # 按 MM 净分位分桶的前瞻收益
     bias_buckets: list[BucketStat]           # 按综合 bias(偏多/中性/偏空) 分桶
+    # Codex 008 G08：入场按 COT 实际可用日（core.cot_release），不再一律 +3 天
+    release_rule: str = "cftc_calendar"
+    n_delayed_release: int = 0               # 因联邦假日顺延的周数（旧规则会提前使用这些报告）
+    n_excluded_unknown_release: int = 0      # 停摆等发布时刻未知 → 排除的周数
 
 
 @dataclass
@@ -108,11 +112,14 @@ def run_backtest(
     price: PriceSeries,
     *,
     horizons: tuple[int, ...] = DEFAULT_HORIZONS,
-    release_lag_days: int = DEFAULT_RELEASE_LAG_DAYS,
+    release_lag_days: int | None = None,
     min_lookback: int = DEFAULT_MIN_LOOKBACK,
 ) -> BacktestResult:
+    """release_lag_days=None（默认）：按 CFTC 发布日程推出的实际可用日入场；给整数则用旧的固定滞后（仅作敏感性对照）。"""
+    from undertow.core.cot_release import available_date
     primary = horizons[-1]
     events: list[_Event] = []
+    n_delayed = n_unknown = 0
 
     for i in range(min_lookback, len(history)):
         sub = history[: i + 1]
@@ -120,7 +127,15 @@ def run_backtest(
         sigs = generate_signals(an)
         d = history[i].report_date
 
-        entry_idx = price.index_on_or_after(d + timedelta(days=release_lag_days))
+        if release_lag_days is None:
+            avail, why = available_date(d)
+            if avail is None:
+                n_unknown += 1
+                continue
+            n_delayed += why != "常规周五"
+        else:
+            avail = d + timedelta(days=release_lag_days)
+        entry_idx = price.index_on_or_after(avail)
         if entry_idx is None:
             continue
         rets: dict[int, float] = {}
@@ -194,6 +209,9 @@ def run_backtest(
         signals=signals,
         mm_percentile_buckets=mm_buckets,
         bias_buckets=bias_buckets,
+        release_rule=("cftc_calendar" if release_lag_days is None else f"fixed_lag_{release_lag_days}d"),
+        n_delayed_release=n_delayed,
+        n_excluded_unknown_release=n_unknown,
     )
 
 

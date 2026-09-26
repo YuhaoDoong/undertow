@@ -124,15 +124,16 @@ def test_calib_table_complete_and_neutral_is_zero():
 
 
 def test_calib_oversold_side_monotonic():
-    """超卖侧必须严格单调（越深的超卖边缘越大）—— 这一侧是通过显著性检验的那一侧。
+    """超卖侧：两档深度超卖（极/强）都高于偏超卖，偏超卖不低于中性。
 
-    注意：**不对超买侧断言单调**。实测牛市 -0.206/-0.355/-0.321、熊市偏超买还是 +0.212，
-    因为超买侧六个桶没有一个 |t| 到 2.0，本来就在噪音里晃。硬测单调只会得到假安全感。
+    2026-09-26（Codex 008 G06）改为同源口径（边缘与 t 同为不重叠样本）后，牛市「极超卖 +1.06」<
+    「强超卖 +1.19」，两者 95% 区间大幅重叠 —— 旧测试要求的「极 ≥ 强」严格单调没有证据支持，
+    不能为了测试通过去调数据。现在只断言数据确实支持的顺序。超买侧仍不断言（全在噪音里）。
     """
     for rg in ("牛", "熊"):
-        e = [CALIB[(b, rg)][0] for b in ("极超卖", "强超卖", "偏超卖", "中性")]
-        for a, b in zip(e, e[1:]):
-            assert a >= b - 1e-9, f"{rg}市 超卖侧非单调: {e}"
+        deep = [CALIB[(b, rg)][0] for b in ("极超卖", "强超卖")]
+        mild, neu = CALIB[("偏超卖", rg)][0], CALIB[("中性", rg)][0]
+        assert min(deep) > mild >= neu - 1e-9, f"{rg}市 超卖侧顺序不成立: {deep}, {mild}, {neu}"
     print("PASS test_calib_oversold_side_monotonic")
 
 
@@ -360,3 +361,31 @@ if __name__ == "__main__":
     for fn in fns:
         fn()
     print(f"\n{len(fns)} tests passed.")
+
+
+def test_reliability_single_source():
+    """Codex 008 G06：可靠性判据唯一；样本不足、方向矛盾不得标显著。"""
+    from undertow.analyze.stretch import reliability
+    assert reliability(3.2, 103, 1.06) == "显著"
+    assert reliability(-2.45, 3, 4.0) == "样本不足"
+    assert reliability(-2.45, 300, 4.0) == "方向矛盾"
+    assert reliability(1.7, 300, 0.5) == "边缘" and reliability(0.5, 300, 0.1) == "不显著"
+
+
+def test_calibrate_edge_and_t_same_sample():
+    """合成复现：重叠均值 +4、不重叠子样本却相反 —— 新版边缘必须与 t 同号、同源。"""
+    from undertow.analyze import stretch_backtest as sb
+    S = sb.Sample
+    samples = []
+    for i in range(0, 400):
+        samples.append(S(name="x", i=i, pctile=0.5, regime="牛", excess={5: (i % 7) * 0.1}))
+    for i in range(1000, 1100):
+        v = -1.0 if i % 5 == 0 else 6.0                   # 不重叠样本为负，重叠均值为正
+        samples.append(S(name="x", i=i, pctile=0.02, regime="牛", excess={5: v + (i % 3) * 0.01}))
+    cal = sb.calibrate(samples, horizon=5, min_n=50)
+    r = cal[("极超卖", "牛")]
+    assert r["edge_pp_all"] > 0 and r["edge_pp"] < 0, "全样本描述为正、同源主估计为负"
+    assert (r["t"] < 0) == (r["edge_pp"] < 0), "边缘与 t 同源同号"
+    md = sb.render_table_md(cal)
+    row = next(l for l in md.splitlines() if l.startswith("| 极超卖"))
+    assert r["n_nov"] == 20 and "样本不足" in row and "✅" not in row

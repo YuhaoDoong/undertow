@@ -725,7 +725,7 @@ def _norm(o: dict, basis: str, which: str = "point"):
 
 def block_bootstrap(groups: dict, *, block_days: int = CONFIG["stats"]["block_days"],
                     iters: int = CONFIG["stats"]["iters"], seed: int = CONFIG["stats"]["seed"],
-                    calendar_days: list | None = None) -> dict:
+                    calendar_days: list | None = None, q_lo: float = 0.025, q_hi: float = 0.975) -> dict:
     """groups: {"YYYY-MM-DD": [值…]}。按【日历交易日】做循环移动块 bootstrap（Politis–Romano）。
 
     - 块沿真实交易日历滑动：无机会/技术缺失的交易日照样占位（贡献 0 个值），不被压缩掉，
@@ -767,7 +767,8 @@ def block_bootstrap(groups: dict, *, block_days: int = CONFIG["stats"]["block_da
     if len(vals) < iters * 0.95:
         out["status"] = "insufficient"; return out
     vals.sort(); n = len(vals)
-    out["lo"], out["hi"] = vals[int(0.025 * n)], vals[int(0.975 * n) - 1]
+    out["lo"], out["hi"] = vals[int(q_lo * n)], vals[min(n - 1, max(0, int(q_hi * n) - 1))]
+    out["q"] = [q_lo, q_hi]
     out["status"] = "degenerate" if out["hi"] - out["lo"] <= 1e-12 else "ok"
     return out
 
@@ -852,14 +853,15 @@ def _non_overlap(rows: list[dict], side: str) -> list[dict]:
 
 
 def interval_ci(lo_by: dict, hi_by: dict, unbounded: int = 0, *,
-                block_days: int = CONFIG["stats"]["block_days"], iters: int = CONFIG["stats"]["iters"]) -> dict:
+                block_days: int = CONFIG["stats"]["block_days"], iters: int = CONFIG["stats"]["iters"],
+                q_lo: float = 0.025, q_hi: float = 0.975) -> dict:
     """区间值样本的块 bootstrap：下界序列取其区间下沿、上界序列取其区间上沿（Codex 007）。
 
     点值样本（下界 = 上界）两条序列相同、同一种子 → 退化为普通区间。unbounded>0（有观测只有单侧界）→
     status=residual_unknown，不判定：下界相减不是差值的下界，缺一侧就给不出有证据的界限。
     """
-    L = block_bootstrap(lo_by, block_days=block_days, iters=iters)
-    H = block_bootstrap(hi_by, block_days=block_days, iters=iters)
+    L = block_bootstrap(lo_by, block_days=block_days, iters=iters, q_lo=q_lo, q_hi=q_hi)
+    H = block_bootstrap(hi_by, block_days=block_days, iters=iters, q_lo=q_lo, q_hi=q_hi)
     out = {"mean": L["mean"] if L["mean"] == H["mean"] else None, "mean_bounds": [L["mean"], H["mean"]],
            "lo": L["lo"], "hi": H["hi"], "n_dates": L["n_dates"], "n_calendar_days": L["n_calendar_days"],
            "block_days": block_days, "unbounded": unbounded}

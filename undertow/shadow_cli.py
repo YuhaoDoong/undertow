@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+import pathlib
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -55,6 +56,37 @@ def _phase_now():
     return "rth" if 9 * 60 + 30 <= m < int(ct[:2]) * 60 + int(ct[3:]) else "off_hours"
 
 
+DIR_MAPPING_VERSION = "dir-map-v1"   # 偏多→P（顺向=卖 put 价差）、偏空→C（顺向=卖 call 价差）、其余→无方向
+
+
+def _flow_identity(fr: dict, store, sym: str, fd) -> dict:
+    """方向信号的时间身份（Codex 009 方向预登记）：信号由前一日与当日两份盘前快照的持仓变化确定性算出，
+    写进首份冻结的信号台账。这里记下可审计的来源，事后能验证「开仓前已可得」。"""
+    import hashlib
+    from datetime import date as _d
+    from undertow.analyze import flow as _flow_mod
+
+    def snap_id(d):
+        if not d:
+            return None, None
+        dd = _d.fromisoformat(str(d))
+        ca = store.captured_at("options", sym, dd)
+        pth = store.path_of("options", sym, dd)
+        sha = hashlib.sha256(pth.read_bytes()).hexdigest()[:16] if pth.exists() else None
+        return (datetime.fromtimestamp(ca, timezone.utc).isoformat() if ca else None), sha
+    cur_at, cur_sha = snap_id(fd.isoformat())
+    prev_at, prev_sha = snap_id(fr.get("prev_date"))
+    return {"call_direction": fr.get("call_direction"), "source_snapshot_date": fd.isoformat(),
+            "prev_snapshot_date": fr.get("prev_date"),
+            "available_at": max([x for x in (cur_at, prev_at) if x], default=None),
+            "snapshot_sha": cur_sha, "prev_snapshot_sha": prev_sha,
+            "ledger_row_sha": hashlib.sha256(json.dumps(fr, sort_keys=True, ensure_ascii=False, default=str)
+                                             .encode()).hexdigest()[:16],
+            "algorithm": "analyze.flow.probe_strong_signal → call_direction",
+            "code_sha": hashlib.sha256(pathlib.Path(_flow_mod.__file__).read_bytes()).hexdigest()[:16],
+            "mapping": DIR_MAPPING_VERSION}
+
+
 def cmd_capture(args) -> int:
     from undertow.analyze.gamma import local_wall
     from undertow.analyze.spread_ledger import decision_context
@@ -95,7 +127,7 @@ def cmd_capture(args) -> int:
             try:
                 led = {r["date"]: r for r in json.load(open(f"data/history/signals/{inst.key}.json"))}
                 fr = led.get(fd.isoformat())
-                flow = {"call_direction": fr.get("call_direction"), "source_snapshot_date": fd.isoformat()} if fr else None
+                flow = _flow_identity(fr, store, sym, fd) if fr else None
             except FileNotFoundError:
                 pass
             exp = sh.target_expiry(snap, T, tuple(sh.CONFIG["dte"]))
@@ -647,6 +679,44 @@ def cmd_chain(args) -> int:
     return 0 if overall in ("complete", "unchanged") else 1
 
 
+def cmd_direction(args) -> int:
+    """方向次要分析（预登记 dir-analysis-v1，docs/prereg/2026-09-26_direction_v1.md）。只读、纯报告。"""
+    from undertow.analyze import shadow_direction as sd
+    from undertow.core.config import load_config
+    cfg = load_config(); rows = []
+    for inst in _instruments(cfg, sh.CONFIG["pools"][sd.ANALYSIS["pool"]]):
+        p = _vdir(args.replay) / f"{inst.key}.jsonl"
+        if p.exists():
+            rows += jl.load(p, KEY)
+    rows = [r for r in rows if r.get("config_version") == sd.ANALYSIS["base_config_version"]]
+    if not args.replay:
+        rows = [r for r in rows if prospective_ok(r)]
+    as_of = market_today()
+    fmt = lambda x: "—" if x is None else f"{x:+.3f}"
+    print(f"方向次要分析 {sd.ANALYSIS['version']}（基于 {sd.ANALYSIS['base_config_version']}，信号 {sd.ANALYSIS['signal']}，"
+          f"单侧 α={sd.ANALYSIS['alpha_one_sided']:.4f}，经济门槛 {sd.ANALYSIS['economic_delta']}；"
+          f"{'正式' if sh.formal_identity(as_of) == 'formal' else '探索'}）")
+    out = {}
+    for inst in sh.CONFIG["pools"][sd.ANALYSIS["pool"]]:
+        rep = sd.instrument_report(rows, inst, as_of=as_of)
+        out[inst] = rep
+        c = rep["coverage"]
+        print(f"  {inst:6s} 行 {c['rows']} 有方向 {c['with_direction']}（多 {c['direction_bull']}/空 {c['direction_bear']}）")
+        for h in ("H-dir", "H-wall|dir"):
+            x = rep[h]; ci = x["ci"]
+            print(f"      {h:10s} 配对 {x['n_pairs']}（无界 {x['n_unbounded']}，日期 {x['n_dates']}）"
+                  f" 均值 {fmt(ci.get('mean'))} 单侧界 [{fmt(ci.get('lo'))},{fmt(ci.get('hi'))}] → {x['verdict']}")
+        d = rep["descriptive"]
+        print("      描述：" + "；".join(f"{k} 均值 {fmt(v['mean'])} 胜率 {fmt(v['win_rate'])} 最差10% {fmt(v['worst_decile_mean'])}"
+                                      for k, v in d.items() if v["n_point"]))
+        dd = rep["direct_direction"]
+        print(f"      直接做方向命中率（描述，单位不同不可比）：{fmt(dd['hit_rate'])}（n={dd['n']}）")
+    if args.output:
+        Path(args.output).write_text(json.dumps({"analysis": sd.ANALYSIS, "as_of": as_of.isoformat(), "reports": out},
+                                                ensure_ascii=False, indent=1, default=str), "utf-8")
+    return 0
+
+
 EXEC_DIR = Path("data/account/shadow_exec")      # 私有：gitignore；研究账在 data/history/shadow/（公开）
 
 
@@ -745,6 +815,9 @@ def register(sub):
     ch = ss.add_parser("chain", help="开盘后近价全链快照（ET 10:15–10:35，入 git；只读）")
     ch.add_argument("instruments", nargs="*"); ch.add_argument("--allow-off-hours", action="store_true")
     ch.add_argument("--status-file"); ch.set_defaults(func=cmd_chain)
+    dr = ss.add_parser("direction", help="方向次要分析（预登记 dir-analysis-v1；只读报告）")
+    dr.add_argument("--replay", action="store_true"); dr.add_argument("--output")
+    dr.set_defaults(func=cmd_direction)
     e = ss.add_parser("exec", help="S05 账户风险预算账（私有，写 data/account/；理论预算，券商执行性未核实；只读）")
     e.add_argument("instruments", nargs="*"); e.add_argument("--session", help="YYYY-MM-DD，默认今天 ET")
     e.set_defaults(func=cmd_exec)

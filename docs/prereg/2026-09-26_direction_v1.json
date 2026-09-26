@@ -1,0 +1,45 @@
+{
+ "version": "dir-analysis-v1-20260926",
+ "analysis": {
+  "version": "dir-analysis-v1-20260926",
+  "base_config_version": "shadow-v5-20260926",
+  "signal": "decision.flow.call_direction",
+  "mapping": {
+   "偏多": "P",
+   "偏空": "C"
+  },
+  "eligible_from": "2026-09-28",
+  "formal_date": "2026-12-31",
+  "pool": "etf",
+  "hypotheses": [
+   "H-dir",
+   "H-wall|dir"
+  ],
+  "family_size": 14,
+  "alpha_one_sided": 0.0035714285714285718,
+  "economic_delta": 0.03,
+  "min_pair_dates": 20,
+  "min_pairable_rate": 0.5,
+  "estimate": "bounds",
+  "tail_quantile": 0.1
+ },
+ "frozen_sha256": {
+  "undertow/analyze/shadow_direction.py": "da801f6d21ca56595f57d38b7380e130e50f1df9eac30c5353535a832a440f06",
+  "undertow/analyze/flow.py": "e031c097b71772a79f04f88cc3bf937c8c37c5c04e46d198bfe8ffd547525c8b",
+  "docs/prereg/2026-09-26_direction_v1.md": "2c681e3475dc4d1bf68e091e202812fb94f00f24618015ccab878930aaa3b042"
+ },
+ "informational_sha256": {
+  "undertow/analyze/shadow.py": "9bb085961954dc618c2ed5fbc6880a4a4ca4624bdf1d2e2a03ca040c1ed6af41",
+  "undertow/shadow_cli.py": "e0a4bd88f7c7af169f18238567fdd11a81fec6d39b09aaf270e872987851a386"
+ },
+ "base": {
+  "shadow_config_version": "shadow-v5-20260926",
+  "shadow_config_hash": "9e60a71ac3cec0f3",
+  "calendar": "nyse-20260101-20270331-v1",
+  "calendar_hash": "57b434b5f68f7843",
+  "b1_rule": "analyze.shadow.pick_b(mult=1.0) + _buy_leg(width=2x_modal_strike_step)",
+  "a_rule": "analyze.gamma.local_wall(mode=max, band=0.05, hi_dte=14)"
+ },
+ "time_contract": "available_at < recorded_at < 09:30 ET session；prospective_ok；文件名日期不是时间证据",
+ "parent_head": "aa11203"
+}

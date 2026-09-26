@@ -118,8 +118,9 @@ def test_only_irreproducible_data_is_tracked():
     # 无人值守脚本必须真的会 add 到那两个凭证 —— 光有 ! 例外没用，
     # 如果脚本不 add data/reports，FAILURE 文件永远进不了 git。
     sh = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
-    add_line = next(l for l in sh.splitlines() if l.startswith("git add "))
+    # Codex 008 G10 后改为 publish_dirs（只提交这些目录，不卷入他人暂存）；三个目录仍须在内
+    add_line = next(l for l in sh.splitlines() if "data/snapshots data/history" in l)
     assert "data/snapshots" in add_line and "data/history" in add_line
     assert "data/reports" in add_line, \
-        "必须仍 add data/reports，否则 FAILURE_/ALERT_ 凭证进不了 git"
+        "必须仍发布 data/reports，否则 FAILURE_/ALERT_ 凭证进不了 git"
     print("PASS test_only_irreproducible_data_is_tracked")

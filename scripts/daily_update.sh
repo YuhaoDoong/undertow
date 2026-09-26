@@ -308,13 +308,22 @@ fi
 # data/reports 里的 HTML/PDF 已 gitignore（可由快照+代码重算），
 # 这一行留着是为了捞同目录下的 FAILURE_*/ALERT_* —— .gitignore 的两条 ! 例外，
 # 它们是"那天确实失败过"的唯一凭证，漏掉就等于把静默失败造回来。
-git add data/snapshots data/history data/reports
-if git diff --cached --quiet; then
-    echo "[跳过] 无变更可提交"
-    exit 0
-fi
-git commit -m "每日自动更新 $(TZ=America/New_York date +%F)：期权链快照+台账（launchd 定时任务）
+# Codex 008 G10：原先 `git add` 三个目录后用 `git diff --cached` 判断、再普通 `git commit`——
+# 索引里若有他人（交叉工作的代理/人）已暂存的文件，会被一起提交。现在只提交这三个目录；
+# 发现目录外的暂存 → 停止发布、数据留在磁盘、告警，下次运行再发（不 stash/reset 他人工作）。
+source scripts/lib_publish.sh
+set +e
+PUB=$(publish_dirs "每日自动更新 $(TZ=America/New_York date +%F)：期权链快照+台账（launchd 定时任务）
 
-Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
-git push
-echo "[完成] 已提交并推送"
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" data/snapshots data/history data/reports); PUB_RC=$?
+set -e
+case $PUB_RC in
+  0) echo "[完成] 已提交并推送（或无变更）" ;;
+  3) echo "[暂停发布] $PUB"
+     alert "⚠️ 每日数据未提交（ET $ET_NOW）" "索引里有他人暂存的文件，已停止自动提交；数据已落盘，下次运行再发" ;;
+  4) echo "[警告] 已提交但推送失败"
+     alert "⚠️ 每日数据推送失败（ET $ET_NOW）" "已本地提交，git push 失败；数据未备份到远端" ;;
+  *) echo "[失败] 提交失败 rc=$PUB_RC"
+     alert "⚠️ 每日数据提交失败（ET $ET_NOW）" "publish_dirs rc=$PUB_RC" ;;
+esac
+exit 0

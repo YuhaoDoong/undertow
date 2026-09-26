@@ -28,6 +28,8 @@ class Rule:
     text: str                  # 规则本身（第一人称，用户口径）
     why: str = ""              # 为什么有这条（通常来自一次真实教训）
     severity: str = "铁律"      # 铁律（不可违）/ 纪律（应遵守）/ 偏好
+    short: str = ""            # 研报置顶用的一句话提醒（详版在 text）
+    merged_from: list = field(default_factory=list)   # 由哪些旧规则合并而来（旧条目留在 rules_archive）
 
 
 @dataclass(frozen=True)
@@ -96,6 +98,8 @@ class SoulProfile:
     open_questions: list = field(default_factory=list) # list[OpenQuestion] 待数据回答的问题
     limits: Limits = field(default_factory=Limits)
     notes: str = ""
+    pinned: list = field(default_factory=list)         # 研报开头置顶的规则 id（顺序即显示顺序）
+    rules_archive: list = field(default_factory=list)  # list[Rule] 被合并掉的旧规则原文（留档，不再生效）
 
     @property
     def ok(self) -> bool:
@@ -143,7 +147,17 @@ def load_profile(path: Path | None = None) -> SoulProfile | None:
         open_questions=[OpenQuestion(**q) for q in raw.get("open_questions", [])],
         limits=Limits(**raw.get("limits", {})),
         notes=raw.get("notes", ""),
+        pinned=list(raw.get("pinned", [])),
+        rules_archive=[Rule(**r) for r in raw.get("rules_archive", [])],
     ))
+
+
+def pinned_rules(profile: "SoulProfile | None") -> tuple[list, list]:
+    """(置顶规则, 找不到的 id)。置顶 id 指向不存在的规则时照实报出，不静默跳过。"""
+    if profile is None:
+        return [], []
+    by = {r.id: r for r in profile.rules}
+    return [by[i] for i in profile.pinned if i in by], [i for i in profile.pinned if i not in by]
 
 
 def save_profile(profile: SoulProfile, path: Path | None = None) -> Path:

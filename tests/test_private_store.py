@@ -125,3 +125,40 @@ def test_consult_packet_marks_discipline_unchecked():
 def test_consult_source_wires_status():
     src = (Path(__file__).resolve().parents[1] / "undertow" / "consult" / "packet.py").read_text("utf-8")
     assert "【纪律层：未完成核查】" in src and '"soul_status"' in src
+
+
+# —— 研报纪律卡片（用户 2026-09-26）——
+def test_pinned_rules_roundtrip_and_card(tmp_path):
+    from undertow.report.html import render_discipline_card, with_discipline
+    r1 = pf.Rule(id="a", text="详版A\n第二行", short="简版A", merged_from=["x", "y"])
+    r2 = pf.Rule(id="b", text="详版B")
+    prof = pf.SoulProfile(rules=[r1, r2], pinned=["a", "b", "gone"],
+                          rules_archive=[pf.Rule(id="x", text="旧x", merged_from=["→ a"])])
+    path = tmp_path / "profile.json"
+    pf.save_profile(prof, path)
+    back = pf.load_profile(path)
+    rules, missing = pf.pinned_rules(back)
+    assert [r.id for r in rules] == ["a", "b"] and missing == ["gone"]
+    assert back.rules_archive[0].id == "x" and back.rules[0].merged_from == ["x", "y"]
+    card = render_discipline_card(rules, missing)
+    assert "简版A" in card and "详版B" in card and "详版A" not in card and "gone" in card
+    page = with_discipline('<html><body><div class="wrap"><h1>研报</h1></div></body></html>', card)
+    assert page.index("简版A") < page.index("<h1>研报</h1>")
+    assert with_discipline("<p>x</p>", "") == "<p>x</p>"
+
+
+def test_discipline_card_absent_and_corrupt(tmp_path, monkeypatch):
+    from undertow import cli
+    monkeypatch.setattr(pf, "DEFAULT_PATH", tmp_path / "none.json")
+    assert cli._discipline_card() == "", "没有档案 → 不显示"
+    bad = _corrupt(tmp_path, "profile.json")
+    monkeypatch.setattr(pf, "DEFAULT_PATH", bad)
+    c = cli._discipline_card()
+    assert "纪律档案读不到" in c, "档案坏了必须告警，不能静默省略"
+
+
+def test_old_profile_without_new_fields_loads(tmp_path):
+    p = tmp_path / "profile.json"
+    p.write_text(json.dumps({"rules": [{"id": "r", "text": "t", "why": "w", "severity": "铁律"}]}), encoding="utf-8")
+    prof = pf.load_profile(p)
+    assert prof.pinned == [] and prof.rules[0].short == "" and prof.rules_archive == []

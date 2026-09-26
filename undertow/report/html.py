@@ -1803,6 +1803,38 @@ def render_summary_card(it: dict) -> str:
         '</div>')
 
 
+def render_discipline_card(rules, missing=(), error: str = "") -> str:
+    """研报开头的纪律提醒（用户 2026-09-26：每天第一眼先看到）。只放一句话简版，详版在私有档案。
+
+    error 非空 = 档案存在但读不到 —— 显式告警，不静默省略（省略会让人以为纪律已核对）。
+    rules 为空且无 error = 没有档案或没设置置顶 → 不显示。
+    """
+    if error:
+        return ('<div class="card" style="border:2px solid #cf222e;background:#fff5f5">'
+                f'<b style="color:#cf222e">⚠️ 纪律档案读不到，今天的纪律提醒缺失</b>'
+                f'<div class="sub">{_esc(error[:200])}</div></div>')
+    if not rules and not missing:
+        return ""
+    items = "".join(f'<li style="margin:4px 0"><b>{_esc(r.short or r.text.splitlines()[0])}</b></li>' for r in rules)
+    miss = (f'<div class="sub" style="color:#cf222e">置顶的规则找不到：{_esc("、".join(missing))}</div>'
+            if missing else "")
+    return ('<div class="card" style="border:2px solid #cf222e;background:#fff8f0">'
+            '<div style="font-weight:700;color:#cf222e;margin-bottom:4px">🧭 开仓前先读这三条（我的铁律）</div>'
+            f'<ol style="margin:0;padding-left:20px;font-size:15px">{items}</ol>{miss}'
+            '<div class="sub" style="margin-top:4px">详版与来由：<code>undertow soul</code></div></div>')
+
+
+def with_discipline(html: str, card: str) -> str:
+    """把纪律卡片插到页面最上方（第一个 wrap 容器的开头）。卡片为空则原样返回。"""
+    if not card:
+        return html
+    anchor = '<div class="wrap">'
+    i = html.find(anchor)
+    if i < 0:
+        return card + html
+    return html[:i + len(anchor)] + card + html[i + len(anchor):]
+
+
 def render_index_html(items: list[dict], asof: str, *, family_notes=None,
                       ratio_html: str = "", events=None, today=None) -> str:
     """多品种综合研报（每品种一句话摘要 + 强信号置顶），非仅链接。

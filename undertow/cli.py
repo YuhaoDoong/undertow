@@ -1382,6 +1382,17 @@ def _score_trend(inst_key: str, date_s: str, score: float) -> str:
         return trend
 
 
+def _discipline_card() -> str:
+    """每日研报开头的纪律卡片。没有档案 → 空；档案读不到 → 告警卡（不静默）。"""
+    from undertow.report.html import render_discipline_card
+    try:
+        from undertow.soul.profile import load_profile, pinned_rules
+        rules, missing = pinned_rules(load_profile())
+        return render_discipline_card(rules, missing)
+    except Exception as e:
+        return render_discipline_card([], error=f"{type(e).__name__}: {e}")
+
+
 def _archive_existing(path) -> None:
     """同日重复生成报告时不覆盖：把旧文件按其生成时刻改名留档（数据尽量多留原则）。
 
@@ -2388,7 +2399,8 @@ def cmd_report(args) -> int:
             _data_day = _data_source_day(curr_date_s, prev_date, px_dates, inst.key)
             fn = f"{inst.key}_{_data_day or today.isoformat()}.html"
             _archive_existing(reports_dir / fn)
-            (reports_dir / fn).write_text(html, encoding="utf-8")
+            from undertow.report.html import with_discipline
+            (reports_dir / fn).write_text(with_discipline(html, _discipline_card()), encoding="utf-8")
             try:
                 _facts = _flow_facts(fa, ga, ga_prev, prev, curr, curr.spot,
                                      date.fromisoformat(curr_date_s) if curr_date_s else today)
@@ -2516,7 +2528,8 @@ def cmd_report(args) -> int:
                                        events=all_events, today=today)
         index_path = reports_dir / f"index_{_idx_data_day}.html"
         _archive_existing(index_path)
-        index_path.write_text(index_html, encoding="utf-8")
+        from undertow.report.html import with_discipline
+        index_path.write_text(with_discipline(index_html, _discipline_card()), encoding="utf-8")
 
     # 标题写【可交易日】不写生成日期 —— 否则周六生成的报告写着 2026-08-29，
     # 装的却是 8/28 可交易的数据（用户 2026-08-29 指出的同一个坑）。
@@ -2918,7 +2931,9 @@ def cmd_account(args) -> int:
         out_dir = DATA_DIR / "account"      # gitignore：敏感数据不入公开仓库
         out_dir.mkdir(parents=True, exist_ok=True)
         fn = out_dir / f"account_{today.isoformat()}.html"
-        fn.write_text(render_account_html(review, assets, health), encoding="utf-8")
+        from undertow.report.html import with_discipline
+        fn.write_text(with_discipline(render_account_html(review, assets, health), _discipline_card()),
+                      encoding="utf-8")
         print(f"\n实盘评价 HTML（本地私有，未入 git）→ {fn}")
     return 0
 

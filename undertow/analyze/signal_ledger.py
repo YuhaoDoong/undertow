@@ -102,6 +102,21 @@ def _save(key: str, rows: list[dict], root: Path | None = None) -> Path:
     return p
 
 
+# 方向裁决（call_direction）实际依赖的源码：快照解析 → 持仓流分析 → 强信号探测。
+# Codex 011 D01：只在【读取时】对当前 flow.py 取哈希，证明不了旧台账行当时由哪版代码算出；
+# 所以在【写入台账那一刻】记下这些文件的合并指纹，方向研究据此核对信号来源。
+CALL_CODE_FILES = ("undertow/analyze/flow.py", "undertow/core/models.py", "undertow/collect/cboe_options.py")
+
+
+def call_code_sha() -> str:
+    import hashlib
+    root = Path(__file__).resolve().parents[2]
+    h = hashlib.sha256()
+    for rel in CALL_CODE_FILES:
+        h.update(rel.encode()); h.update(b"\0"); h.update((root / rel).read_bytes()); h.update(b"\0")
+    return h.hexdigest()[:16]
+
+
 def record(key: str, *, on_date: str, prev_date: str | None, spot: float,
            probe: dict, signal=None, outlook_bias: str = "",
            root: Path | None = None) -> dict:
@@ -159,6 +174,7 @@ def _record_unlocked(key: str, *, on_date: str, prev_date: str | None, spot: flo
         # 日后可直接比较两个口径谁更有预测力 —— 实测两者 60% 的日子方向相反。
         # 方向裁决与弃权（软/硬），供日后校准弃权阈值
         "call_direction": probe.get("call_direction"),
+        "call_code_sha": call_code_sha(),             # 写入时的方向算法源码指纹（见 CALL_CODE_FILES）
         "call_abstain": probe.get("call_abstain"),
         "call_hard_abstain": probe.get("call_hard_abstain"),
         "call_ratio": probe.get("call_ratio"),

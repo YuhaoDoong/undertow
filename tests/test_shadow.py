@@ -895,13 +895,14 @@ def test_n02_certified_vs_uncertified_quote_time(tmp_path, monkeypatch):
     run, stf, store = _chain_env(tmp_path, monkeypatch, lambda: _pl(GOOD_OPTS))
     assert run() == 0 and json.loads(stf.read_text())["overall"] == "complete"
     f = store.load("options_open", "SLV", date(2026, 9, 28))["undertow_filter"]
-    assert f["open_window_certified"] is True and f["n_kept"] == 2 and "有限近价链" in f["scope"]
+    assert f["underlying_proxy_in_window"] is True and f["options_quote_time_verified"] is None
+    assert f["n_kept"] == 2 and "有限近价链" in f["scope"]
     run2, stf2, store2 = _chain_env(tmp_path / "b", monkeypatch, lambda: _pl(GOOD_OPTS, ltt="2026-09-28T11:30:00"))
     assert run2() == 1 and json.loads(stf2.read_text())["overall"] == "partial"
-    assert store2.load("options_open", "SLV", date(2026, 9, 28))["undertow_filter"]["open_window_certified"] is False
+    assert store2.load("options_open", "SLV", date(2026, 9, 28))["undertow_filter"]["underlying_proxy_in_window"] is False
     run3, _, store3 = _chain_env(tmp_path / "c", monkeypatch, lambda: _pl(GOOD_OPTS, ltt=None))
     run3()
-    assert store3.load("options_open", "SLV", date(2026, 9, 28))["undertow_filter"]["open_window_certified"] is None
+    assert store3.load("options_open", "SLV", date(2026, 9, 28))["undertow_filter"]["underlying_proxy_in_window"] is None
 
 
 def test_n02_existing_file_validated_not_just_exists(tmp_path, monkeypatch):
@@ -913,3 +914,16 @@ def test_n02_existing_file_validated_not_just_exists(tmp_path, monkeypatch):
     assert run() == 1 and json.loads(stf.read_text())["overall"] == "partial"
     assert list(p.parent.glob("*.corrupt-*")), "坏文件隔离保留"
     assert store.load("options_open", "SLV", date(2026, 9, 28))["undertow_filter"]["status"] == "ok", "已重抓"
+
+
+
+def test_d04_chain_time_converted_to_et():
+    """Codex 011 D04：UTC 10:05 = ET 06:05，不能被当成开盘窗；带偏移的一律转 ET，无时区按 ET。"""
+    from undertow.shadow_cli import filter_chain
+    base = lambda ltt: {"symbol": "SLV", "data": {"current_price": 58.0, "last_trade_time": ltt, "options": GOOD_OPTS}}
+    d = date(2026, 9, 28)
+    assert filter_chain(base("2026-09-28T10:05:00+00:00"), d)["undertow_filter"]["underlying_proxy_in_window"] is False
+    assert filter_chain(base("2026-09-28T14:05:00+00:00"), d)["undertow_filter"]["underlying_proxy_in_window"] is True
+    assert filter_chain(base("2026-09-28T10:05:00-04:00"), d)["undertow_filter"]["underlying_proxy_in_window"] is True
+    assert filter_chain(base("2026-09-28T10:05:00"), d)["undertow_filter"]["underlying_proxy_in_window"] is True
+    assert filter_chain(base("2026-09-28T10:21:00"), d)["undertow_filter"]["underlying_proxy_in_window"] is False

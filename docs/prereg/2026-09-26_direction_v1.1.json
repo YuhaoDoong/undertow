@@ -1,0 +1,82 @@
+{
+ "version": "dir-analysis-v1.1-20260926",
+ "analysis": {
+  "version": "dir-analysis-v1.1-20260926",
+  "supersedes": "dir-analysis-v1-20260926",
+  "base_config_version": "shadow-v5-20260926",
+  "signal": "decision.flow.call_direction",
+  "mapping": {
+   "偏多": "P",
+   "偏空": "C"
+  },
+  "mapping_version": "dir-map-v1",
+  "call_code_sha": "31057c35f587532f",
+  "eligible_from": "2026-09-28",
+  "formal_date": "2026-12-31",
+  "pool": "etf",
+  "hypotheses": [
+   "H-dir",
+   "H-wall|dir"
+  ],
+  "family_size": 14,
+  "alpha_one_sided": 0.0035714285714285718,
+  "economic_delta": 0.03,
+  "min_pair_dates": 20,
+  "min_pairable_rate": 0.5,
+  "estimate": "bounds",
+  "tail_quantile": 0.1,
+  "diagnostics_version": "dir-diagnostics-v1"
+ },
+ "supersedes": {
+  "version": "dir-analysis-v1-20260926",
+  "sha256": {
+   "docs/prereg/2026-09-26_direction_v1.md": "2c681e3475dc4d1bf68e091e202812fb94f00f24618015ccab878930aaa3b042",
+   "docs/prereg/2026-09-26_direction_v1.json": "bc6ce7146afdff274efed38996f7059833ac118cf00c6fb673c62b1f45fdd4c3"
+  },
+  "frozen_commit": "1146c6d",
+  "reasons": [
+   "D01 准入未在分析内实现：未检查 available_at/recorded_at/身份，拒绝不计数",
+   "D02 可配对率只按已结算行计算，成熟缺结果的机会从分母消失",
+   "D03 固定卖 put/call 与顺逆两侧样本不同，不可比",
+   "D05 判定用语混淆「未证实」与「排除」；依赖函数未冻结"
+  ],
+  "unchanged": "假设、信号、映射、配对、区间传播、δ、α、家族、门槛、纳入起点、检验日、v5 全部设置",
+  "real_samples_seen": 0
+ },
+ "frozen_sha256": {
+  "undertow/analyze/shadow_direction.py": "46e662845777de41e10a9e2b244b5001a33b39432ee3465866b72f675bf693f6",
+  "undertow/analyze/flow.py": "e031c097b71772a79f04f88cc3bf937c8c37c5c04e46d198bfe8ffd547525c8b",
+  "docs/prereg/2026-09-26_direction_v1.1.md": "4e160c16b9fd3af7db8b738d64a943700441e76c4b4a8e123ab6dfbf4494e19c"
+ },
+ "dependency_fingerprints": {
+  "shadow._vals": "b22c8a30b8309b71",
+  "shadow._norm": "a389633139c89c74",
+  "shadow.interval_ci": "7f1f917980cc4b0e",
+  "shadow.block_bootstrap": "234a2631396b2108",
+  "shadow.formal_identity": "bfab5c4a6ef30dad",
+  "shadow.window_leg": "569d40ca6bcf72e9",
+  "core.market_calendar": "060af248e083f523",
+  "shadow.config_hash": "9e60a71ac3cec0f3",
+  "signal_ledger.call_code_sha": "c890479d67096fbf",
+  "signal_ledger.CALL_CODE_FILES": [
+   "undertow/analyze/flow.py",
+   "undertow/core/models.py",
+   "undertow/collect/cboe_options.py"
+  ]
+ },
+ "informational_sha256": {
+  "undertow/analyze/shadow.py": "9bb085961954dc618c2ed5fbc6880a4a4ca4624bdf1d2e2a03ca040c1ed6af41",
+  "undertow/shadow_cli.py": "2039f7fa7b332df92bdf1fbae917e41a08c1e9685af033f66a18fc13618fa07d",
+  "undertow/analyze/signal_ledger.py": "591f064ea141b1f089acd445b420db1ed0654e9cecb442ec8be61ac8e3ff35f1"
+ },
+ "base": {
+  "shadow_config_version": "shadow-v5-20260926",
+  "shadow_config_hash": "9e60a71ac3cec0f3",
+  "calendar": "nyse-20260101-20270331-v1",
+  "calendar_hash": "57b434b5f68f7843",
+  "b1_rule": "analyze.shadow.pick_b(mult=1.0) + _buy_leg(width=2x_modal_strike_step)",
+  "a_rule": "analyze.gamma.local_wall(mode=max, band=0.05, hi_dte=14)"
+ },
+ "time_contract": "session 认证且 recorded_at(aware) < 当日 09:30 ET；available_at(aware) < recorded_at；snapshot_sha/prev_snapshot_sha/ledger_row_sha 齐全；mapping=dir-map-v1；ledger_code_sha=call_code_sha 冻结值",
+ "parent_head": "1146c6d"
+}

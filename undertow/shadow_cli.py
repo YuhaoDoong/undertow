@@ -84,6 +84,8 @@ def _flow_identity(fr: dict, store, sym: str, fd) -> dict:
                                              .encode()).hexdigest()[:16],
             "algorithm": "analyze.flow.probe_strong_signal → call_direction",
             "code_sha": hashlib.sha256(pathlib.Path(_flow_mod.__file__).read_bytes()).hexdigest()[:16],
+            # 台账写入那一刻的方向算法指纹（signal_ledger.call_code_sha）；旧台账行没有此字段 → None
+            "ledger_code_sha": fr.get("call_code_sha"),
             "mapping": DIR_MAPPING_VERSION}
 
 
@@ -551,9 +553,14 @@ def chain_quote_time(payload: dict):
     """
     t = ((payload.get("data") or {}).get("last_trade_time"))
     try:
-        return datetime.fromisoformat(str(t)) if t else None
+        dt_ = datetime.fromisoformat(str(t)) if t else None
     except ValueError:
         return None
+    if dt_ is None:
+        return None
+    # Codex 011 D04：带时区的一律先转 ET（旧版直接用小时数：UTC 10:05 被当成 ET 10:05 认证）；
+    # 不带时区按 CBOE 惯例视为 ET（数据源契约，写明在此）。
+    return dt_.astimezone(ET).replace(tzinfo=None) if dt_.tzinfo else dt_
 
 
 def filter_chain(payload: dict, today: date, *, max_dte: int = CHAIN_MAX_DTE, band: float = CHAIN_BAND,
@@ -562,8 +569,8 @@ def filter_chain(payload: dict, today: date, *, max_dte: int = CHAIN_MAX_DTE, ba
 
     状态（Codex 009 N02）：ok / empty（合法但 0 个合约）/ no_match（有合约但都不在范围内）；
     结构不对 → ChainSchemaError，不当成 0 个合约的正常结果。
-    时间认证：标的最后成交时间落在当天 ET 10:00–10:20 → open_window_certified=True；
-    落在别处 → False；取不到 → None（未知，不认证为开盘报价）。
+    时间：标的最后成交时间（转 ET）落在当天 10:00–10:20 → underlying_proxy_in_window=True；落在别处 → False；
+    取不到 → None。它只是标的代理，期权报价时刻本身未知（options_quote_time_verified=None）。
     过滤按当时现价截断：≤max_dte 天、|K/现价−1|≤band 的有限近价链，更远的保护腿/到期不在其中。
     """
     import re
@@ -598,7 +605,10 @@ def filter_chain(payload: dict, today: date, *, max_dte: int = CHAIN_MAX_DTE, ba
                                 "quote_time_et_proxy": qt.isoformat() if qt else None,
                                 "quote_time_basis": "标的 last_trade_time（CBOE 延迟约 15 分钟）",
                                 "source_timestamp_raw": payload.get("timestamp"),
-                                "open_window": list(CHAIN_QUOTE_WINDOW), "open_window_certified": cert,
+                                "open_window": list(CHAIN_QUOTE_WINDOW),
+                                # Codex 011 D04：这只证明【标的】最后成交在窗口内，不证明每条期权 bid/ask 来自该时刻
+                                "underlying_proxy_in_window": cert,
+                                "options_quote_time_verified": None,   # 数据源不给期权报价时刻 → 未知
                                 "purpose": purpose, "source": "cboe delayed ~15min",
                                 "scope": f"有限近价链：≤{max_dte} 天到期、按当时现价 ±{band:.0%}；更远的保护腿/到期不在内"}}
 
@@ -662,14 +672,14 @@ def cmd_chain(args) -> int:
                 continue
             store.save("options_open", sym, f, on_date=today, captured_at=_time.time())
             done.append(inst.key)
-            if meta["open_window_certified"] is not True:
+            if meta["underlying_proxy_in_window"] is not True:
                 uncert.append(inst.key)
             print(f"  {inst.key:7s} {meta['n_kept']}/{meta['n_full']} 个合约  报价时刻≈{meta['quote_time_et_proxy']}"
-                  f"  开盘窗认证={meta['open_window_certified']}")
+                  f"  标的代理在窗内={meta['underlying_proxy_in_window']}（期权报价时刻未知）")
         except Exception as e:
             issues.append({"instrument": inst.key, "error": f"{type(e).__name__}: {e}"[:200]})
     if uncert:
-        issues.append({"instrument": ",".join(uncert), "error": "已保存但报价时刻未落在 ET 10:00–10:20（或未知）：只作研究用途"})
+        issues.append({"instrument": ",".join(uncert), "error": "已保存但标的代理时刻未落在 ET 10:00–10:20（或未知）：只作研究用途"})
     overall = ("failed" if issues and not done else
                "partial" if issues else ("complete" if done else "unchanged"))
     _status(args, "chain", done, issues, overall=overall,
@@ -680,7 +690,9 @@ def cmd_chain(args) -> int:
 
 
 def cmd_direction(args) -> int:
-    """方向次要分析（预登记 dir-analysis-v1，docs/prereg/2026-09-26_direction_v1.md）。只读、纯报告。"""
+    """方向次要分析（预登记 dir-analysis-v1.1，docs/prereg/2026-09-26_direction_v1.1.md）。只读、纯报告。
+
+    Codex 011 D01/D02：行不在这里预先过滤 —— 准入由 shadow_direction 自己判，拒绝按原因计入机会表。"""
     from undertow.analyze import shadow_direction as sd
     from undertow.core.config import load_config
     cfg = load_config(); rows = []
@@ -688,29 +700,40 @@ def cmd_direction(args) -> int:
         p = _vdir(args.replay) / f"{inst.key}.jsonl"
         if p.exists():
             rows += jl.load(p, KEY)
+    other = [r for r in rows if r.get("config_version") != sd.ANALYSIS["base_config_version"]]
     rows = [r for r in rows if r.get("config_version") == sd.ANALYSIS["base_config_version"]]
-    if not args.replay:
-        rows = [r for r in rows if prospective_ok(r)]
     as_of = market_today()
     fmt = lambda x: "—" if x is None else f"{x:+.3f}"
     print(f"方向次要分析 {sd.ANALYSIS['version']}（基于 {sd.ANALYSIS['base_config_version']}，信号 {sd.ANALYSIS['signal']}，"
           f"单侧 α={sd.ANALYSIS['alpha_one_sided']:.4f}，经济门槛 {sd.ANALYSIS['economic_delta']}；"
           f"{'正式' if sh.formal_identity(as_of) == 'formal' else '探索'}）")
+    if other:
+        print(f"  ⚠️ {len(other)} 行不是 {sd.ANALYSIS['base_config_version']}，不属于本分析")
     out = {}
     for inst in sh.CONFIG["pools"][sd.ANALYSIS["pool"]]:
         rep = sd.instrument_report(rows, inst, as_of=as_of)
         out[inst] = rep
-        c = rep["coverage"]
-        print(f"  {inst:6s} 行 {c['rows']} 有方向 {c['with_direction']}（多 {c['direction_bull']}/空 {c['direction_bear']}）")
+        print(f"  {inst}")
         for h in ("H-dir", "H-wall|dir"):
-            x = rep[h]; ci = x["ci"]
-            print(f"      {h:10s} 配对 {x['n_pairs']}（无界 {x['n_unbounded']}，日期 {x['n_dates']}）"
-                  f" 均值 {fmt(ci.get('mean'))} 单侧界 [{fmt(ci.get('lo'))},{fmt(ci.get('hi'))}] → {x['verdict']}")
-        d = rep["descriptive"]
-        print("      描述：" + "；".join(f"{k} 均值 {fmt(v['mean'])} 胜率 {fmt(v['win_rate'])} 最差10% {fmt(v['worst_decile_mean'])}"
-                                      for k, v in d.items() if v["n_point"]))
-        dd = rep["direct_direction"]
-        print(f"      直接做方向命中率（描述，单位不同不可比）：{fmt(dd['hit_rate'])}（n={dd['n']}）")
+            x = rep[h]; ci = x["ci"]; op = x["opportunities"]
+            tab = "，".join(f"{k} {v}" for k, v in (op["table"] or {}).items() if v)
+            print(f"      {h:10s} 机会 {op['days']} 日（{tab or '—'}）可配对率 {fmt(op['pairable_rate'])}")
+            if op["reasons"]:
+                print("                 拒绝原因：" + "；".join(f"{k} ×{v}" for k, v in op["reasons"].items()))
+            print(f"                 配对 {x['n_pairs']}（无界 {x['n_unbounded']}，日期 {x['n_dates']}）"
+                  f" 单侧界 [{fmt(ci.get('lo'))},{fmt(ci.get('hi'))}] → {x['verdict']}")
+        cs = rep["common_sample"]
+        for rule in (sh.CONFIG["primary_b"], "A"):
+            c = cs[rule]
+            if c["n_keys"]:
+                print(f"      共同样本 {rule}（{c['n_keys']} 日）：" + "；".join(
+                    f"{k} 均值 {fmt(c[k]['mean'])} 胜率 {fmt(c[k]['win_rate'])} 最差10% {fmt(c[k]['worst_decile_mean'])}"
+                    for k in ("aligned", "counter", "always_put", "always_call")))
+        dd, dg = rep["direct_direction"], rep["diagnostics"]
+        print(f"      直接做方向命中率（描述，单位不同不可比）：{fmt(dd['hit_rate'])}（n={dd['n']}）；"
+              f"开仓前已走 {fmt(dg['pre_move_ATR']['mean'])} ATR、开仓后 {fmt(dg['post_move_ATR']['mean'])} ATR"
+              f"（n={dg['pre_move_ATR']['n']}/{dg['post_move_ATR']['n']}，描述）")
+    print(f"  注：{sd.ANALYSIS['economic_delta']} 等门槛是设计选择，不保证统计功效；「未证实」≠「已排除」。")
     if args.output:
         Path(args.output).write_text(json.dumps({"analysis": sd.ANALYSIS, "as_of": as_of.isoformat(), "reports": out},
                                                 ensure_ascii=False, indent=1, default=str), "utf-8")
@@ -815,7 +838,7 @@ def register(sub):
     ch = ss.add_parser("chain", help="开盘后近价全链快照（ET 10:15–10:35，入 git；只读）")
     ch.add_argument("instruments", nargs="*"); ch.add_argument("--allow-off-hours", action="store_true")
     ch.add_argument("--status-file"); ch.set_defaults(func=cmd_chain)
-    dr = ss.add_parser("direction", help="方向次要分析（预登记 dir-analysis-v1；只读报告）")
+    dr = ss.add_parser("direction", help="方向次要分析（预登记 dir-analysis-v1.1；只读报告）")
     dr.add_argument("--replay", action="store_true"); dr.add_argument("--output")
     dr.set_defaults(func=cmd_direction)
     e = ss.add_parser("exec", help="S05 账户风险预算账（私有，写 data/account/；理论预算，券商执行性未核实；只读）")

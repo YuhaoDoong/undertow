@@ -230,16 +230,6 @@ def _snap_quote(snap, kind, expiry, strike):
     return None
 
 
-def _credit(sell_bid, sell_ask, buy_bid, buy_ask, give):
-    """(conservative, mid, mid_give)，每张美元。任一价缺失或倒挂 → None。"""
-    vals = (sell_bid, sell_ask, buy_bid, buy_ask)
-    if any(v is None or not math.isfinite(v) or v < 0 for v in vals) or sell_bid > sell_ask or buy_bid > buy_ask:
-        return None
-    cons = (sell_bid - buy_ask) * 100
-    mid = ((sell_bid + sell_ask) / 2 - (buy_bid + buy_ask) / 2) * 100
-    return {"conservative": round(cons, 4), "mid": round(mid, 4), "mid_give": round(mid + give * (cons - mid), 4)}
-
-
 def build_opportunity(*, inst: str, sym: str, snap, session: date, spot: float, atr: float | None,
                       wall_fn, labels: dict, identity: dict, cfg: dict = CONFIG) -> dict:
     """一个 (品种, 决策日) 的机会行。wall_fn(kind) -> local_wall 结果（调用方注入，保持本模块纯）。"""

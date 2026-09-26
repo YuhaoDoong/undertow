@@ -157,10 +157,16 @@ def cmd_quote(args) -> int:
     for inst in _instruments(cfg, args.instruments):
         p = _path(inst.key, False)
         if not p.exists():
+            if window == "open":
+                issues.append({"instrument": inst.key, "error": "no_opportunity_row"})
             continue
         root = inst.options.symbol
         need, pending = {}, []
-        for r in jl.load(p, KEY):
+        rows_ = jl.load(p, KEY)
+        if window == "open" and not any(r["session"] == today.isoformat() for r in rows_):
+            # 盘前 capture 对每个品种都写一行（无候选也记原因）→ 开盘窗时没有当日行 = 上游失败，不是「没机会」
+            issues.append({"instrument": inst.key, "error": "no_opportunity_row"})
+        for r in rows_:
             for l in r["legs"]:
                 if not expected_today(r, l):
                     continue
@@ -223,6 +229,12 @@ def cmd_quote(args) -> int:
         overall = "partial"
     else:
         overall = "failed"
+    missing_rows = [i["instrument"] for i in issues if i.get("error") == "no_opportunity_row"]
+    if missing_rows and overall in ("complete", "unchanged"):
+        overall = "partial" if counts["valid_legs"] > 0 else "failed"
+    if missing_rows:
+        print(f"  ⚠️ 应有当日机会行却没有（盘前 capture 未跑或失败）：{', '.join(missing_rows)}", file=sys.stderr)
+    counts["missing_rows"] = len(missing_rows)
     print(f"  {wkey}：应有 {counts['expected_legs']} 条腿，有效 {counts['valid_legs']} → {overall}")
     _status(args, f"quote-{window}", done, issues, overall=overall, counts=counts)
     return 0 if overall in ("complete", "unchanged") else 1

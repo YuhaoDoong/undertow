@@ -43,7 +43,8 @@ import json
 import math
 import random
 import statistics as st
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 CONFIG = {
     "version": "shadow-v3-20260926",
@@ -314,6 +315,23 @@ def _credit(sell_bid, sell_ask, buy_bid, buy_ask, give):
     return {"conservative": round(cons, 4), "mid": round(mid, 4), "mid_give": round(mid + give * (cons - mid), 4)}
 
 
+def in_window(wkey: str, started_at: str, ended_at: str) -> bool:
+    """尝试是否在预登记窗口内开始【并】结束（ET、同一日期、含结束分钟）。时间戳不可解析 → False。
+
+    晚到的尝试（抓取拖过窗口末）不计：否则「10:20 窗口」会悄悄变成「任何时候」。
+    """
+    day, wname = wkey.split("|")
+    lo, hi = CONFIG["quote"]["windows"][wname]
+    tz = ZoneInfo(CONFIG["quote"]["timezone"])
+    try:
+        t0 = datetime.fromisoformat(started_at).astimezone(tz)
+        t1 = datetime.fromisoformat(ended_at).astimezone(tz)
+    except (TypeError, ValueError):
+        return False
+    lo_m = int(lo[:2]) * 60 + int(lo[3:]); hi_m = int(hi[:2]) * 60 + int(hi[3:])
+    return all(t.date().isoformat() == day and lo_m <= t.hour * 60 + t.minute <= hi_m for t in (t0, t1))
+
+
 def window_leg(row: dict, leg: dict, wkey: str, purpose: str) -> dict:
     """某窗口对某条腿的状态：not_run / missing（附原因）/ valid（附价格）。取第一次通过质量的尝试。"""
     w = (row.get("windows") or {}).get(wkey)
@@ -323,6 +341,8 @@ def window_leg(row: dict, leg: dict, wkey: str, purpose: str) -> dict:
     for a in w["attempts"]:
         if a.get("phase") != "rth":
             reasons.append("off_hours"); continue
+        if not in_window(wkey, a.get("started_at"), a.get("ended_at")):
+            reasons.append("outside_window"); continue
         sq = a["quotes"].get(qkey(leg["side"], leg["sell"]))
         bq = a["quotes"].get(qkey(leg["side"], leg["buy"]))
         bad = entry_quality(sq, bq) if purpose == "entry" else exit_quality(sq, bq)

@@ -166,7 +166,11 @@ def _q(bid, ask, bs=10, as_=10, err=None):
     return {"bid": bid, "ask": ask, "bid_size": bs, "ask_size": as_, "error": err, "quote_time": None}
 
 
-def _att(t, quotes, phase="rth"):
+def _att(wkey, quotes, phase="rth", minute=0):
+    """窗口内第 minute 分钟开始、同分钟结束的一次尝试（ET 夏令时 = UTC−4）。"""
+    day, w = wkey.split("|")
+    hh, mm = map(int, sh.CONFIG["quote"]["windows"][w][0].split(":"))
+    t = f"{day}T{hh:02d}:{mm + minute:02d}:10-04:00"
     return {"started_at": t, "ended_at": t, "phase": phase, "underlying": None, "quotes": quotes}
 
 
@@ -185,7 +189,7 @@ ENTRY_OK = {"P|57": _q(0.30, 0.32), "P|56": _q(0.08, 0.10)}          # 保守收
 
 def _full_windows(cost_quotes):
     """cost_quotes: 标记窗口 → quotes；入场窗固定 ENTRY_OK。"""
-    w = {"2026-09-14|open": {"attempts": [_att("2026-09-14T14:05Z", ENTRY_OK)]}}
+    w = {"2026-09-14|open": {"attempts": [_att("2026-09-14|open", ENTRY_OK)]}}
     for k, q in cost_quotes.items():
         w[k] = {"attempts": [_att(k, q)]}
     return w
@@ -224,28 +228,28 @@ def test_r01_one_day_missing_and_missing_before_trigger():
 def test_r02_zero_size_and_errors_are_not_valid_entries():
     for bad, why in ((_q(0.30, 0.32, bs=0), "zero_size"), (_q(None, 0.32), "price_missing"),
                      (_q(0.30, 0.32, err="timeout"), "leg_error")):
-        w = {"2026-09-14|open": {"attempts": [_att("t", {"P|57": bad, "P|56": _q(0.08, 0.10)})]}}
+        w = {"2026-09-14|open": {"attempts": [_att("2026-09-14|open", {"P|57": bad, "P|56": _q(0.08, 0.10)})]}}
         x = sh.window_leg(_vrow(w), _leg(), "2026-09-14|open", "entry")
         assert x["status"] == "missing" and x["reasons"] == [why]
 
 
 def test_r02_retry_takes_first_valid_attempt_not_best():
     w = {"2026-09-14|open": {"attempts": [
-        _att("t1", {"P|57": _q(0.30, 0.32, bs=0), "P|56": _q(0.08, 0.10)}),     # 失败
-        _att("t2", {"P|57": _q(0.25, 0.27), "P|56": _q(0.08, 0.10)}),           # 第一次有效：收 15
-        _att("t3", {"P|57": _q(0.40, 0.42), "P|56": _q(0.08, 0.10)})]}}         # 更好但不许挑
+        _att("2026-09-14|open", {"P|57": _q(0.30, 0.32, bs=0), "P|56": _q(0.08, 0.10)}, minute=1),  # 失败
+        _att("2026-09-14|open", {"P|57": _q(0.25, 0.27), "P|56": _q(0.08, 0.10)}, minute=6),        # 第一次有效：收 15
+        _att("2026-09-14|open", {"P|57": _q(0.40, 0.42), "P|56": _q(0.08, 0.10)}, minute=11)]}}     # 更好但不许挑
     x = sh.window_leg(_vrow(w), _leg(), "2026-09-14|open", "entry")
-    assert x["status"] == "valid" and x["at"] == "t2" and x["credit"]["conservative"] == pytest.approx(15.0)
+    assert x["status"] == "valid" and x["at"].startswith("2026-09-14T10:06") and x["credit"]["conservative"] == pytest.approx(15.0)
 
 
 def test_off_hours_quotes_never_count():
-    w = {"2026-09-14|open": {"attempts": [_att("t", ENTRY_OK, phase="off_hours")]}}
+    w = {"2026-09-14|open": {"attempts": [_att("2026-09-14|open", ENTRY_OK, phase="off_hours")]}}
     assert sh.window_leg(_vrow(w), _leg(), "2026-09-14|open", "entry")["reasons"] == ["off_hours"]
 
 
 def test_r05_exit_cost_above_width_kept_raw():
     wide = {"P|57": _q(1.40, 1.50), "P|56": _q(0.30, 0.35)}         # 成本 120 > 宽 100
-    x = sh.window_leg(_vrow({"k": {"attempts": [_att("t", wide)]}}), _leg(), "k", "exit")
+    x = sh.window_leg(_vrow({"2026-09-15|open": {"attempts": [_att("2026-09-15|open", wide)]}}), _leg(), "2026-09-15|open", "exit")
     assert x["cost"] == pytest.approx(120.0) and x["exceeds_width"] is True
     m = _marks_all({"P|57": _q(0.10, 0.12), "P|56": _q(0.02, 0.03)}); m["2026-09-15|open"] = wide
     o = sh.settle_leg(_leg(), _vrow(_full_windows(m)), bars=BARS3)
@@ -292,6 +296,7 @@ def _quote_env(tmp_path, monkeypatch, depth_fn):
     monkeypatch.setattr(sc, "_phase_now", lambda: "rth")
     monkeypatch.setattr(sc, "_window_now", lambda w: True)
     monkeypatch.setattr(sc, "market_today", lambda: T)
+    monkeypatch.setattr(sc, "_now_iso", lambda: f"{T.isoformat()}T10:03:00-04:00")
     monkeypatch.setattr(lq, "fetch_depth", depth_fn)
     monkeypatch.setattr(lq, "fetch_stock_quotes", lambda syms: {})
     r = _row(); r["recorded_at"] = "2026-09-14T10:00:00+00:00"
@@ -370,3 +375,34 @@ def test_block_bootstrap_refuses_too_few_blocks():
     assert sh.date_block_bootstrap(g, block_days=5)[1] is None       # 需 ≥16 个日期
     g16 = {f"d{i:02d}": [0.1 * (i % 3)] for i in range(16)}
     assert sh.date_block_bootstrap(g16, iters=2000, block_days=5)[1] is not None
+
+
+def test_late_or_wrong_day_attempts_do_not_count():
+    """晚到（拖过窗口末）或日期对不上的尝试不计有效 —— 否则固定窗口会悄悄变成「任何时候」。"""
+    late = _att("2026-09-14|open", ENTRY_OK); late["ended_at"] = "2026-09-14T10:21:30-04:00"
+    x = sh.window_leg(_vrow({"2026-09-14|open": {"attempts": [late]}}), _leg(), "2026-09-14|open", "entry")
+    assert x["reasons"] == ["outside_window"]
+    other_day = _att("2026-09-15|open", ENTRY_OK)
+    x2 = sh.window_leg(_vrow({"2026-09-14|open": {"attempts": [other_day]}}), _leg(), "2026-09-14|open", "entry")
+    assert x2["reasons"] == ["outside_window"]
+    edge = _att("2026-09-14|open", ENTRY_OK, minute=20)                 # 10:20:10 仍在窗口（含结束分钟）
+    assert sh.window_leg(_vrow({"2026-09-14|open": {"attempts": [edge]}}), _leg(), "2026-09-14|open", "entry")["status"] == "valid"
+    utc = dict(_att("2026-09-14|open", ENTRY_OK), started_at="2026-09-14T14:05:00+00:00", ended_at="2026-09-14T14:06:00+00:00")
+    assert sh.in_window("2026-09-14|open", utc["started_at"], utc["ended_at"]), "UTC 时间戳换算到 ET 后判定"
+    assert not sh.in_window("2026-09-14|open", None, None)
+
+
+def test_quote_missing_opportunity_row_is_failure(tmp_path, monkeypatch):
+    """开盘窗时没有当日机会行 = 盘前 capture 失败，不得报 unchanged 并写 .ok。"""
+    import argparse
+    from undertow import shadow_cli as sc
+    monkeypatch.setattr(sc, "DIR", tmp_path)
+    monkeypatch.setattr(sc, "_phase_now", lambda: "rth")
+    monkeypatch.setattr(sc, "_window_now", lambda w: True)
+    monkeypatch.setattr(sc, "market_today", lambda: T)
+    st = tmp_path / "st.json"
+    rc = sc.cmd_quote(argparse.Namespace(instruments=["silver"], window="open", allow_off_hours=False, status_file=str(st)))
+    s_ = json.loads(st.read_text())
+    assert rc == 1 and s_["overall"] == "failed" and s_["counts"]["missing_rows"] == 1
+    rc2 = sc.cmd_quote(argparse.Namespace(instruments=["silver"], window="close", allow_off_hours=False, status_file=str(st)))
+    assert rc2 == 0 and json.loads(st.read_text())["overall"] == "unchanged", "收盘窗无应有任务是正常的"

@@ -406,3 +406,40 @@ def test_quote_missing_opportunity_row_is_failure(tmp_path, monkeypatch):
     assert rc == 1 and s_["overall"] == "failed" and s_["counts"]["missing_rows"] == 1
     rc2 = sc.cmd_quote(argparse.Namespace(instruments=["silver"], window="close", allow_off_hours=False, status_file=str(st)))
     assert rc2 == 0 and json.loads(st.read_text())["overall"] == "unchanged", "收盘窗无应有任务是正常的"
+
+
+def test_status_breakdown_surfaces_unknowns():
+    cheap = {"P|57": _q(0.10, 0.12), "P|56": _q(0.02, 0.03)}
+    m = _marks_all(cheap); del m["2026-09-15|open"]
+    row = dict(_vrow(_full_windows(m)), legs=[_leg()])
+    row["outcome"] = {"P-A": sh.settle_leg(_leg(), row, bars=BARS3)}
+    unsettled = dict(_vrow({}), legs=[_leg()], outcome=None)
+    bd = sh.status_breakdown([row, unsettled], "stop1x_twice_daily")
+    assert bd["status"] == {"path_unknown": 1, "unsettled": 1}
+    assert bd["marks"] == {"expected": 5, "valid": 4, "not_run": 1, "missing": 0}
+    snap = sh.status_breakdown([row], "snapshot_model")
+    assert snap["status"] == {"credit_missing": 1}, "快照无权利金不得标成正常的 stale_snapshot_quote"
+
+
+def test_settle_rederive_recomputes_outcome_keeps_raw(tmp_path, monkeypatch):
+    import argparse, types
+    from undertow import shadow_cli as sc
+    from undertow.collect import cboe_history as ch
+    monkeypatch.setattr(sc, "DIR", tmp_path)
+    ser = types.SimpleNamespace(dates=[b[0] for b in BARS3], highs=[b[1] for b in BARS3],
+                                lows=[b[2] for b in BARS3], closes=[b[3] for b in BARS3])
+    monkeypatch.setattr(ch.CboeHistorySource, "fetch_series", lambda self, inst: ser)
+    r = _row(); r["recorded_at"] = "2026-09-14T10:00:00+00:00"
+    for l in r["legs"]:
+        l["expiry"] = "2026-09-16"
+    r["windows"] = _full_windows({})
+    r["outcome"] = {l["leg_id"]: {"pnl": {"x": 999}} for l in r["legs"] if l["status"] == "candidate"}  # 旧派生
+    p = sc._path("silver", False)
+    jl.insert_frozen(p, r, key_field="key", frozen=sh.frozen_part)
+    ns = lambda **k: argparse.Namespace(instruments=["silver"], status_file=None, **k)
+    sc.cmd_settle(ns(rederive=False))
+    assert jl.load(p, "key")[0]["outcome"] == r["outcome"], "不加 --rederive 时已结算行不动"
+    sc.cmd_settle(ns(rederive=True))
+    new = jl.load(p, "key")[0]
+    assert new["windows"] == r["windows"] and new["rederived_at"]
+    assert all("quote_entry_expiry_intrinsic" in o["pnl"] for o in new["outcome"].values())

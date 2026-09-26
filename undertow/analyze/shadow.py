@@ -250,7 +250,8 @@ def build_opportunity(*, inst: str, sym: str, snap, session: date, spot: float, 
 def frozen_part(row: dict) -> dict:
     """事前冻结部分：除 entry/monitor/exits/outcome/identity.status 与 recorded_at 以外的一切。"""
     out = {k: v for k, v in row.items()
-           if k not in ("windows", "entry", "marks", "monitor", "exits", "outcome", "recorded_at", "settled_at")}
+           if k not in ("windows", "entry", "marks", "monitor", "exits", "outcome", "recorded_at", "settled_at",
+                        "rederived_at")}
     idt = dict(out.get("identity") or {})
     idt.pop("status", None); idt.pop("certified_at", None)
     out["identity"] = idt
@@ -395,6 +396,14 @@ def settle_leg(leg: dict, row: dict, *, bars: list, fee: float = CONFIG["fee_rou
            "pnl": {}, "max_risk": {}, "credit": {}, "status": {}}
 
     def put(basis, credit, cost, status="ok"):
+        # 有价却标 ok 才可信：缺权利金 / 权利金越出 (0, W) 必须在状态上显式可见，不能混进「正常」
+        if status in ("ok", "stale_snapshot_quote"):
+            if credit is None:
+                status = "credit_missing"
+            elif not (0 < credit < W):
+                status = "credit_outside_0_width"
+            elif cost is None:
+                status = "cost_missing"
         res["status"][basis] = status
         if credit is None or cost is None or not (0 < credit < W):
             res["pnl"][basis] = None; res["max_risk"][basis] = None; res["credit"][basis] = credit
@@ -522,6 +531,32 @@ def judge(lo, hi, *, min_useful: float = 0.0) -> str:
 def flow_aligned_side(row: dict):
     d = ((row.get("decision") or {}).get("flow") or {}).get("call_direction")
     return {"偏多": "P", "偏空": "C"}.get(d)
+
+
+def status_breakdown(rows: list[dict], basis: str) -> dict:
+    """某终点下所有候选腿的状态计数（用户可见，S01 验收：每种状态进报告，不只写日志）。
+
+    未结算的腿记「unsettled」；另汇总入场缺失原因与持仓标记覆盖（应有/有效/未运行/缺失）。
+    """
+    from collections import Counter
+    st_, reasons = Counter(), Counter()
+    marks = {"expected": 0, "valid": 0, "not_run": 0, "missing": 0}
+    for r in rows:
+        for l in r.get("legs", []):
+            if l.get("status") != "candidate":
+                continue
+            o = (r.get("outcome") or {}).get(l["leg_id"])
+            if not o:
+                st_["unsettled"] += 1
+                continue
+            st_[o["status"].get(basis, "absent")] += 1
+            ent = o.get("entry") or {}
+            for why in ent.get("reasons", []) if ent.get("status") == "missing" else []:
+                reasons[why] += 1
+            for k in marks:
+                marks[k] += (o.get("marks") or {}).get(k, 0)
+    return {"basis": basis, "status": dict(st_.most_common()), "entry_missing_reasons": dict(reasons.most_common()),
+            "marks": marks}
 
 
 def paired_summary(rows: list[dict], basis: str = CONFIG["primary_basis"],

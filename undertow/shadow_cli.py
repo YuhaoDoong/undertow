@@ -263,7 +263,10 @@ def cmd_settle(args) -> int:
                 if idt.get("status") == "provisional" and T <= last:
                     idt["status"] = "certified" if T in tdays else "non_trading"
                     idt["certified_at"] = _now_iso(); ch = True
-                if r["outcome"] is None:
+                rederive = getattr(args, "rederive", False) and r["outcome"] is not None
+                if r["outcome"] is None or rederive:
+                    # outcome 是从冻结的事前字段 + 原始盘口尝试 + 日线【派生】的，不是观测本身：
+                    # 派生逻辑修 bug 后可 --rederive 重算（S00：保留原始记录、重算派生结果），原始观测不动。
                     res, complete = {}, True
                     for l in r["legs"]:
                         if l["status"] != "candidate":
@@ -272,8 +275,10 @@ def cmd_settle(args) -> int:
                         if o is None:
                             complete = False; break
                         res[l["leg_id"]] = o
-                    if complete and res:
+                    if complete and res and not rederive:
                         r["outcome"] = res; r["settled_at"] = _now_iso(); ch = True
+                    elif complete and res and res != r["outcome"]:
+                        r["outcome"] = res; r["rederived_at"] = _now_iso(); ch = True
                 return ch
             try:
                 n = jl.update(p, fn, key_field=KEY, frozen=sh.frozen_part)
@@ -309,6 +314,15 @@ def cmd_report(args) -> int:
     bases = args.basis or [sh.CONFIG["primary_endpoint"]] + list(sh.CONFIG["secondary_endpoints"])
     subsets = [("两侧", None, False), ("put", ["P"], False), ("call", ["C"], False), ("顺增仓方向", None, True)]
     for basis in bases:
+        bd = sh.status_breakdown(rows_main, basis)
+        out[f"{basis}|status"] = bd
+        line = "，".join(f"{k} {v}" for k, v in bd["status"].items()) or "无候选腿"
+        extra = ""
+        if basis == sh.CONFIG["primary_endpoint"]:
+            m = bd["marks"]
+            extra = (f"；持仓标记 应有 {m['expected']} 有效 {m['valid']} 未运行 {m['not_run']} 缺失 {m['missing']}"
+                     + (f"；入场缺失原因 {bd['entry_missing_reasons']}" if bd["entry_missing_reasons"] else ""))
+        print(f"  {basis:30s} 状态：{line}{extra}")
         for b in sh.CONFIG["b_rules"]:
             for lab, sides, fa in subsets:
                 sm = sh.paired_summary(rows_main, basis=basis, b_rule=b, mode=mode, sides=sides, flow_aligned_only=fa)
@@ -354,6 +368,8 @@ def register(sub):
                    help="open=ET 10:00–10:20 入场与持仓标记；close=ET 15:30–15:45 持仓标记（止损/到期前平仓口径）")
     q.set_defaults(func=cmd_quote)
     s = ss.add_parser("settle", help="收盘后监控与到期结算"); s.add_argument("instruments", nargs="*")
+    s.add_argument("--rederive", action="store_true",
+                   help="对已结算行按当前派生逻辑重算 outcome（原始观测不动；变化时记 rederived_at）")
     s.add_argument("--status-file"); s.set_defaults(func=cmd_settle)
     r = ss.add_parser("report", help="配对统计"); r.add_argument("instruments", nargs="*")
     r.add_argument("--replay", action="store_true"); r.add_argument("--basis", nargs="*")

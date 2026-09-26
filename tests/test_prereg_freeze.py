@@ -3,8 +3,8 @@
 改这些文件是允许的，但必须同时写新的预登记版本（新文件、新版本号、看结果前冻结），
 并把本测试指向新版本 —— 否则「事前设计」会在不知不觉中被事后改掉。
 
-现行：dir-analysis-v1.1（2026-09-26，Codex 011）。v1 已被取代：它的代码守卫退役，
-但 v1 的文本与 JSON 必须保持原样（哈希记在 v1.1 JSON 的 supersedes 段），被取代的旧判断不静默覆盖。
+现行：dir-analysis-v1.2（2026-09-26，Codex 012）。v1、v1.1 已被取代：它们的代码守卫退役，
+但两版的文本与 JSON 必须保持原样（哈希记在 v1.2 JSON 的 supersedes 段），被取代的旧判断不静默覆盖。
 """
 import hashlib
 import inspect
@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PREREG = ROOT / "docs" / "prereg" / "2026-09-26_direction_v1.1.json"
+PREREG = ROOT / "docs" / "prereg" / "2026-09-26_direction_v1.2.json"
 
 _MSG = ("在预登记冻结后被改动。flow.py/依赖函数的无关改动：先确认分析结果在已记录样本上逐行不变，"
         "再追加修订记录并更新哈希；否则需要新的预登记版本（见 docs/prereg/ 修订规则）")
@@ -47,13 +47,14 @@ def test_direction_prereg_matches_code_constants():
 
 def test_superseded_v1_documents_preserved():
     sup = _doc()["supersedes"]
-    assert sup["version"] == "dir-analysis-v1-20260926" and sup["real_samples_seen"] == 0
+    assert sup["version"] == "dir-analysis-v1.1-20260926" and sup["real_samples_seen"] == 0
+    assert len(sup["sha256"]) == 4           # v1 与 v1.1 的文本和 JSON
     for rel, sha in sup["sha256"].items():
         assert hashlib.sha256((ROOT / rel).read_bytes()).hexdigest() == sha, f"被取代的 {rel} 不得改动"
 
 
-def test_v1_and_v1_1_share_design_constants():
-    """v1.1 只修实现：v1 冻结的设计常数必须原样保留。"""
+def test_v1_and_current_share_design_constants():
+    """v1.1/v1.2 不改设计常数：v1 冻结的常数必须原样保留（version/supersedes 以外）。"""
     v1 = json.loads((ROOT / "docs" / "prereg" / "2026-09-26_direction_v1.json").read_text("utf-8"))["analysis"]
     v11 = _doc()["analysis"]
     for k, v in v1.items():

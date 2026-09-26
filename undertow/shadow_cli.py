@@ -76,9 +76,12 @@ def _flow_identity(fr: dict, store, sym: str, fd) -> dict:
         return (datetime.fromtimestamp(ca, timezone.utc).isoformat() if ca else None), sha
     cur_at, cur_sha = snap_id(fd.isoformat())
     prev_at, prev_sha = snap_id(fr.get("prev_date"))
+    # Codex 012 R01：两份来源的抓取时刻都要已知才算「可得时刻」已知 —— 旧版 max() 跳过缺失值，
+    # 前一份没有抓取时刻时拿当前一份的时刻顶替，准入就排除不了前视。任一缺失 → available_at=None。
     return {"call_direction": fr.get("call_direction"), "source_snapshot_date": fd.isoformat(),
             "prev_snapshot_date": fr.get("prev_date"),
-            "available_at": max([x for x in (cur_at, prev_at) if x], default=None),
+            "source_captured_at": {"current": cur_at, "previous": prev_at},
+            "available_at": max(cur_at, prev_at) if (cur_at and prev_at) else None,
             "snapshot_sha": cur_sha, "prev_snapshot_sha": prev_sha,
             "ledger_row_sha": hashlib.sha256(json.dumps(fr, sort_keys=True, ensure_ascii=False, default=str)
                                              .encode()).hexdigest()[:16],
@@ -690,7 +693,7 @@ def cmd_chain(args) -> int:
 
 
 def cmd_direction(args) -> int:
-    """方向次要分析（预登记 dir-analysis-v1.1，docs/prereg/2026-09-26_direction_v1.1.md）。只读、纯报告。
+    """方向次要分析（预登记 dir-analysis-v1.2，docs/prereg/2026-09-26_direction_v1.2.md）。只读、纯报告。
 
     Codex 011 D01/D02：行不在这里预先过滤 —— 准入由 shadow_direction 自己判，拒绝按原因计入机会表。"""
     from undertow.analyze import shadow_direction as sd
@@ -711,7 +714,7 @@ def cmd_direction(args) -> int:
         print(f"  ⚠️ {len(other)} 行不是 {sd.ANALYSIS['base_config_version']}，不属于本分析")
     out = {}
     for inst in sh.CONFIG["pools"][sd.ANALYSIS["pool"]]:
-        rep = sd.instrument_report(rows, inst, as_of=as_of)
+        rep = sd.instrument_report(rows, inst, as_of=as_of, now=datetime.now(timezone.utc))
         out[inst] = rep
         print(f"  {inst}")
         for h in ("H-dir", "H-wall|dir"):
@@ -722,6 +725,13 @@ def cmd_direction(args) -> int:
                 print("                 拒绝原因：" + "；".join(f"{k} ×{v}" for k, v in op["reasons"].items()))
             print(f"                 配对 {x['n_pairs']}（无界 {x['n_unbounded']}，日期 {x['n_dates']}）"
                   f" 单侧界 [{fmt(ci.get('lo'))},{fmt(ci.get('hi'))}] → {x['verdict']}")
+            cov = op.get("coverage")
+            if cov:
+                fr = lambda k: f"{cov[k]['num']}/{cov[k]['den']}"
+                print(f"                 全日历覆盖：采集 {fr('collection')}，身份可审计 {fr('identity_auditable')}，"
+                      f"有方向 {fr('direction_present')}，有候选 {fr('candidate_present')}，"
+                      f"成熟有结果 {fr('matured_result_complete')}，端到端可配对 {fr('end_to_end_paired')}")
+            print(f"                 适用范围：{x['scope']['conditional']}；推广：{x['scope']['generalization']}")
         cs = rep["common_sample"]
         for rule in (sh.CONFIG["primary_b"], "A"):
             c = cs[rule]
@@ -838,7 +848,7 @@ def register(sub):
     ch = ss.add_parser("chain", help="开盘后近价全链快照（ET 10:15–10:35，入 git；只读）")
     ch.add_argument("instruments", nargs="*"); ch.add_argument("--allow-off-hours", action="store_true")
     ch.add_argument("--status-file"); ch.set_defaults(func=cmd_chain)
-    dr = ss.add_parser("direction", help="方向次要分析（预登记 dir-analysis-v1.1；只读报告）")
+    dr = ss.add_parser("direction", help="方向次要分析（预登记 dir-analysis-v1.2；只读报告）")
     dr.add_argument("--replay", action="store_true"); dr.add_argument("--output")
     dr.set_defaults(func=cmd_direction)
     e = ss.add_parser("exec", help="S05 账户风险预算账（私有，写 data/account/；理论预算，券商执行性未核实；只读）")

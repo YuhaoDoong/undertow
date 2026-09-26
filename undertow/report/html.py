@@ -2766,7 +2766,9 @@ def render_wall_spread(v, display_name: str = "", events=None) -> str:
         f'而唯一的逆势样本（call 侧，样本期白银 +9.7%）实测持有到期破墙率是 '
         f'<b>{ad_lo:.0%}~{ad_hi:.0%}</b>。<br>'
         'put 侧全程 0 破墙、年化 +400%~580%，那是样本期单边上涨送的，不是策略挣的。'
-        '<b>整套东西未经跌市验证。</b>'
+        '<b>整套东西未经跌市验证。</b><br>'
+        '表中「权利金/ROI」是<b>快照盘口模型</b>（中价往不利方向让 25%），未验证可成交；'
+        '「最大亏损」= 宽度 − 权利金，是定义风险，<b>不是券商保证金</b>。'
         '</div>')
     if not v.ok:
         return ('<div class="card"><h2>墙位卖方价差 <b>v3</b> · 今日无候选</h2>'
@@ -2810,14 +2812,15 @@ def render_wall_spread(v, display_name: str = "", events=None) -> str:
         f'{warn}'
         '<table><thead><tr><th>方向</th><th>卖/买</th><th class="r">到期</th>'
         '<th class="r">DTE</th><th class="r">墙位</th><th class="r">缓冲</th>'
-        '<th class="r">权利金</th><th class="r">占用</th><th class="r">ROI</th>'
+        '<th class="r">模型权利金</th><th class="r">最大亏损</th><th class="r">模型ROI</th>'
         '</tr></thead><tbody>'
         + rows(v.puts, "卖 put") + rows(v.calls, "卖 call") +
         '</tbody></table>'
         '<div class="sub" style="margin-top:8px;line-height:1.7">'
         '<b>出场规则（第三步定版）</b>：只在<b>收盘越过卖腿</b>时平仓；'
-        '换墙不平、浮盈不平。实测：破卖腿即平在逆势侧砍掉 76% 亏损，'
-        '顺势侧一次都不触发；而换墙即平两侧都亏，还把最差单笔从 −$2 恶化到 −$45。'
+        '换墙不平、浮盈不平。⛔ 旧版这里写「实测砍掉 76% 亏损」—— '
+        '那次回测用当天收盘触发、按当天盘前报价平仓，含前视，<b>已撤回</b>；'
+        '该规则的实际减损效果<b>未知</b>，待前瞻台账用真实盘口验证。'
         '<br>推导全过程见 <code>docs/wall_spread_3steps.md</code>。'
         '</div></div>')
 

@@ -26,7 +26,7 @@
 |---|---|
 | `macro.py` | 宏观背景：实际利率/美元/通胀预期 + 波动率指数 → 金银基本面驱动。<br>Real rates / USD / breakeven + vol index. |
 | `volregime.py` | 波动率环境：期权偏贵/偏便宜 → 波段级买方/卖方倾向。<br>Rich/cheap vol regime. |
-| `vrp_history.py` | 波动率溢价 VRP 跨周期稳定性检验（"这个卖方 edge 能否穿越牛熊"，只落盘存档、不进日报）。<br>Cross-regime VRP stability check (archived, not in daily report).<br>2026-09-25 `scripts/step6_vrp.py` 复用本模块按波动率状态拆：溢价在 ATR 扩张日均值≈0、尾巴恶化 4~8 倍；ATR 低分位是风险调整后最好的卖方环境；短到期（3~10 DTE）溢价比 30 天指数大一倍以上。见 `docs/wall_spread_3steps.md` 第六步。 |
+| `vrp_history.py` | 波动率溢价 VRP 跨周期稳定性检验（"这个卖方 edge 能否穿越牛熊"，只落盘存档、不进日报）。<br>Cross-regime VRP stability check (archived, not in daily report).<br>2026-09-26：短到期 VRP 研究改为 `analyze/vrp_research.py`（前收选 ATM、只收成熟窗口、描述与检验分栏）；旧「扩张日≈0、尾巴 4~8 倍、低 ATR 最好」为过度概括，已撤回。 |
 
 ## Backtest & aggregation / 回测与综合
 
@@ -46,7 +46,7 @@
 | `strategy.py` | 方向性情景参数化（期货）：方向随研判、位点随结构、缓冲随 ATR、实时层否决票。<br>Directional futures scenarios. |
 | `credit_spread.py` | 方向性信用价差：偏空→熊市看涨价差 / 偏多→牛市看跌价差（跟近端 bias）。<br>Directional credit spreads. |
 | `condor.py` | 铁鹰：区间震荡 + 偏卖方环境的规则化结构映射。<br>Iron condor for range/seller regimes. |
-| `wall_spread.py` | **墙位卖方价差 v3**（三步法定版，只激活白银；候选 ≠ 建议下单，生死线未过，见文件头）<br>**第四步（2026-09-25）**：技术指标能否提示破墙 —— `scripts/step4_filters.py` 在 15 品种 20 年日线上测，结论：方向类指标只是波动率代理、布林带宽扩张无效、只有 ATR 5 日扩张比 ≥1.3 跨簇复现（约 2×）；**未进模块、未设阈值**。详见 `docs/wall_spread_3steps.md` 第四步。 |
+| `wall_spread.py` | **墙位卖方价差 v3**（三步法定版，只激活白银；候选 ≠ 建议下单，生死线未过，见文件头）。<br>⛔ 2026-09-26 更正：第三步「破卖腿即平减损 76%」前视作废；第四~八步结论已按 Codex 审查降级 —— 墙「尚未检出增量支撑」（不是无用），ATR 扩张为探索性风险标签（不是已验证过滤器），增仓定侧为待检假说。现行研究方案：墙选腿 A vs 无 OI 距离 B 的前瞻配对影子账（`shadow_ledger.py`）。详见 `docs/wall_spread_3steps.md` 顶部更正注记与 `GPTcom/` 汇总报告。 |
 | `spread_ledger.py` | **卖方价差前瞻台账**：研报每次生成时 `record()` 当日候选（无候选也记，否则覆盖率无从统计），`backfill()` 事后用真实收盘回填破卖腿/损益。2026-09-25 起随行记录 `context`：决策日 ATR 扩张比/分位、布林带宽扩张比、近价局部墙（`decision_context` + `gamma.local_wall`）——**只记录不过滤**，攒第四/五步要的前瞻样本。 |
 
 ## Trade planning / 交易计划（盈亏比 + 斐波，波段交易纪律落地）

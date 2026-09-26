@@ -293,3 +293,20 @@ def test_默认口径保留当日到期供pin判定():
     import inspect
     from undertow.analyze.gamma import structural_walls
     assert inspect.signature(structural_walls).parameters["min_dte"].default == 0
+
+
+def test_日报卡片不再展示已撤回的76与占用称呼():
+    """W01（Codex A01/A14）：旧「砍掉 76% 亏损」来自前视回测，已撤回；
+    「占用」会被读成券商保证金，改称定义风险的「最大亏损」，权利金标为模型。"""
+    from undertow.report.html import render_wall_spread
+    c = ws.Candidate(kind="P", expiry=date(2026, 9, 4), dte=2, sell=55.0, buy=54.0,
+                     wall=55.0, offset=0, width_n=2, credit=12.0, width=100.0,
+                     spot=58.0, wall_rule="基准")
+    v = ws.Verdict(True, "测试", puts=[c], calls=[], params=ws.PARAMS["silver"])
+    html = render_wall_spread(v, "白银")
+    # 撤回说明本身会提到旧数字；要禁止的是未加限定的旧断言
+    assert "实测：破卖腿即平在逆势侧砍掉 76% 亏损" not in html
+    assert html.count("76%") == 1 and "已撤回" in html and "模型权利金" in html and "最大亏损" in html
+    assert ">占用<" not in html and "不是券商保证金" in html
+    src = pathlib.Path(ws.__file__).read_text("utf-8")
+    assert "作废" in src and "逆势砍掉 76% 亏损，顺势一次都不触发" not in src

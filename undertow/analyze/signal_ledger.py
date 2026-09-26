@@ -105,6 +105,16 @@ def _save(key: str, rows: list[dict], root: Path | None = None) -> Path:
 def record(key: str, *, on_date: str, prev_date: str | None, spot: float,
            probe: dict, signal=None, outlook_bias: str = "",
            root: Path | None = None) -> dict:
+    """加锁外壳（Codex 006 C05）：读→判首发→写 整段互斥，见 _record_unlocked。"""
+    from undertow.collect.asof_history import locked
+    with locked(_path(key, root)):
+        return _record_unlocked(key, on_date=on_date, prev_date=prev_date, spot=spot, probe=probe,
+                                signal=signal, outlook_bias=outlook_bias, root=root)
+
+
+def _record_unlocked(key: str, *, on_date: str, prev_date: str | None, spot: float,
+                     probe: dict, signal=None, outlook_bias: str = "",
+                     root: Path | None = None) -> dict:
     """记录某一日的强信号分量（同日覆盖）。**每个有前日可比的交易日都记，不只记候选。**
 
     outlook_bias 为空 = 当时的综合研判未知（例如 --rebuild 事后重放）：

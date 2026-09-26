@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -45,14 +46,33 @@ def atomic_write_json(path: Path, obj, *, indent=1) -> None:
         Path(name).unlink(missing_ok=True)
 
 
+@contextmanager
+def locked(path: Path):
+    """对 `<path>.lock` 加排他 flock，包住整段「读 → 合并 → 写主文件 → 追加修订」。
+
+    Codex 006 C05：原子替换只保证单次写入不出半截文件，不保证两个进程（定时研报 + 手动研报）
+    各自读到「还没有这个 key」、各自写入，后写者把先写的首发内容整体换掉且不留修订。
+    锁放在存储层（本模块），调用方不必各自实现。
+    """
+    import fcntl
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lp = path.with_name(path.name + ".lock")
+    with open(lp, "a") as fh:
+        fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
+
+
 def append_revisions(path: Path, revisions: list[dict]) -> None:
     if not revisions:
         return
     rp = path.with_name(path.name + ".revisions.jsonl")
+    # 调用方应已持有 locked(path)；这里整批一次 write，避免多行交错
+    blob = "".join(json.dumps(r, ensure_ascii=False, default=str) + "\n" for r in revisions)
     with rp.open("a", encoding="utf-8") as f:
-        for r in revisions:
-            f.write(json.dumps(r, ensure_ascii=False, default=str) + "\n")
-        f.flush(); os.fsync(f.fileno())
+        f.write(blob); f.flush(); os.fsync(f.fileno())
 
 
 def freeze_merge(old_rows: list[dict], new_rows: list[dict], key, *, volatile=()) -> tuple[list[dict], list[dict]]:
@@ -75,9 +95,14 @@ def freeze_merge(old_rows: list[dict], new_rows: list[dict], key, *, volatile=()
 
 
 def load_json(path: Path, default):
+    """读 JSON；不存在 → default。解析失败或顶层类型与 default 不同（如期望 list 却读到 dict）→ 抛错，
+    不当空表覆盖（C05：合法 JSON 不等于结构正确）。"""
     if not path.exists():
         return default
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        obj = json.loads(path.read_text(encoding="utf-8"))
     except (ValueError, UnicodeError) as e:
         raise ValueError(f"{path} 无法解析（{e}）；原文件未改，拒绝当作空表覆盖") from e
+    if not isinstance(obj, type(default)):
+        raise ValueError(f"{path} 顶层类型为 {type(obj).__name__}，期望 {type(default).__name__}；原文件未改")
+    return obj

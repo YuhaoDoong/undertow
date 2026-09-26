@@ -1351,34 +1351,35 @@ def _drop_incomplete_bar(series, today: date):
 def _score_trend(inst_key: str, date_s: str, score: float) -> str:
     """记录每日综合分并给出对昨趋势短句（同向比强弱、异向报翻转）。入 git 留痕。"""
     from undertow.collect.asof_history import (append_revisions, atomic_write_json,
-                                                load_json)
+                                                load_json, locked)
     hist_path = DATA_DIR / "history" / "outlook_scores.json"
-    data: dict = load_json(hist_path, {})     # 坏文件抛错，不再当空表覆盖
-    hist = data.setdefault(inst_key, {})
-    prev_dates = sorted(d for d in hist if d < date_s)
-    trend = ""
-    if prev_dates:
-        pv = hist[prev_dates[-1]]
-        arrow = f"综合分较上日 {pv:+.1f} → {score:+.1f}"
-        if pv * score > 0:
-            side = "空" if score < 0 else "多"
-            if abs(score) > abs(pv) + 0.05:
-                trend = f"{arrow}，看{side}增强"
-            elif abs(score) < abs(pv) - 0.05:
-                trend = f"{arrow}，看{side}减弱"
-            else:
-                trend = f"{arrow}，强度持平"
-        elif score == 0 or pv == 0 or pv * score < 0:
-            trend = f"{arrow}，方向较昨发生翻转/中性化"
-    # S04 首份冻结：同日已发布且分数不同 → 不覆盖，写修订
-    new = round(score, 2)
-    if date_s in hist and hist[date_s] != new:
-        append_revisions(hist_path, [{"key": [inst_key, date_s], "published": hist[date_s],
-                                      "revision": new, "revised_at": __import__("datetime").datetime.now().astimezone().isoformat()}])
-    else:
-        hist[date_s] = new
-        atomic_write_json(hist_path, data)
-    return trend
+    with locked(hist_path):                   # C05：读→判→写整段加锁，防两个进程各写一份首发
+        data: dict = load_json(hist_path, {})     # 坏文件抛错，不再当空表覆盖
+        hist = data.setdefault(inst_key, {})
+        prev_dates = sorted(d for d in hist if d < date_s)
+        trend = ""
+        if prev_dates:
+            pv = hist[prev_dates[-1]]
+            arrow = f"综合分较上日 {pv:+.1f} → {score:+.1f}"
+            if pv * score > 0:
+                side = "空" if score < 0 else "多"
+                if abs(score) > abs(pv) + 0.05:
+                    trend = f"{arrow}，看{side}增强"
+                elif abs(score) < abs(pv) - 0.05:
+                    trend = f"{arrow}，看{side}减弱"
+                else:
+                    trend = f"{arrow}，强度持平"
+            elif score == 0 or pv == 0 or pv * score < 0:
+                trend = f"{arrow}，方向较昨发生翻转/中性化"
+        # S04 首份冻结：同日已发布且分数不同 → 不覆盖，写修订
+        new = round(score, 2)
+        if date_s in hist and hist[date_s] != new:
+            append_revisions(hist_path, [{"key": [inst_key, date_s], "published": hist[date_s],
+                                          "revision": new, "revised_at": __import__("datetime").datetime.now().astimezone().isoformat()}])
+        else:
+            hist[date_s] = new
+            atomic_write_json(hist_path, data)
+        return trend
 
 
 def _archive_existing(path) -> None:
@@ -1406,13 +1407,38 @@ def _archive_existing(path) -> None:
     path.rename(backup)
 
 
-def _persist_vrp(key: str, h) -> None:
-    """VRP 跨周期结果落盘存档 —— 长周期数据「记录」，纳入 git 备份，不进每日报告分析。"""
-    d = DATA_DIR / "history" / "vrp"
-    d.mkdir(parents=True, exist_ok=True)
-    (d / f"{key}.json").write_text(
-        json.dumps(dataclasses.asdict(h), ensure_ascii=False, indent=2, default=str),
-        encoding="utf-8")
+def vrp_cache_record(h, *, iv_series, px_dates, px_closes, computed_at: str) -> dict:
+    """VRP 长周期结果的【最新缓存】记录（Codex 006 C05 分类）。
+
+    分类理由：它由公开的波动率指数与价格【全历史】每天整体重算，没有「当时发布、之后不可再得」的内容，
+    所以不是 as-of 档案（不走首发冻结 + 修订），而是可重算的 latest cache：允许覆盖，但必须
+    原子写入，并带输入与代码的指纹，事后能说清「这份数字是用哪批数据、哪版代码算的」。
+    ⚠️ 不能用来回测「当时知道什么」：数据源会修订历史，缓存只代表最后一次计算。
+    """
+    import hashlib
+    import inspect
+    from undertow.analyze import vrp_history
+    iv = sorted((str(d), v) for d, v in iv_series)
+    px = [(str(d), c) for d, c in zip(px_dates, px_closes)]
+    sha = lambda o: hashlib.sha256(json.dumps(o, default=str).encode()).hexdigest()[:16]
+    return {"schema": 2, "kind": "latest_cache",
+            "not_for_asof_backtest": True,
+            "computed_at": computed_at,
+            "inputs": {"iv": {"n": len(iv), "first": iv[0][0] if iv else None, "last": iv[-1][0] if iv else None,
+                              "sha": sha(iv)},
+                       "px": {"n": len(px), "first": px[0][0] if px else None, "last": px[-1][0] if px else None,
+                              "sha": sha(px)}},
+            "code_sha": hashlib.sha256(inspect.getsource(vrp_history).encode()).hexdigest()[:16],
+            "result": dataclasses.asdict(h)}
+
+
+def _persist_vrp(key: str, h, *, iv_series, px_dates, px_closes) -> None:
+    """VRP 跨周期结果落盘 —— 可重算的最新缓存（见 vrp_cache_record），原子写 + 回读校验。"""
+    from datetime import datetime as _dt, timezone as _tz
+    from undertow.collect.asof_history import atomic_write_json
+    rec = vrp_cache_record(h, iv_series=iv_series, px_dates=px_dates, px_closes=px_closes,
+                           computed_at=_dt.now(_tz.utc).isoformat())
+    atomic_write_json(DATA_DIR / "history" / "vrp" / f"{key}.json", rec, indent=2)
 
 
 def _persist_signal_probe(key: str, fa, strong_sig, outlook_bias: str) -> None:
@@ -1438,14 +1464,15 @@ def _persist_resonance(row: dict) -> None:
     forward_* 留空，日后由校准脚本按真实价格回填。
     """
     from undertow.collect.asof_history import (append_revisions, atomic_write_json,
-                                                freeze_merge, load_json)
+                                                freeze_merge, load_json, locked)
     p = DATA_DIR / "history" / "resonance" / f"{row['instrument']}.json"
-    rows = load_json(p, [])                   # 坏文件抛错，不再当空表覆盖
-    # S04 首份冻结（原为「同日覆盖」：9/26 一次手动运行把 9/25 盘前记录改成了盘后值）
-    merged, revs = freeze_merge(rows, [row], key=lambda r: r.get("date"))
-    merged.sort(key=lambda r: r.get("date", ""))
-    atomic_write_json(p, merged)
-    append_revisions(p, revs)
+    with locked(p):                           # C05：读→合并→写→修订整段加锁
+        rows = load_json(p, [])               # 坏文件抛错，不再当空表覆盖
+        # S04 首份冻结（原为「同日覆盖」：9/26 一次手动运行把 9/25 盘前记录改成了盘后值）
+        merged, revs = freeze_merge(rows, [row], key=lambda r: r.get("date"))
+        merged.sort(key=lambda r: r.get("date", ""))
+        atomic_write_json(p, merged)
+        append_revisions(p, revs)
 
 
 def cmd_live(args) -> int:
@@ -2008,7 +2035,8 @@ def cmd_report(args) -> int:
                         px_ser = px_src.fetch_series(inst, use_cache=not args.no_cache)
                         _persist_vrp(inst.key, assess_vrp_history(
                             iv_series=iv_ser, px_dates=px_ser.dates,
-                            px_closes=px_ser.closes, index_name=inst.vol_index))
+                            px_closes=px_ser.closes, index_name=inst.vol_index),
+                            iv_series=iv_ser, px_dates=px_ser.dates, px_closes=px_ser.closes)
                 except Exception as ve:
                     print(f"[提示] {inst.key} 波动率历史跳过: {type(ve).__name__}: {ve}",
                           file=sys.stderr)

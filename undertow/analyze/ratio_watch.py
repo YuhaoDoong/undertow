@@ -120,23 +120,24 @@ def save(rows: list[RatioRow]) -> int:
     原为「按日期覆盖」：2026-09-26 一次只跑白银的手动研报把 9/25 金银比记录的黄金侧写成 null。
     坏文件仍隔离为 .corrupt（原逻辑），但从空表重建时同样走冻结。返回本次新写入行数。
     """
-    from undertow.collect.asof_history import append_revisions, atomic_write_json, freeze_merge
+    from undertow.collect.asof_history import append_revisions, atomic_write_json, freeze_merge, locked
     STORE.parent.mkdir(parents=True, exist_ok=True)
-    old = []
-    if STORE.exists():
-        try:
-            old = json.loads(STORE.read_text())
-        except Exception as e:
-            q = STORE.with_suffix(".corrupt")
-            STORE.rename(q)
-            print(f"[比值观察] 台账损坏（{type(e).__name__}），已隔离为 {q.name}，从空表重建")
-            old = []
-    new = [asdict(r) for r in rows]
-    before = {(r.get("date"), r.get("pair")) for r in old}
-    merged, revs = freeze_merge(old, new, key=lambda r: (r.get("date"), r.get("pair")))
-    merged.sort(key=lambda r: (r.get("date", ""), r.get("pair", "")))
-    atomic_write_json(STORE, merged)
-    append_revisions(STORE, revs)
+    with locked(STORE):                       # C05：读→合并→写→修订整段加锁
+        old = []
+        if STORE.exists():
+            try:
+                old = json.loads(STORE.read_text())
+            except Exception as e:
+                q = STORE.with_suffix(".corrupt")
+                STORE.rename(q)
+                print(f"[比值观察] 台账损坏（{type(e).__name__}），已隔离为 {q.name}，从空表重建")
+                old = []
+        new = [asdict(r) for r in rows]
+        before = {(r.get("date"), r.get("pair")) for r in old}
+        merged, revs = freeze_merge(old, new, key=lambda r: (r.get("date"), r.get("pair")))
+        merged.sort(key=lambda r: (r.get("date", ""), r.get("pair", "")))
+        atomic_write_json(STORE, merged)
+        append_revisions(STORE, revs)
     return sum(1 for r in new if (r.get("date"), r.get("pair")) not in before)
 
 

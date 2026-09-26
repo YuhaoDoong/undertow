@@ -3639,13 +3639,18 @@ def cmd_serve(args) -> int:
                                     capital=capital, question=question or "", mode=mode,
                                     pre_trade=pt, asof=today)
 
+    from undertow.consult.server import NonLoopbackBind
     try:
         httpd = serve(build_packet, build_positions, host=args.host, port=args.port)
+    except NonLoopbackBind as e:
+        print(f"[拒绝启动] {e}", file=sys.stderr)
+        return 2
     except OSError as e:
         print(f"[启动失败] {e}（端口可能被占用，换 --port）", file=sys.stderr)
         return 2
-    url = f"http://{args.host}:{args.port}"
-    print(f"undertow 咨询 API 已启动（只读，仅本机）：{url}", file=sys.stderr)
+    bh, bp = httpd.server_address[:2]                    # 以实际绑定为准，不复述参数
+    url = f"http://{'[' + bh + ']' if ':' in bh else bh}:{bp}"
+    print(f"undertow 咨询 API 已启动（只读，绑定 {bh}，仅本机回环；无认证）：{url}", file=sys.stderr)
     print(f"  {url}/            端点清单", file=sys.stderr)
     print(f"  {url}/consult?q=这个价差该平还是展期   完整咨询包", file=sys.stderr)
     print(f"  {url}/prompt?q=...  只取 prompt 文本（喂给任意 LLM）", file=sys.stderr)
@@ -3805,7 +3810,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     psv = sub.add_parser("serve", help="本地只读 HTTP API：把咨询上下文包暴露给其它 AI 接入（localhost）")
     psv.add_argument("--port", type=int, default=8787, help="端口（默认 8787）")
-    psv.add_argument("--host", default="127.0.0.1", help="绑定地址（默认 127.0.0.1，仅本机）")
+    psv.add_argument("--host", default="127.0.0.1",
+                     help="绑定地址：只接受 127.0.0.1 / ::1 / localhost；其它地址拒绝启动（服务无认证）")
     psv.set_defaults(func=cmd_serve)
 
     psl = sub.add_parser("soul", help="交易灵魂档案：你的交易体系/铁律/弱点；--check 核当前持仓是否破戒")

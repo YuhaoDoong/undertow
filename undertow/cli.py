@@ -58,6 +58,7 @@ from undertow.report import markdown as report_mod
 from undertow.report import viz
 from undertow.analyze.family import check as _family_check
 from undertow.analyze.indicators import build as _build_labels
+from undertow.report.html import _esc as _html_esc
 from undertow.report.html import (render_report_html, render_index_html,
                           render_wall_layers_section,
                           render_wall_history,
@@ -1203,9 +1204,61 @@ def _save_snapshot_dedup(store, inst, sym, payload, today):
                         return None, True
                 elif materially_same(prev, curr):
                     return store.path_of("options", sym, today), True
+                else:
+                    # ③ 盘前快照不得被【非盘前】抓取覆盖（2026-09-26 W02 发现）：
+                    # 同日去重原规则是「物质内容变了就覆盖」，而盘中 volume 一直在涨，
+                    # 于是 ET 13:10 的一次手动 snapshot 把 06:00 的盘前快照覆盖成盘中快照 ——
+                    # 决策依据被换掉，前瞻台账随即判它「盘中抓取、不可认证」。
+                    # 盘前→盘前仍允许覆盖（早时点可能撞上结算未落地的残缺链）。
+                    # 非盘前的新数据另存 options_intraday，不丢。
+                    import time as _time
+                    from undertow.core.clock import PRE, capture_phase
+                    old_ca = store.captured_at("options", sym, today)
+                    if (old_ca is not None and capture_phase(old_ca) == PRE
+                            and capture_phase(_time.time()) != PRE):
+                        store.save("options_intraday", sym, payload, on_date=today)
+                        print(f"[保护] {inst.key} 今日已有盘前快照，非盘前抓取另存 options_intraday，"
+                              "不覆盖决策用快照", file=sys.stderr)
+                        return store.path_of("options", sym, today), True
     except Exception:
         pass  # 判定失败不应阻断落盘（宁可多存）
     return store.save("options", sym, payload, on_date=today), False
+
+
+def _certify_report_session(store, px_src, inst, curr_date_s, today, *,
+                            replay: bool, no_cache: bool) -> dict:
+    """本品种当前快照可用于哪个交易日：captured_at + ETF 日线日历 → 三态认证。
+
+    日历取该 ETF 已完成日线（回放时截到 today 之前，不得看到未来）。
+    取不到 captured_at 或日线时如实返回 unmappable，不退回文件名日期。
+    """
+    from undertow.core.clock import certify_session
+    ca = None
+    if curr_date_s:
+        try:
+            ca = store.captured_at("options", inst.options.symbol,
+                                   date.fromisoformat(curr_date_s))
+        except Exception:
+            ca = None
+    tdays: list = []
+    try:
+        ser = px_src.fetch_series(inst, use_cache=not no_cache)
+        tdays = [d for d in ser.dates if (d < today if replay else True)]
+    except Exception as e:
+        return {"session": None, "status": "unmappable",
+                "source": f"trading_calendar_unavailable: {type(e).__name__}",
+                "captured_at": ca}
+    out = certify_session(ca, tdays)
+    out["captured_at"] = ca
+    return out
+
+
+def _sess_meta_row(meta: dict, curr_date_s: str | None) -> dict:
+    from datetime import datetime as _dt, timezone as _tz
+    ca = meta.get("captured_at")
+    return {"snapshot_file_date": curr_date_s,
+            "captured_at": _dt.fromtimestamp(ca, _tz.utc).isoformat() if ca else None,
+            "status": meta.get("status"), "source": meta.get("source")}
 
 
 def _load_curr_prev_snapshot(store, source, inst, today, *, no_cache, no_snapshot,
@@ -1640,6 +1693,7 @@ def cmd_report(args) -> int:
         print(e, file=sys.stderr)
         return 2
 
+    ledger_issues: list[dict] = []   # W02：台账失败/冲突，进状态文件
     written = []
 
     failed: list = []
@@ -1654,6 +1708,11 @@ def cmd_report(args) -> int:
         # 不初始化的话某个分支没走到就是 NameError —— 会被外层 except 接住变成
         # 「整份研报失败」，为一个命名用的变量丢掉一份研报不值。
         px_dates: list = []
+        # W02（Codex A10）：决策日上下文【每个品种独立】产生。旧版 _exec_day 只在成本闸门
+        # 的看涨/看跌分支里赋值，墙价差与台账却无条件使用 —— 方向中性时 NameError（被吞成
+        # 「候选失败」），或沿用循环里上一个品种的日期。
+        _exec_day = None
+        _sess_meta: dict = {}
         try:
             history = cot_src.fetch_history(inst, lookback=lookback, use_cache=not args.no_cache)
             an = analyze(history)
@@ -1662,6 +1721,10 @@ def cmd_report(args) -> int:
             curr, prev, prev_date, curr_date_s = _load_curr_prev_snapshot(
                 store, opt_src, inst, today, no_cache=args.no_cache,
                 no_snapshot=args.no_snapshot, replay=bool(replay))
+            _sess_meta = _certify_report_session(store, px_src, inst, curr_date_s, today,
+                                                 replay=bool(replay), no_cache=args.no_cache)
+            _exec_day = _sess_meta["session"] or (date.fromisoformat(curr_date_s)
+                                                  if curr_date_s else today)
 
             # —— 真实商品期货价：比值 = 期货价/ETF价，换算研报里所有位点（免乘数漂移）——
             # ⚠️ 2026-09-03 修：原来用 `real_price / curr.spot`，两者**不同步** ——
@@ -2017,9 +2080,7 @@ def cmd_report(args) -> int:
             cost_html = ""
             try:
                 if _ti and _ti.get("side") in ("看涨", "看跌"):
-                    # 可执行日 = 快照日（不是 obs_day）：DTE 必须按下单日算
-                    _exec_day = (date.fromisoformat(curr_date_s)
-                                 if curr_date_s else today)
+                    # 可执行日 = 本品种认证后的 session（见循环开头），DTE 按下单日算
                     _cands = cost_candidates(curr, curr.spot, _ti["side"], _exec_day,
                                              decidable=_ti["decidable"])
                     cost_html = render_cost_gate(
@@ -2222,11 +2283,20 @@ def cmd_report(args) -> int:
                         print(f"⚠️ {inst.key} 台账上下文失败：{type(e).__name__}: {e}",
                               file=sys.stderr)
                         _ctx["error"] = f"{type(e).__name__}: {e}"[:120]
-                    _sl.record(inst.key, inst.options.symbol, _exec_day,
-                               _ws_spot, _ws_v, context=_ctx)
+                    if _sess_meta.get("status") == "unmappable":
+                        raise ValueError(f"快照 session 无法认证（{_sess_meta.get('source')}），"
+                                         "不计入前瞻台账")
+                    _sl.record(inst.key, inst.options.symbol, _sess_meta["session"],
+                               _ws_spot, _ws_v, context=_ctx,
+                               session_meta=_sess_meta_row(_sess_meta, curr_date_s),
+                               root=_sl.REPLAY_DIR if replay else None)
                 except Exception as e:
-                    print(f"⚠️ {inst.key} 价差台账落盘失败：{type(e).__name__}: {e}",
-                          file=sys.stderr)
+                    # 失败必须进报告卡片与任务状态文件 —— 只写 stderr 在无人值守时等于没人知道
+                    _msg = f"{type(e).__name__}: {e}"[:200]
+                    ledger_issues.append({"instrument": inst.key, "error": _msg})
+                    print(f"⚠️ {inst.key} 价差台账落盘失败：{_msg}", file=sys.stderr)
+                    _ws_html += (f'<div class="sub" style="color:#cf222e;margin-top:6px">'
+                                 f'⚠️ 前瞻台账未写入：{_html_esc(_msg)}</div>')
             except Exception as e:
                 print(f"⚠️ {inst.key} 卖方价差候选失败：{type(e).__name__}: {e}",
                       file=sys.stderr)
@@ -2301,7 +2371,7 @@ def cmd_report(args) -> int:
     _write_status(getattr(args, "status_file", None), {
         "command": "report", "date": str(today), "overall": _ov,
         "n_ok": len(_ok), "n_failed": len(failed),
-        "ok": _ok, "failed": failed})
+        "ok": _ok, "failed": failed, "ledger_issues": ledger_issues})
 
     if not written:
         print("没有生成任何报告。", file=sys.stderr)
@@ -3216,6 +3286,17 @@ def cmd_signals(args) -> int:
                                           highs=getattr(ser, "highs", None) or None,
                                           lows=getattr(ser, "lows", None) or None)
             print(f"  {key:<8} 回填 {filled} 行，仍有 {pending} 个前瞻格未到期")
+            # 卖方价差前瞻台账（spread_ledger）：9/2 起逐日记录，但回填此前从未被任何入口调用
+            # —— 7 天候选一笔都没结算（2026-09-26 W02 发现）。这里一并认证 session、回填到期结果。
+            try:
+                from undertow.analyze import spread_ledger as _spl
+                if (_spl.DIR / f"{key}.jsonl").exists():
+                    cc = _spl.certify(key, list(ser.dates))
+                    f2, p2 = _spl.backfill(key, {d.isoformat(): c for d, c in zip(ser.dates, ser.closes)})
+                    print(f"  {key:<8} 价差台账：认证 {cc['certified']}、非交易日 {cc['non_trading']}、"
+                          f"待认证 {cc['still_provisional']}；回填 {f2} 个候选，{p2} 个未到期")
+            except Exception as e:
+                print(f"[警告] {key} 价差台账认证/回填失败：{type(e).__name__}: {e}", file=sys.stderr)
 
     rows = sl.load_all(keys)
     if not rows:

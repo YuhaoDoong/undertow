@@ -186,6 +186,11 @@ def _decision_fields(row: dict) -> dict:
     out = {key: value for key, value in row.items()
            if key not in ("recorded_at", "candidates")}
     out.setdefault("context", {})
+    # session_meta.status 会被 certify() 事后从 provisional 升级；它不是事前输入，
+    # 不能因此让同日重跑判冲突。captured_at / session / source 仍参与比较。
+    if isinstance(out.get("session_meta"), dict):
+        out["session_meta"] = {k: v for k, v in out["session_meta"].items()
+                               if k not in ("status", "certified_at")}
     out["candidates"] = [{key: value for key, value in c.items()
                           if key not in ("settle", "broke", "pnl")}
                          for c in row["candidates"]]
@@ -224,13 +229,21 @@ def decision_context(highs, lows, closes, dates, session: date) -> dict:
             "bb_width_20": _r(bw[-1]), "bb_expand_5": _ratio(bw)}
 
 
+REPLAY_DIR = DIR / "replay"
+
+
 def record(inst: str, sym: str, session: date, spot: float, verdict,
-           *, root: pathlib.Path | None = None, context: dict | None = None) -> pathlib.Path:
+           *, root: pathlib.Path | None = None, context: dict | None = None,
+           session_meta: dict | None = None) -> pathlib.Path:
     """冻结某品种某可交易日的首份推荐。相同输入幂等，变化必须显式解决。
 
     spot 必须是决策价（C[可交易日前一交易日] 收盘），与回测口径一致。
     context 是决策日的波动率状态与近墙（decision_context + gamma.local_wall），
     只记录不参与判定；旧行没有这个字段，load/backfill 照常。
+    session_meta（2026-09-26，Codex A10）：snapshot_file_date / captured_at /
+    status(certified|provisional) / source。**文件名日期不再冒充可交易日。**
+    旧行没有此字段 → 在 summarize 里归为「身份未认证」，不计入前瞻主样本。
+    回放调用方必须传 root=REPLAY_DIR，不得写真实前瞻账。
     """
     row = {
         "date": session.isoformat(), "inst": inst, "sym": sym,
@@ -238,6 +251,7 @@ def record(inst: str, sym: str, session: date, spot: float, verdict,
         "spot": round(float(spot), 4),
         "ok": bool(verdict.ok), "reason": verdict.reason,
         "context": dict(context or {}),
+        **({"session_meta": dict(session_meta)} if session_meta else {}),
         "params": {k: (list(v) if isinstance(v, tuple) else v)
                    for k, v in (verdict.params or {}).items()},
         "candidates": [
@@ -320,8 +334,13 @@ def summarize(inst: str, *, root: pathlib.Path | None = None) -> dict:
                     if any(c.get("pnl") is not None for c in r["candidates"])}
     pending = sum(c.get("pnl") is None for r in rows for c in r["candidates"])
     broke = sum(1 for c in done if c.get("broke"))
+    identity = {}
+    for r in rows:
+        k = prospective_status(r)
+        identity[k] = identity.get(k, 0) + 1
     return {
         "basis": "hypothetical_candidates_hold_to_expiry",
+        "identity": identity,
         "note": ("候选报价假设成交、持有到期的模型损益，非实盘；不含逐日破腿退出。"
                  "同日多候选不是独立样本；不同决策日的持有期也可能重叠。"
                  + ("尚无已回填的候选。" if not done else "")),
@@ -340,3 +359,51 @@ def summarize(inst: str, *, root: pathlib.Path | None = None) -> dict:
         "put": sum(1 for c in done if c["kind"] == "P"),
         "call": sum(1 for c in done if c["kind"] == "C"),
     }
+
+
+def certify(inst: str, trading_days: list, *, root: pathlib.Path | None = None) -> dict:
+    """把 provisional 行按已完成的日线日历升级为 certified，或判为 non_trading。
+
+    只改 session_meta.status 与 certified_at，不动任何事前字段与回填结果。
+    日历还没覆盖到的行保持 provisional（不猜）。返回各状态计数。
+    """
+    tdays = set(trading_days)
+    last = max(trading_days) if trading_days else None
+    counts = {"certified": 0, "non_trading": 0, "still_provisional": 0}
+    with _locked_path(inst, root) as path:
+        rows = _load_path(path, inst)
+        changed = False
+        for r in rows:
+            sm = r.get("session_meta")
+            if not isinstance(sm, dict) or sm.get("status") != "provisional":
+                continue
+            sess = date.fromisoformat(r["date"])
+            if last is None or sess > last:
+                counts["still_provisional"] += 1
+                continue
+            sm["status"] = "certified" if sess in tdays else "non_trading"
+            sm["certified_at"] = datetime.now(timezone.utc).isoformat()
+            counts["certified" if sess in tdays else "non_trading"] += 1
+            changed = True
+        if changed:
+            _atomic_write(path, rows, inst)
+    return counts
+
+
+def prospective_status(row: dict) -> str:
+    """一行能否计入前瞻主样本：prospective / late_record / uncertified / legacy。
+
+    prospective 需同时满足：session 已认证；首份记录时刻早于该 session 09:30 ET。
+    迟到生成（开盘后才落盘）的候选当时并不可用于开盘决策，只能单列。
+    """
+    from undertow.core.clock import is_before_open
+    sm = row.get("session_meta")
+    if not isinstance(sm, dict):
+        return "legacy"                       # 9/26 前旧行：文件日期冒充可交易日
+    if sm.get("status") != "certified":
+        return "uncertified"
+    ra = row.get("recorded_at")
+    if not ra:
+        return "uncertified"
+    ts = datetime.fromisoformat(ra).timestamp()
+    return "prospective" if is_before_open(ts, date.fromisoformat(row["date"])) else "late_record"

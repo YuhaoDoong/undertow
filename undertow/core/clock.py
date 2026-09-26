@@ -115,3 +115,44 @@ def sessions_between(last: date, today: date) -> int:
         if d.weekday() < 5:
             n += 1
     return n
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# session 认证：前瞻台账的「这份候选能用于哪个交易日」
+# ═══════════════════════════════════════════════════════════════════════════
+# Codex A10（2026-09-26）：日报把快照【文件名日期】直接当可交易日写进台账，
+# 与研究脚本用 captured_at → decision_session 的口径不一致；且每日凌晨运行时，
+# 日线日历（来自已完成的日线）还没有"今天"这一根，decision_session 会返回 None。
+# 不能猜：用工作日推一个日期冒充已认证，休市日就会被当成交易日。
+# 所以分三态：certified（日历覆盖内认证）/ provisional（日历尚未覆盖、按工作日暂定，
+# 待日线出来后由 spread_ledger.certify 升级或判为非交易日）/ unmappable（盘中抓取等，
+# 不可计入前瞻）。
+CERTIFIED, PROVISIONAL, UNMAPPABLE = "certified", "provisional", "unmappable"
+MARKET_OPEN = (9, 30)
+
+
+def certify_session(captured_at: float | None, trading_days: list[date]) -> dict:
+    """返回 {"session": date|None, "status": 三态之一, "source": 说明}。纯函数。"""
+    if captured_at is None:
+        return {"session": None, "status": UNMAPPABLE, "source": "missing_captured_at"}
+    d = datetime.fromtimestamp(captured_at, ET).date()
+    covered = bool(trading_days) and d <= trading_days[-1]
+    if covered:
+        s = decision_session(captured_at, trading_days)
+        if s is not None:
+            return {"session": s, "status": CERTIFIED, "source": "trading_calendar"}
+    phase = capture_phase(captured_at)
+    # 日历内的非交易日由 decision_session 先行顺延（见上），这里的盘中即真盘中
+    if phase == INTRADAY and (not covered or d in trading_days):
+        return {"session": None, "status": UNMAPPABLE, "source": "intraday_capture"}
+    # 目标交易日落在日历之外（今天盘前 / 最后一根之后的盘后或周末）：按工作日暂定
+    nxt = d if (phase == PRE and d.weekday() < 5 and not covered) else d + timedelta(days=1)
+    while nxt.weekday() >= 5:
+        nxt += timedelta(days=1)
+    return {"session": nxt, "status": PROVISIONAL, "source": "weekday_uncertified"}
+
+
+def is_before_open(unix_ts: float, session: date) -> bool:
+    """unix_ts 是否早于 session 当日 09:30 ET —— 判断记录是否真的「事前」。"""
+    t = datetime.fromtimestamp(unix_ts, ET)
+    return (t.date(), (t.hour, t.minute)) < (session, MARKET_OPEN)

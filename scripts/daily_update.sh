@@ -230,12 +230,19 @@ try:
     d = json.load(open(sys.argv[1], encoding="utf-8"))
     if d.get("schema") != 1:
         raise ValueError("schema")
-    print(f"{d.get('overall','crashed')}|{','.join(d.get('failed', []))}")
+    li = ";".join(f"{i.get('instrument')}:{i.get('error','')[:80]}" for i in d.get("ledger_issues", []))
+    print(f"{d.get('overall','crashed')}|{','.join(d.get('failed', []))}|{li}")
 except Exception:
-    print("crashed|")
+    print("crashed||")
 PYEOF
 )
-RPT_OVERALL="${RPT_JSON%%|*}"; RPT_BAD="${RPT_JSON#*|}"
+RPT_OVERALL="${RPT_JSON%%|*}"; _R="${RPT_JSON#*|}"
+RPT_BAD="${_R%%|*}"; RPT_LEDGER="${_R#*|}"
+# W02（Codex A02/A10）：前瞻台账写入失败/同日冲突不影响研报生成，但必须出声 ——
+# 台账是不可再生的事前记录，缺一天就是永久缺一天。只写 stderr 在无人值守时等于没人知道。
+if [[ -n "$RPT_LEDGER" ]]; then
+    alert "⚠️ 前瞻台账未写入（ET $ET_NOW）" "$RPT_LEDGER"
+fi
 echo "[状态] report overall=$RPT_OVERALL rc=$RPT_RC"
 case "$RPT_OVERALL" in
   crashed)

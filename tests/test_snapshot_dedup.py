@@ -164,3 +164,24 @@ def test_dedup_is_announced_not_silent(capsys, store, monkeypatch):
     err = capsys.readouterr().err
     assert "去重" in err and "gold" in err, f"同日去重必须打印出来：{err!r}"
     print("PASS test_dedup_is_announced_not_silent")
+
+
+def test_intraday_capture_never_overwrites_premarket(store, monkeypatch):
+    """盘前快照是决策依据，盘中抓取（volume 在涨 → 物质内容「变了」）不得覆盖它。
+
+    2026-09-26 实测：ET 13:10 一次手动 snapshot 把 06:00 的 SLV 盘前快照覆盖成盘中快照，
+    前瞻台账随即判它不可认证。盘中数据另存 options_intraday，不丢。
+    """
+    import time as _t
+    from datetime import datetime
+    from undertow.core.clock import ET
+    pre = datetime(2026, 9, 24, 6, 0, tzinfo=ET).timestamp()
+    mid = datetime(2026, 9, 24, 13, 10, tzinfo=ET).timestamp()
+    store.save("options", "GLD", _payload(BASE), on_date=TODAY, captured_at=pre)
+    monkeypatch.setattr(_t, "time", lambda: mid)
+    more_vol = [(400.0, "C", 1000, 555), (390.0, "P", 800, 31)]
+    p, sk = cli._save_snapshot_dedup(store, _Inst, "GLD", _payload(more_vol), TODAY)
+    assert sk is True
+    assert store.captured_at("options", "GLD", TODAY) == pre, "盘前快照被覆盖"
+    assert store.load("options_intraday", "GLD", TODAY) is not None, "盘中数据必须另存"
+    print("PASS test_intraday_capture_never_overwrites_premarket")

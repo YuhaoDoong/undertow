@@ -6,7 +6,8 @@
 >   修后重算见 `data/history/wall_spread/rerun_20260926/`（含 COMPARISON.md 与输入 manifest）。
 > - 现行主实验：前瞻配对影子账 `undertow shadow ...`（墙选腿 A vs 无 OI 距离 B），已接入 daily_update.sh（capture/settle）
 >   与 session_hooks.sh 窗口④⑤（开盘窗 ET 10:00–10:20；收盘窗 = 核心收市前 30~15 分钟，由 `shadow windows` 按预存日历给出）。
->   当前版本 **shadow-v4-20260926**（Codex 006）：主比较 A vs B1，**唯一主终点「到期前最后交易日收盘窗整体平仓」**；
+>   当前版本 **shadow-v5-20260926**（Codex 006/007）：主比较 A vs B1，**唯一主终点「到期前最后交易日收盘窗的退出政策」**
+>   （长腿买价为 0 → 只买回短腿，残腿到期虚值记 0、实值处置未知只有上界；A−B 按区间传播）；S02 机会分母与三均值已在 report；
 >   三池（ETF/杠杆 ETF/个股）分开报告；交易日与窗口来自 `core/market_calendar.py`（NYSE，覆盖至 2027-03-31，到期前需续）；
 >   出场两腿都须合格；各终点独立成熟；块 bootstrap 沿日历；12/31 前一切判定为探索。
 >   配置 `analyze/shadow.CONFIG`，改动须升版本；首个前瞻样本 2026-09-28。

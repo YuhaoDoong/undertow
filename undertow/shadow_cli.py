@@ -320,6 +320,51 @@ def prospective_ok(r: dict) -> bool:
             and is_before_open(datetime.fromisoformat(r["recorded_at"]).timestamp(), date.fromisoformat(r["session"])))
 
 
+def _high_vol_days(cfg, insts) -> set | None:
+    """各品种 |日收益| ≥ 自身近一年 70 分位的交易日（AGENTS.md：大波动门槛按品种自身分位定）。
+    描述缺失是否集中在大波动日用；取数失败 → None（报告写「未知」，不当作没有集中）。"""
+    from undertow.collect.cboe_history import CboeHistorySource
+    src, out = CboeHistorySource(), set()
+    try:
+        for k in insts:
+            ser = src.fetch_series(cfg.get(k))
+            rets = [(ser.dates[i], abs(ser.closes[i] / ser.closes[i - 1] - 1))
+                    for i in range(1, len(ser.closes)) if ser.closes[i - 1]]
+            recent = sorted(r for _, r in rets[-252:])
+            if not recent:
+                continue
+            thr = recent[int(0.7 * (len(recent) - 1))]
+            out |= {(k, d.isoformat()) for d, r in rets if r >= thr}
+        return out
+    except Exception as e:
+        print(f"  ⚠️ 大波动日判定失败（{type(e).__name__}）：缺失×波动一栏记未知", file=sys.stderr)
+        return None
+
+
+def _formal_freeze(summaries: dict, rows_main: list[dict]) -> str:
+    """正式检验的首份产物永久保留；之后不同内容只追加修订（Codex 007：formal 不能只靠日期变成）。"""
+    import hashlib
+    import inspect
+    from undertow.collect.asof_history import append_revisions, atomic_write_json, load_json, locked
+    path = _vdir(False) / "formal" / "formal_result.json"
+    body = {"config_version": sh.CONFIG["version"], "config_hash": sh.config_hash(),
+            "code_sha": hashlib.sha256(inspect.getsource(sh).encode()).hexdigest()[:16],
+            "input": {"n_rows": len(rows_main),
+                      "rows_sha": hashlib.sha256(json.dumps(sorted(
+                          [[r["key"], r.get("outcome")] for r in rows_main], key=lambda x: x[0]),
+                          sort_keys=True, default=str).encode()).hexdigest()[:16]},
+            "summaries": summaries}
+    with locked(path):
+        old = load_json(path, {})
+        if not old:
+            atomic_write_json(path, {**body, "first_published_at": _now_iso()})
+            return f"首份正式结果已冻结：{path}"
+        if {k: old.get(k) for k in body} != body:
+            append_revisions(path, [{"revised_at": _now_iso(), "revision": body}])
+            return f"⚠️ 正式结果与首份不同（数据迟到/更正/代码变化）：首份保留，差异已追加到 {path.name}.revisions.jsonl"
+        return "正式结果与首份一致"
+
+
 def cmd_report(args) -> int:
     from undertow.core.config import load_config
     cfg = load_config(); rows = []
@@ -340,18 +385,27 @@ def cmd_report(args) -> int:
     subsets = [("两侧", None, False), ("put", ["P"], False), ("call", ["C"], False), ("顺增仓方向", None, True)]
     as_of = market_today()
     ident = sh.formal_identity(as_of)
+    prim, pb = sh.CONFIG["primary_endpoint"], sh.CONFIG["primary_b"]
     print(f"  身份：{'正式判定' if ident == 'formal' else '探索（正式检验日 ' + sh.CONFIG['formal_test']['date'] + ' 之前，一切判定都不是放行依据）'}；"
-          f"主终点 {sh.CONFIG['primary_endpoint']}，主池 {sh.CONFIG['primary_pool']}；日历 {mc.VERSION}")
+          f"主终点 {prim}，主池 {sh.CONFIG['primary_pool']}；日历 {mc.VERSION}")
 
     def ci(x):
-        return f"{fmt(x['mean'])} [{fmt(x['lo'])},{fmt(x['hi'])}]"
+        mb = x.get("mean_bounds") or [x.get("mean"), x.get("mean")]
+        m = fmt(mb[0]) if mb[0] == mb[1] else f"[{fmt(mb[0])}…{fmt(mb[1])}]"
+        return f"{m} [{fmt(x['lo'])},{fmt(x['hi'])}]"
 
     def line(sm, label):
         c = sm["coverage"]
-        return (f"  {label}: 机会 {c['opportunities']} A有价 {c['a_priced']} 配对 {c['pairs']}（同腿 {c['identical_pairs']}）"
-                f"日期 {sm['n_dates_pairs']}  A={ci(sm['A'])} {sm['A_verdict']}  "
-                f"A−B={ci(sm['AminusB'])} {sm['AminusB_verdict']}"
-                f"  （{sm['sensitivity']['block_days']}日块：A−B [{fmt(sm['sensitivity']['AminusB']['lo'])},"
+        extra = ""
+        if c["a_unbounded"] or c["pairs_unbounded"]:
+            extra += f"（残腿处置未知：A {c['a_unbounded']}、配对 {c['pairs_unbounded']}）"
+        if c["excluded_conditional"]:
+            extra += f"（条件样本外 {c['excluded_conditional']}）"
+        return (f"  {label}: 机会 {c['opportunities']} A有值 {c['a_priced']} 配对 {c['pairs']}（同腿 {c['identical_pairs']}）"
+                f"日期 {sm['n_dates_pairs']}{extra}\n"
+                f"      A全体={ci(sm['A'])} {sm['A_verdict']}｜A配对={ci(sm['A_paired'])}｜B配对={ci(sm['B_paired'])}\n"
+                f"      A−B={ci(sm['AminusB'])} {sm['AminusB_verdict']}"
+                f"  （{sm['sensitivity']['block_days']}日块：[{fmt(sm['sensitivity']['AminusB']['lo'])},"
                 f"{fmt(sm['sensitivity']['AminusB']['hi'])}] {sm['sensitivity']['AminusB_verdict']}）")
 
     for basis in bases:
@@ -359,7 +413,7 @@ def cmd_report(args) -> int:
         out[f"{basis}|status"] = bd
         st_line = "，".join(f"{k} {v}" for k, v in bd["status"].items()) or "无候选腿"
         extra = ""
-        if basis == sh.CONFIG["primary_endpoint"]:
+        if basis == prim:
             m = bd["marks"]
             extra = (f"；持仓标记 应有 {m['expected']} 有效 {m['valid']} 未运行 {m['not_run']} 缺失 {m['missing']}"
                      f" 未到 {m['pending']}"
@@ -367,7 +421,7 @@ def cmd_report(args) -> int:
                      + (f"；退出方式 {bd['exit_modes']}" if bd["exit_modes"] else ""))
         print(f"  {basis:30s} 状态：{st_line}{extra}")
         # 主终点：每个池都列；其它终点只列主池（--detail 全列）。池之间从不合并。
-        pools = list(sh.CONFIG["pools"]) if (basis == sh.CONFIG["primary_endpoint"] or args.detail) else [sh.CONFIG["primary_pool"]]
+        pools = list(sh.CONFIG["pools"]) if (basis == prim or args.detail) else [sh.CONFIG["primary_pool"]]
         for pool in pools:
             for b in sh.CONFIG["b_rules"]:
                 for lab, sides, fa in subsets:
@@ -376,15 +430,61 @@ def cmd_report(args) -> int:
                     out[f"{basis}|{pool}|{b}|{lab}"] = sm
                     if lab != "两侧" and not args.detail:
                         continue
-                    print(line(sm, f"{basis:30s} [{pool}] vs {b} [{lab}]"))
-            if basis == sh.CONFIG["primary_endpoint"]:
-                sm = sh.paired_summary(rows_main, basis=basis, b_rule=sh.CONFIG["primary_b"], mode=mode,
-                                       pool=pool, non_overlap=True, as_of=as_of)
-                out[f"{basis}|{pool}|{sh.CONFIG['primary_b']}|不重叠"] = sm
-                print(line(sm, f"{basis:30s} [{pool}] vs {sh.CONFIG['primary_b']} [不重叠入场·敏感性]"))
+                    print(line(sm, f"{basis} [{pool}] vs {b} [{lab}]"))
+            if basis == prim:
+                for est, lab in (("both_legs_only", "仅双腿整体退出·条件样本"), ("residual0", "残腿按0·情景")):
+                    sm = sh.paired_summary(rows_main, basis=basis, b_rule=pb, mode=mode, pool=pool,
+                                           as_of=as_of, estimate=est)
+                    out[f"{basis}|{pool}|{pb}|{est}"] = sm
+                    print(line(sm, f"{basis} [{pool}] vs {pb} [{lab}]"))
+                sm = sh.paired_summary(rows_main, basis=basis, b_rule=pb, mode=mode, pool=pool,
+                                       non_overlap=True, as_of=as_of)
+                out[f"{basis}|{pool}|{pb}|不重叠"] = sm
+                print(line(sm, f"{basis} [{pool}] vs {pb} [不重叠入场·敏感性]"))
+
+    # ── S02：机会分母、逐品种权重、缺失×大波动、描述性指标 ──
+    print(f"\n  机会分母（{prim}，A vs {pb}；每格 = 品种×侧×交易日）")
+    for pool in sh.CONFIG["pools"]:
+        hv = _high_vol_days(cfg, sh.CONFIG["pools"][pool])
+        led_end = None
+        if mode == "prospective":
+            led_end = min(as_of, date.fromisoformat(sh.CONFIG["formal_test"]["date"])) if ident == "formal" else as_of
+        led = sh.opportunity_ledger(rows_main, basis=prim, b_rule=pb, pool=pool, mode=mode,
+                                    end=led_end, high_vol=hv)
+        out[f"denominator|{pool}"] = led
+        if led["status"] != "ok":
+            print(f"  [{pool}] {led['status']}"); continue
+        tot = "，".join(f"{k} {v}" for k, v in led["totals"].items())
+        print(f"  [{pool}] {led['start']}～{led['end']} 共 {led['cells']} 格：{tot}")
+        for inst, c in led["by_instrument"].items():
+            print(f"      {inst:7s} 格 {c['cells']:4d} 可配对 {c['pairable']:4d}（率 {c['pairable_rate'] if c['pairable_rate'] is not None else '—'}）"
+                  f" 池内权重 {c['weight_in_pool'] if c['weight_in_pool'] is not None else '—'}"
+                  f"｜未生成 {c['not_generated']} 无候选 {c['no_candidate']} 入场缺 {c['entry_missing']}"
+                  f" 未成熟 {c['immature']} 未知 {c['unknown']}")
+        if led["no_candidate_reasons"]:
+            print(f"      无候选原因：{led['no_candidate_reasons']}")
+        mv = led["missing_by_vol"]
+        if mv is None:
+            print("      缺失×大波动：未知（取数失败）")
+        else:
+            rate = lambda x: f"{x['missing']}/{x['cells']}" if x["cells"] else "—"
+            print(f"      缺失（入场缺+未知）大波动日 {rate(mv['high'])}，其余日 {rate(mv['other'])}")
+        mt = sh.metrics_table(rows_main, basis=prim, pool=pool, mode=mode, as_of=as_of)
+        out[f"metrics|{pool}"] = mt
+        for rule, m in mt.items():
+            print(f"      {rule:3s} 点值 {m['n_point']} 仅区间 {m['n_interval_only']} 无价 {m['n_unpriced']}"
+                  f"｜净$ {fmt(m['net_usd'])} 损益/宽 {fmt(m['pnl_per_width'])} 损益/风险 {fmt(m['pnl_per_max_risk'])}"
+                  f" 收/宽 {fmt(m['credit_per_width'])} 费/收 {fmt(m['fee_per_credit'])}")
+    print("      （描述性：池内等机会权重是研究估计量，不是账户组合权重；池均值不外推到单个品种）")
+
+    if ident == "formal" and not args.replay:
+        # 大波动门槛随近一年数据滚动，不进冻结内容（否则每天都是一条假修订）
+        frozen = {k: ({kk: vv for kk, vv in v.items() if kk != "missing_by_vol"} if k.startswith("denominator|") else v)
+                  for k, v in out.items()}
+        print("  " + _formal_freeze(frozen, rows_main))
     if args.output:
-        Path(args.output).write_text(json.dumps({"schema": 2, "generated_at": _now_iso(), "config": sh.CONFIG,
-                                                 "config_hash": sh.config_hash(), "mode": mode,
+        Path(args.output).write_text(json.dumps({"schema": 3, "generated_at": _now_iso(), "config": sh.CONFIG,
+                                                 "config_hash": sh.config_hash(), "mode": mode, "identity": ident,
                                                  "n_rows": len(rows), "n_main": len(rows_main), "summaries": out},
                                                 ensure_ascii=False, indent=1, default=str), "utf-8")
     return 0

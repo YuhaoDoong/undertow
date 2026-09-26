@@ -81,7 +81,8 @@ def test_cli_is_read_only():
 
 def _settled_row(day, flow, a_p, b_p, a_c, b_c):
     def o(p):
-        return {"pnl": {sh.CONFIG["primary_basis"]: p}, "max_risk": {sh.CONFIG["primary_basis"]: 100.0}}
+        b = sh.CONFIG["primary_basis"]
+        return {"pnl": {b: p}, "pnl_bounds": {b: [p, p]}, "pnl_residual0": {b: p}, "max_risk": {b: 100.0}}
     return {"session": day, "identity": {"mode": "prospective"}, "decision": {"flow": {"call_direction": flow}},
             "legs": [{"leg_id": "P-B1", "same_as_A": False}, {"leg_id": "C-B1", "same_as_A": False}],
             "outcome": {"P-A": o(a_p), "P-B1": o(b_p), "C-A": o(a_c), "C-B1": o(b_c)}}
@@ -245,9 +246,9 @@ def test_r05_exit_cost_above_width_kept_raw():
 def test_r06_pre_expiry_exit_and_immature_expiry():
     cheap = {"P|57": _q(0.10, 0.12), "P|56": _q(0.02, 0.03)}
     o = sh.settle_leg(_leg(), _vrow(_full_windows({"2026-09-15|close": cheap})), bars=BARS3)
-    assert o["pnl"]["pre_expiry_close_exit"] == pytest.approx(20 - 10 - 3.2)      # 9/15 收盘窗平仓
+    assert o["pnl"]["pre_expiry_exit_policy"] == pytest.approx(20 - 10 - 3.2)      # 9/15 收盘窗平仓
     o2 = sh.settle_leg(_leg(), _vrow(_full_windows({})), bars=BARS3)
-    assert o2["pnl"]["pre_expiry_close_exit"] is None and o2["status"]["pre_expiry_close_exit"] == "exit_not_run"
+    assert o2["pnl"]["pre_expiry_exit_policy"] is None and o2["status"]["pre_expiry_exit_policy"] == "exit_not_run"
     o3 = sh.settle_leg(_leg(), _vrow(_full_windows({})), bars=BARS3[:2])
     assert o3["complete"] is False and o3["bars_missing"] == ["2026-09-16"], "到期日线未出：不完整、明确列出缺哪天"
     assert o3["pnl"]["quote_entry_expiry_intrinsic"] is None and o3["status"]["quote_entry_expiry_intrinsic"] == "immature"
@@ -262,7 +263,7 @@ def test_half_day_close_window_not_run_is_unknown_not_skipped():
 
 def test_no_valid_entry_makes_all_quote_bases_unknown():
     o = sh.settle_leg(_leg(), _vrow({}), bars=BARS3)
-    for b in ("quote_entry_expiry_intrinsic", "pre_expiry_close_exit", "close_beyond_next_open_exit", "stop1x_twice_daily"):
+    for b in ("quote_entry_expiry_intrinsic", "pre_expiry_exit_policy", "close_beyond_next_open_exit", "stop1x_twice_daily"):
         assert o["pnl"][b] is None and o["status"][b].startswith("entry_"), b
 
 
@@ -419,11 +420,12 @@ def test_marks_after_expiry_are_ignored():
 from undertow.core import market_calendar as mc   # noqa: E402
 
 
-def test_config_v4_identity():
+def test_config_v5_identity():
     c = sh.CONFIG
-    assert c["version"] == "shadow-v4-20260926" and c["fee_round_trip"] == ws.FEE_PER_TRADE
-    assert c["primary_endpoint"] == "pre_expiry_close_exit" == c["primary_basis"], "决定 1：唯一主终点"
-    assert "quote_entry_expiry_intrinsic" in c["secondary_endpoints"] and "pre_expiry_close_exit" not in c["secondary_endpoints"]
+    assert c["version"] == "shadow-v5-20260926" and c["fee_round_trip"] == ws.FEE_PER_TRADE
+    assert "short_only_policy" in c and c["prospective_start"] == "2026-09-28"
+    assert c["primary_endpoint"] == "pre_expiry_exit_policy" == c["primary_basis"], "决定 1：唯一主终点"
+    assert "quote_entry_expiry_intrinsic" in c["secondary_endpoints"] and "pre_expiry_exit_policy" not in c["secondary_endpoints"]
     assert c["primary_comparison"] == "A vs B1" and c["b_rules"]["B3"] == {"delta": 0.20}
     assert c["stats"]["block_days"] == 5 and c["stats"]["sensitivity_block_days"] == 10 and c["stats"]["min_full_blocks"] == 4
     assert c["formal_test"]["date"] == "2026-12-31"
@@ -468,7 +470,7 @@ def test_c01_protective_error_or_zero_size_never_earns_income():
 def test_c01_worthless_long_leg_is_named_short_only():
     worthless = {"bid": 0.0, "ask": 0.01, "bid_size": 0, "ask_size": 50}
     assert sh.exit_quality(SQ, worthless) is None
-    assert sh.exit_mode(worthless) == "short_only_long_residual_0" and sh.exit_cost_raw(SQ, worthless) == 100.0
+    assert sh.exit_mode(worthless) == "short_only" and sh.exit_cost_raw(SQ, worthless) == 100.0
     good = {"bid": 0.8, "ask": 0.85, "bid_size": 5, "ask_size": 5}
     assert sh.exit_mode(good) == "both_legs" and sh.exit_cost_raw(SQ, good) == pytest.approx(20.0)
 
@@ -488,7 +490,7 @@ def test_c02_missing_bar_keeps_expected_windows():
     cheap = {"P|57": _q(0.10, 0.12), "P|56": _q(0.02, 0.03)}
     o = sh.settle_leg(_leg(), _vrow(_full_windows(_marks_all(cheap))), bars=bars)
     assert o["marks"]["expected"] == 5 and o["bars_missing"] == ["2026-09-15"] and o["complete"] is False
-    assert o["pnl"]["pre_expiry_close_exit"] == pytest.approx(20 - 10 - 3.2), "到期前一交易日仍是 9/15，不是 9/14"
+    assert o["pnl"]["pre_expiry_exit_policy"] == pytest.approx(20 - 10 - 3.2), "到期前一交易日仍是 9/15，不是 9/14"
     assert o["status"]["close_beyond_next_open_exit"] == "bars_incomplete"
     assert o["any_close_breach"] is None
 
@@ -517,9 +519,9 @@ def _fri_mon(exit_quotes, exit_minute=0):
 
 def test_c03_friday_entry_monday_expiry_exits_friday_close():
     o = _fri_mon({"P|57": _q(0.90, 1.00), "P|56": _q(0.90, 0.95)})
-    assert o["status"]["pre_expiry_close_exit"] == "ok"
-    assert o["pnl"]["pre_expiry_close_exit"] == pytest.approx(20 - 10 - 3.2)
-    assert o["exit_mode"]["pre_expiry_close_exit"] == "both_legs"
+    assert o["status"]["pre_expiry_exit_policy"] == "ok"
+    assert o["pnl"]["pre_expiry_exit_policy"] == pytest.approx(20 - 10 - 3.2)
+    assert o["exit_mode"]["pre_expiry_exit_policy"] == "both_legs"
 
 
 def test_c03_inconsistent_timestamps_never_priced():
@@ -534,7 +536,7 @@ def test_c03_inconsistent_timestamps_never_priced():
     bars = [(date(2026, 9, 18), 58.2, 57.8, 58.0), (date(2026, 9, 21), 58.2, 57.8, 58.0)]
     o = sh.settle_leg(leg, {"session": "2026-09-18", "windows": w}, bars=bars)
     # 10:00:20 不在收盘窗内 → 窗口判为缺失（outside_window）；无论哪条规则拦下，都不得产生损益
-    assert o["pnl"]["pre_expiry_close_exit"] is None
+    assert o["pnl"]["pre_expiry_exit_policy"] is None
 
 
 def test_endpoint_maturity_is_independent():
@@ -542,7 +544,7 @@ def test_endpoint_maturity_is_independent():
     now = datetime(2026, 9, 15, 16, 0, tzinfo=sh._TZ)
     o = sh.settle_leg(_leg(), _vrow(_full_windows({"2026-09-15|close": {"P|57": _q(0.10, 0.12), "P|56": _q(0.02, 0.03)}})),
                       bars=BARS3[:2], now=now)
-    assert o["status"]["pre_expiry_close_exit"] == "ok" and o["pnl"]["pre_expiry_close_exit"] is not None
+    assert o["status"]["pre_expiry_exit_policy"] == "ok" and o["pnl"]["pre_expiry_exit_policy"] is not None
     assert o["status"]["quote_entry_expiry_intrinsic"] == "immature"
     assert o["status"]["stop1x_twice_daily"] in ("immature", "path_unknown")
     assert o["marks"]["pending"] == 2 and o["bars_missing"] == [] and o["complete"] is False
@@ -626,3 +628,118 @@ def test_session_hooks_windows_from_calendar_and_ok_only_on_success():
     assert "|| IN_SHADOW == 1" in src[src.index("不在任何窗口"):]
     du = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
     assert "shadow capture" in du and "shadow settle" in du
+
+
+# ═══════════════════ v5（Codex 007：零买价身份、残腿区间、S02）═══════════════════
+
+def test_v5_zero_bid_needs_identifiable_quote():
+    assert sh.exit_quality(SQ, {"bid": 0.0, "ask": None, "bid_size": 0, "ask_size": 0}) == "protective_ask_missing"
+    assert sh.exit_quality(SQ, {"bid": 0.0, "ask": 0.05, "bid_size": 0, "ask_size": 0}) == "protective_zero_bid_unverified"
+    assert sh.exit_quality(SQ, {"bid": 0.0, "ask": 0.0, "bid_size": 0, "ask_size": 5}) == "protective_zero_bid_unverified"
+    assert sh.exit_quality(SQ, {"bid": 0.0, "ask": 0.05, "bid_size": 0, "ask_size": 10}) is None
+
+
+def _short_only_row(expiry_close):
+    """9/15 收盘窗：短腿 ask 0.10，长腿 bid 0 / ask 0.02 → 只买回短腿；到期 9/16 收盘 = expiry_close。"""
+    m = {"2026-09-15|close": {"P|57": _q(0.08, 0.10), "P|56": _q(0.0, 0.02, bs=0)}}
+    bars = BARS3[:2] + ([(date(2026, 9, 16), 58.2, 55.0, expiry_close)] if expiry_close is not None else [])
+    return sh.settle_leg(_leg(), _vrow(_full_windows(m)), bars=bars)
+
+
+def test_v5_short_only_residual_expired_otm_is_point():
+    o = _short_only_row(58.0)                                   # 长腿 56P 到期虚值
+    b = sh.CONFIG["primary_basis"]
+    assert o["exit_mode"][b] == "short_only" and o["status"][b] == "ok|short_only_expired_otm"
+    assert o["pnl"][b] == pytest.approx(20 - 10 - 3.2) and o["pnl_bounds"][b] == [o["pnl"][b], o["pnl"][b]]
+    assert o["residual"][b]["status"] == "expired_otm" and o["residual"][b]["strike"] == 56.0
+
+
+def test_v5_short_only_residual_itm_has_no_lower_bound():
+    o = _short_only_row(55.5)                                   # 长腿 56P 到期实值 0.50
+    b = sh.CONFIG["primary_basis"]
+    assert o["status"][b] == "ok|short_only_itm_unknown" and o["pnl"][b] is None
+    assert o["pnl_bounds"][b] == [None, pytest.approx(20 - 10 - 3.2 + 50)]
+    assert o["pnl_residual0"][b] == pytest.approx(20 - 10 - 3.2), "残值零情景单独保存，不冒充已实现"
+
+
+def test_v5_short_only_waits_for_expiry_bar():
+    o = _short_only_row(None)
+    assert o["status"][sh.CONFIG["primary_basis"]] == "immature" and o["complete"] is False
+
+
+def test_v5_lower_bound_difference_is_not_a_difference_bound():
+    """Codex 007 反例：A=[10,10]、B=[5,25] → 零残值差 +5，但真实差可到 −15。区间传播后不得判「支持」。"""
+    days = _cal(20)
+    noise = lambda i: 0.01 * (i % 3 - 1)
+    lo = {d: [10 / 100 - 25 / 100 + noise(i)] for i, d in enumerate(days)}
+    hi = {d: [10 / 100 - 5 / 100 + noise(i)] for i, d in enumerate(days)}
+    ci = sh.interval_ci(lo, hi, iters=500)
+    assert ci["mean_bounds"][0] == pytest.approx(-0.15, abs=0.01) and ci["mean_bounds"][1] == pytest.approx(0.05, abs=0.01)
+    assert ci["lo"] < -0.14 and ci["hi"] > 0.04 and sh.judge(ci) == "未决", "零残值差 +0.05 不得被判支持"
+    const = sh.interval_ci({d: [-0.15] for d in days}, {d: [0.05] for d in days}, iters=500)
+    assert const["status"] == "degenerate", "上下界各自恒定仍是常数样本：不判定"
+    ci2 = sh.interval_ci(lo, hi, unbounded=1, iters=500)
+    assert ci2["status"] == "residual_unknown" and sh.judge(ci2) == "未决（残腿处置未知）"
+
+
+def _rowp(day, inst, a, b, a_mode="both_legs", b_mode="both_legs", b_bounds=None):
+    k = sh.CONFIG["primary_basis"]
+
+    def o(v, mode, bounds=None):
+        bb = bounds or [v, v]
+        return {"pnl": {k: v if bb[0] == bb[1] else None}, "pnl_bounds": {k: bb}, "pnl_residual0": {k: bb[0] if bb[0] is not None else v},
+                "max_risk": {k: 100.0}, "credit": {k: 20.0}, "width_usd": 100.0, "exit_mode": {k: mode},
+                "status": {k: "ok"}}
+    return {"session": day, "instrument": inst, "identity": {"mode": "prospective"},
+            "decision": {"flow": {"call_direction": "偏多"}},
+            "legs": [{"leg_id": "P-A", "status": "candidate", "expiry": day},
+                     {"leg_id": "P-B1", "status": "candidate", "expiry": day, "same_as_A": False},
+                     {"leg_id": "C-A", "status": "no_candidate", "reason": "no_wall"}],
+            "outcome": {"P-A": o(a, a_mode), "P-B1": o(b, b_mode, b_bounds)}}
+
+
+def test_v5_estimates_conditional_and_scenario():
+    rows = [_rowp("2026-09-28", "gold", 10, 5, b_mode="short_only", b_bounds=[5, 25])]
+    s_b = sh.paired_summary(rows, pool=None, sides=["P"])
+    s_c = sh.paired_summary(rows, pool=None, sides=["P"], estimate="both_legs_only")
+    s_r = sh.paired_summary(rows, pool=None, sides=["P"], estimate="residual0")
+    assert s_b["AminusB"]["mean_bounds"] == [pytest.approx(-0.15), pytest.approx(0.05)]
+    assert s_c["coverage"]["pairs"] == 0 and s_c["coverage"]["excluded_conditional"] == 1
+    assert s_r["AminusB"]["mean"] == pytest.approx(0.05)
+    assert set(s_b) >= {"A", "A_paired", "B_paired", "AminusB"}, "S02：三个均值并列"
+
+
+def test_s02_opportunity_ledger_every_cell_in_one_category():
+    rows = [_rowp("2026-09-28", "gold", 10, 5), _rowp("2026-09-29", "gold", 10, 5)]
+    rows[1]["outcome"]["P-B1"] = None
+    led = sh.opportunity_ledger(rows, pool="etf", start=date(2026, 9, 28), end=date(2026, 9, 30),
+                                high_vol={("gold", "2026-09-28")})
+    t = led["totals"]
+    assert led["cells"] == 7 * 3 * 2 == sum(t.values())
+    assert t["pairable"] == 1 and t["priced_A_only"] == 1 and t["no_candidate"] == 2
+    assert t["not_generated"] == 7 * 3 * 2 - 4, "没有机会行的交易日必须进分母，不能消失"
+    g = led["by_instrument"]["gold"]
+    assert g["cells"] == 6 and g["pairable_rate"] == pytest.approx(1 / 6, abs=1e-4) and g["weight_in_pool"] == 1.0
+    assert led["no_candidate_reasons"] == {"no_wall": 2}
+    assert led["missing_by_vol"]["high"]["cells"] == 2
+
+
+def test_s02_metrics_table_descriptive():
+    rows = [_rowp("2026-09-28", "gold", 10, 5), _rowp("2026-09-29", "gold", -30, 5, b_mode="short_only", b_bounds=[5, 25])]
+    mt = sh.metrics_table(rows, pool="etf", sides=["P"])
+    assert mt["A"]["n_point"] == 2 and mt["A"]["net_usd"] == pytest.approx(-10)
+    assert mt["A"]["pnl_per_width"] == pytest.approx(-0.10) and mt["A"]["credit_per_width"] == pytest.approx(0.2)
+    assert mt["A"]["fee_per_credit"] == pytest.approx(3.2 / 20)
+    assert mt["B1"]["n_point"] == 1 and mt["B1"]["n_interval_only"] == 1
+
+
+def test_formal_freeze_keeps_first_and_appends_revision(tmp_path, monkeypatch):
+    from undertow import shadow_cli as sc
+    monkeypatch.setattr(sc, "DIR", tmp_path)
+    rows = [{"key": "k1", "outcome": {"x": 1}}]
+    assert "首份正式结果已冻结" in sc._formal_freeze({"a": 1}, rows)
+    assert sc._formal_freeze({"a": 1}, rows) == "正式结果与首份一致"
+    assert "首份保留" in sc._formal_freeze({"a": 2}, rows)
+    f = tmp_path / sh.CONFIG["version"] / "formal" / "formal_result.json"
+    assert json.loads(f.read_text())["summaries"] == {"a": 1}
+    assert len((f.parent / "formal_result.json.revisions.jsonl").read_text().splitlines()) == 1

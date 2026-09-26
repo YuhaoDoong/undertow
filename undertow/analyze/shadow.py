@@ -34,7 +34,7 @@
 - 止损四态（R01）：未运行 / 运行缺价 / 有效未触发 / 有效触发；首次触发前任一应有窗口未知 → 该口径 None（path_unknown）。
 - 平仓成本保留原值（R05）：超过宽度不置空，标 exceeds_width。
 - 主终点改名（R06）：quote_entry_expiry_intrinsic = 报价入场—到期内在价值「研究收益」（不等于 ETF 实际到期处置）；
-  新增 pre_expiry_close_exit = 到期前最后一个交易日 ET 15:30 窗口按两腿保守报价整体平仓（小账户实际会执行的出场）。
+  新增 pre_expiry_exit_policy = 到期前最后一个交易日 ET 15:30 窗口按两腿保守报价整体平仓（小账户实际会执行的出场）。
 """
 from __future__ import annotations
 
@@ -53,15 +53,30 @@ POOLS = {"etf": ["gold", "silver", "wti", "qqq", "tlt", "spy", "iwm"],
          "single_stock": ["googl", "tsla", "nvda", "intc", "amd", "msft", "aapl"]}
 
 CONFIG = {
-    "version": "shadow-v4-20260926",
+    "version": "shadow-v5-20260926",
     # ── S00 实验身份（机器可读；改任一项 = 新版本）──
     "instruments": [k for pool in POOLS.values() for k in pool],
     # Codex 006：ETF / 杠杆 ETF / 个股不因样本多就混成一种策略证据 —— 分池冻结、分池报告，从不合并
     "pools": POOLS, "primary_pool": "etf",
     "aggregation": "池内每个 (品种, 侧, 入场日) 观测等权；不同池分开报告，不合并成一个结论",
     "primary_comparison": "A vs B1",
-    # Codex 006 决定 1：唯一主终点 = 到期前最后交易日收盘窗整体退出（拟执行的出场政策，非「已证明更优」）
-    "primary_endpoint": "pre_expiry_close_exit",
+    # Codex 006 决定 1 + 007：唯一主终点 = 到期前最后交易日收盘窗的【退出政策】（拟执行，非「已证明更优」）
+    "primary_endpoint": "pre_expiry_exit_policy",
+    "primary_endpoint_definition": (
+        "到期前最后交易日收盘窗：两腿报价都合格且长腿 bid>0 → 两腿整体平仓（点值）；"
+        "长腿报价有效但 bid=0 → 只买回短腿、长腿持有至到期：到期虚值 → 残腿现金流 0（点值，依 OCC 按例外行权规则），"
+        "到期实值 → 处置未知（损益只有上界，无下界）。点值与区间分开保存，不把残值零情景冒充已平仓收益。"),
+    "short_only_policy": {
+        "trigger": "长腿报价有效（无错误、ask>0、ask_size>0）且 bid==0",
+        "residual": "长腿 1 张持有至到期，不再下任何指令",
+        "otm_at_expiry": "现金流 0：OCC exercise-by-exception 只自动行权实值 ≥$0.01 的期权 "
+                         "(https://www.optionseducation.org/referencelibrary/faq/options-exercise)",
+        "itm_at_expiry": "未知：会被自动行权成标的仓位，券商处置、费用与隔夜风险未核实 → 损益下界 None，上界 = 内在值",
+        "permission": "未核实：组合单是否允许单独买回短腿取决于券商与入场方式（AGENTS.md 组合单 vs 分腿）",
+        "fees": "仍按 $3.20 往返预算"},
+    "estimates": {"primary": "bounds（点值或 [下界, 上界]；任一配对无界 → A−B 判定为未决）",
+                  "conditional": "both_legs_only（两臂都为双腿整体退出的条件样本，不外推全部机会）",
+                  "scenario": "residual0（残腿按 0 估值的情景，不是已实现收益）"},
     "secondary_endpoints": ["quote_entry_expiry_intrinsic", "close_beyond_next_open_exit",
                             "stop1x_twice_daily", "stop2x_twice_daily", "snapshot_model"],
     "quote": {"timezone": "America/New_York",
@@ -72,10 +87,9 @@ CONFIG = {
               "selection": "first_valid_attempt_per_leg",
               "quality": {
                   "entry": "sell: 无错误, bid>0, bid_size>0, ask>=bid; buy: 无错误, ask>0, ask_size>0, ask>=bid",
-                  "exit": ("sell: 无错误, ask>0, ask_size>0, ask>=bid; buy: 无错误, bid 为数, ask>=bid; "
-                           "buy bid>0 须 bid_size>0 → both_legs；buy bid==0（有效报价）→ "
-                           "short_only_long_residual_0：只买回短腿、长腿残值按 0（收益保守下界）；"
-                           "保护腿报错/缺失/零量 → 该窗口缺失，不计任何收入")},
+                  "exit": ("sell: 无错误, ask>0, ask_size>0, ask>=bid; buy: 无错误, bid 与 ask 均为数, ask>=bid; "
+                           "buy bid>0 须 bid_size>0 → both_legs；buy bid==0 须 ask>0 且 ask_size>0 → short_only；"
+                           "保护腿报错/缺失/缺 ask/零量 → 该窗口缺失，不计任何收入")},
               "source_timestamp": "unknown (longbridge depth 不提供)"},
     "calendar": {"version": mc.VERSION, "hash": mc.calendar_hash(),
                  "source": mc.SOURCE["url"], "read_at": mc.SOURCE["read_at"]},
@@ -92,14 +106,22 @@ CONFIG = {
               "non_overlap_sensitivity": "同品种同侧：入场日须晚于上一笔被采纳入场的到期日"},
     "formal_test": {"date": "2026-12-31",
                     "sample": "入场日与全部候选腿到期日均 ≤ 该日",
-                    "identity": "该日之后的运行才是正式判定；此前一切区间与判定标 exploratory"},
+                    "identity": "该日之后的运行才是正式判定；此前一切区间与判定标 exploratory",
+                    "freeze": ("首次正式运行把结果、纳入行的数据 sha、config/code sha、生成时刻写入 formal/ 并永久保留；"
+                               "之后数据迟到或更正产生的差异只追加为修订，不改首份")},
+    # S02：机会分母事前冻结（Codex 005 R07 / 007）
+    "prospective_start": "2026-09-28",
+    "denominator": {"unit": "池 × 品种 × 侧 × 日历交易日（prospective_start 起）",
+                    "categories": ["not_generated", "no_candidate", "entry_missing", "immature",
+                                   "unknown", "priced_A_only", "pairable"]},
+    "metrics": ["net_usd", "pnl_per_width", "pnl_per_max_risk", "credit_per_width", "fee_per_credit"],
     "dte": [2, 4], "width": {"rule": "2x_modal_strike_step", "band": 0.05},
     "wall": {"def": "local_max", "band": 0.05, "hi_dte": 14},
     "b_rules": {"B1": {"atr": 1.0}, "B2": {"atr": 2.0}, "B3": {"delta": 0.20}}, "primary_b": "B1",
     "stops": [1.0, 2.0],
     "term_structure": {"atm_band": 0.02, "far_dte": [20, 45]},
     "sides": ["P", "C"],
-    "primary_basis": "pre_expiry_close_exit",
+    "primary_basis": "pre_expiry_exit_policy",
     "fee_round_trip": 3.20,
     "mid_give": 0.25,
 }
@@ -337,15 +359,36 @@ def exit_quality(sq: dict | None, bq: dict | None) -> str | None:
     bb, ba = _num(bq.get("bid")), _num(bq.get("ask"))
     if bb is None:
         return "protective_price_missing"
-    if bb < 0 or (ba is not None and ba < bb):
+    if ba is None:
+        # Codex 007：bid=0、ask=None、双侧零量曾被当作「有效零买价」—— 那只是缺报价
+        return "protective_ask_missing"
+    if bb < 0 or ba < bb:
         return "protective_price_invalid"
     if bb > 0 and (bq.get("bid_size") or 0) <= 0:
         return "protective_zero_size"
+    if bb == 0 and (ba <= 0 or (bq.get("ask_size") or 0) <= 0):
+        return "protective_zero_bid_unverified"
     return None
 
 
 def exit_mode(bq: dict) -> str:
-    return "both_legs" if _num(bq.get("bid")) > 0 else "short_only_long_residual_0"
+    return "both_legs" if _num(bq.get("bid")) > 0 else "short_only"
+
+
+def residual_leg(leg: dict, expiry_bar) -> dict:
+    """只买回短腿后，残余长腿（1 张）到期的现金流身份（每张美元）。expiry_bar=(date,h,l,close) 或 None。
+
+    到期虚值 → 现金流 0（OCC 按例外行权：不自动行权，无需指令）；
+    恰在行权价或实值 → 会/可能被行权成标的仓位，处置未知：下界 None，上界 = 内在值。
+    """
+    if expiry_bar is None:
+        return {"status": "immature"}
+    K, px = leg["buy"], expiry_bar[3]
+    otm = px > K if leg["side"] == "P" else px < K
+    intr = round(max(0.0, (K - px) if leg["side"] == "P" else (px - K)) * 100, 4)
+    if otm:
+        return {"status": "expired_otm", "cash_lo": 0.0, "cash_hi": 0.0}
+    return {"status": "itm_disposition_unknown", "cash_lo": None, "cash_hi": intr}
 
 
 def exit_cost_raw(sq: dict, bq: dict) -> float:
@@ -485,7 +528,7 @@ def _after(later_iso: str, earlier_iso: str) -> bool:
         return False
 
 
-BASES = ("snapshot_model", "quote_entry_expiry_intrinsic", "pre_expiry_close_exit",
+BASES = ("snapshot_model", "quote_entry_expiry_intrinsic", "pre_expiry_exit_policy",
          "close_beyond_next_open_exit") + tuple(f"stop{m:g}x_twice_daily" for m in CONFIG["stops"])
 
 
@@ -499,10 +542,10 @@ def settle_leg(leg: dict, row: dict, *, bars: list, now: datetime | None = None,
     session = date.fromisoformat(row["session"])
     exp = date.fromisoformat(leg["expiry"])
     k, S, W = leg["side"], leg["sell"], leg["width_usd"]
-    res = {"calendar": mc.VERSION, "width_usd": W, "pnl": {}, "max_risk": {}, "credit": {},
-           "status": {}, "exit_mode": {}, "complete": False}
+    res = {"calendar": mc.VERSION, "width_usd": W, "pnl": {}, "pnl_bounds": {}, "pnl_residual0": {},
+           "max_risk": {}, "credit": {}, "status": {}, "exit_mode": {}, "residual": {}, "complete": False}
 
-    def put(basis, credit, cost, status="ok"):
+    def put(basis, credit, cost, status="ok", resid=None):
         # 有价却标 ok 才可信：缺权利金 / 权利金越出 (0, W) 必须在状态上显式可见，不能混进「正常」
         if status in ("ok", "stale_snapshot_quote"):
             if credit is None:
@@ -514,10 +557,20 @@ def settle_leg(leg: dict, row: dict, *, bars: list, now: datetime | None = None,
         res["status"][basis] = status
         if credit is None or cost is None or not (0 < credit < W) or status == "immature":
             res["pnl"][basis] = None; res["max_risk"][basis] = None; res["credit"][basis] = credit
+            res["pnl_bounds"][basis] = [None, None]; res["pnl_residual0"][basis] = None
             return
-        res["pnl"][basis] = round(credit - cost - fee, 4)
+        base = round(credit - cost - fee, 4)
         res["max_risk"][basis] = round(W - credit + fee, 4)
         res["credit"][basis] = credit
+        res["pnl_residual0"][basis] = base                  # 残腿按 0 的情景（非已实现）
+        if resid is None:
+            res["pnl"][basis] = base; res["pnl_bounds"][basis] = [base, base]
+            return
+        res["residual"][basis] = {"side": k, "strike": leg["buy"], "qty": 1, **resid}
+        lo = None if resid["cash_lo"] is None else round(base + resid["cash_lo"], 4)
+        hi = round(base + resid["cash_hi"], 4)
+        res["pnl_bounds"][basis] = [lo, hi]
+        res["pnl"][basis] = lo if lo == hi else None       # 只有残腿现金流确定时才有点值
 
     days = mc.trading_days(session, exp)
     if days is None or session not in days or exp not in days:
@@ -549,25 +602,36 @@ def settle_leg(leg: dict, row: dict, *, bars: list, now: datetime | None = None,
 
     put("quote_entry_expiry_intrinsic", ec, intrinsic, tag if ec is None else ("ok" if eb else "immature"))
 
+    def settle_exit(basis, x, label):
+        """x=有效出场报价。双腿 → 点值；只买回短腿 → 残腿按到期结果定点值或区间（Codex 007）。"""
+        res["exit_mode"][basis] = x["mode"]
+        if x["mode"] == "both_legs":
+            return put(basis, ec, x["cost"], label)
+        rl = residual_leg(leg, eb)
+        if rl["status"] == "immature":
+            return put(basis, ec, None, "immature")
+        tag = "short_only_expired_otm" if rl["status"] == "expired_otm" else "short_only_itm_unknown"
+        put(basis, ec, x["cost"], f"{label}|{tag}", resid=rl)
+
     def exit_at(basis, wk):
-        """在 wk 窗口整体退出：须严格晚于实际入场（C03）。"""
+        """在 wk 窗口退出：须严格晚于实际入场（C03）。"""
         if not _passed(wk, now):
             return put(basis, ec, None, "immature")
         w = window_leg(row, leg, wk, "exit")
         if w["status"] == "valid" and not _after(w["at"], ent["ended_at"]):
             return put(basis, ec, None, "exit_not_after_entry")
         if w["status"] == "valid":
-            res["exit_mode"][basis] = w["mode"]
-        put(basis, ec, w.get("cost"), "ok" if w["status"] == "valid" else f"exit_{w['status']}")
+            return settle_exit(basis, w, "ok")
+        put(basis, ec, None, f"exit_{w['status']}")
 
-    # 主终点：到期前最后一个交易日的收盘窗整体平仓。入场日本身可以是这一天（周五入场、周一到期）。
+    # 主终点：到期前最后一个交易日收盘窗的退出政策。入场日本身可以是这一天（周五入场、周一到期）。
     X = mc.prev_trading_day(exp)
     if ec is None:
-        put("pre_expiry_close_exit", None, None, tag)
+        put("pre_expiry_exit_policy", None, None, tag)
     elif X is None or X < session:
-        put("pre_expiry_close_exit", ec, None, "no_exit_day")
+        put("pre_expiry_exit_policy", ec, None, "no_exit_day")
     else:
-        exit_at("pre_expiry_close_exit", f"{X.isoformat()}|close")
+        exit_at("pre_expiry_exit_policy", f"{X.isoformat()}|close")
 
     # 收盘越过卖腿 → 下一交易日开盘窗平仓；首次越线前任一交易日缺日线 → 未知（不当作没越线）
     basis = "close_beyond_next_open_exit"
@@ -608,9 +672,9 @@ def settle_leg(leg: dict, row: dict, *, bars: list, now: datetime | None = None,
             if x["status"] != "valid":
                 unknown = True; continue
             if x["cost"] >= (1 + mult) * ec:
-                hit = (wk, x["cost"]); break
+                hit = (wk, x); break
         if hit and not unknown:
-            put(basis, ec, hit[1], f"stopped@{hit[0]}")
+            settle_exit(basis, hit[1], f"stopped@{hit[0]}")
         elif hit and unknown:
             put(basis, ec, None, "path_unknown_before_trigger")
         elif unknown:
@@ -626,8 +690,16 @@ def settle_leg(leg: dict, row: dict, *, bars: list, now: datetime | None = None,
 
 # ── 统计（W06）──────────────────────────────────────────────────────────
 
-def _norm(o: dict, basis: str):
-    p, r = o["pnl"].get(basis), o["max_risk"].get(basis)
+def _norm(o: dict, basis: str, which: str = "point"):
+    """which: point / lo / hi / residual0。缺失或不可得 → None。"""
+    r = o["max_risk"].get(basis)
+    if which == "point":
+        p = o["pnl"].get(basis)
+    elif which == "residual0":
+        p = (o.get("pnl_residual0") or {}).get(basis)
+    else:
+        b = (o.get("pnl_bounds") or {}).get(basis) or [None, None]
+        p = b[0] if which == "lo" else b[1]
     return p / r if (p is not None and r) else None
 
 
@@ -686,7 +758,8 @@ def zero_event_upper(n: int, alpha: float = 0.05) -> float | None:
 
 
 _NOT_JUDGED = {"empty": "样本不足", "insufficient": "样本不足", "degenerate": "退化（不判）",
-               "calendar_unknown": "日历未知", "date_not_trading_day": "日期不在交易日历"}
+               "calendar_unknown": "日历未知", "date_not_trading_day": "日期不在交易日历",
+               "residual_unknown": "未决（残腿处置未知）"}
 
 
 def judge(ci: dict, *, min_useful: float = 0.0) -> str:
@@ -753,56 +826,229 @@ def _non_overlap(rows: list[dict], side: str) -> list[dict]:
     return keep
 
 
-def paired_summary(rows: list[dict], basis: str = CONFIG["primary_basis"],
-                   b_rule: str = CONFIG["primary_b"], *, mode: str = "prospective",
-                   sides=None, flow_aligned_only: bool = False, pool: str | None = CONFIG["primary_pool"],
-                   non_overlap: bool = False, as_of: date | None = None) -> dict:
-    """A 绝对收益与 A−B 配对差（按日历交易日块 bootstrap）。只收指定 mode、指定池的行。
+def interval_ci(lo_by: dict, hi_by: dict, unbounded: int = 0, *,
+                block_days: int = CONFIG["stats"]["block_days"], iters: int = CONFIG["stats"]["iters"]) -> dict:
+    """区间值样本的块 bootstrap：下界序列取其区间下沿、上界序列取其区间上沿（Codex 007）。
 
-    pool=None 仅供单元测试；报告永远分池（ETF / 杠杆 ETF / 个股不合并成一个结论）。
-    as_of 晚于正式检验日 → formal，只收入场与到期都在检验日之前的行；否则 exploratory。
+    点值样本（下界 = 上界）两条序列相同、同一种子 → 退化为普通区间。unbounded>0（有观测只有单侧界）→
+    status=residual_unknown，不判定：下界相减不是差值的下界，缺一侧就给不出有证据的界限。
     """
+    L = block_bootstrap(lo_by, block_days=block_days, iters=iters)
+    H = block_bootstrap(hi_by, block_days=block_days, iters=iters)
+    out = {"mean": L["mean"] if L["mean"] == H["mean"] else None, "mean_bounds": [L["mean"], H["mean"]],
+           "lo": L["lo"], "hi": H["hi"], "n_dates": L["n_dates"], "n_calendar_days": L["n_calendar_days"],
+           "block_days": block_days, "unbounded": unbounded}
+    if unbounded:
+        out["status"] = "residual_unknown"
+    elif L["status"] != "ok":
+        out["status"] = L["status"]
+    elif H["status"] != "ok":
+        out["status"] = H["status"]
+    else:
+        out["status"] = "degenerate" if out["hi"] - out["lo"] <= 1e-12 else "ok"
+    return out
+
+
+def _vals(o: dict | None, basis: str, estimate: str):
+    """某条腿在某终点下的归一化值 (下界, 上界)；未定价 → None；条件样本外 → "excluded"。下界可为 None（无界）。"""
+    if not o:
+        return None
+    if estimate == "bounds":
+        hi = _norm(o, basis, "hi")
+        return None if hi is None else (_norm(o, basis, "lo"), hi)
+    if estimate == "both_legs_only":
+        if (o.get("exit_mode") or {}).get(basis, "both_legs") != "both_legs":
+            return "excluded"
+        v = _norm(o, basis, "point")
+        return None if v is None else (v, v)
+    if estimate == "residual0":
+        v = _norm(o, basis, "residual0")
+        return None if v is None else (v, v)
+    raise ValueError(estimate)
+
+
+def _eligible(rows, *, mode, pool, as_of):
     ident = formal_identity(as_of)
     fdate = CONFIG["formal_test"]["date"]
-    base = [r for r in rows if (r.get("identity") or {}).get("mode") == mode and r.get("outcome")
+    base = [r for r in rows if (r.get("identity") or {}).get("mode") == mode
             and (pool is None or r.get("instrument") in CONFIG["pools"][pool])]
     if ident == "formal":
         base = [r for r in base if r["session"] <= fdate
                 and all(l["expiry"] <= fdate for l in r["legs"] if l.get("status") == "candidate")]
-    a_by, d_by, cover = {}, {}, {"opportunities": 0, "a_priced": 0, "pairs": 0, "identical_pairs": 0}
+    return ident, base
+
+
+def paired_summary(rows: list[dict], basis: str = CONFIG["primary_basis"],
+                   b_rule: str = CONFIG["primary_b"], *, mode: str = "prospective",
+                   sides=None, flow_aligned_only: bool = False, pool: str | None = CONFIG["primary_pool"],
+                   non_overlap: bool = False, as_of: date | None = None, estimate: str = "bounds") -> dict:
+    """A 全体 / A 配对 / B 配对 三个均值与 A−B 配对差（日历块 bootstrap，区间值按界限传播）。
+
+    estimate：bounds（主）/ both_legs_only（条件样本）/ residual0（情景）。
+    pool=None 仅供单元测试；报告永远分池。as_of 晚于正式检验日 → formal，只收检验日前入场且到期的行。
+    """
+    ident, base = _eligible(rows, mode=mode, pool=pool, as_of=as_of)
+    base = [r for r in base if r.get("outcome")]
+    S = {k: {} for k in ("aL", "aH", "paL", "paH", "pbL", "pbH", "dL", "dH")}
+    cover = {"opportunities": 0, "a_priced": 0, "a_unbounded": 0, "pairs": 0, "pairs_unbounded": 0,
+             "identical_pairs": 0, "excluded_conditional": 0}
+    add = lambda key, d, v: S[key].setdefault(d, []).append(v)
     for side in (sides or CONFIG["sides"]):
         use = _non_overlap(base, side) if non_overlap else base
         for r in use:
             if flow_aligned_only and flow_aligned_side(r) != side:
                 continue
             cover["opportunities"] += 1
-            oa = r["outcome"].get(f"{side}-A"); ob = r["outcome"].get(f"{side}-{b_rule}")
-            na = _norm(oa, basis) if oa else None
-            if na is None:
+            d = r["session"]
+            va = _vals(r["outcome"].get(f"{side}-A"), basis, estimate)
+            vb = _vals(r["outcome"].get(f"{side}-{b_rule}"), basis, estimate)
+            if va == "excluded" or vb == "excluded":
+                cover["excluded_conditional"] += 1
+            if va is None or va == "excluded":
                 continue
             cover["a_priced"] += 1
-            a_by.setdefault(r["session"], []).append(na)
-            nb = _norm(ob, basis) if ob else None
-            if nb is None:
+            if va[0] is None:
+                cover["a_unbounded"] += 1
+            else:
+                add("aL", d, va[0]); add("aH", d, va[1])
+            if vb is None or vb == "excluded":
                 continue
             cover["pairs"] += 1
             leg_b = next((l for l in r["legs"] if l["leg_id"] == f"{side}-{b_rule}"), {})
             cover["identical_pairs"] += bool(leg_b.get("same_as_A"))
-            d_by.setdefault(r["session"], []).append(na - nb)
+            if va[0] is None or vb[0] is None:
+                cover["pairs_unbounded"] += 1
+                continue
+            add("paL", d, va[0]); add("paH", d, va[1]); add("pbL", d, vb[0]); add("pbH", d, vb[1])
+            add("dL", d, va[0] - vb[1]); add("dH", d, va[1] - vb[0])
     sens = CONFIG["stats"]["sensitivity_block_days"]
-    A, D = block_bootstrap(a_by), block_bootstrap(d_by)
-    A10, D10 = block_bootstrap(a_by, block_days=sens), block_bootstrap(d_by, block_days=sens)
+    A = interval_ci(S["aL"], S["aH"], cover["a_unbounded"])
+    PA = interval_ci(S["paL"], S["paH"], cover["pairs_unbounded"])
+    PB = interval_ci(S["pbL"], S["pbH"], cover["pairs_unbounded"])
+    D = interval_ci(S["dL"], S["dH"], cover["pairs_unbounded"])
+    A10 = interval_ci(S["aL"], S["aH"], cover["a_unbounded"], block_days=sens)
+    D10 = interval_ci(S["dL"], S["dH"], cover["pairs_unbounded"], block_days=sens)
     tagv = (lambda v: v) if ident == "formal" else (lambda v: f"探索·{v}")
-    return {"basis": basis, "b_rule": b_rule, "mode": mode, "pool": pool, "identity": ident,
+    return {"basis": basis, "b_rule": b_rule, "mode": mode, "pool": pool, "identity": ident, "estimate": estimate,
             "sides": list(sides or CONFIG["sides"]), "flow_aligned_only": flow_aligned_only,
             "non_overlap": non_overlap, "coverage": cover,
-            "n_dates_A": len(a_by), "n_dates_pairs": len(d_by),
-            "A": A, "A_verdict": tagv(judge(A)), "AminusB": D, "AminusB_verdict": tagv(judge(D)),
+            "n_dates_A": len(S["aL"]), "n_dates_pairs": len(S["dL"]),
+            "A": A, "A_verdict": tagv(judge(A)),
+            "A_paired": PA, "B_paired": PB,
+            "AminusB": D, "AminusB_verdict": tagv(judge(D)),
             "stats_version": CONFIG["stats"]["version"],
             "sensitivity": {"block_days": sens, "A": A10, "A_verdict": tagv(judge(A10)),
                             "AminusB": D10, "AminusB_verdict": tagv(judge(D10))},
-            "note": ("区间为按日历交易日的循环移动块 bootstrap（主 5 日、敏感性 10 日）；同日多品种/两侧不当独立；"
-                     f"{fdate} 之前的一切判定都是探索，不是放行依据。")}
+            "note": ("区间为按日历交易日的循环移动块 bootstrap（主 5 日、敏感性 10 日）；区间值观测按 "
+                     "[A下界−B上界, A上界−B下界] 传播；同日多品种/两侧不当独立；"
+                     f"{CONFIG['formal_test']['date']} 之前的一切判定都是探索，不是放行依据。")}
+
+
+# ── S02：机会分母与描述性指标（Codex 005 R07 / 007）──────────────────────────
+
+def opportunity_ledger(rows: list[dict], *, basis: str = CONFIG["primary_basis"], b_rule: str = CONFIG["primary_b"],
+                       pool: str = CONFIG["primary_pool"], mode: str = "prospective",
+                       start: date | None = None, end: date | None = None,
+                       high_vol: set | None = None) -> dict:
+    """按「池 × 品种 × 侧 × 日历交易日」生成分母，每个格子落入且只落入一个类别。
+
+    not_generated：该交易日没有机会行（capture 未跑/失败）；no_candidate：有行但 A 无候选腿；
+    entry_missing：入场窗无有效报价；immature：终点未成熟或未结算；unknown：其余拿不到点值/上界
+    （退出缺价、止损路径未知等）；priced_A_only：A 有值、B 无；pairable：A、B 都有值（区间亦算）。
+    high_vol：{(品种, "YYYY-MM-DD")} 大波动交易日集合（由调用方按各品种 |日收益| 70 分位给出），
+    用来看缺失是否集中在大波动日。纯函数：不取数。
+    """
+    cats = CONFIG["denominator"]["categories"]
+    insts = CONFIG["pools"][pool]
+    mine = [r for r in rows if (r.get("identity") or {}).get("mode") == mode and r.get("instrument") in insts]
+    if start is None:
+        start = (date.fromisoformat(CONFIG["prospective_start"]) if mode == "prospective"
+                 else (min(date.fromisoformat(r["session"]) for r in mine) if mine else None))
+    if end is None:
+        end = max((date.fromisoformat(r["session"]) for r in mine), default=start)
+    out = {"basis": basis, "b_rule": b_rule, "pool": pool, "mode": mode,
+           "start": start.isoformat() if start else None, "end": end.isoformat() if end else None,
+           "totals": dict.fromkeys(cats, 0), "by_instrument": {}, "no_candidate_reasons": {},
+           "missing_by_vol": {"high": {"cells": 0, "missing": 0}, "other": {"cells": 0, "missing": 0}}}
+    days = mc.trading_days(start, end) if start and end and start <= end else []
+    if days is None:
+        out["status"] = "calendar_unknown"
+        return out
+    by = {(r["instrument"], r["session"]): r for r in mine}
+    for inst in insts:
+        ci = out["by_instrument"].setdefault(inst, dict.fromkeys(cats, 0))
+        for d in days:
+            r = by.get((inst, d.isoformat()))
+            for side in CONFIG["sides"]:
+                if r is None:
+                    cat = "not_generated"
+                else:
+                    la = next((l for l in r["legs"] if l["leg_id"] == f"{side}-A"), None)
+                    if la is None or la.get("status") != "candidate":
+                        cat = "no_candidate"
+                        why = (la or {}).get("reason") or "absent"
+                        out["no_candidate_reasons"][why] = out["no_candidate_reasons"].get(why, 0) + 1
+                    else:
+                        oa = (r.get("outcome") or {}).get(f"{side}-A")
+                        stt = (oa or {}).get("status", {}).get(basis) if oa else None
+                        va = _vals(oa, basis, "bounds")
+                        if oa is None or stt == "immature":
+                            cat = "immature"
+                        elif str(stt).startswith("entry_"):
+                            cat = "entry_missing"
+                        elif va is None:
+                            cat = "unknown"
+                        else:
+                            vb = _vals((r.get("outcome") or {}).get(f"{side}-{b_rule}"), basis, "bounds")
+                            cat = "pairable" if vb is not None else "priced_A_only"
+                ci[cat] += 1; out["totals"][cat] += 1
+                if high_vol is not None and cat != "not_generated":
+                    key = "high" if (inst, d.isoformat()) in high_vol else "other"
+                    out["missing_by_vol"][key]["cells"] += 1
+                    out["missing_by_vol"][key]["missing"] += cat in ("entry_missing", "unknown")
+    n_pair = out["totals"]["pairable"]
+    for inst, c in out["by_instrument"].items():
+        n = sum(c.values())
+        c["cells"] = n
+        c["pairable_rate"] = round(c["pairable"] / n, 4) if n else None
+        c["weight_in_pool"] = round(c["pairable"] / n_pair, 4) if n_pair else None
+    out["cells"] = sum(out["totals"].values())
+    if high_vol is None:
+        out["missing_by_vol"] = None
+    out["status"] = "ok"
+    return out
+
+
+def metrics_table(rows: list[dict], *, basis: str = CONFIG["primary_basis"], pool: str = CONFIG["primary_pool"],
+                  mode: str = "prospective", as_of: date | None = None, sides=None) -> dict:
+    """每条规则的描述性指标均值（只取有点值的腿；区间值与未知单独计数）。不是组合收益，不做推断。
+
+    net_usd = 每张净损益；pnl_per_width = 净损益 / 宽度；pnl_per_max_risk = 净损益 / 事前最大风险；
+    credit_per_width = 入场保守收权金 / 宽度；fee_per_credit = 往返费用预算 / 收权金。
+    """
+    _, base = _eligible(rows, mode=mode, pool=pool, as_of=as_of)
+    fee = CONFIG["fee_round_trip"]
+    out = {}
+    for rule in RULES:
+        acc = {m: [] for m in CONFIG["metrics"]}
+        n_interval = n_unknown = 0
+        for r in base:
+            for side in (sides or CONFIG["sides"]):
+                o = (r.get("outcome") or {}).get(f"{side}-{rule}")
+                if not o:
+                    continue
+                cr, W, mr = o["credit"].get(basis), o["width_usd"], o["max_risk"].get(basis)
+                if cr is None or mr is None:
+                    n_unknown += 1; continue
+                pnl = o["pnl"].get(basis)
+                if pnl is None:
+                    n_interval += 1; continue
+                acc["net_usd"].append(pnl); acc["pnl_per_width"].append(pnl / W)
+                acc["pnl_per_max_risk"].append(pnl / mr); acc["credit_per_width"].append(cr / W)
+                acc["fee_per_credit"].append(fee / cr)
+        out[rule] = {"n_point": len(acc["net_usd"]), "n_interval_only": n_interval, "n_unpriced": n_unknown,
+                     **{m: (round(st.mean(v), 4) if v else None) for m, v in acc.items()}}
+    return out
 
 
 # ── P5 风险预算（草案，未接入任何流程；实盘试点 G4 前由用户与 Codex 定稿）────────

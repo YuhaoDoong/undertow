@@ -1,0 +1,4175 @@
+{
+ "schema": 2,
+ "asof": "2026-09-26",
+ "min_useful_OE": 0.7,
+ "inference": {
+  "primary": "Garwood 精确（观测）× 基准块 bootstrap（块 5、2000 次）最不利组合",
+  "simultaneous_alpha": 0.0005208333333333333,
+  "family": "96 格 = 4 品种×3 墙定义×2 侧×4 窗口",
+  "legacy": "OE_ci_bootstrap_legacy（行 bootstrap，观测 0 次时退化，仅对照）",
+  "baseline_primary": "同期（Ein，预登记）",
+  "baseline_sensitivity": "20 年（E20，只传播观测部分）"
+ },
+ "bootstrap": {
+  "iters": 20000,
+  "seed": 20260926
+ },
+ "instruments": {
+  "gold": {
+   "symbol": "GLD",
+   "span": "2026-06-26→2026-09-22",
+   "n_days": 57,
+   "summary": {
+    "local_max|P|k1": {
+     "n": 56,
+     "n_nov": 56,
+     "buf_pct_med": 2.2354572064896994,
+     "buf_atr_med": 1.153263670990535,
+     "endpoint_hold": 0.875,
+     "close_hold": 0.875,
+     "intraday_hold": 0.7857142857142857,
+     "random_close_hold_in": 0.8884660421545667,
+     "random_close_hold_20": 0.9225884178714368,
+     "random_end_hold_in": 0.8884660421545667,
+     "OE_close_in": 1.1207349081364828,
+     "expected_breaches_nov": 6.245901639344264,
+     "observed_breaches_nov": 7,
+     "close_hold_nov": 0.875,
+     "random_close_hold_nov": 0.8884660421545667,
+     "OE_ci_bootstrap_legacy": [
+      0.42068965517241375,
+      1.9624664879356564
+     ],
+     "baseline_uncertainty": {
+      "E_point": 6.245901639344262,
+      "E_lo": 4.19672131147541,
+      "E_hi": 8.639344262295081
+     },
+     "OE_ci": [
+      0.32576118812658805,
+      3.436653113530645
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.1397490454502514,
+      5.147263117365156
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 4.335048599199542,
+     "OE_close_20": 1.6147454497494067,
+     "OE_ci_20y": [
+      0.6492114187692222,
+      3.3269927733602565
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.10275483867081678
+    },
+    "local_max|P|k2": {
+     "n": 56,
+     "n_nov": 30,
+     "buf_pct_med": 2.2354572064896994,
+     "buf_atr_med": 1.153263670990535,
+     "endpoint_hold": 0.8571428571428572,
+     "close_hold": 0.7857142857142857,
+     "intraday_hold": 0.6785714285714286,
+     "random_close_hold_in": 0.8135245901639344,
+     "random_close_hold_20": 0.8662722618593759,
+     "random_end_hold_in": 0.8539227166276346,
+     "OE_close_in": 0.7860824742268041,
+     "expected_breaches_nov": 6.360655737704918,
+     "observed_breaches_nov": 5,
+     "close_hold_nov": 0.8333333333333334,
+     "random_close_hold_nov": 0.7879781420765027,
+     "OE_ci_bootstrap_legacy": [
+      0.22932330827067665,
+      1.3522167487684729
+     ],
+     "baseline_uncertainty": {
+      "E_point": 6.360655737704918,
+      "E_lo": 4.229508196721311,
+      "E_hi": 8.885245901639344
+     },
+     "OE_ci": [
+      0.18271710294690713,
+      2.7587916931731895
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.06161104393335391,
+      4.325406520355438
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 4.616088448341594,
+     "OE_close_20": 1.083168153287083,
+     "OE_ci_20y": [
+      0.3517017510142565,
+      2.5277531420600727
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.10275483867081678
+    },
+    "local_max|P|k3": {
+     "n": 56,
+     "n_nov": 20,
+     "buf_pct_med": 2.2354572064896994,
+     "buf_atr_med": 1.153263670990535,
+     "endpoint_hold": 0.8571428571428572,
+     "close_hold": 0.7321428571428572,
+     "intraday_hold": 0.6071428571428572,
+     "random_close_hold_in": 0.7652224824355972,
+     "random_close_hold_20": 0.822797221843933,
+     "random_end_hold_in": 0.8468969555035128,
+     "OE_close_in": 0.9870550161812297,
+     "expected_breaches_nov": 5.065573770491803,
+     "observed_breaches_nov": 5,
+     "close_hold_nov": 0.75,
+     "random_close_hold_nov": 0.7467213114754099,
+     "OE_ci_bootstrap_legacy": [
+      0.34078212290502796,
+      1.6339285714285716
+     ],
+     "baseline_uncertainty": {
+      "E_point": 5.065573770491803,
+      "E_lo": 3.2459016393442623,
+      "E_hi": 7.262295081967213
+     },
+     "OE_ci": [
+      0.22355004468899248,
+      3.5947891759529433
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.07537965194556762,
+      5.636135768947993
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 3.8114394661582462,
+     "OE_close_20": 1.3118403281476663,
+     "OE_ci_20y": [
+      0.4259509837512435,
+      3.061397716774919
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.10275483867081678
+    },
+    "local_max|P|expiry": {
+     "n": 54,
+     "n_nov": 21,
+     "buf_pct_med": 2.1722696803396833,
+     "buf_atr_med": 1.126931942704975,
+     "endpoint_hold": 0.8888888888888888,
+     "close_hold": 0.7407407407407407,
+     "intraday_hold": 0.6111111111111112,
+     "random_close_hold_in": 0.7627200971463266,
+     "random_close_hold_20": 0.8206115203622698,
+     "random_end_hold_in": 0.8424357417526817,
+     "OE_close_in": 0.9207083920305895,
+     "expected_breaches_nov": 5.430601092896175,
+     "observed_breaches_nov": 5,
+     "close_hold_nov": 0.7619047619047619,
+     "random_close_hold_nov": 0.741399947957325,
+     "OE_ci_bootstrap_legacy": [
+      0.3065326633165829,
+      1.6153393487642211
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.29895150874589527,
+      2.148626253286424
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.10080454561848085,
+      3.3687509023496762
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 4.210752610035983,
+     "OE_close_20": 1.1874361813807135,
+     "OE_ci_20y": [
+      0.3855572959211554,
+      2.7710799374705983
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.11725838945901673
+    },
+    "local_max|C|k1": {
+     "n": 57,
+     "n_nov": 57,
+     "buf_pct_med": 2.696694374637554,
+     "buf_atr_med": 1.5000517116558074,
+     "endpoint_hold": 0.8596491228070176,
+     "close_hold": 0.8596491228070176,
+     "intraday_hold": 0.7719298245614035,
+     "random_close_hold_in": 0.8774805867126834,
+     "random_close_hold_20": 0.9177842643582464,
+     "random_end_hold_in": 0.8774805867126834,
+     "OE_close_in": 1.1455399061032863,
+     "expected_breaches_nov": 6.983606557377049,
+     "observed_breaches_nov": 8,
+     "close_hold_nov": 0.8596491228070176,
+     "random_close_hold_nov": 0.8774805867126834,
+     "OE_ci_bootstrap_legacy": [
+      0.5398230088495575,
+      1.8063781321184507
+     ],
+     "baseline_uncertainty": {
+      "E_point": 6.983606557377049,
+      "E_lo": 5.065573770491803,
+      "E_hi": 9.19672131147541
+     },
+     "OE_ci": [
+      0.37555037928994384,
+      3.11182699816114
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.17397266958950602,
+      4.578682346770018
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 4.6862969315799505,
+     "OE_close_20": 1.7071048029606735,
+     "OE_ci_20y": [
+      0.7370066871934351,
+      3.36367700347124
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.08592671269251195
+    },
+    "local_max|C|k2": {
+     "n": 57,
+     "n_nov": 30,
+     "buf_pct_med": 2.696694374637554,
+     "buf_atr_med": 1.5000517116558074,
+     "endpoint_hold": 0.7894736842105263,
+     "close_hold": 0.7543859649122807,
+     "intraday_hold": 0.7017543859649122,
+     "random_close_hold_in": 0.7926373310324992,
+     "random_close_hold_20": 0.8623713305375524,
+     "random_end_hold_in": 0.8300258843830889,
+     "OE_close_in": 1.5895765472312702,
+     "expected_breaches_nov": 5.032786885245902,
+     "observed_breaches_nov": 8,
+     "close_hold_nov": 0.7333333333333334,
+     "random_close_hold_nov": 0.83224043715847,
+     "OE_ci_bootstrap_legacy": [
+      0.778723404255319,
+      2.6378378378378375
+     ],
+     "baseline_uncertainty": {
+      "E_point": 5.032786885245901,
+      "E_lo": 3.098360655737705,
+      "E_hi": 7.229508196721311
+     },
+     "OE_ci": [
+      0.4777409586885679,
+      5.0875901715967835
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.22131217151861132,
+      7.48578224948114
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 3.1603126191383915,
+     "OE_close_20": 2.531395138428132,
+     "OE_ci_20y": [
+      1.0928767476459753,
+      4.987857569765012
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.08592671269251195
+    },
+    "local_max|C|k3": {
+     "n": 57,
+     "n_nov": 20,
+     "buf_pct_med": 2.696694374637554,
+     "buf_atr_med": 1.5000517116558074,
+     "endpoint_hold": 0.7719298245614035,
+     "close_hold": 0.6666666666666667,
+     "intraday_hold": 0.6140350877192983,
+     "random_close_hold_in": 0.7293643945930399,
+     "random_close_hold_20": 0.8172093723345542,
+     "random_end_hold_in": 0.8021282714984181,
+     "OE_close_in": 1.3631284916201118,
+     "expected_breaches_nov": 5.868852459016393,
+     "observed_breaches_nov": 8,
+     "close_hold_nov": 0.6,
+     "random_close_hold_nov": 0.7065573770491803,
+     "OE_ci_bootstrap_legacy": [
+      0.8883495145631068,
+      1.7985257985257983
+     ],
+     "baseline_uncertainty": {
+      "E_point": 5.868852459016393,
+      "E_lo": 3.9344262295081966,
+      "E_hi": 7.868852459016393
+     },
+     "OE_ci": [
+      0.43892450579512177,
+      4.006477260132467
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.20333055758272311,
+      5.895053521466398
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 4.145281220209724,
+     "OE_close_20": 1.929905252506669,
+     "OE_ci_20y": [
+      0.8331961073979339,
+      3.8026827090384474
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.08592671269251195
+    },
+    "local_max|C|expiry": {
+     "n": 55,
+     "n_nov": 21,
+     "buf_pct_med": 2.7680644902970952,
+     "buf_atr_med": 1.5075575940790107,
+     "endpoint_hold": 0.7636363636363637,
+     "close_hold": 0.6909090909090909,
+     "intraday_hold": 0.6363636363636364,
+     "random_close_hold_in": 0.7448683556880278,
+     "random_close_hold_20": 0.8291568262583435,
+     "random_end_hold_in": 0.8114008941877795,
+     "OE_close_in": 1.4112592266167234,
+     "expected_breaches_nov": 4.9601092896174865,
+     "observed_breaches_nov": 7,
+     "close_hold_nov": 0.6666666666666667,
+     "random_close_hold_nov": 0.7638043195420244,
+     "OE_ci_bootstrap_legacy": [
+      0.7660643270773739,
+      2.0295748613678373
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.5673994033580867,
+      2.9077333823857385
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.24340998221532867,
+      4.355071140394887
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 3.116963579726964,
+     "OE_close_20": 2.2457753582777435,
+     "OE_ci_20y": [
+      0.9029181700500957,
+      4.62715556110725
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.08779982899059448
+    },
+    "nearest|P|k1": {
+     "n": 56,
+     "n_nov": 56,
+     "buf_pct_med": 0.6231160949551118,
+     "buf_atr_med": 0.3340754453029443,
+     "endpoint_hold": 0.7142857142857143,
+     "close_hold": 0.7142857142857143,
+     "intraday_hold": 0.5892857142857143,
+     "random_close_hold_in": 0.7315573770491803,
+     "random_close_hold_20": 0.7891754471943151,
+     "random_end_hold_in": 0.7315573770491803,
+     "OE_close_in": 1.0643402399127588,
+     "expected_breaches_nov": 15.032786885245903,
+     "observed_breaches_nov": 16,
+     "close_hold_nov": 0.7142857142857143,
+     "random_close_hold_nov": 0.7315573770491803,
+     "OE_ci_bootstrap_legacy": [
+      0.6421052631578946,
+      1.511261261261261
+     ],
+     "baseline_uncertainty": {
+      "E_point": 15.032786885245901,
+      "E_lo": 11.01639344262295,
+      "E_hi": 19.327868852459016
+     },
+     "OE_ci": [
+      0.47317076308069017,
+      2.3585756747785984
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.2915243463868201,
+      3.1836274949678254
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 11.806174957118353,
+     "OE_close_20": 1.3552230132209793,
+     "OE_ci_20y": [
+      0.774627047867646,
+      2.2007972685425017
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.16004934669571805
+    },
+    "nearest|P|k2": {
+     "n": 56,
+     "n_nov": 30,
+     "buf_pct_med": 0.6231160949551118,
+     "buf_atr_med": 0.3340754453029443,
+     "endpoint_hold": 0.6428571428571428,
+     "close_hold": 0.5357142857142857,
+     "intraday_hold": 0.4464285714285714,
+     "random_close_hold_in": 0.5749414519906324,
+     "random_close_hold_20": 0.67665840640488,
+     "random_end_hold_in": 0.6460772833723654,
+     "OE_close_in": 0.8652482269503546,
+     "expected_breaches_nov": 13.868852459016393,
+     "observed_breaches_nov": 12,
+     "close_hold_nov": 0.6,
+     "random_close_hold_nov": 0.5377049180327869,
+     "OE_ci_bootstrap_legacy": [
+      0.5053254437869823,
+      1.2364864864864864
+     ],
+     "baseline_uncertainty": {
+      "E_point": 13.868852459016393,
+      "E_lo": 10.278688524590164,
+      "E_hi": 17.852459016393443
+     },
+     "OE_ci": [
+      0.34732330728379723,
+      2.0393248611464028
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.19376202900980177,
+      2.8490138505845115
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 10.732176896683187,
+     "OE_close_20": 1.1181328928438217,
+     "OE_ci_20y": [
+      0.5777555819675797,
+      1.9531531440424912
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.16004934669571805
+    },
+    "nearest|P|k3": {
+     "n": 56,
+     "n_nov": 20,
+     "buf_pct_med": 0.6231160949551118,
+     "buf_atr_med": 0.3340754453029443,
+     "endpoint_hold": 0.6071428571428572,
+     "close_hold": 0.4285714285714286,
+     "intraday_hold": 0.3392857142857143,
+     "random_close_hold_in": 0.4991217798594848,
+     "random_close_hold_20": 0.6042523491760861,
+     "random_end_hold_in": 0.6446135831381733,
+     "OE_close_in": 1.0667726550079493,
+     "expected_breaches_nov": 10.311475409836065,
+     "observed_breaches_nov": 11,
+     "close_hold_nov": 0.44999999999999996,
+     "random_close_hold_nov": 0.4844262295081967,
+     "OE_ci_bootstrap_legacy": [
+      0.6777777777777778,
+      1.405149051490515
+     ],
+     "baseline_uncertainty": {
+      "E_point": 10.311475409836065,
+      "E_lo": 7.639344262295082,
+      "E_hi": 13.344262295081966
+     },
+     "OE_ci": [
+      0.41149973267991036,
+      2.5764041830717153
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.22171744246714037,
+      3.6384890757006207
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 8.17254528122021,
+     "OE_close_20": 1.345969905517322,
+     "OE_ci_20y": [
+      0.6719033273336574,
+      2.408311956194302
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.16004934669571805
+    },
+    "nearest|P|expiry": {
+     "n": 54,
+     "n_nov": 21,
+     "buf_pct_med": 0.5977074780782909,
+     "buf_atr_med": 0.30897654227410987,
+     "endpoint_hold": 0.6666666666666667,
+     "close_hold": 0.4444444444444444,
+     "intraday_hold": 0.35185185185185186,
+     "random_close_hold_in": 0.5077717061323619,
+     "random_close_hold_20": 0.6098559926607261,
+     "random_end_hold_in": 0.6443837279902853,
+     "OE_close_in": 1.1062263010386326,
+     "expected_breaches_nov": 9.943715846994536,
+     "observed_breaches_nov": 11,
+     "close_hold_nov": 0.47619047619047616,
+     "random_close_hold_nov": 0.5264897215716888,
+     "OE_ci_bootstrap_legacy": [
+      0.6696551093221114,
+      1.5247010390119582
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.5522241837689406,
+      1.979344423769994
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.29754025086813785,
+      2.7953001746603654
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 7.866789770420627,
+     "OE_close_20": 1.398283203316344,
+     "OE_ci_20y": [
+      0.6980179371112432,
+      2.501914896379592
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.16182940266901252
+    },
+    "nearest|C|k1": {
+     "n": 57,
+     "n_nov": 57,
+     "buf_pct_med": 0.4339135098239799,
+     "buf_atr_med": 0.20923593618807387,
+     "endpoint_hold": 0.5614035087719298,
+     "close_hold": 0.5614035087719298,
+     "intraday_hold": 0.4385964912280702,
+     "random_close_hold_in": 0.5780845556514236,
+     "random_close_hold_20": 0.6890988668545769,
+     "random_end_hold_in": 0.5780845556514236,
+     "OE_close_in": 1.0395364689843218,
+     "expected_breaches_nov": 24.04918032786885,
+     "observed_breaches_nov": 25,
+     "close_hold_nov": 0.5614035087719298,
+     "random_close_hold_nov": 0.5780845556514237,
+     "OE_ci_bootstrap_legacy": [
+      0.761970853573907,
+      1.3109469442578912
+     ],
+     "baseline_uncertainty": {
+      "E_point": 24.049180327868854,
+      "E_lo": 19.491803278688526,
+      "E_hi": 28.131147540983605
+     },
+     "OE_ci": [
+      0.5751163127724879,
+      1.893356462194577
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.39834348442450507,
+      2.4341671482252005
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 17.721364589289117,
+     "OE_close_20": 1.4107265766153319,
+     "OE_ci_20y": [
+      0.9129478582934754,
+      2.082510718155186
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.16700889801505817
+    },
+    "nearest|C|k2": {
+     "n": 57,
+     "n_nov": 30,
+     "buf_pct_med": 0.4339135098239799,
+     "buf_atr_med": 0.20923593618807387,
+     "endpoint_hold": 0.6491228070175439,
+     "close_hold": 0.45614035087719296,
+     "intraday_hold": 0.3508771929824561,
+     "random_close_hold_in": 0.43054357204486626,
+     "random_close_hold_20": 0.5480834186113397,
+     "random_end_hold_in": 0.6008052919183204,
+     "OE_close_in": 0.9268755935422602,
+     "expected_breaches_nov": 17.262295081967213,
+     "observed_breaches_nov": 16,
+     "close_hold_nov": 0.4666666666666667,
+     "random_close_hold_nov": 0.42459016393442617,
+     "OE_ci_bootstrap_legacy": [
+      0.6402671755725191,
+      1.1938490214352284
+     ],
+     "baseline_uncertainty": {
+      "E_point": 17.262295081967213,
+      "E_lo": 13.508196721311476,
+      "E_hi": 20.75409836065574
+     },
+     "OE_ci": [
+      0.44065428884054725,
+      1.9234986085573036
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.2714906827725694,
+      2.596356403663081
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 13.764963781929088,
+     "OE_close_20": 1.1623713838611847,
+     "OE_ci_20y": [
+      0.6643956786611942,
+      1.8876183046461725
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.16700889801505817
+    },
+    "nearest|C|k3": {
+     "n": 57,
+     "n_nov": 20,
+     "buf_pct_med": 0.4339135098239799,
+     "buf_atr_med": 0.20923593618807387,
+     "endpoint_hold": 0.631578947368421,
+     "close_hold": 0.368421052631579,
+     "intraday_hold": 0.24561403508771928,
+     "random_close_hold_in": 0.38021282714984184,
+     "random_close_hold_20": 0.4669008077868647,
+     "random_end_hold_in": 0.6183491515674432,
+     "OE_close_in": 0.9786096256684492,
+     "expected_breaches_nov": 12.262295081967213,
+     "observed_breaches_nov": 12,
+     "close_hold_nov": 0.4,
+     "random_close_hold_nov": 0.3868852459016393,
+     "OE_ci_bootstrap_legacy": [
+      0.6430722891566265,
+      1.2866004962779156
+     ],
+     "baseline_uncertainty": {
+      "E_point": 12.262295081967213,
+      "E_lo": 9.655737704918034,
+      "E_hi": 14.573770491803279
+     },
+     "OE_ci": [
+      0.4254612841755401,
+      2.170894207026815
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.23735303666106178,
+      3.0328211957835123
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 10.507149666348903,
+     "OE_close_20": 1.1420794774088188,
+     "OE_ci_20y": [
+      0.5901291316502997,
+      1.9949830081235373
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.16700889801505817
+    },
+    "nearest|C|expiry": {
+     "n": 55,
+     "n_nov": 21,
+     "buf_pct_med": 0.41168792047394653,
+     "buf_atr_med": 0.20923593618807387,
+     "endpoint_hold": 0.6545454545454545,
+     "close_hold": 0.4,
+     "intraday_hold": 0.2727272727272727,
+     "random_close_hold_in": 0.38638847491306505,
+     "random_close_hold_20": 0.47806953982101486,
+     "random_end_hold_in": 0.6107848981619473,
+     "OE_close_in": 1.0678782068649313,
+     "expected_breaches_nov": 13.110109289617487,
+     "observed_breaches_nov": 14,
+     "close_hold_nov": 0.33333333333333337,
+     "random_close_hold_nov": 0.3757090814467864,
+     "OE_ci_bootstrap_legacy": [
+      0.761183786369403,
+      1.3388066980978701
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.5838189527803641,
+      1.7917181773944564
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.34444526115242446,
+      2.456719933989337
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 11.351460547766122,
+     "OE_close_20": 1.2333214691703343,
+     "OE_ci_20y": [
+      0.6742683238067397,
+      2.0693038594454833
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.17531305903398928
+    },
+    "structural|P|k1": {
+     "n": 43,
+     "n_nov": 43,
+     "buf_pct_med": 5.792420327304049,
+     "buf_atr_med": 3.245461072930558,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 0.9992375142966069,
+     "random_close_hold_20": 0.9974869360564841,
+     "random_end_hold_in": 0.9992375142966069,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.032786885245901676,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9992375142966069,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.03278688524590164,
+      "E_lo": 0.0,
+      "E_hi": 0.09836065573770492
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.0次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.0次·无从区分",
+     "expected_breaches_nov_20y": 0.10806174957118397,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      34.13677336108597
+     ],
+     "verdict_20y": "期望破墙仅0.1次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|P|k2": {
+     "n": 43,
+     "n_nov": 25,
+     "buf_pct_med": 5.792420327304049,
+     "buf_atr_med": 3.245461072930558,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 0.9767441860465116,
+     "random_close_hold_in": 0.9980937857415173,
+     "random_close_hold_20": 0.9923086471198432,
+     "random_end_hold_in": 0.9980937857415173,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.049180327868852514,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9980327868852459,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.04918032786885246,
+      "E_lo": 0.0,
+      "E_hi": 0.14754098360655737
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.0次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.0次·无从区分",
+     "expected_breaches_nov_20y": 0.1869996187571481,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      19.726668314252528
+     ],
+     "verdict_20y": "期望破墙仅0.2次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|P|k3": {
+     "n": 43,
+     "n_nov": 18,
+     "buf_pct_med": 5.792420327304049,
+     "buf_atr_med": 3.245461072930558,
+     "endpoint_hold": 0.9767441860465116,
+     "close_hold": 0.9767441860465116,
+     "intraday_hold": 0.9534883720930233,
+     "random_close_hold_in": 0.988562714449104,
+     "random_close_hold_20": 0.9854967078280533,
+     "random_end_hold_in": 0.988562714449104,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.2131147540983609,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.98816029143898,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.21311475409836064,
+      "E_lo": 0.0,
+      "E_hi": 0.639344262295082
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.2次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.2次·无从区分",
+     "expected_breaches_nov_20y": 0.22383222116301227,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      16.480555993890633
+     ],
+     "verdict_20y": "期望破墙仅0.2次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|P|expiry": {
+     "n": 42,
+     "n_nov": 19,
+     "buf_pct_med": 5.9733612058332,
+     "buf_atr_med": 3.2880304740711255,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 0.9761904761904762,
+     "random_close_hold_in": 0.989799635701275,
+     "random_close_hold_20": 0.9869624470227221,
+     "random_end_hold_in": 0.9901964610981004,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.18087431693989087,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9904802991084268,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.0,
+      20.394711181354978
+     ],
+     "verdict": "期望破墙仅0.2次·无从区分",
+     "OE_ci_simultaneous": [
+      0.0,
+      45.62962716439466
+     ],
+     "verdict_simultaneous": "期望破墙仅0.2次·无从区分",
+     "expected_breaches_nov_20y": 0.24270439762693385,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      15.199063099730857
+     ],
+     "verdict_20y": "期望破墙仅0.2次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|k1": {
+     "n": 48,
+     "n_nov": 48,
+     "buf_pct_med": 7.293793606851473,
+     "buf_atr_med": 3.7581850652847137,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 0.9986338797814207,
+     "random_close_hold_20": 0.9994163331427482,
+     "random_end_hold_in": 0.9986338797814207,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.06557377049180335,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9986338797814207,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.06557377049180328,
+      "E_lo": 0.0,
+      "E_hi": 0.16393442622950818
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.1次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.1次·无从区分",
+     "expected_breaches_nov_20y": 0.028016009148084886,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      131.6704115356166
+     ],
+     "verdict_20y": "期望破墙仅0.0次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|k2": {
+     "n": 48,
+     "n_nov": 27,
+     "buf_pct_med": 7.293793606851473,
+     "buf_atr_med": 3.7581850652847137,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 0.9965846994535519,
+     "random_close_hold_20": 0.9973829266742915,
+     "random_end_hold_in": 0.9965846994535519,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.08196721311475419,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9969641772920461,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.08196721311475409,
+      "E_lo": 0.0,
+      "E_hi": 0.21311475409836064
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.1次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.1次·无从区分",
+     "expected_breaches_nov_20y": 0.06614563476934832,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      55.76905364922662
+     ],
+     "verdict_20y": "期望破墙仅0.1次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|k3": {
+     "n": 48,
+     "n_nov": 18,
+     "buf_pct_med": 7.293793606851473,
+     "buf_atr_med": 3.7581850652847137,
+     "endpoint_hold": 0.9791666666666666,
+     "close_hold": 0.9791666666666666,
+     "intraday_hold": 0.9583333333333334,
+     "random_close_hold_in": 0.9849726775956285,
+     "random_close_hold_20": 0.9938830632348268,
+     "random_end_hold_in": 0.9849726775956285,
+     "OE_close_in": 3.812499999999999,
+     "expected_breaches_nov": 0.2622950819672132,
+     "observed_breaches_nov": 1,
+     "close_hold_nov": 0.9444444444444444,
+     "random_close_hold_nov": 0.9854280510018215,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      15.249999999999982
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.26229508196721313,
+      "E_lo": 0.0,
+      "E_hi": 0.6229508196721312
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.3次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.3次·无从区分",
+     "expected_breaches_nov_20y": 0.10104861773117257,
+     "OE_close_20": 9.896226415094336,
+     "OE_ci_20y": [
+      0.2505507601464154,
+      55.13824450089531
+     ],
+     "verdict_20y": "期望破墙仅0.1次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|expiry": {
+     "n": 46,
+     "n_nov": 17,
+     "buf_pct_med": 7.293793606851473,
+     "buf_atr_med": 3.9060327556717276,
+     "endpoint_hold": 0.9782608695652174,
+     "close_hold": 0.9782608695652174,
+     "intraday_hold": 0.9347826086956522,
+     "random_close_hold_in": 0.9846044191019244,
+     "random_close_hold_20": 0.9934261774114022,
+     "random_end_hold_in": 0.9846044191019244,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.2153005464480876,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9873352619736419,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.0,
+      17.133627921392126
+     ],
+     "verdict": "期望破墙仅0.2次·无从区分",
+     "OE_ci_simultaneous": [
+      0.0,
+      38.33351926754983
+     ],
+     "verdict_simultaneous": "期望破墙仅0.2次·无从区分",
+     "expected_breaches_nov_20y": 0.08980726314661369,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      41.07551354829401
+     ],
+     "verdict_20y": "期望破墙仅0.1次·无从区分",
+     "oi_share_before_target_med": null
+    }
+   }
+  },
+  "silver": {
+   "symbol": "SLV",
+   "span": "2026-06-26→2026-09-22",
+   "n_days": 57,
+   "summary": {
+    "local_max|P|k1": {
+     "n": 56,
+     "n_nov": 56,
+     "buf_pct_med": 2.4665910780821863,
+     "buf_atr_med": 0.6163352986882413,
+     "endpoint_hold": 0.8571428571428572,
+     "close_hold": 0.8571428571428572,
+     "intraday_hold": 0.7321428571428572,
+     "random_close_hold_in": 0.8331381733021077,
+     "random_close_hold_20": 0.8679022082018928,
+     "random_end_hold_in": 0.8331381733021077,
+     "OE_close_in": 0.8561403508771929,
+     "expected_breaches_nov": 9.344262295081968,
+     "observed_breaches_nov": 8,
+     "close_hold_nov": 0.8571428571428572,
+     "random_close_hold_nov": 0.8331381733021077,
+     "OE_ci_bootstrap_legacy": [
+      0.35812133072407043,
+      1.408525754884547
+     ],
+     "baseline_uncertainty": {
+      "E_point": 9.344262295081966,
+      "E_lo": 6.360655737704918,
+      "E_hi": 12.78688524590164
+     },
+     "OE_ci": [
+      0.2701073881816134,
+      2.4782333567829697
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.12512649697399697,
+      3.6464248586390093
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 7.3974763406940065,
+     "OE_close_20": 1.081449893390192,
+     "OE_ci_20y": [
+      0.4668933049165349,
+      2.130887412708435
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.20171319879962277
+    },
+    "local_max|P|k2": {
+     "n": 56,
+     "n_nov": 30,
+     "buf_pct_med": 2.4665910780821863,
+     "buf_atr_med": 0.6163352986882413,
+     "endpoint_hold": 0.7857142857142857,
+     "close_hold": 0.75,
+     "intraday_hold": 0.6428571428571428,
+     "random_close_hold_in": 0.7365339578454333,
+     "random_close_hold_20": 0.7873782979746379,
+     "random_end_hold_in": 0.8009367681498829,
+     "OE_close_in": 1.002053388090349,
+     "expected_breaches_nov": 7.9836065573770485,
+     "observed_breaches_nov": 8,
+     "close_hold_nov": 0.7333333333333334,
+     "random_close_hold_nov": 0.733879781420765,
+     "OE_ci_bootstrap_legacy": [
+      0.5020576131687243,
+      1.4682713347921228
+     ],
+     "baseline_uncertainty": {
+      "E_point": 7.983606557377049,
+      "E_lo": 5.344262295081967,
+      "E_hi": 11.065573770491802
+     },
+     "OE_ci": [
+      0.31212409300986454,
+      2.9495538111404667
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.14459061872550372,
+      4.339916702920048
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 6.237273874631889,
+     "OE_close_20": 1.2826116282206934,
+     "OE_ci_20y": [
+      0.553740663977552,
+      2.5272562239578793
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.20171319879962277
+    },
+    "local_max|P|k3": {
+     "n": 56,
+     "n_nov": 20,
+     "buf_pct_med": 2.4665910780821863,
+     "buf_atr_med": 0.6163352986882413,
+     "endpoint_hold": 0.8035714285714286,
+     "close_hold": 0.6964285714285714,
+     "intraday_hold": 0.5892857142857143,
+     "random_close_hold_in": 0.6712529274004684,
+     "random_close_hold_20": 0.728194223197379,
+     "random_end_hold_in": 0.7836651053864169,
+     "OE_close_in": 0.8693586698337293,
+     "expected_breaches_nov": 6.9016393442622945,
+     "observed_breaches_nov": 6,
+     "close_hold_nov": 0.7,
+     "random_close_hold_nov": 0.6549180327868853,
+     "OE_ci_bootstrap_legacy": [
+      0.31362467866323906,
+      1.5250000000000001
+     ],
+     "baseline_uncertainty": {
+      "E_point": 6.901639344262295,
+      "E_lo": 4.786885245901639,
+      "E_hi": 9.245901639344263
+     },
+     "OE_ci": [
+      0.23814813734564155,
+      2.7281777923754786
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.09234995859954825,
+      4.172105893726199
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 5.447506837786661,
+     "OE_close_20": 1.1014212884288583,
+     "OE_ci_20y": [
+      0.40420220094399817,
+      2.397330450680956
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.20171319879962277
+    },
+    "local_max|P|expiry": {
+     "n": 52,
+     "n_nov": 18,
+     "buf_pct_med": 2.4665910780821863,
+     "buf_atr_med": 0.6938175864891647,
+     "endpoint_hold": 0.7692307692307692,
+     "close_hold": 0.7307692307692308,
+     "intraday_hold": 0.5769230769230769,
+     "random_close_hold_in": 0.6832019756200084,
+     "random_close_hold_20": 0.7376283032260162,
+     "random_end_hold_in": 0.7873371164354771,
+     "OE_close_in": 0.8295557570262918,
+     "expected_breaches_nov": 7.232786885245902,
+     "observed_breaches_nov": 6,
+     "close_hold_nov": 0.6666666666666667,
+     "random_close_hold_nov": 0.5981785063752276,
+     "OE_ci_bootstrap_legacy": [
+      0.3613030602171767,
+      1.2424775483751505
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.30443234239107375,
+      1.8055936431859467
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.11805389086615925,
+      2.7612305552313012
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 6.355876236358636,
+     "OE_close_20": 0.9440083124459134,
+     "OE_ci_20y": [
+      0.34643441307037526,
+      2.054708672238185
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.22629614683588575
+    },
+    "local_max|C|k1": {
+     "n": 57,
+     "n_nov": 57,
+     "buf_pct_med": 3.2346868547832086,
+     "buf_atr_med": 0.8580040187541859,
+     "endpoint_hold": 0.8421052631578947,
+     "close_hold": 0.8421052631578947,
+     "intraday_hold": 0.6491228070175439,
+     "random_close_hold_in": 0.8254242162784009,
+     "random_close_hold_20": 0.889589905362776,
+     "random_end_hold_in": 0.8254242162784009,
+     "OE_close_in": 0.9044481054365733,
+     "expected_breaches_nov": 9.950819672131148,
+     "observed_breaches_nov": 9,
+     "close_hold_nov": 0.8421052631578947,
+     "random_close_hold_nov": 0.8254242162784009,
+     "OE_ci_bootstrap_legacy": [
+      0.42068965517241375,
+      1.4523809523809523
+     ],
+     "baseline_uncertainty": {
+      "E_point": 9.950819672131148,
+      "E_lo": 7.163934426229508,
+      "E_hi": 12.901639344262295
+     },
+     "OE_ci": [
+      0.3189806339772274,
+      2.3848352643857424
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.15701252181159497,
+      3.4553231389824868
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 6.2933753943217665,
+     "OE_close_20": 1.4300751879699247,
+     "OE_ci_20y": [
+      0.6539214395332982,
+      2.7147281674686106
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.1141965342804865
+    },
+    "local_max|C|k2": {
+     "n": 57,
+     "n_nov": 30,
+     "buf_pct_med": 3.2346868547832086,
+     "buf_atr_med": 0.8580040187541859,
+     "endpoint_hold": 0.7192982456140351,
+     "close_hold": 0.631578947368421,
+     "intraday_hold": 0.5087719298245614,
+     "random_close_hold_in": 0.6962899050905953,
+     "random_close_hold_20": 0.8038143317907727,
+     "random_end_hold_in": 0.7584124245038827,
+     "OE_close_in": 1.3260869565217392,
+     "expected_breaches_nov": 9.049180327868852,
+     "observed_breaches_nov": 12,
+     "close_hold_nov": 0.6,
+     "random_close_hold_nov": 0.6983606557377049,
+     "OE_ci_bootstrap_legacy": [
+      0.7721518987341773,
+      1.955128205128205
+     ],
+     "baseline_uncertainty": {
+      "E_point": 9.049180327868852,
+      "E_lo": 6.311475409836065,
+      "E_hi": 11.80327868852459
+     },
+     "OE_ci": [
+      0.5253265022667433,
+      3.321186202438427
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.29306506887734785,
+      4.639822556666205
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 5.817627261253681,
+     "OE_close_20": 2.0626966048378352,
+     "OE_ci_20y": [
+      1.0658254354002739,
+      3.6031158592411776
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.1141965342804865
+    },
+    "local_max|C|k3": {
+     "n": 57,
+     "n_nov": 20,
+     "buf_pct_med": 3.2346868547832086,
+     "buf_atr_med": 0.8580040187541859,
+     "endpoint_hold": 0.7017543859649122,
+     "close_hold": 0.5614035087719298,
+     "intraday_hold": 0.4385964912280702,
+     "random_close_hold_in": 0.5996548748921484,
+     "random_close_hold_20": 0.7373256410540342,
+     "random_end_hold_in": 0.7135461604831752,
+     "OE_close_in": 1.043726235741445,
+     "expected_breaches_nov": 8.62295081967213,
+     "observed_breaches_nov": 9,
+     "close_hold_nov": 0.55,
+     "random_close_hold_nov": 0.5688524590163935,
+     "OE_ci_bootstrap_legacy": [
+      0.546594982078853,
+      1.5814814814814815
+     ],
+     "baseline_uncertainty": {
+      "E_point": 8.62295081967213,
+      "E_lo": 6.032786885245901,
+      "E_hi": 11.131147540983607
+     },
+     "OE_ci": [
+      0.3697168762004095,
+      2.831991876458069
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.18198653117189684,
+      4.103196227541703
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 5.771933515674311,
+     "OE_close_20": 1.559269519574251,
+     "OE_ci_20y": [
+      0.7129973147131019,
+      2.959979252190542
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.1141965342804865
+    },
+    "local_max|C|expiry": {
+     "n": 53,
+     "n_nov": 18,
+     "buf_pct_med": 3.316113981003177,
+     "buf_atr_med": 0.8617670469620594,
+     "endpoint_hold": 0.7547169811320755,
+     "close_hold": 0.6226415094339622,
+     "intraday_hold": 0.4716981132075472,
+     "random_close_hold_in": 0.6107433756057326,
+     "random_close_hold_20": 0.7444577255527881,
+     "random_end_hold_in": 0.7186050108258584,
+     "OE_close_in": 1.311619017281198,
+     "expected_breaches_nov": 6.861748633879781,
+     "observed_breaches_nov": 9,
+     "close_hold_nov": 0.5,
+     "random_close_hold_nov": 0.6187917425622345,
+     "OE_ci_bootstrap_legacy": [
+      0.728720756595321,
+      1.9192448872574726
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.5997557353032046,
+      2.4898614570436477
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.29521905231916135,
+      3.6074927412646653
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 4.323237101269188,
+     "OE_close_20": 2.0817734001583763,
+     "OE_ci_20y": [
+      0.9519193606499565,
+      3.9518543746776054
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.11956670780200192
+    },
+    "nearest|P|k1": {
+     "n": 56,
+     "n_nov": 56,
+     "buf_pct_med": 0.6239277318143721,
+     "buf_atr_med": 0.1824610176177533,
+     "endpoint_hold": 0.7142857142857143,
+     "close_hold": 0.7142857142857143,
+     "intraday_hold": 0.5714285714285714,
+     "random_close_hold_in": 0.6920374707259953,
+     "random_close_hold_20": 0.7143683340844225,
+     "random_end_hold_in": 0.6920374707259953,
+     "OE_close_in": 0.9277566539923953,
+     "expected_breaches_nov": 17.245901639344265,
+     "observed_breaches_nov": 16,
+     "close_hold_nov": 0.7142857142857143,
+     "random_close_hold_nov": 0.6920374707259953,
+     "OE_ci_bootstrap_legacy": [
+      0.5601469237832875,
+      1.319567354965585
+     ],
+     "baseline_uncertainty": {
+      "E_point": 17.24590163934426,
+      "E_lo": 13.295081967213115,
+      "E_hi": 21.75409836065574
+     },
+     "OE_ci": [
+      0.4203981384115545,
+      1.9543315085711694
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.2590107041372113,
+      2.6379749403432537
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 15.995373291272344,
+     "OE_close_20": 1.000289252938547,
+     "OE_ci_20y": [
+      0.5717517363993991,
+      1.6244070784980194
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.2271407122227361
+    },
+    "nearest|P|k2": {
+     "n": 56,
+     "n_nov": 30,
+     "buf_pct_med": 0.6239277318143721,
+     "buf_atr_med": 0.1824610176177533,
+     "endpoint_hold": 0.625,
+     "close_hold": 0.5357142857142857,
+     "intraday_hold": 0.3928571428571429,
+     "random_close_hold_in": 0.5307377049180328,
+     "random_close_hold_20": 0.5914192559649017,
+     "random_end_hold_in": 0.6282201405152226,
+     "OE_close_in": 0.899092970521542,
+     "expected_breaches_nov": 14.459016393442623,
+     "observed_breaches_nov": 13,
+     "close_hold_nov": 0.5666666666666667,
+     "random_close_hold_nov": 0.5180327868852459,
+     "OE_ci_bootstrap_legacy": [
+      0.556442417331813,
+      1.2404306220095693
+     ],
+     "baseline_uncertainty": {
+      "E_point": 14.459016393442623,
+      "E_lo": 11.081967213114755,
+      "E_hi": 18.114754098360656
+     },
+     "OE_ci": [
+      0.3821168343450059,
+      2.005997264804277
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.21964549845100256,
+      2.7751582709415255
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 12.57236011779554,
+     "OE_close_20": 1.0340142883434558,
+     "OE_ci_20y": [
+      0.550569059917885,
+      1.7681959242237166
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.2271407122227361
+    },
+    "nearest|P|k3": {
+     "n": 56,
+     "n_nov": 20,
+     "buf_pct_med": 0.6239277318143721,
+     "buf_atr_med": 0.1824610176177533,
+     "endpoint_hold": 0.5714285714285714,
+     "close_hold": 0.4285714285714286,
+     "intraday_hold": 0.2857142857142857,
+     "random_close_hold_in": 0.4502341920374707,
+     "random_close_hold_20": 0.5201076012142707,
+     "random_end_hold_in": 0.6276346604215457,
+     "OE_close_in": 0.9599427753934192,
+     "expected_breaches_nov": 11.459016393442623,
+     "observed_breaches_nov": 11,
+     "close_hold_nov": 0.44999999999999996,
+     "random_close_hold_nov": 0.42704918032786887,
+     "OE_ci_bootstrap_legacy": [
+      0.5972027972027972,
+      1.310888252148997
+     ],
+     "baseline_uncertainty": {
+      "E_point": 11.459016393442623,
+      "E_lo": 8.754098360655737,
+      "E_hi": 14.295081967213115
+     },
+     "OE_ci": [
+      0.3841293376163383,
+      2.2483227515195123
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.20697018138561574,
+      3.175160878794924
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 9.877761413843889,
+     "OE_close_20": 1.113612643506784,
+     "OE_ci_20y": [
+      0.5559114193162087,
+      1.992560630763684
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.2271407122227361
+    },
+    "nearest|P|expiry": {
+     "n": 52,
+     "n_nov": 18,
+     "buf_pct_med": 0.6239277318143721,
+     "buf_atr_med": 0.1824610176177533,
+     "endpoint_hold": 0.5384615384615384,
+     "close_hold": 0.46153846153846156,
+     "intraday_hold": 0.32692307692307687,
+     "random_close_hold_in": 0.4592370744010088,
+     "random_close_hold_20": 0.5250635073167862,
+     "random_end_hold_in": 0.6253415300546448,
+     "OE_close_in": 0.8730453220249138,
+     "expected_breaches_nov": 10.308743169398907,
+     "observed_breaches_nov": 9,
+     "close_hold_nov": 0.5,
+     "random_close_hold_nov": 0.4272920461445051,
+     "OE_ci_bootstrap_legacy": [
+      0.49644620476371326,
+      1.2282513294439568
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.399211914561482,
+      1.6573119701085122
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.19650493718376127,
+      2.4012343679862393
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 9.29123806749698,
+     "OE_close_20": 0.9686545468557304,
+     "OE_ci_20y": [
+      0.44293054030925294,
+      1.8388080605948507
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.23008392989710347
+    },
+    "nearest|C|k1": {
+     "n": 57,
+     "n_nov": 57,
+     "buf_pct_med": 0.7431874483897705,
+     "buf_atr_med": 0.21800227876946268,
+     "endpoint_hold": 0.543859649122807,
+     "close_hold": 0.543859649122807,
+     "intraday_hold": 0.368421052631579,
+     "random_close_hold_in": 0.545010066148979,
+     "random_close_hold_20": 0.6888298559226669,
+     "random_end_hold_in": 0.545010066148979,
+     "OE_close_in": 1.002528445006321,
+     "expected_breaches_nov": 25.934426229508198,
+     "observed_breaches_nov": 26,
+     "close_hold_nov": 0.543859649122807,
+     "random_close_hold_nov": 0.545010066148979,
+     "OE_ci_bootstrap_legacy": [
+      0.720771144278607,
+      1.288732394366197
+     ],
+     "baseline_uncertainty": {
+      "E_point": 25.934426229508198,
+      "E_lo": 21.147540983606557,
+      "E_hi": 30.39344262295082
+     },
+     "OE_ci": [
+      0.5588068264031163,
+      1.8014398985043618
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.39038993430968105,
+      2.3067604415037435
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 17.73669821240799,
+     "OE_close_20": 1.4658872631553985,
+     "OE_ci_20y": [
+      0.9575662286295701,
+      2.147864480012088
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.2086969383227333
+    },
+    "nearest|C|k2": {
+     "n": 57,
+     "n_nov": 30,
+     "buf_pct_med": 0.7431874483897705,
+     "buf_atr_med": 0.21800227876946268,
+     "endpoint_hold": 0.5614035087719298,
+     "close_hold": 0.3508771929824561,
+     "intraday_hold": 0.26315789473684215,
+     "random_close_hold_in": 0.3914293931550187,
+     "random_close_hold_20": 0.5503361896537726,
+     "random_end_hold_in": 0.5642795513373597,
+     "OE_close_in": 1.139679715302491,
+     "expected_breaches_nov": 18.426229508196723,
+     "observed_breaches_nov": 21,
+     "close_hold_nov": 0.30000000000000004,
+     "random_close_hold_nov": 0.3857923497267759,
+     "OE_ci_bootstrap_legacy": [
+      0.8808664259927798,
+      1.3788426763110309
+     ],
+     "baseline_uncertainty": {
+      "E_point": 18.42622950819672,
+      "E_lo": 14.98360655737705,
+      "E_hi": 21.672131147540984
+     },
+     "OE_ci": [
+      0.599817844197162,
+      2.1423901256362656
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.39865775021455385,
+      2.8052771355890975
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 13.695204038704249,
+     "OE_close_20": 1.5333835071497688,
+     "OE_ci_20y": [
+      0.9491885588077817,
+      2.343939575067518
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.2086969383227333
+    },
+    "nearest|C|k3": {
+     "n": 57,
+     "n_nov": 20,
+     "buf_pct_med": 0.7431874483897705,
+     "buf_atr_med": 0.21800227876946268,
+     "endpoint_hold": 0.6140350877192983,
+     "close_hold": 0.3157894736842105,
+     "intraday_hold": 0.19298245614035092,
+     "random_close_hold_in": 0.3183779119930975,
+     "random_close_hold_20": 0.4703363711192562,
+     "random_end_hold_in": 0.5464480874316939,
+     "OE_close_in": 0.8703923900118906,
+     "expected_breaches_nov": 13.786885245901638,
+     "observed_breaches_nov": 12,
+     "close_hold_nov": 0.4,
+     "random_close_hold_nov": 0.31065573770491806,
+     "OE_ci_bootstrap_legacy": [
+      0.5635103926096998,
+      1.1773220747889024
+     ],
+     "baseline_uncertainty": {
+      "E_point": 13.78688524590164,
+      "E_lo": 11.426229508196721,
+      "E_hi": 15.901639344262295
+     },
+     "OE_ci": [
+      0.38993307384747955,
+      1.8345146168418855
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.21753283463059425,
+      2.5628862041843457
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 10.674731748369451,
+     "OE_close_20": 1.1241500285787491,
+     "OE_ci_20y": [
+      0.5808647238062299,
+      1.9636638692470005
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.2086969383227333
+    },
+    "nearest|C|expiry": {
+     "n": 53,
+     "n_nov": 18,
+     "buf_pct_med": 0.7218398522746305,
+     "buf_atr_med": 0.21800227876946268,
+     "endpoint_hold": 0.6037735849056604,
+     "close_hold": 0.339622641509434,
+     "intraday_hold": 0.2075471698113207,
+     "random_close_hold_in": 0.3192648726672853,
+     "random_close_hold_20": 0.4715173142799223,
+     "random_end_hold_in": 0.5364315908856583,
+     "OE_close_in": 1.0947242482111221,
+     "expected_breaches_nov": 11.875136612021858,
+     "observed_breaches_nov": 13,
+     "close_hold_nov": 0.2777777777777778,
+     "random_close_hold_nov": 0.34027018822100785,
+     "OE_ci_bootstrap_legacy": [
+      0.7603351568450939,
+      1.3968132811754606
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.5828945566820949,
+      1.8720118045340057
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.33505502490167083,
+      2.5897986671280924
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 8.9425135624871,
+     "OE_close_20": 1.453729973028347,
+     "OE_ci_20y": [
+      0.7740499852346501,
+      2.4859225275780448
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.23798932384341637
+    },
+    "structural|P|k1": {
+     "n": 56,
+     "n_nov": 56,
+     "buf_pct_med": 6.610928539199784,
+     "buf_atr_med": 1.8686038466860393,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 0.9874121779859485,
+     "random_close_hold_20": 0.9878060687997596,
+     "random_end_hold_in": 0.9874121779859485,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.7049180327868857,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9874121779859485,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.7049180327868853,
+      "E_lo": 0.16393442622950818,
+      "E_hi": 1.3934426229508197
+     },
+     "OE_ci": [
+      0.0,
+      22.502164670095013
+     ],
+     "verdict": "期望破墙仅0.7次·无从区分",
+     "OE_ci_simultaneous": [
+      0.0,
+      50.34468863804882
+     ],
+     "verdict_simultaneous": "期望破墙仅0.7次·无从区分",
+     "expected_breaches_nov_20y": 0.6828601472134596,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      5.402100956055364
+     ],
+     "verdict_20y": "期望破墙仅0.7次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|P|k2": {
+     "n": 56,
+     "n_nov": 29,
+     "buf_pct_med": 6.610928539199784,
+     "buf_atr_med": 1.8686038466860393,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 0.9821428571428571,
+     "random_close_hold_in": 0.9733606557377049,
+     "random_close_hold_20": 0.9697172306028007,
+     "random_end_hold_in": 0.9818501170960188,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 1.0,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9655172413793104,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 1.0,
+      "E_lo": 0.3442622950819672,
+      "E_hi": 1.7704918032786885
+     },
+     "OE_ci": [
+      0.0,
+      10.715316509569053
+     ],
+     "verdict": "期望破墙仅1.0次·无从区分",
+     "OE_ci_simultaneous": [
+      0.0,
+      23.973661256213724
+     ],
+     "verdict_simultaneous": "期望破墙仅1.0次·无从区分",
+     "expected_breaches_nov_20y": 1.0006310475389142,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      3.686553063875901
+     ],
+     "verdict_20y": "期望破墙仅1.0次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|P|k3": {
+     "n": 56,
+     "n_nov": 20,
+     "buf_pct_med": 6.610928539199784,
+     "buf_atr_med": 1.8686038466860393,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 0.9642857142857143,
+     "random_close_hold_in": 0.9578454332552693,
+     "random_close_hold_20": 0.9501442697844971,
+     "random_end_hold_in": 0.9721896955503513,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.7868852459016393,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9606557377049181,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.7868852459016393,
+      "E_lo": 0.2459016393442623,
+      "E_hi": 1.4262295081967213
+     },
+     "OE_ci": [
+      0.0,
+      15.001443113396672
+     ],
+     "verdict": "期望破墙仅0.8次·无从区分",
+     "OE_ci_simultaneous": [
+      0.0,
+      33.563125758699215
+     ],
+     "verdict_simultaneous": "期望破墙仅0.8次·无从区分",
+     "expected_breaches_nov_20y": 0.9671786240269301,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      3.814062224364486
+     ],
+     "verdict_20y": "期望破墙仅1.0次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|P|expiry": {
+     "n": 52,
+     "n_nov": 18,
+     "buf_pct_med": 6.109675003782599,
+     "buf_atr_med": 1.8199034785288424,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 0.9423076923076923,
+     "random_close_hold_in": 0.9524800336275746,
+     "random_close_hold_20": 0.9484277538532331,
+     "random_end_hold_in": 0.9683217738545608,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 1.0538251366120222,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9414541590771098,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.0,
+      3.50046637336194
+     ],
+     "verdict": "期望破墙仅1.1次·无从区分",
+     "OE_ci_simultaneous": [
+      0.0,
+      7.831686072810287
+     ],
+     "verdict_simultaneous": "期望破墙仅1.1次·无从区分",
+     "expected_breaches_nov_20y": 1.123141307766471,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      3.2844303994568653
+     ],
+     "verdict_20y": "期望破墙仅1.1次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|k1": {
+     "n": 50,
+     "n_nov": 50,
+     "buf_pct_med": 9.267078956450948,
+     "buf_atr_med": 2.658134413672866,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 0.9944262295081967,
+     "random_close_hold_20": 0.9929674027339642,
+     "random_end_hold_in": 0.9944262295081967,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.27868852459016413,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9944262295081967,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.2786885245901639,
+      "E_lo": 0.06557377049180328,
+      "E_hi": 0.5245901639344263
+     },
+     "OE_ci": [
+      0.0,
+      56.255411675237525
+     ],
+     "verdict": "期望破墙仅0.3次·无从区分",
+     "OE_ci_simultaneous": [
+      0.0,
+      125.86172159512202
+     ],
+     "verdict_simultaneous": "期望破墙仅0.3次·无从区分",
+     "expected_breaches_nov_20y": 0.35162986330178647,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      10.490802514540562
+     ],
+     "verdict_20y": "期望破墙仅0.4次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|k2": {
+     "n": 50,
+     "n_nov": 27,
+     "buf_pct_med": 9.267078956450948,
+     "buf_atr_med": 2.658134413672866,
+     "endpoint_hold": 0.98,
+     "close_hold": 0.98,
+     "intraday_hold": 0.96,
+     "random_close_hold_in": 0.9672131147540983,
+     "random_close_hold_20": 0.9787126630206142,
+     "random_end_hold_in": 0.9681967213114754,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.8032786885245901,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9702489374620522,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.8032786885245902,
+      "E_lo": 0.3442622950819672,
+      "E_hi": 1.3114754098360655
+     },
+     "OE_ci": [
+      0.0,
+      10.715316509569053
+     ],
+     "verdict": "期望破墙仅0.8次·无从区分",
+     "OE_ci_simultaneous": [
+      0.0,
+      23.973661256213724
+     ],
+     "verdict_simultaneous": "期望破墙仅0.8次·无从区分",
+     "expected_breaches_nov_20y": 0.5159865376525034,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      7.1491777109081305
+     ],
+     "verdict_20y": "期望破墙仅0.5次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|k3": {
+     "n": 50,
+     "n_nov": 19,
+     "buf_pct_med": 9.267078956450948,
+     "buf_atr_med": 2.658134413672866,
+     "endpoint_hold": 0.96,
+     "close_hold": 0.96,
+     "intraday_hold": 0.94,
+     "random_close_hold_in": 0.939016393442623,
+     "random_close_hold_20": 0.9619145802650957,
+     "random_end_hold_in": 0.9527868852459016,
+     "OE_close_in": 0.8133333333333331,
+     "expected_breaches_nov": 1.2295081967213117,
+     "observed_breaches_nov": 1,
+     "close_hold_nov": 0.9473684210526316,
+     "random_close_hold_nov": 0.9352890422778257,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      2.9397590361445785
+     ],
+     "baseline_uncertainty": {
+      "E_point": 1.2295081967213115,
+      "E_lo": 0.5573770491803278,
+      "E_hi": 1.9672131147540983
+     },
+     "OE_ci": [
+      0.012869885725347335,
+      9.99618373080214
+     ],
+     "verdict": "期望破墙仅1.2次·无从区分",
+     "OE_ci_simultaneous": [
+      0.00013239571199556125,
+      19.22220070238849
+     ],
+     "verdict_simultaneous": "期望破墙仅1.2次·无从区分",
+     "expected_breaches_nov_20y": 0.7925520723753418,
+     "OE_close_20": 1.2617467480753917,
+     "OE_ci_20y": [
+      0.0319446618925749,
+      7.030002929952904
+     ],
+     "verdict_20y": "期望破墙仅0.8次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|expiry": {
+     "n": 46,
+     "n_nov": 18,
+     "buf_pct_med": 9.267078956450948,
+     "buf_atr_med": 2.658134413672866,
+     "endpoint_hold": 0.9565217391304348,
+     "close_hold": 0.9565217391304348,
+     "intraday_hold": 0.9347826086956522,
+     "random_close_hold_in": 0.9365585649798052,
+     "random_close_hold_20": 0.9613323179082259,
+     "random_end_hold_in": 0.9509265858873842,
+     "OE_close_in": 0.6983400114481968,
+     "expected_breaches_nov": 1.4319672131147543,
+     "observed_breaches_nov": 1,
+     "close_hold_nov": 0.9444444444444444,
+     "random_close_hold_nov": 0.9204462659380692,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      2.131624927198602
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.017680438317592216,
+      3.89090150941354
+     ],
+     "verdict": "期望破墙仅1.4次·无从区分",
+     "OE_ci_simultaneous": [
+      0.00018188306169968343,
+      7.482024314610289
+     ],
+     "verdict_simultaneous": "期望破墙仅1.4次·无从区分",
+     "expected_breaches_nov_20y": 0.8251794478253724,
+     "OE_close_20": 1.2118576179221852,
+     "OE_ci_20y": [
+      0.03068157847485277,
+      6.752038487655101
+     ],
+     "verdict_20y": "期望破墙仅0.8次·无从区分",
+     "oi_share_before_target_med": null
+    }
+   }
+  },
+  "wti": {
+   "symbol": "USO",
+   "span": "2026-06-26→2026-09-22",
+   "n_days": 57,
+   "summary": {
+    "local_max|P|k1": {
+     "n": 45,
+     "n_nov": 45,
+     "buf_pct_med": 3.255657440901827,
+     "buf_atr_med": 0.8653943590609681,
+     "endpoint_hold": 0.7777777777777778,
+     "close_hold": 0.7777777777777778,
+     "intraday_hold": 0.6666666666666667,
+     "random_close_hold_in": 0.8539162112932605,
+     "random_close_hold_20": 0.8953382404486505,
+     "random_end_hold_in": 0.8539162112932605,
+     "OE_close_in": 1.5211970074812968,
+     "expected_breaches_nov": 6.573770491803279,
+     "observed_breaches_nov": 10,
+     "close_hold_nov": 0.7777777777777778,
+     "random_close_hold_nov": 0.8539162112932605,
+     "OE_ci_bootstrap_legacy": [
+      0.7800511508951407,
+      2.2857142857142856
+     ],
+     "baseline_uncertainty": {
+      "E_point": 6.573770491803279,
+      "E_lo": 3.360655737704918,
+      "E_hi": 10.344262295081966
+     },
+     "OE_ci": [
+      0.4635795728432299,
+      5.472252285673582
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.2397322608982863,
+      7.821835944056247
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 4.709779179810726,
+     "OE_close_20": 2.1232417950435365,
+     "OE_ci_20y": [
+      1.0181769703107708,
+      3.904717257414357
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.0
+    },
+    "local_max|P|k2": {
+     "n": 45,
+     "n_nov": 24,
+     "buf_pct_med": 3.255657440901827,
+     "buf_atr_med": 0.8653943590609681,
+     "endpoint_hold": 0.8,
+     "close_hold": 0.7333333333333334,
+     "intraday_hold": 0.6,
+     "random_close_hold_in": 0.7719489981785064,
+     "random_close_hold_20": 0.8091151311176553,
+     "random_end_hold_in": 0.8120218579234972,
+     "OE_close_in": 1.422740524781341,
+     "expected_breaches_nov": 5.622950819672131,
+     "observed_breaches_nov": 8,
+     "close_hold_nov": 0.6666666666666667,
+     "random_close_hold_nov": 0.7657103825136612,
+     "OE_ci_bootstrap_legacy": [
+      0.7052023121387284,
+      2.1906077348066297
+     ],
+     "baseline_uncertainty": {
+      "E_point": 5.622950819672131,
+      "E_lo": 2.9344262295081966,
+      "E_hi": 8.737704918032787
+     },
+     "OE_ci": [
+      0.3952791046560197,
+      5.37181308621113
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.18311194679121412,
+      7.903982375150479
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 4.7761884728649555,
+     "OE_close_20": 1.6749757773275786,
+     "OE_ci_20y": [
+      0.7231356543760401,
+      3.3003700146568757
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.0
+    },
+    "local_max|P|k3": {
+     "n": 45,
+     "n_nov": 19,
+     "buf_pct_med": 3.255657440901827,
+     "buf_atr_med": 0.8653943590609681,
+     "endpoint_hold": 0.7555555555555555,
+     "close_hold": 0.6444444444444444,
+     "intraday_hold": 0.5333333333333333,
+     "random_close_hold_in": 0.6998178506375228,
+     "random_close_hold_20": 0.7400238445893821,
+     "random_end_hold_in": 0.7806921675774134,
+     "OE_close_in": 1.278443113772455,
+     "expected_breaches_nov": 5.475409836065574,
+     "observed_breaches_nov": 7,
+     "close_hold_nov": 0.631578947368421,
+     "random_close_hold_nov": 0.7118205349439172,
+     "OE_ci_bootstrap_legacy": [
+      0.5718749999999999,
+      1.9869706840390877
+     ],
+     "baseline_uncertainty": {
+      "E_point": 5.475409836065574,
+      "E_lo": 2.6557377049180326,
+      "E_hi": 8.639344262295081
+     },
+     "OE_ci": [
+      0.32576118812658805,
+      5.430760475702748
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.1397490454502514,
+      8.13394665460173
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 4.624658110666947,
+     "OE_close_20": 1.513625403757791,
+     "OE_ci_20y": [
+      0.6085559157396807,
+      3.118646831089187
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.0
+    },
+    "local_max|P|expiry": {
+     "n": 25,
+     "n_nov": 12,
+     "buf_pct_med": 3.2283037857087415,
+     "buf_atr_med": 0.9017640394885904,
+     "endpoint_hold": 0.6799999999999999,
+     "close_hold": 0.64,
+     "intraday_hold": 0.6,
+     "random_close_hold_in": 0.6955956284153005,
+     "random_close_hold_20": 0.7353417334860635,
+     "random_end_hold_in": 0.7786448087431694,
+     "OE_close_in": 1.345489302257187,
+     "expected_breaches_nov": 3.716120218579235,
+     "observed_breaches_nov": 5,
+     "close_hold_nov": 0.5833333333333333,
+     "random_close_hold_nov": 0.6903233151183972,
+     "OE_ci_bootstrap_legacy": [
+      0.5470852017937219,
+      2.1820969253044886
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.4368767140528943,
+      3.1399231975826023
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.14731204681369037,
+      4.922968379906049
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 3.205681145206182,
+     "OE_close_20": 1.5597309194263023,
+     "OE_ci_20y": [
+      0.5064403839870981,
+      3.6398916644506736
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.05540118096561306
+    },
+    "local_max|C|k1": {
+     "n": 54,
+     "n_nov": 54,
+     "buf_pct_med": 2.436996721764084,
+     "buf_atr_med": 0.7039442604233038,
+     "endpoint_hold": 0.7407407407407407,
+     "close_hold": 0.7407407407407407,
+     "intraday_hold": 0.6111111111111112,
+     "random_close_hold_in": 0.7146326654523376,
+     "random_close_hold_20": 0.8367605249834482,
+     "random_end_hold_in": 0.7146326654523376,
+     "OE_close_in": 0.9085106382978724,
+     "expected_breaches_nov": 15.40983606557377,
+     "observed_breaches_nov": 14,
+     "close_hold_nov": 0.7407407407407407,
+     "random_close_hold_nov": 0.7146326654523376,
+     "OE_ci_bootstrap_legacy": [
+      0.5241675617615467,
+      1.3174946004319654
+     ],
+     "baseline_uncertainty": {
+      "E_point": 15.40983606557377,
+      "E_lo": 10.868852459016393,
+      "E_hi": 19.672131147540984
+     },
+     "OE_ci": [
+      0.3890747890452807,
+      2.1611868603800453
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.22954884674828518,
+      2.9633180641681838
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 8.814931650893795,
+     "OE_close_20": 1.5882142431110582,
+     "OE_ci_20y": [
+      0.8682915057571123,
+      2.664753630784401
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.0
+    },
+    "local_max|C|k2": {
+     "n": 54,
+     "n_nov": 29,
+     "buf_pct_med": 2.436996721764084,
+     "buf_atr_med": 0.7039442604233038,
+     "endpoint_hold": 0.6481481481481481,
+     "close_hold": 0.5925925925925926,
+     "intraday_hold": 0.4629629629629629,
+     "random_close_hold_in": 0.5191256830601093,
+     "random_close_hold_20": 0.7340017762819614,
+     "random_end_hold_in": 0.5670916818457803,
+     "OE_close_in": 0.8531468531468532,
+     "expected_breaches_nov": 14.065573770491802,
+     "observed_breaches_nov": 12,
+     "close_hold_nov": 0.5862068965517242,
+     "random_close_hold_nov": 0.5149802148106275,
+     "OE_ci_bootstrap_legacy": [
+      0.4976689976689977,
+      1.22
+     ],
+     "baseline_uncertainty": {
+      "E_point": 14.065573770491802,
+      "E_lo": 10.311475409836065,
+      "E_hi": 17.557377049180328
+     },
+     "OE_ci": [
+      0.3531606737927677,
+      2.0328405213653324
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.19701853369905742,
+      2.839954983015085
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 7.88430795119899,
+     "OE_close_20": 1.5220105650712341,
+     "OE_ci_20y": [
+      0.7864450687494107,
+      2.6586461586637116
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.0
+    },
+    "local_max|C|k3": {
+     "n": 54,
+     "n_nov": 20,
+     "buf_pct_med": 2.436996721764084,
+     "buf_atr_med": 0.7039442604233038,
+     "endpoint_hold": 0.5,
+     "close_hold": 0.42592592592592593,
+     "intraday_hold": 0.31481481481481477,
+     "random_close_hold_in": 0.399210686095932,
+     "random_close_hold_20": 0.6604912297106701,
+     "random_end_hold_in": 0.4893746205221615,
+     "OE_close_in": 0.972463768115942,
+     "expected_breaches_nov": 11.311475409836065,
+     "observed_breaches_nov": 11,
+     "close_hold_nov": 0.44999999999999996,
+     "random_close_hold_nov": 0.43442622950819676,
+     "OE_ci_bootstrap_legacy": [
+      0.584664536741214,
+      1.3824362606232294
+     ],
+     "baseline_uncertainty": {
+      "E_point": 11.311475409836065,
+      "E_lo": 8.475409836065573,
+      "E_hi": 14.163934426229508
+     },
+     "OE_ci": [
+      0.3876860907424158,
+      2.3222521263276974
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.20888657195399296,
+      3.279566555660521
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 6.512097622554176,
+     "OE_close_20": 1.6891638666322049,
+     "OE_ci_20y": [
+      0.8432245162017544,
+      3.022380752575737
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.0
+    },
+    "local_max|C|expiry": {
+     "n": 31,
+     "n_nov": 13,
+     "buf_pct_med": 2.7186194617544235,
+     "buf_atr_med": 0.7888785912882259,
+     "endpoint_hold": 0.5806451612903225,
+     "close_hold": 0.4838709677419355,
+     "intraday_hold": 0.3870967741935484,
+     "random_close_hold_in": 0.4067600916622598,
+     "random_close_hold_20": 0.6858681769039743,
+     "random_end_hold_in": 0.4993037193724661,
+     "OE_close_in": 1.0949068880412833,
+     "expected_breaches_nov": 7.30655737704918,
+     "observed_breaches_nov": 8,
+     "close_hold_nov": 0.3846153846153846,
+     "random_close_hold_nov": 0.4379571248423708,
+     "OE_ci_bootstrap_legacy": [
+      0.6292552094078812,
+      1.5404040404040404
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.4727030800575692,
+      2.157403056835971
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.2189783882425722,
+      3.1743613308322542
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 3.8856300486455124,
+     "OE_close_20": 2.0588681629093104,
+     "OE_ci_20y": [
+      0.8888731385924062,
+      4.0567910539214065
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.08851457906922122
+    },
+    "nearest|P|k1": {
+     "n": 45,
+     "n_nov": 45,
+     "buf_pct_med": 2.4834221817709,
+     "buf_atr_med": 0.6613613274635972,
+     "endpoint_hold": 0.6888888888888889,
+     "close_hold": 0.6888888888888889,
+     "intraday_hold": 0.6,
+     "random_close_hold_in": 0.8043715846994536,
+     "random_close_hold_20": 0.8364855707442458,
+     "random_end_hold_in": 0.8043715846994536,
+     "OE_close_in": 1.5903165735567972,
+     "expected_breaches_nov": 8.803278688524589,
+     "observed_breaches_nov": 14,
+     "close_hold_nov": 0.6888888888888889,
+     "random_close_hold_nov": 0.8043715846994536,
+     "OE_ci_bootstrap_legacy": [
+      0.9573991031390134,
+      2.2513181019332165
+     ],
+     "baseline_uncertainty": {
+      "E_point": 8.80327868852459,
+      "E_lo": 4.868852459016393,
+      "E_hi": 13.081967213114755
+     },
+     "OE_ci": [
+      0.5850748707447826,
+      4.824467637818081
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.34518623571170703,
+      6.615083759405744
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 7.358149316508938,
+     "OE_close_20": 1.902652337944438,
+     "OE_ci_20y": [
+      1.0401977381905034,
+      3.1923273246349657
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.0
+    },
+    "nearest|P|k2": {
+     "n": 45,
+     "n_nov": 24,
+     "buf_pct_med": 2.4834221817709,
+     "buf_atr_med": 0.6613613274635972,
+     "endpoint_hold": 0.7333333333333334,
+     "close_hold": 0.6444444444444444,
+     "intraday_hold": 0.5333333333333333,
+     "random_close_hold_in": 0.7205828779599271,
+     "random_close_hold_20": 0.7365820595521899,
+     "random_end_hold_in": 0.7770491803278688,
+     "OE_close_in": 1.3522167487684729,
+     "expected_breaches_nov": 6.655737704918033,
+     "observed_breaches_nov": 9,
+     "close_hold_nov": 0.625,
+     "random_close_hold_nov": 0.7226775956284153,
+     "OE_ci_bootstrap_legacy": [
+      0.7193396226415094,
+      1.992462311557789
+     ],
+     "baseline_uncertainty": {
+      "E_point": 6.655737704918033,
+      "E_lo": 3.721311475409836,
+      "E_hi": 9.901639344262295
+     },
+     "OE_ci": [
+      0.4156254287087393,
+      4.591070530998103
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.2045841964664339,
+      6.6518775847372105
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 6.263357172907026,
+     "OE_close_20": 1.4369290703922621,
+     "OE_ci_20y": [
+      0.6570554710147964,
+      2.7277389712535847
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.0
+    },
+    "nearest|P|k3": {
+     "n": 45,
+     "n_nov": 19,
+     "buf_pct_med": 2.4834221817709,
+     "buf_atr_med": 0.6613613274635972,
+     "endpoint_hold": 0.7555555555555555,
+     "close_hold": 0.6,
+     "intraday_hold": 0.48888888888888893,
+     "random_close_hold_in": 0.6568306010928961,
+     "random_close_hold_20": 0.6645580568997358,
+     "random_end_hold_in": 0.7537340619307833,
+     "OE_close_in": 1.2842105263157895,
+     "expected_breaches_nov": 6.229508196721311,
+     "observed_breaches_nov": 8,
+     "close_hold_nov": 0.5789473684210527,
+     "random_close_hold_nov": 0.6721311475409837,
+     "OE_ci_bootstrap_legacy": [
+      0.6853932584269663,
+      1.8531645569620254
+     ],
+     "baseline_uncertainty": {
+      "E_point": 6.229508196721311,
+      "E_lo": 3.3934426229508197,
+      "E_hi": 9.262295081967213
+     },
+     "OE_ci": [
+      0.3728916155427583,
+      4.645191026240543
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.17274100467205833,
+      6.834844662569738
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 5.879444561329686,
+     "OE_close_20": 1.3606727500447309,
+     "OE_ci_20y": [
+      0.5874419157661699,
+      2.681067753214487
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.0
+    },
+    "nearest|P|expiry": {
+     "n": 25,
+     "n_nov": 12,
+     "buf_pct_med": 2.4834221817709,
+     "buf_atr_med": 0.6613613274635972,
+     "endpoint_hold": 0.64,
+     "close_hold": 0.56,
+     "intraday_hold": 0.52,
+     "random_close_hold_in": 0.6441420765027323,
+     "random_close_hold_20": 0.6459349969291059,
+     "random_end_hold_in": 0.743639344262295,
+     "OE_close_in": 1.271363067944977,
+     "expected_breaches_nov": 3.9327868852459016,
+     "observed_breaches_nov": 5,
+     "close_hold_nov": 0.5833333333333333,
+     "random_close_hold_nov": 0.6722677595628415,
+     "OE_ci_bootstrap_legacy": [
+      0.49816251531237243,
+      2.1160146463673155
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.4128081275415739,
+      2.966937294033692
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.13919627266312107,
+      4.651750238648198
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 3.539435353960391,
+     "OE_close_20": 1.4126547033569452,
+     "OE_ci_20y": [
+      0.4586851369673546,
+      3.296664838437178
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.05540118096561306
+    },
+    "nearest|C|k1": {
+     "n": 54,
+     "n_nov": 54,
+     "buf_pct_med": 0.9766419898654344,
+     "buf_atr_med": 0.30428479129998076,
+     "endpoint_hold": 0.5925925925925926,
+     "close_hold": 0.5925925925925926,
+     "intraday_hold": 0.4629629629629629,
+     "random_close_hold_in": 0.6065573770491803,
+     "random_close_hold_20": 0.7242941153561553,
+     "random_end_hold_in": 0.6065573770491803,
+     "OE_close_in": 1.0354938271604939,
+     "expected_breaches_nov": 21.24590163934426,
+     "observed_breaches_nov": 22,
+     "close_hold_nov": 0.5925925925925926,
+     "random_close_hold_nov": 0.6065573770491803,
+     "OE_ci_bootstrap_legacy": [
+      0.7187745483110761,
+      1.357566765578635
+     ],
+     "baseline_uncertainty": {
+      "E_point": 21.24590163934426,
+      "E_lo": 15.655737704918034,
+      "E_hi": 26.311475409836067
+     },
+     "OE_ci": [
+      0.5240026512186953,
+      2.1275435891252767
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.3523034279203291,
+      2.7719993288013196
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 14.888117770767613,
+     "OE_close_20": 1.4776884720240702,
+     "OE_ci_20y": [
+      0.926059498219483,
+      2.2372381049084025
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.0
+    },
+    "nearest|C|k2": {
+     "n": 54,
+     "n_nov": 29,
+     "buf_pct_med": 0.9766419898654344,
+     "buf_atr_med": 0.30428479129998076,
+     "endpoint_hold": 0.5,
+     "close_hold": 0.4444444444444444,
+     "intraday_hold": 0.35185185185185186,
+     "random_close_hold_in": 0.4219793564055859,
+     "random_close_hold_20": 0.5985875442122812,
+     "random_end_hold_in": 0.47935640558591375,
+     "OE_close_in": 0.9375600384245918,
+     "expected_breaches_nov": 17.065573770491802,
+     "observed_breaches_nov": 16,
+     "close_hold_nov": 0.4482758620689655,
+     "random_close_hold_nov": 0.41153193894855855,
+     "OE_ci_bootstrap_legacy": [
+      0.6402671755725191,
+      1.2258373205741628
+     ],
+     "baseline_uncertainty": {
+      "E_point": 17.065573770491802,
+      "E_lo": 13.114754098360656,
+      "E_hi": 20.80327868852459
+     },
+     "OE_ci": [
+      0.4396125529331235,
+      1.9812035668140227
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.27084886082748616,
+      2.674247095772973
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 11.977282288599074,
+     "OE_close_20": 1.335862311204777,
+     "OE_ci_20y": [
+      0.7635607338358235,
+      2.1693567014191215
+     ],
+     "verdict_20y": "排除实用增量",
+     "oi_share_before_target_med": 0.0
+    },
+    "nearest|C|k3": {
+     "n": 54,
+     "n_nov": 20,
+     "buf_pct_med": 0.9766419898654344,
+     "buf_atr_med": 0.30428479129998076,
+     "endpoint_hold": 0.4444444444444444,
+     "close_hold": 0.35185185185185186,
+     "intraday_hold": 0.2777777777777778,
+     "random_close_hold_in": 0.3230115361262902,
+     "random_close_hold_20": 0.5233614637149246,
+     "random_end_hold_in": 0.4250151791135398,
+     "OE_close_in": 0.97062423500612,
+     "expected_breaches_nov": 13.393442622950818,
+     "observed_breaches_nov": 13,
+     "close_hold_nov": 0.35,
+     "random_close_hold_nov": 0.33032786885245913,
+     "OE_ci_bootstrap_legacy": [
+      0.6535714285714286,
+      1.273955773955774
+     ],
+     "baseline_uncertainty": {
+      "E_point": 13.39344262295082,
+      "E_lo": 10.540983606557377,
+      "E_hi": 16.065573770491802
+     },
+     "OE_ci": [
+      0.43085622648084865,
+      2.108948912920204
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.24766150590646419,
+      2.917584745188913
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 10.062276456974542,
+     "OE_close_20": 1.2919541671893948,
+     "OE_ci_20y": [
+      0.6879111819876442,
+      2.2092809726719596
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.0
+    },
+    "nearest|C|expiry": {
+     "n": 31,
+     "n_nov": 13,
+     "buf_pct_med": 0.9809578765147098,
+     "buf_atr_med": 0.3321587972750754,
+     "endpoint_hold": 0.4516129032258065,
+     "close_hold": 0.3870967741935484,
+     "intraday_hold": 0.3548387096774194,
+     "random_close_hold_in": 0.3174951524766437,
+     "random_close_hold_20": 0.5154090111689047,
+     "random_end_hold_in": 0.42652917327692574,
+     "OE_close_in": 0.8941277063547807,
+     "expected_breaches_nov": 8.947267759562841,
+     "observed_breaches_nov": 8,
+     "close_hold_nov": 0.3846153846153846,
+     "random_close_hold_nov": 0.31174863387978147,
+     "OE_ci_bootstrap_legacy": [
+      0.5304347826086956,
+      1.2294255962378233
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.38602088029130954,
+      1.7617880277859816
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.1788231000819317,
+      2.592260992124962
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 6.470173808354957,
+     "OE_close_20": 1.2364428278061979,
+     "OE_ci_20y": [
+      0.5338082529233688,
+      2.4362852818325003
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.07599463567277603
+    },
+    "structural|P|k1": {
+     "n": 56,
+     "n_nov": 56,
+     "buf_pct_med": 11.43955654440198,
+     "buf_atr_med": 3.181483043232183,
+     "endpoint_hold": 0.9821428571428571,
+     "close_hold": 0.9821428571428571,
+     "intraday_hold": 0.9464285714285714,
+     "random_close_hold_in": 0.990632318501171,
+     "random_close_hold_20": 0.9942729457713685,
+     "random_end_hold_in": 0.990632318501171,
+     "OE_close_in": 1.9062499999999996,
+     "expected_breaches_nov": 0.5245901639344264,
+     "observed_breaches_nov": 1,
+     "close_hold_nov": 0.9821428571428571,
+     "random_close_hold_nov": 0.990632318501171,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      7.176470588235289
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.5245901639344263,
+      "E_lo": 0.0,
+      "E_hi": 1.2131147540983607
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.5次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.5次·无从区分",
+     "expected_breaches_nov_20y": 0.3207150368033651,
+     "OE_close_20": 3.1180327868852435,
+     "OE_ci_20y": [
+      0.07894175538708073,
+      17.372566769779965
+     ],
+     "verdict_20y": "期望破墙仅0.3次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|P|k2": {
+     "n": 56,
+     "n_nov": 30,
+     "buf_pct_med": 11.43955654440198,
+     "buf_atr_med": 3.181483043232183,
+     "endpoint_hold": 0.9464285714285714,
+     "close_hold": 0.9464285714285714,
+     "intraday_hold": 0.9464285714285714,
+     "random_close_hold_in": 0.9686768149882904,
+     "random_close_hold_20": 0.9835176392812068,
+     "random_end_hold_in": 0.969847775175644,
+     "OE_close_in": 1.1090909090909082,
+     "expected_breaches_nov": 0.9016393442622957,
+     "observed_breaches_nov": 1,
+     "close_hold_nov": 0.9666666666666667,
+     "random_close_hold_nov": 0.9699453551912568,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      3.9354838709677384
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.9016393442622951,
+      "E_lo": 0.13114754098360656,
+      "E_hi": 1.9508196721311475
+     },
+     "OE_ci": [
+      0.012978036025560337,
+      42.4837808559091
+     ],
+     "verdict": "期望破墙仅0.9次·无从区分",
+     "OE_ci_simultaneous": [
+      0.00013350828100392733,
+      81.69435298515108
+     ],
+     "verdict_simultaneous": "期望破墙仅0.9次·无从区分",
+     "expected_breaches_nov_20y": 0.47223390828775746,
+     "OE_close_20": 2.1175946547884195,
+     "OE_ci_20y": [
+      0.05361285485849174,
+      11.798482263039435
+     ],
+     "verdict_20y": "期望破墙仅0.5次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|P|k3": {
+     "n": 56,
+     "n_nov": 20,
+     "buf_pct_med": 11.43955654440198,
+     "buf_atr_med": 3.181483043232183,
+     "endpoint_hold": 0.9821428571428571,
+     "close_hold": 0.9464285714285714,
+     "intraday_hold": 0.9464285714285714,
+     "random_close_hold_in": 0.9493559718969555,
+     "random_close_hold_20": 0.9713526795106849,
+     "random_end_hold_in": 0.9622365339578454,
+     "OE_close_in": 0.7625,
+     "expected_breaches_nov": 1.3114754098360657,
+     "observed_breaches_nov": 1,
+     "close_hold_nov": 0.95,
+     "random_close_hold_nov": 0.9344262295081968,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      2.904761904761904
+     ],
+     "baseline_uncertainty": {
+      "E_point": 1.3114754098360655,
+      "E_lo": 0.3770491803278688,
+      "E_hi": 2.459016393442623
+     },
+     "OE_ci": [
+      0.010295908580277867,
+      14.776967254229252
+     ],
+     "verdict": "期望破墙仅1.3次·无从区分",
+     "OE_ci_simultaneous": [
+      0.00010591656959644901,
+      28.41542712526995
+     ],
+     "verdict_simultaneous": "期望破墙仅1.3次·无从区分",
+     "expected_breaches_nov_20y": 0.7498422049232065,
+     "OE_close_20": 1.33361391694725,
+     "OE_ci_20y": [
+      0.03376418107444713,
+      7.430421166423283
+     ],
+     "verdict_20y": "期望破墙仅0.7次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|P|expiry": {
+     "n": 33,
+     "n_nov": 13,
+     "buf_pct_med": 11.83071497274768,
+     "buf_atr_med": 3.3686041455283333,
+     "endpoint_hold": 0.9696969696969697,
+     "close_hold": 0.9090909090909091,
+     "intraday_hold": 0.9090909090909091,
+     "random_close_hold_in": 0.9415797317436662,
+     "random_close_hold_20": 0.9640329097000003,
+     "random_end_hold_in": 0.958602417618811,
+     "OE_close_in": 2.489795918367347,
+     "expected_breaches_nov": 0.8032786885245902,
+     "observed_breaches_nov": 2,
+     "close_hold_nov": 0.8461538461538461,
+     "random_close_hold_nov": 0.9382093316519546,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      7.261904761904762
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.30152583655473175,
+      8.993998933289014
+     ],
+     "verdict": "期望破墙仅0.8次·无从区分",
+     "OE_ci_simultaneous": [
+      0.028629194970339014,
+      15.956008848437314
+     ],
+     "verdict_simultaneous": "期望破墙仅0.8次·无从区分",
+     "expected_breaches_nov_20y": 0.4796983616939433,
+     "OE_close_20": 4.1692867012042,
+     "OE_ci_20y": [
+      0.504919961970808,
+      15.060897106697748
+     ],
+     "verdict_20y": "期望破墙仅0.5次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|k1": {
+     "n": 48,
+     "n_nov": 48,
+     "buf_pct_med": 7.4761299529373275,
+     "buf_atr_med": 2.0509642552589424,
+     "endpoint_hold": 0.9791666666666666,
+     "close_hold": 0.9791666666666666,
+     "intraday_hold": 0.9166666666666666,
+     "random_close_hold_in": 0.950136612021858,
+     "random_close_hold_20": 0.984770417104802,
+     "random_end_hold_in": 0.950136612021858,
+     "OE_close_in": 0.41780821917808214,
+     "expected_breaches_nov": 2.39344262295082,
+     "observed_breaches_nov": 1,
+     "close_hold_nov": 0.9791666666666666,
+     "random_close_hold_nov": 0.950136612021858,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      1.4186046511627908
+     ],
+     "baseline_uncertainty": {
+      "E_point": 2.3934426229508197,
+      "E_lo": 1.1475409836065573,
+      "E_hi": 3.80327868852459
+     },
+     "OE_ci": [
+      0.006656837444145174,
+      4.855289240675326
+     ],
+     "verdict": "期望破墙仅2.4次·无从区分",
+     "OE_ci_simultaneous": [
+      6.848054068735927e-05,
+      9.336497484017269
+     ],
+     "verdict_simultaneous": "期望破墙仅2.4次·无从区分",
+     "expected_breaches_nov_20y": 0.7310199789695063,
+     "OE_close_20": 1.367951668584579,
+     "OE_ci_20y": [
+      0.03463353767701326,
+      7.621738873393108
+     ],
+     "verdict_20y": "期望破墙仅0.7次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|k2": {
+     "n": 48,
+     "n_nov": 26,
+     "buf_pct_med": 7.4761299529373275,
+     "buf_atr_med": 2.0509642552589424,
+     "endpoint_hold": 0.8958333333333334,
+     "close_hold": 0.8958333333333334,
+     "intraday_hold": 0.7916666666666666,
+     "random_close_hold_in": 0.862363387978142,
+     "random_close_hold_20": 0.961558687421119,
+     "random_end_hold_in": 0.8763661202185792,
+     "OE_close_in": 0.7656903765690376,
+     "expected_breaches_nov": 3.918032786885246,
+     "observed_breaches_nov": 3,
+     "close_hold_nov": 0.8846153846153846,
+     "random_close_hold_nov": 0.8493064312736444,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      1.6666666666666665
+     ],
+     "baseline_uncertainty": {
+      "E_point": 3.918032786885246,
+      "E_lo": 2.2950819672131146,
+      "E_hi": 5.573770491803279
+     },
+     "OE_ci": [
+      0.11099705734303436,
+      3.8200261232448707
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.021448575664892167,
+      6.423839817016535
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 1.1001262095077826,
+     "OE_close_20": 2.7269598470363294,
+     "OE_ci_20y": [
+      0.5623646792056767,
+      7.969333876396755
+     ],
+     "verdict_20y": "期望破墙仅1.1次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|k3": {
+     "n": 48,
+     "n_nov": 18,
+     "buf_pct_med": 7.4761299529373275,
+     "buf_atr_med": 2.0509642552589424,
+     "endpoint_hold": 0.8333333333333334,
+     "close_hold": 0.8125,
+     "intraday_hold": 0.6875,
+     "random_close_hold_in": 0.7780054644808743,
+     "random_close_hold_20": 0.9356765902237183,
+     "random_end_hold_in": 0.8097677595628415,
+     "OE_close_in": 0.7845659163987139,
+     "expected_breaches_nov": 5.098360655737705,
+     "observed_breaches_nov": 4,
+     "close_hold_nov": 0.7777777777777778,
+     "random_close_hold_nov": 0.7167577413479054,
+     "OE_ci_bootstrap_legacy": [
+      0.18154761904761904,
+      1.591304347826087
+     ],
+     "baseline_uncertainty": {
+      "E_point": 5.098360655737705,
+      "E_lo": 3.2295081967213113,
+      "E_hi": 7.065573770491803
+     },
+     "OE_ci": [
+      0.15425008768261217,
+      3.1712533461909933
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.04222868498197259,
+      5.127108300284338
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 1.663791289711761,
+     "OE_close_20": 2.404147698533131,
+     "OE_ci_20y": [
+      0.6550493324286695,
+      6.155572960823694
+     ],
+     "verdict_20y": "期望破墙仅1.7次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|expiry": {
+     "n": 29,
+     "n_nov": 13,
+     "buf_pct_med": 7.268235600052009,
+     "buf_atr_med": 1.9516201620162004,
+     "endpoint_hold": 0.8275862068965517,
+     "close_hold": 0.7931034482758621,
+     "intraday_hold": 0.6551724137931034,
+     "random_close_hold_in": 0.7605332579611833,
+     "random_close_hold_20": 0.9307169109299525,
+     "random_end_hold_in": 0.7975315620878085,
+     "OE_close_in": 1.5171613331122533,
+     "expected_breaches_nov": 3.2956284153005466,
+     "observed_breaches_nov": 5,
+     "close_hold_nov": 0.6153846153846154,
+     "random_close_hold_nov": 0.746490121899958,
+     "OE_ci_bootstrap_legacy": [
+      0.551703346397347,
+      2.8266186124340327
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.49261815518433316,
+      3.540548450532331
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.1661077059122038,
+      5.551093760164331
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 0.8986511974361755,
+     "OE_close_20": 5.563893993870868,
+     "OE_ci_20y": [
+      1.8065812350221928,
+      12.984272554926836
+     ],
+     "verdict_20y": "期望破墙仅0.9次·无从区分",
+     "oi_share_before_target_med": null
+    }
+   }
+  },
+  "qqq": {
+   "symbol": "QQQ",
+   "span": "2026-07-31→2026-09-22",
+   "n_days": 37,
+   "summary": {
+    "local_max|P|k1": {
+     "n": 37,
+     "n_nov": 37,
+     "buf_pct_med": 2.4621344071787843,
+     "buf_atr_med": 1.7801589427627496,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 0.972972972972973,
+     "random_close_hold_in": 0.9846603360116873,
+     "random_close_hold_20": 0.9505486075711309,
+     "random_end_hold_in": 0.9846603360116873,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.5675675675675672,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9846603360116873,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.5675675675675675,
+      "E_lo": 0.24324324324324326,
+      "E_hi": 1.054054054054054
+     },
+     "OE_ci": [
+      0.0,
+      15.165393311357292
+     ],
+     "verdict": "期望破墙仅0.6次·无从区分",
+     "OE_ci_simultaneous": [
+      0.0,
+      33.929935876280624
+     ],
+     "verdict_simultaneous": "期望破墙仅0.6次·无从区分",
+     "expected_breaches_nov_20y": 1.829701519868156,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      2.016109957857907
+     ],
+     "verdict_20y": "期望破墙仅1.8次·无从区分",
+     "oi_share_before_target_med": 0.10845128281734324
+    },
+    "local_max|P|k2": {
+     "n": 37,
+     "n_nov": 19,
+     "buf_pct_med": 2.4621344071787843,
+     "buf_atr_med": 1.7801589427627496,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 0.972972972972973,
+     "random_close_hold_in": 0.9678597516435354,
+     "random_close_hold_20": 0.8996683496683496,
+     "random_end_hold_in": 0.9737034331628927,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.5135135135135135,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.972972972972973,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.5135135135135135,
+      "E_lo": 0.1891891891891892,
+      "E_hi": 0.9459459459459459
+     },
+     "OE_ci": [
+      0.0,
+      19.49836282888795
+     ],
+     "verdict": "期望破墙仅0.5次·无从区分",
+     "OE_ci_simultaneous": [
+      0.0,
+      43.62420326950365
+     ],
+     "verdict_simultaneous": "期望破墙仅0.5次·无从区分",
+     "expected_breaches_nov_20y": 1.8135531135531135,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      2.0340619894427476
+     ],
+     "verdict_20y": "期望破墙仅1.8次·无从区分",
+     "oi_share_before_target_med": 0.10845128281734324
+    },
+    "local_max|P|k3": {
+     "n": 37,
+     "n_nov": 13,
+     "buf_pct_med": 2.4621344071787843,
+     "buf_atr_med": 1.7801589427627496,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 0.972972972972973,
+     "random_close_hold_in": 0.9401022644265887,
+     "random_close_hold_20": 0.8563245421644397,
+     "random_end_hold_in": 0.9525200876552228,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.3783783783783782,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9708939708939709,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.3783783783783784,
+      "E_lo": 0.0,
+      "E_hi": 0.972972972972973
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.4次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.4次·无从区分",
+     "expected_breaches_nov_20y": 1.6209928558344018,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      2.2756913707772606
+     ],
+     "verdict_20y": "期望破墙仅1.6次·无从区分",
+     "oi_share_before_target_med": 0.10845128281734324
+    },
+    "local_max|P|expiry": {
+     "n": 36,
+     "n_nov": 15,
+     "buf_pct_med": 2.5089780004043605,
+     "buf_atr_med": 1.7537278722955003,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 0.9722222222222222,
+     "random_close_hold_in": 0.9466966966966968,
+     "random_close_hold_20": 0.8668903929414096,
+     "random_end_hold_in": 0.9572072072072072,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.6486486486486485,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9567567567567568,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.0,
+      5.687022491758986
+     ],
+     "verdict": "期望破墙仅0.6次·无从区分",
+     "OE_ci_simultaneous": [
+      0.0,
+      12.723725953605236
+     ],
+     "verdict_simultaneous": "期望破墙仅0.6次·无从区分",
+     "expected_breaches_nov_20y": 1.9057501575178806,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      1.9356574310446177
+     ],
+     "verdict_20y": "期望破墙仅1.9次·无从区分",
+     "oi_share_before_target_med": 0.11160731311058501
+    },
+    "local_max|C|k1": {
+     "n": 37,
+     "n_nov": 37,
+     "buf_pct_med": 2.1682370303099052,
+     "buf_atr_med": 1.493381780430839,
+     "endpoint_hold": 0.8918918918918919,
+     "close_hold": 0.8918918918918919,
+     "intraday_hold": 0.8918918918918919,
+     "random_close_hold_in": 0.8977355734112491,
+     "random_close_hold_20": 0.9088821471169026,
+     "random_end_hold_in": 0.8977355734112491,
+     "OE_close_in": 1.0571428571428572,
+     "expected_breaches_nov": 3.7837837837837833,
+     "observed_breaches_nov": 4,
+     "close_hold_nov": 0.8918918918918919,
+     "random_close_hold_nov": 0.8977355734112491,
+     "OE_ci_bootstrap_legacy": [
+      0.2740740740740741,
+      1.85
+     ],
+     "baseline_uncertainty": {
+      "E_point": 3.7837837837837838,
+      "E_lo": 1.4324324324324325,
+      "E_hi": 6.72972972972973
+     },
+     "OE_ci": [
+      0.16194786676375117,
+      7.149788320564847
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.04433608791938788,
+      11.55938521520957
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 3.3713605566746017,
+     "OE_close_20": 1.1864646135462495,
+     "OE_ci_20y": [
+      0.32327167483424923,
+      3.0378206374656234
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.19176083493382168
+    },
+    "local_max|C|k2": {
+     "n": 37,
+     "n_nov": 19,
+     "buf_pct_med": 2.1682370303099052,
+     "buf_atr_med": 1.493381780430839,
+     "endpoint_hold": 0.8108108108108107,
+     "close_hold": 0.8108108108108107,
+     "intraday_hold": 0.7837837837837838,
+     "random_close_hold_in": 0.8035062089116143,
+     "random_close_hold_20": 0.8350905850905851,
+     "random_end_hold_in": 0.8239590942293645,
+     "OE_close_in": 1.1840000000000002,
+     "expected_breaches_nov": 3.378378378378378,
+     "observed_breaches_nov": 4,
+     "close_hold_nov": 0.7894736842105263,
+     "random_close_hold_nov": 0.8221906116642959,
+     "OE_ci_bootstrap_legacy": [
+      0.29600000000000004,
+      2.25609756097561
+     ],
+     "baseline_uncertainty": {
+      "E_point": 3.3783783783783785,
+      "E_lo": 1.1081081081081081,
+      "E_hi": 6.1891891891891895
+     },
+     "OE_ci": [
+      0.1760917852584019,
+      9.242409292437483
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.04820823533592522,
+      14.942619912344078
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 2.733333333333333,
+     "OE_close_20": 1.4634146341463417,
+     "OE_ci_20y": [
+      0.39873123425353374,
+      3.7469226861233045
+     ],
+     "verdict_20y": "期望破墙仅2.7次·无从区分",
+     "oi_share_before_target_med": 0.19176083493382168
+    },
+    "local_max|C|k3": {
+     "n": 37,
+     "n_nov": 13,
+     "buf_pct_med": 2.1682370303099052,
+     "buf_atr_med": 1.493381780430839,
+     "endpoint_hold": 0.7297297297297297,
+     "close_hold": 0.7297297297297297,
+     "intraday_hold": 0.7297297297297297,
+     "random_close_hold_in": 0.7523739956172388,
+     "random_close_hold_20": 0.7749662100275766,
+     "random_end_hold_in": 0.7888970051132214,
+     "OE_close_in": 0.7628865979381445,
+     "expected_breaches_nov": 2.621621621621621,
+     "observed_breaches_nov": 2,
+     "close_hold_nov": 0.8461538461538461,
+     "random_close_hold_nov": 0.7983367983367984,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      2.078651685393259
+     ],
+     "baseline_uncertainty": {
+      "E_point": 2.6216216216216215,
+      "E_lo": 0.7837837837837838,
+      "E_hi": 4.945945945945946
+     },
+     "OE_ci": [
+      0.04897127489686719,
+      9.21770495537195
+     ],
+     "verdict": "期望破墙仅2.6次·无从区分",
+     "OE_ci_simultaneous": [
+      0.004649711590183346,
+      16.352879616855198
+     ],
+     "verdict_simultaneous": "期望破墙仅2.6次·无从区分",
+     "expected_breaches_nov_20y": 2.1439824143616044,
+     "OE_close_20": 0.9328434723171567,
+     "OE_ci_20y": [
+      0.11297167221219273,
+      3.36975136518328
+     ],
+     "verdict_20y": "期望破墙仅2.1次·无从区分",
+     "oi_share_before_target_med": 0.19176083493382168
+    },
+    "local_max|C|expiry": {
+     "n": 36,
+     "n_nov": 15,
+     "buf_pct_med": 2.1580707994899417,
+     "buf_atr_med": 1.379541445518399,
+     "endpoint_hold": 0.7222222222222222,
+     "close_hold": 0.7222222222222222,
+     "intraday_hold": 0.7222222222222222,
+     "random_close_hold_in": 0.7582582582582582,
+     "random_close_hold_20": 0.7849801360838181,
+     "random_end_hold_in": 0.792042042042042,
+     "OE_close_in": 1.2869565217391306,
+     "expected_breaches_nov": 3.108108108108108,
+     "observed_breaches_nov": 4,
+     "close_hold_nov": 0.7333333333333334,
+     "random_close_hold_nov": 0.7927927927927928,
+     "OE_ci_bootstrap_legacy": [
+      0.32456140350877194,
+      2.41304347826087
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.3506523376015134,
+      3.295119834695103
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.09599726862545177,
+      5.327368838313976
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 2.4949866369815075,
+     "OE_close_20": 1.603214999515706,
+     "OE_ci_20y": [
+      0.4368221286126285,
+      4.10486714581935
+     ],
+     "verdict_20y": "期望破墙仅2.5次·无从区分",
+     "oi_share_before_target_med": 0.1959674042449206
+    },
+    "nearest|P|k1": {
+     "n": 37,
+     "n_nov": 37,
+     "buf_pct_med": 0.09095361365702992,
+     "buf_atr_med": 0.06106181380658784,
+     "endpoint_hold": 0.6216216216216216,
+     "close_hold": 0.6216216216216216,
+     "intraday_hold": 0.32432432432432434,
+     "random_close_hold_in": 0.5785244704163623,
+     "random_close_hold_20": 0.6059478266033842,
+     "random_end_hold_in": 0.5785244704163623,
+     "OE_close_in": 0.8977469670710572,
+     "expected_breaches_nov": 15.594594594594595,
+     "observed_breaches_nov": 14,
+     "close_hold_nov": 0.6216216216216216,
+     "random_close_hold_nov": 0.5785244704163623,
+     "OE_ci_bootstrap_legacy": [
+      0.5381818181818182,
+      1.2671232876712328
+     ],
+     "baseline_uncertainty": {
+      "E_point": 15.594594594594595,
+      "E_lo": 9.432432432432432,
+      "E_hi": 21.783783783783782
+     },
+     "OE_ci": [
+      0.3513590821626823,
+      2.4903036719424536
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.20729709139697405,
+      3.414587600737927
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 14.579930415674784,
+     "OE_close_20": 0.9602240614913151,
+     "OE_ci_20y": [
+      0.524963429734336,
+      1.6110928140357959
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.5383349012229539
+    },
+    "nearest|P|k2": {
+     "n": 37,
+     "n_nov": 19,
+     "buf_pct_med": 0.09095361365702992,
+     "buf_atr_med": 0.06106181380658784,
+     "endpoint_hold": 0.5675675675675675,
+     "close_hold": 0.5135135135135135,
+     "intraday_hold": 0.29729729729729726,
+     "random_close_hold_in": 0.49890430971512056,
+     "random_close_hold_20": 0.48190773190773195,
+     "random_end_hold_in": 0.5536888239590942,
+     "OE_close_in": 1.115068493150685,
+     "expected_breaches_nov": 9.864864864864865,
+     "observed_breaches_nov": 11,
+     "close_hold_nov": 0.42105263157894735,
+     "random_close_hold_nov": 0.48079658605974396,
+     "OE_ci_bootstrap_legacy": [
+      0.7057220708446866,
+      1.5247252747252749
+     ],
+     "baseline_uncertainty": {
+      "E_point": 9.864864864864865,
+      "E_lo": 6.378378378378378,
+      "E_hi": 13.35135135135135
+     },
+     "OE_ci": [
+      0.4112812420804919,
+      3.0857433262380187
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.22159971899599562,
+      4.357795821285782
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 10.056959706959708,
+     "OE_close_20": 1.0937699185955454,
+     "OE_ci_20y": [
+      0.546006002533429,
+      1.9570565147716974
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.5383349012229539
+    },
+    "nearest|P|k3": {
+     "n": 37,
+     "n_nov": 13,
+     "buf_pct_med": 0.09095361365702992,
+     "buf_atr_med": 0.06106181380658784,
+     "endpoint_hold": 0.6216216216216216,
+     "close_hold": 0.45945945945945943,
+     "intraday_hold": 0.29729729729729726,
+     "random_close_hold_in": 0.44558071585098613,
+     "random_close_hold_20": 0.4180252793551933,
+     "random_end_hold_in": 0.6070124178232286,
+     "OE_close_in": 0.880952380952381,
+     "expected_breaches_nov": 6.8108108108108105,
+     "observed_breaches_nov": 6,
+     "close_hold_nov": 0.5384615384615384,
+     "random_close_hold_nov": 0.47609147609147606,
+     "OE_ci_bootstrap_legacy": [
+      0.4051094890510949,
+      1.3560209424083771
+     ],
+     "baseline_uncertainty": {
+      "E_point": 6.8108108108108105,
+      "E_lo": 4.297297297297297,
+      "E_hi": 9.297297297297296
+     },
+     "OE_ci": [
+      0.23683164935802747,
+      3.0389970995798192
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.09183944605678152,
+      4.647430876978849
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 7.235391097270562,
+     "OE_close_20": 0.8292571775786116,
+     "OE_ci_20y": [
+      0.30432276899606414,
+      1.8049437614291737
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.5383349012229539
+    },
+    "nearest|P|expiry": {
+     "n": 36,
+     "n_nov": 15,
+     "buf_pct_med": 0.09215564250507624,
+     "buf_atr_med": 0.06500871868600151,
+     "endpoint_hold": 0.6388888888888888,
+     "close_hold": 0.5,
+     "intraday_hold": 0.2777777777777778,
+     "random_close_hold_in": 0.4572072072072072,
+     "random_close_hold_20": 0.4335966012371948,
+     "random_end_hold_in": 0.5938438438438438,
+     "OE_close_in": 0.9673202614379085,
+     "expected_breaches_nov": 8.27027027027027,
+     "observed_breaches_nov": 8,
+     "close_hold_nov": 0.4666666666666667,
+     "random_close_hold_nov": 0.4486486486486486,
+     "OE_ci_bootstrap_legacy": [
+      0.4868421052631579,
+      1.4415584415584415
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.41762023052187736,
+      1.9060065396965773
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.19346141126483607,
+      2.804461334545249
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 8.49073328515534,
+     "OE_close_20": 0.9422036626667679,
+     "OE_ci_20y": [
+      0.4067766658960965,
+      1.856516827321932
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.5427255974756433
+    },
+    "nearest|C|k1": {
+     "n": 37,
+     "n_nov": 37,
+     "buf_pct_med": 0.07147962830593713,
+     "buf_atr_med": 0.044754989267939194,
+     "endpoint_hold": 0.5135135135135135,
+     "close_hold": 0.5135135135135135,
+     "intraday_hold": 0.18918918918918914,
+     "random_close_hold_in": 0.5113221329437545,
+     "random_close_hold_20": 0.48846612589516825,
+     "random_end_hold_in": 0.5113221329437545,
+     "OE_close_in": 0.9955156950672646,
+     "expected_breaches_nov": 18.08108108108108,
+     "observed_breaches_nov": 18,
+     "close_hold_nov": 0.5135135135135135,
+     "random_close_hold_nov": 0.5113221329437545,
+     "OE_ci_bootstrap_legacy": [
+      0.6636771300448431,
+      1.3313343328335832
+     ],
+     "baseline_uncertainty": {
+      "E_point": 18.08108108108108,
+      "E_lo": 12.027027027027026,
+      "E_hi": 24.37837837837838
+     },
+     "OE_ci": [
+      0.43759845773257433,
+      2.3653193930304175
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.27913404533054675,
+      3.1501582676872326
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 18.926753341878776,
+     "OE_close_20": 0.9510347429831946,
+     "OE_ci_20y": [
+      0.563643462124845,
+      1.503044909693112
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.44981132075471697
+    },
+    "nearest|C|k2": {
+     "n": 37,
+     "n_nov": 19,
+     "buf_pct_med": 0.07147962830593713,
+     "buf_atr_med": 0.044754989267939194,
+     "endpoint_hold": 0.4864864864864865,
+     "close_hold": 0.43243243243243246,
+     "intraday_hold": 0.10810810810810811,
+     "random_close_hold_in": 0.4258582907231556,
+     "random_close_hold_20": 0.34672309672309676,
+     "random_end_hold_in": 0.5098612125639153,
+     "OE_close_in": 0.8222222222222223,
+     "expected_breaches_nov": 10.945945945945946,
+     "observed_breaches_nov": 9,
+     "close_hold_nov": 0.5263157894736843,
+     "random_close_hold_nov": 0.4238975817923186,
+     "OE_ci_bootstrap_legacy": [
+      0.45454545454545453,
+      1.1935483870967742
+     ],
+     "baseline_uncertainty": {
+      "E_point": 10.945945945945946,
+      "E_lo": 7.351351351351352,
+      "E_hi": 14.18918918918919
+     },
+     "OE_ci": [
+      0.290035818291425,
+      2.3240357636121667
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.1427649530876442,
+      3.3672323911648876
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 12.499450549450549,
+     "OE_close_20": 0.7200316497428458,
+     "OE_ci_20y": [
+      0.32924432006807147,
+      1.366844357184179
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.44981132075471697
+    },
+    "nearest|C|k3": {
+     "n": 37,
+     "n_nov": 13,
+     "buf_pct_med": 0.07147962830593713,
+     "buf_atr_med": 0.044754989267939194,
+     "endpoint_hold": 0.4864864864864865,
+     "close_hold": 0.3783783783783784,
+     "intraday_hold": 0.08108108108108103,
+     "random_close_hold_in": 0.35792549306062815,
+     "random_close_hold_20": 0.27483501086725126,
+     "random_end_hold_in": 0.47406866325785246,
+     "OE_close_in": 0.819620253164557,
+     "expected_breaches_nov": 8.54054054054054,
+     "observed_breaches_nov": 7,
+     "close_hold_nov": 0.46153846153846156,
+     "random_close_hold_nov": 0.343035343035343,
+     "OE_ci_bootstrap_legacy": [
+      0.35806451612903223,
+      1.1858974358974361
+     ],
+     "baseline_uncertainty": {
+      "E_point": 8.54054054054054,
+      "E_lo": 5.918918918918919,
+      "E_hi": 10.783783783783784
+     },
+     "OE_ci": [
+      0.2609810348527195,
+      2.436707709511361
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.11195885768661881,
+      3.6495902573308445
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 9.553031690785858,
+     "OE_close_20": 0.7327516778523491,
+     "OE_ci_20y": [
+      0.2946041782981198,
+      1.5097485100581647
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.44981132075471697
+    },
+    "nearest|C|expiry": {
+     "n": 36,
+     "n_nov": 15,
+     "buf_pct_med": 0.06988567971581983,
+     "buf_atr_med": 0.04381518072499551,
+     "endpoint_hold": 0.4444444444444444,
+     "close_hold": 0.38888888888888884,
+     "intraday_hold": 0.08333333333333337,
+     "random_close_hold_in": 0.3731231231231231,
+     "random_close_hold_20": 0.29026637259601173,
+     "random_end_hold_in": 0.4804804804804804,
+     "OE_close_in": 1.0787172011661808,
+     "expected_breaches_nov": 9.27027027027027,
+     "observed_breaches_nov": 10,
+     "close_hold_nov": 0.33333333333333337,
+     "random_close_hold_nov": 0.38198198198198197,
+     "OE_ci_bootstrap_legacy": [
+      0.6548672566371682,
+      1.4487951807228918
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.5172868272795919,
+      1.9837993398094977
+     ],
+     "verdict": "未决",
+     "OE_ci_simultaneous": [
+      0.26750605052773724,
+      2.835569738358105
+     ],
+     "verdict_simultaneous": "未决",
+     "expected_breaches_nov_20y": 10.429573537532871,
+     "OE_close_20": 0.9588119748149849,
+     "OE_ci_20y": [
+      0.4597876105744193,
+      1.7632893594197752
+     ],
+     "verdict_20y": "未决",
+     "oi_share_before_target_med": 0.4524608525278082
+    },
+    "structural|P|k1": {
+     "n": 32,
+     "n_nov": 32,
+     "buf_pct_med": 4.767838418105352,
+     "buf_atr_med": 3.5408331289633264,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 1.0,
+     "random_close_hold_20": 0.9940143746566563,
+     "random_end_hold_in": 1.0,
+     "OE_close_in": null,
+     "expected_breaches_nov": 0.0,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 1.0,
+     "OE_ci_bootstrap_legacy": [
+      null,
+      null
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.0,
+      "E_lo": 0.0,
+      "E_hi": 0.0
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.0次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.0次·无从区分",
+     "expected_breaches_nov_20y": 0.19154001098699858,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      19.259054205464835
+     ],
+     "verdict_20y": "期望破墙仅0.2次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|P|k2": {
+     "n": 32,
+     "n_nov": 17,
+     "buf_pct_med": 4.767838418105352,
+     "buf_atr_med": 3.5408331289633264,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 1.0,
+     "random_close_hold_20": 0.9816620879120879,
+     "random_end_hold_in": 1.0,
+     "OE_close_in": null,
+     "expected_breaches_nov": 0.0,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 1.0,
+     "OE_ci_bootstrap_legacy": [
+      null,
+      null
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.0,
+      "E_lo": 0.0,
+      "E_hi": 0.0
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.0次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.0次·无从区分",
+     "expected_breaches_nov_20y": 0.3331501831501831,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      11.072722275680096
+     ],
+     "verdict_20y": "期望破墙仅0.3次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|P|k3": {
+     "n": 32,
+     "n_nov": 12,
+     "buf_pct_med": 4.767838418105352,
+     "buf_atr_med": 3.5408331289633264,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 1.0,
+     "random_close_hold_20": 0.9664144074006228,
+     "random_end_hold_in": 1.0,
+     "OE_close_in": null,
+     "expected_breaches_nov": 0.0,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 1.0,
+     "OE_ci_bootstrap_legacy": [
+      null,
+      null
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.0,
+      "E_lo": 0.0,
+      "E_hi": 0.0
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.0次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.0次·无从区分",
+     "expected_breaches_nov_20y": 0.5171276790620992,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      7.133401679067651
+     ],
+     "verdict_20y": "期望破墙仅0.5次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|P|expiry": {
+     "n": 31,
+     "n_nov": 13,
+     "buf_pct_med": 4.848527251101931,
+     "buf_atr_med": 3.429492344883167,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 1.0,
+     "random_close_hold_20": 0.9702127253841204,
+     "random_end_hold_in": 1.0,
+     "OE_close_in": null,
+     "expected_breaches_nov": 0.0,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 1.0,
+     "OE_ci_bootstrap_legacy": [
+      null,
+      null
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.0次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.0次·无从区分",
+     "expected_breaches_nov_20y": 0.3416209881588155,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      10.798163994534846
+     ],
+     "verdict_20y": "期望破墙仅0.3次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|k1": {
+     "n": 32,
+     "n_nov": 32,
+     "buf_pct_med": 4.824806764012202,
+     "buf_atr_med": 4.033442313613904,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 1.0,
+     "random_close_hold_20": 0.9964235030214247,
+     "random_end_hold_in": 1.0,
+     "OE_close_in": null,
+     "expected_breaches_nov": 0.0,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 1.0,
+     "OE_ci_bootstrap_legacy": [
+      null,
+      null
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.0,
+      "E_lo": 0.0,
+      "E_hi": 0.0
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.0次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.0次·无从区分",
+     "expected_breaches_nov_20y": 0.11444790331441124,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      32.231953118265935
+     ],
+     "verdict_20y": "期望破墙仅0.1次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|k2": {
+     "n": 32,
+     "n_nov": 17,
+     "buf_pct_med": 4.824806764012202,
+     "buf_atr_med": 4.033442313613904,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 0.9847972972972974,
+     "random_close_hold_20": 0.9895833333333334,
+     "random_end_hold_in": 0.9847972972972974,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.21621621621621578,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9872813990461049,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.21621621621621623,
+      "E_lo": 0.0,
+      "E_hi": 0.6486486486486487
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.2次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.2次·无从区分",
+     "expected_breaches_nov_20y": 0.16630036630036593,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      22.182028435530988
+     ],
+     "verdict_20y": "期望破墙仅0.2次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|k3": {
+     "n": 32,
+     "n_nov": 11,
+     "buf_pct_med": 4.824806764012202,
+     "buf_atr_med": 4.033442313613904,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 0.9451013513513514,
+     "random_close_hold_20": 0.979861238322037,
+     "random_end_hold_in": 0.9560810810810811,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.7567567567567564,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9312039312039313,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": {
+      "E_point": 0.7567567567567568,
+      "E_lo": 0.0,
+      "E_hi": 1.837837837837838
+     },
+     "OE_ci": [
+      null,
+      null
+     ],
+     "verdict": "期望破墙仅0.8次·无从区分",
+     "OE_ci_simultaneous": [
+      null,
+      null
+     ],
+     "verdict_simultaneous": "期望破墙仅0.8次·无从区分",
+     "expected_breaches_nov_20y": 0.26744825059534705,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      13.792871876717797
+     ],
+     "verdict_20y": "期望破墙仅0.3次·无从区分",
+     "oi_share_before_target_med": null
+    },
+    "structural|C|expiry": {
+     "n": 31,
+     "n_nov": 12,
+     "buf_pct_med": 4.736900904926822,
+     "buf_atr_med": 3.993711760707014,
+     "endpoint_hold": 1.0,
+     "close_hold": 1.0,
+     "intraday_hold": 1.0,
+     "random_close_hold_in": 0.952048823016565,
+     "random_close_hold_20": 0.9813392388929087,
+     "random_end_hold_in": 0.9616390584132519,
+     "OE_close_in": 0.0,
+     "expected_breaches_nov": 0.6756756756756753,
+     "observed_breaches_nov": 0,
+     "close_hold_nov": 1.0,
+     "random_close_hold_nov": 0.9436936936936937,
+     "OE_ci_bootstrap_legacy": [
+      0.0,
+      0.0
+     ],
+     "baseline_uncertainty": "not_propagated_varying_k",
+     "OE_ci": [
+      0.0,
+      5.4595415920886285
+     ],
+     "verdict": "期望破墙仅0.7次·无从区分",
+     "OE_ci_simultaneous": [
+      0.0,
+      12.21477691546103
+     ],
+     "verdict_simultaneous": "期望破墙仅0.7次·无从区分",
+     "expected_breaches_nov_20y": 0.2568211113549088,
+     "OE_close_20": 0.0,
+     "OE_ci_20y": [
+      0.0,
+      14.363614558992243
+     ],
+     "verdict_20y": "期望破墙仅0.3次·无从区分",
+     "oi_share_before_target_med": null
+    }
+   }
+  }
+ }
+}

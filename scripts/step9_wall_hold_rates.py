@@ -16,12 +16,26 @@
 - 期望破墙数（不重叠子样本上 ΣF）< 3 时不判定：观测 0 次也无法与随机区分（bootstrap 会退化成 [0,0]）。
 - 区间：不重叠子样本（每 k 天取 1；到期窗按不重叠区间取），对 (破墙, 期望) 行做 bootstrap（固定种子 20000 次）。
   局限：期望 F 当常数，未传播基准自身的估计误差；单一样本期；金银同日相关不合并。
+
+═══ 2026-09-26 修订（Codex 005 R08/R09；写于重跑之前，改的是推断方法，不改墙定义与窗口）═══
+- R08：bootstrap 在观测 0 次时退化成 [0,0] 并判「支持」。改为边界有效的精确区间：观测破墙数按 Poisson
+  处理（独立 Bernoulli 之和的方差 ≤ Poisson，故偏保守），O/E 的 Garwood 精确区间；观测 0 次给出非零上界。
+- 基准误差传播：同期基准 F 由重叠历史窗口估计。对基准窗口做循环移动块 bootstrap（块长 5、2000 次），
+  得到期望 E 的 95% 范围 [E_lo, E_hi]；合成区间取最不利组合：下界 = Garwood_L(O, E_hi)、上界 = Garwood_U(O, E_lo)。
+  这是保守合成，不是精确联合覆盖。
+- 多重比较：96 格 = 4 品种 × 3 墙定义 × 2 侧 × 4 窗口，自成一族，与方向检验的「族 36」无关。
+  逐格结论用 95%；「96 格同时」结论用 α=0.05/96 的同一合成区间另列。
+- 主基准是预登记的同期基准（Ein）；20 年基准（E20）只作敏感性并列，不择优引用。
+- 实用效应 0.70 是研究选择，不是市场规律。
+- R09：全样本百分比（n）与不重叠子样本的观测/期望（n_nov）分两段列出，后者给出 O、E、n_nov 与由它们算出的
+  守住率，读者可以自己验算 O/E。「期间是否越界」包含「窗末是否越界」，两者不能直接比出均值回归。
 用法：python3 scripts/step9_wall_hold_rates.py [--emit --output PATH]
 """
 from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import statistics as st
 import sys
@@ -86,6 +100,71 @@ def boot_ratio(rows, key_obs, key_exp):
 
 
 MIN_EXPECTED = 3.0
+N_CELLS = len(KEYS) * len(DEFS) * 2 * (len(KS) + 1)        # 96：W04 自己的多重比较族
+BASE_ITERS, BASE_BLOCK = 2000, 5
+
+
+def pois_cdf(o: int, mu: float) -> float:
+    """P(X ≤ o)，X ~ Poisson(mu)。"""
+    if mu <= 0:
+        return 1.0
+    term = math.exp(-mu); tot = term
+    for i in range(1, o + 1):
+        term *= mu / i; tot += term
+    return min(1.0, tot)
+
+
+def garwood(o: int, E: float, alpha: float = 0.05):
+    """O/E 的 Garwood 精确 (1−alpha) 区间（Poisson，E 为暴露）。o=0 → 下界 0、上界 −ln(alpha/2)/E。"""
+    if E <= 0:
+        return None, None
+
+    def solve(f, lo=0.0, hi=1.0):
+        while f(hi) > 0:
+            hi *= 2
+        for _ in range(200):
+            mid = (lo + hi) / 2
+            (lo, hi) = (mid, hi) if f(mid) > 0 else (lo, mid)
+        return (lo + hi) / 2
+    upper = solve(lambda th: pois_cdf(o, th * E) - alpha / 2)
+    lower = 0.0 if o == 0 else solve(lambda th: alpha / 2 - (1 - pois_cdf(o - 1, th * E)))
+    return lower, upper
+
+
+def expected_range(c, lo_idx, hi_idx, k, kind, bufs):
+    """基准期望 E = Σ_rows F(b_row) 及其块 bootstrap 95% 范围（传播基准估计误差）。"""
+    js = list(range(max(lo_idx, 1), min(hi_idx, len(c) - k)))
+    n = len(js)
+    if not n or not bufs:
+        return None, None, None
+    col = []
+    for j in js:
+        win = c[j + 1:j + k + 1]; tot = 0
+        for b in bufs:
+            lvl = c[j] * (1 - b) if kind == "P" else c[j] * (1 + b)
+            tot += any(crosses(kind, lvl, x) for x in win)
+        col.append(tot)
+    E = sum(col) / n
+    rnd = random.Random(SEED); vals = []
+    nb = -(-n // BASE_BLOCK)
+    for _ in range(BASE_ITERS):
+        pick = []
+        for _ in range(nb):
+            s0 = rnd.randrange(n)
+            pick.extend((s0 + t) % n for t in range(BASE_BLOCK))
+        pick = pick[:n]
+        vals.append(sum(col[t] for t in pick) / n)
+    vals.sort()
+    return E, vals[int(0.025 * len(vals))], vals[int(0.975 * len(vals)) - 1]
+
+
+def combined_interval(o, E_lo, E_hi, alpha):
+    """观测 Garwood × 基准 bootstrap 的最不利组合（保守合成）。"""
+    if not E_lo or not E_hi:
+        return None, None
+    lo, _ = garwood(o, E_hi, alpha)
+    _, hi = garwood(o, E_lo, alpha)
+    return lo, hi
 
 
 def verdict(lo, hi, ratio, expected):
@@ -139,10 +218,11 @@ def run(key, cfg, store, src):
                         "close_breach": any(crosses(kind, K, x) for x in cw),
                         "intraday_breach": (any(x < K for x in lw) if kind == "P" else any(x > K for x in hw)) if ohlc else None,
                         "F_close_in": 1 - ch_in, "F_end_in": 1 - eh_in, "F_close_20": 1 - ch_20, "F_end_20": 1 - eh_20})
-    return {"symbol": inst.options.symbol, "span": f"{Ts[0]}→{Ts[-1]}", "n_days": len(Ts), "rows": out}
+    return {"symbol": inst.options.symbol, "span": f"{Ts[0]}→{Ts[-1]}", "n_days": len(Ts), "rows": out,
+            "ctx": {"c": c, "lo": lo_idx, "hi": hi_idx}}
 
 
-def summarize(rows):
+def summarize(rows, ctx):
     res = {}
     for how in DEFS:
         for kind in ("P", "C"):
@@ -166,10 +246,34 @@ def summarize(rows):
                         "random_close_hold_20": 1 - st.mean(r["F_close_20"] for r in rr),
                         "random_end_hold_in": 1 - st.mean(r["F_end_in"] for r in rr)}
                 o = sum(r["close_breach"] for r in nov); e = sum(r["F_close_in"] for r in nov)
+                e20 = sum(r["F_close_20"] for r in nov)
                 item["OE_close_in"] = o / e if e else None      # e=0 → 不可估计
-                lo, hi = boot_ratio([{"o": r["close_breach"], "e": r["F_close_in"]} for r in nov], "o", "e")
-                item["OE_ci"] = (lo, hi); item["expected_breaches_nov"] = e; item["observed_breaches_nov"] = o
+                item["expected_breaches_nov"] = e; item["observed_breaches_nov"] = o
+                # R09：不重叠子样本自己的守住率，读者可用 O、E、n_nov 验算 O/E
+                item["close_hold_nov"] = 1 - o / len(nov) if nov else None
+                item["random_close_hold_nov"] = 1 - e / len(nov) if nov else None
+                # R08：旧 bootstrap 区间仅留作对照（观测 0 次时退化）；主区间 = Garwood × 基准 bootstrap 保守合成
+                item["OE_ci_bootstrap_legacy"] = boot_ratio([{"o": r["close_breach"], "e": r["F_close_in"]} for r in nov], "o", "e")
+                kwin = nov[0]["k"] if nov else 1
+                E_pt, E_lo, E_hi = expected_range(ctx["c"], ctx["lo"], ctx["hi"], kwin, kind, [r["buf_pct"] / 100 for r in nov]) \
+                    if wname != "expiry" else (e, None, None)
+                if wname == "expiry":
+                    # 到期窗每行 k 不同，基准窗口不共用；只传播观测部分（Garwood），基准误差未传播 —— 显式标注
+                    lo, hi = garwood(o, e); lo_s, hi_s = garwood(o, e, 0.05 / N_CELLS)
+                    item["baseline_uncertainty"] = "not_propagated_varying_k"
+                else:
+                    lo, hi = combined_interval(o, E_lo, E_hi, 0.05)
+                    lo_s, hi_s = combined_interval(o, E_lo, E_hi, 0.05 / N_CELLS)
+                    item["baseline_uncertainty"] = {"E_point": E_pt, "E_lo": E_lo, "E_hi": E_hi}
+                item["OE_ci"] = (lo, hi)
                 item["verdict"] = verdict(lo, hi, item["OE_close_in"], e)
+                item["OE_ci_simultaneous"] = (lo_s, hi_s)
+                item["verdict_simultaneous"] = verdict(lo_s, hi_s, item["OE_close_in"], e)
+                # 20 年基准：敏感性（只传播观测部分）
+                item["expected_breaches_nov_20y"] = e20
+                item["OE_close_20"] = o / e20 if e20 else None
+                item["OE_ci_20y"] = garwood(o, e20) if e20 else (None, None)
+                item["verdict_20y"] = verdict(*item["OE_ci_20y"], item["OE_close_20"], e20)
                 sh = [r["oi_share_expiring_before_target"] for r in rr if r["oi_share_expiring_before_target"] is not None]
                 item["oi_share_before_target_med"] = st.median(sh) if sh else None
                 res[f"{how}|{kind}|{wname}"] = item
@@ -181,21 +285,32 @@ def main():
     ap.add_argument("--output", type=Path, default=ROOT / "data/history/wall_spread/wall_hold_rates.json")
     a = ap.parse_args()
     cfg = load_config(); store = SnapshotStore(); src = CboeHistorySource()
-    emit = {"schema": 1, "asof": date.today().isoformat(), "min_useful_OE": MIN_USEFUL,
+    emit = {"schema": 2, "asof": date.today().isoformat(), "min_useful_OE": MIN_USEFUL,
+            "inference": {"primary": "Garwood 精确（观测）× 基准块 bootstrap（块 5、2000 次）最不利组合",
+                          "simultaneous_alpha": 0.05 / N_CELLS, "family": f"{N_CELLS} 格 = 4 品种×3 墙定义×2 侧×4 窗口",
+                          "legacy": "OE_ci_bootstrap_legacy（行 bootstrap，观测 0 次时退化，仅对照）",
+                          "baseline_primary": "同期（Ein，预登记）", "baseline_sensitivity": "20 年（E20，只传播观测部分）"},
             "bootstrap": {"iters": B_ITERS, "seed": SEED}, "instruments": {}}
-    print(f"墙守住率（事前固定墙，不重画）。O/E = 期间收盘破墙 ÷ 同期同距离随机价位期望；最小有用效果 O/E≤{MIN_USEFUL}")
+    fmt = lambda ci: f"[{ci[0]:.2f},{ci[1]:.2f}]" if ci and ci[0] is not None else "—"
+    print(f"墙守住率（事前固定墙，不重画）。O/E = 不重叠子样本上 期间收盘破墙数 ÷ 同期同距离随机价位期望；最小有用效果 O/E≤{MIN_USEFUL}")
+    print(f"区间：Garwood 精确 × 基准块 bootstrap 的保守合成；「同时」列为 {N_CELLS} 格族 α=0.05/{N_CELLS}")
     for key in KEYS:
-        r = run(key, cfg, store, src); s = summarize(r["rows"])
-        emit["instruments"][key] = {"symbol": r["symbol"], "span": r["span"], "n_days": r["n_days"], "summary": s}
-        print(f"\n{'═'*118}\n{key} ({r['symbol']}) {r['span']} 可交易日 {r['n_days']}\n{'═'*118}")
-        print(f"  {'墙·侧·窗':22s}{'n':>4s}{'缓冲%':>6s}{'ATR':>5s} │{'窗末收在墙内':>7s}{'随机':>5s} │{'期间收盘未破':>7s}{'随机同期':>6s}{'20年':>5s} │{'盘中未碰':>5s} │"
-              f"{'O/E':>5s}{'95%区间':>13s}{'期望/观测':>9s}  判定")
-        for kk, v in s.items():
-            ci = v["OE_ci"]; cis = f"[{ci[0]:.2f},{ci[1]:.2f}]" if ci[0] is not None else "—"
-            oe = f"{v['OE_close_in']:.2f}" if v["OE_close_in"] is not None else "—"
+        r = run(key, cfg, store, src); s_ = summarize(r["rows"], r["ctx"])
+        emit["instruments"][key] = {"symbol": r["symbol"], "span": r["span"], "n_days": r["n_days"], "summary": s_}
+        print(f"\n{'═'*124}\n{key} ({r['symbol']}) {r['span']} 可交易日 {r['n_days']}\n{'═'*124}")
+        print(f"  ── 全样本（描述，n 行，含重叠窗）──")
+        print(f"  {'墙·侧·窗':22s}{'n':>4s}{'缓冲%':>6s}{'ATR':>5s} │{'窗末守住':>6s}{'随机':>5s} │{'期间守住':>6s}{'随机同期':>6s}{'20年':>5s} │{'盘中未碰':>5s}")
+        for kk, v in s_.items():
             print(f"  {kk:22s}{v['n']:4d}{v['buf_pct_med']:6.2f}{v['buf_atr_med']:5.2f} │{v['endpoint_hold']:7.0%}{v['random_end_hold_in']:6.0%} │"
-                  f"{v['close_hold']:7.0%}{v['random_close_hold_in']:7.0%}{v['random_close_hold_20']:6.0%} │{v['intraday_hold']:6.0%} │"
-                  f"{oe:>5s}{cis:>13s}{v['expected_breaches_nov']:5.1f}/{v['observed_breaches_nov']:<3d}  {v['verdict']}")
+                  f"{v['close_hold']:7.0%}{v['random_close_hold_in']:7.0%}{v['random_close_hold_20']:6.0%} │{v['intraday_hold']:6.0%}")
+        print(f"  ── 不重叠子样本（推断，n_nov 行；守住率 = 1 − O/n_nov、随机 = 1 − E/n_nov，可验算 O/E）──")
+        print(f"  {'墙·侧·窗':22s}{'n_nov':>6s}{'O':>4s}{'E':>6s}{'守住':>6s}{'随机':>6s} │{'O/E':>5s}{'95%(合成)':>14s} {'判定':14s}│{'同时区间':>13s} {'判定':10s}│{'O/E20':>6s}{'20年区间':>13s}")
+        for kk, v in s_.items():
+            oe = f"{v['OE_close_in']:.2f}" if v["OE_close_in"] is not None else "—"
+            oe20 = f"{v['OE_close_20']:.2f}" if v["OE_close_20"] is not None else "—"
+            print(f"  {kk:22s}{v['n_nov']:6d}{v['observed_breaches_nov']:4d}{v['expected_breaches_nov']:6.1f}"
+                  f"{v['close_hold_nov']:6.0%}{v['random_close_hold_nov']:6.0%} │{oe:>5s}{fmt(v['OE_ci']):>14s} {v['verdict']:14s}│"
+                  f"{fmt(v['OE_ci_simultaneous']):>13s} {v['verdict_simultaneous']:10s}│{oe20:>6s}{fmt(v['OE_ci_20y']):>13s}")
     if a.emit:
         a.output.parent.mkdir(parents=True, exist_ok=True)
         a.output.write_text(json.dumps(emit, ensure_ascii=False, indent=1, default=str), "utf-8")

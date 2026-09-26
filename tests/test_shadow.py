@@ -443,3 +443,12 @@ def test_settle_rederive_recomputes_outcome_keeps_raw(tmp_path, monkeypatch):
     new = jl.load(p, "key")[0]
     assert new["windows"] == r["windows"] and new["rederived_at"]
     assert all("quote_entry_expiry_intrinsic" in o["pnl"] for o in new["outcome"].values())
+
+
+def test_marks_after_expiry_are_ignored():
+    """跨到期标记：到期后窗口里的尝试（哪怕成本极高）不参与止损判断。"""
+    cheap = {"P|57": _q(0.10, 0.12), "P|56": _q(0.02, 0.03)}
+    dear = {"P|57": _q(0.90, 0.95), "P|56": _q(0.05, 0.06)}
+    m = _marks_all(cheap); m["2026-09-17|open"] = dear
+    o = sh.settle_leg(_leg(), _vrow(_full_windows(m)), bars=BARS3 + [(date(2026, 9, 17), 58.2, 57.8, 58.0)])
+    assert o["status"]["stop1x_twice_daily"] == "held_all_marks_valid" and o["marks"]["expected"] == 5

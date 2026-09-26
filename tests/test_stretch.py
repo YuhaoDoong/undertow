@@ -389,3 +389,11 @@ def test_calibrate_edge_and_t_same_sample():
     md = sb.render_table_md(cal)
     row = next(l for l in md.splitlines() if l.startswith("| 极超卖"))
     assert r["n_nov"] == 20 and "样本不足" in row and "✅" not in row
+
+
+def test_containment_cache_named_by_panel():
+    """不同品种面板的不突破率缓存不得互相覆盖（2026-09-26 本轮重跑时发现）。"""
+    from undertow.cli import containment_path
+    a = containment_path(5, "combo", None)
+    b = containment_path(5, "combo", ["TLT", "IEF", "SHY", "TLH"])
+    assert a.name == "h5_combo.json" and b.name == "h5_combo_IEF-SHY-TLH-TLT.json" and a != b

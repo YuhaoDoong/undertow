@@ -1635,21 +1635,29 @@ def cmd_live(args) -> int:
 
 
 
-def _persist_containment(acc: dict, *, horizon: int, mode: str, spans: list) -> None:
-    """不突破率校准表落盘存档 —— 卖方选行权价距离时直接查这张表。
+def containment_path(horizon: int, mode: str, symbols: list | None):
+    """最新缓存的文件名带面板身份（2026-09-26）。
 
-    与 VRP 同类：这是"回测产出的参数"，纳入 git 备份，改指标后重跑覆盖。
+    原来只按 h{horizon}_{mode}.json 命名：换一个品种面板重跑就整体覆盖另一个面板的结果
+    （实测：仓库里的 h5_combo.json 是一次 TLT/IEF/SHY/TLH 运行覆盖默认面板后留下的；
+    本轮重跑默认面板又差点把它覆盖回来）。默认面板沿用旧名，其它面板加品种后缀。
     """
     d = DATA_DIR / "history" / "containment"
-    d.mkdir(parents=True, exist_ok=True)
-    (d / f"h{horizon}_{mode}.json").write_text(json.dumps({
-        "asof": market_today().isoformat(), "horizon": horizon, "mode": mode,
-        "panel": spans, "unit": "ATR14 倍数",
+    tag = "" if not symbols else "_" + "-".join(sorted(str(x).upper() for x in symbols))
+    return d / f"h{horizon}_{mode}{tag}.json"
+
+
+def _persist_containment(acc: dict, *, horizon: int, mode: str, spans: list, symbols: list | None = None) -> None:
+    """不突破率校准表 —— 可重算的最新缓存（同 VRP，Codex 008 C05 分类）：原子写，文件名带面板身份。"""
+    from undertow.collect.asof_history import atomic_write_json
+    atomic_write_json(containment_path(horizon, mode, symbols), {
+        "kind": "latest_cache", "asof": market_today().isoformat(), "horizon": horizon, "mode": mode,
+        "panel_symbols": sorted(symbols) if symbols else "default", "panel": spans, "unit": "ATR14 倍数",
         "note": ("终值=到期收盘在行权价内；路径=期间一次都没碰到。"
                  "超买档看向上不突破(卖call)，超卖档看向下不突破(卖put)。"
                  "提升才是 edge，绝对值高只是因为虚值远。"),
         "bands": acc,
-    }, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
+    })
 
 
 def cmd_vol(args) -> int:
@@ -3432,7 +3440,8 @@ def cmd_backtest_stretch(args) -> int:
     if acc:
         print()
         print(sb.render_containment_md(acc, horizon=args.horizon))
-        _persist_containment(acc, horizon=args.horizon, mode=args.mode, spans=spans)
+        _persist_containment(acc, horizon=args.horizon, mode=args.mode, spans=spans,
+                             symbols=(list(args.symbols) if args.symbols else None))
 
     # 两维分歧：分歧时该信谁？（答案应是"都别太信"）
     dv = sb.diverge_stats(samples, horizon=args.horizon)

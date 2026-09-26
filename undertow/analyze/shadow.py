@@ -69,8 +69,9 @@ CONFIG = {
     "short_only_policy": {
         "trigger": "长腿报价有效（无错误、ask>0、ask_size>0）且 bid==0",
         "residual": "长腿 1 张持有至到期，不再下任何指令",
-        "otm_at_expiry": "现金流 0：OCC exercise-by-exception 只自动行权实值 ≥$0.01 的期权 "
-                         "(https://www.optionseducation.org/referencelibrary/faq/options-exercise)",
+        "otm_at_expiry": "模型处置情景：现金流 0（OCC exercise-by-exception 只自动行权实值 ≥$0.01 的期权，"
+                         "https://www.optionseducation.org/referencelibrary/faq/options-exercise）；"
+                         "假设无相反指令、券商按此处置，实际未核实（actual_confirmed=None）",
         "itm_at_expiry": "未知：会被自动行权成标的仓位，券商处置、费用与隔夜风险未核实 → 损益下界 None，上界 = 内在值",
         "permission": "未核实：组合单是否允许单独买回短腿取决于券商与入场方式（AGENTS.md 组合单 vs 分腿）",
         "fees": "仍按 $3.20 往返预算"},
@@ -378,7 +379,9 @@ def exit_mode(bq: dict) -> str:
 def residual_leg(leg: dict, expiry_bar) -> dict:
     """只买回短腿后，残余长腿（1 张）到期的现金流身份（每张美元）。expiry_bar=(date,h,l,close) 或 None。
 
-    到期虚值 → 现金流 0（OCC 按例外行权：不自动行权，无需指令）；
+    到期虚值 → 现金流 0，但这是【模型处置情景】：依据 OCC 按例外行权规则（虚值不自动行权），
+    假设没有相反行权指令、券商按该规则处置；长桥的实际到期处置条款未核实（Codex 008 v5 复核）。
+    所以点值带 disposition_basis / model_assumption / actual_confirmed=None，不等于已确认的实际现金流。
     恰在行权价或实值 → 会/可能被行权成标的仓位，处置未知：下界 None，上界 = 内在值。
     """
     if expiry_bar is None:
@@ -386,9 +389,12 @@ def residual_leg(leg: dict, expiry_bar) -> dict:
     K, px = leg["buy"], expiry_bar[3]
     otm = px > K if leg["side"] == "P" else px < K
     intr = round(max(0.0, (K - px) if leg["side"] == "P" else (px - K)) * 100, 4)
+    ident = {"disposition_basis": "model: OCC exercise-by-exception",
+             "model_assumption": "无相反行权指令；券商按 OCC 规则处置；按到期日收盘价判虚实值（盘后变动未计）",
+             "actual_confirmed": None}                    # None = 未用实际成交/交割记录核对
     if otm:
-        return {"status": "expired_otm", "cash_lo": 0.0, "cash_hi": 0.0}
-    return {"status": "itm_disposition_unknown", "cash_lo": None, "cash_hi": intr}
+        return {"status": "expired_otm", "cash_lo": 0.0, "cash_hi": 0.0, **ident}
+    return {"status": "itm_disposition_unknown", "cash_lo": None, "cash_hi": intr, **ident}
 
 
 def exit_cost_raw(sq: dict, bq: dict) -> float:
@@ -801,6 +807,7 @@ def status_breakdown(rows: list[dict], basis: str) -> dict:
     st_, reasons = Counter(), Counter()
     marks = {"expected": 0, "valid": 0, "not_run": 0, "missing": 0, "pending": 0}
     modes = Counter()
+    model_pts = 0     # 残腿到期虚值、按模型处置情景给点值且未经实际记录确认的腿
     for r in rows:
         for l in r.get("legs", []):
             if l.get("status") != "candidate":
@@ -817,8 +824,12 @@ def status_breakdown(rows: list[dict], basis: str) -> dict:
                 marks[k] += (o.get("marks") or {}).get(k, 0)
             if (o.get("exit_mode") or {}).get(basis):
                 modes[o["exit_mode"][basis]] += 1
+            rs = (o.get("residual") or {}).get(basis) or {}
+            if rs.get("status") == "expired_otm" and rs.get("actual_confirmed") is not True:
+                model_pts += 1
     return {"basis": basis, "status": dict(st_.most_common()), "entry_missing_reasons": dict(reasons.most_common()),
-            "marks": marks, "exit_modes": dict(modes.most_common())}
+            "marks": marks, "exit_modes": dict(modes.most_common()),
+            "model_disposition_points": model_pts}
 
 
 def formal_identity(as_of: date | None) -> str:

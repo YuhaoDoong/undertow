@@ -652,6 +652,10 @@ def test_v5_short_only_residual_expired_otm_is_point():
     assert o["exit_mode"][b] == "short_only" and o["status"][b] == "ok|short_only_expired_otm"
     assert o["pnl"][b] == pytest.approx(20 - 10 - 3.2) and o["pnl_bounds"][b] == [o["pnl"][b], o["pnl"][b]]
     assert o["residual"][b]["status"] == "expired_otm" and o["residual"][b]["strike"] == 56.0
+    r = o["residual"][b]
+    assert r["disposition_basis"].startswith("model") and r["actual_confirmed"] is None, "模型处置 ≠ 已确认现金流"
+    row = dict(_vrow({}), legs=[_leg()], outcome={"P-A": o})
+    assert sh.status_breakdown([row], b)["model_disposition_points"] == 1
 
 
 def test_v5_short_only_residual_itm_has_no_lower_bound():

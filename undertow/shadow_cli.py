@@ -418,7 +418,9 @@ def cmd_report(args) -> int:
             extra = (f"；持仓标记 应有 {m['expected']} 有效 {m['valid']} 未运行 {m['not_run']} 缺失 {m['missing']}"
                      f" 未到 {m['pending']}"
                      + (f"；入场缺失原因 {bd['entry_missing_reasons']}" if bd["entry_missing_reasons"] else "")
-                     + (f"；退出方式 {bd['exit_modes']}" if bd["exit_modes"] else ""))
+                     + (f"；退出方式 {bd['exit_modes']}" if bd["exit_modes"] else "")
+                     + (f"；其中 {bd['model_disposition_points']} 个点值依赖残腿到期处置模型（未经实际记录确认）"
+                        if bd.get("model_disposition_points") else ""))
         print(f"  {basis:30s} 状态：{st_line}{extra}")
         # 主终点：每个池都列；其它终点只列主池（--detail 全列）。池之间从不合并。
         pools = list(sh.CONFIG["pools"]) if (basis == prim or args.detail) else [sh.CONFIG["primary_pool"]]

@@ -39,3 +39,12 @@ def test_sign_test_exact():
     assert s10.sign_test_p(7, 0) == pytest.approx(1 / 128)
     assert s10.sign_test_p(0, 3) == 1.0
     assert s10.sign_test_p(0, 0) is None
+
+
+def test_garwood_binomial_coverage_by_enumeration():
+    """Codex 008：Garwood 是 Poisson 区间；用于二项破墙事件时以枚举给出实际覆盖率，不宣称精确二项覆盖。"""
+    import step9_coverage_check as cc
+    rows = cc.grid()
+    assert len(rows) > 100 and min(r["coverage"] for r in rows) >= 0.95
+    assert any(r["kind"] == "heterogeneous" for r in rows)
+    assert abs(sum(cc.poisson_binomial([0.2, 0.5, 0.9])) - 1) < 1e-12

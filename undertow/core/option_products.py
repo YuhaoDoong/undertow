@@ -10,6 +10,10 @@ from __future__ import annotations
 from datetime import date
 
 VERSION = "option-products-20260926-v1"
+# 认证范围（Codex 008 v5 复核）：本表只证明「影子账观察窗落在各主池品种的期权交易时段内」；
+# 它【不】认证到期处置、行权、交割与券商规则 —— UNVERIFIED 里的各项在任何报告里都不得写成已确认。
+CERTIFIES = "observation_windows_within_option_trading_hours"
+DOES_NOT_CERTIFY = ["expiry_disposition", "exercise_style", "broker_rules"]
 SOURCES = {
     "nasdaq_hours": {"url": "https://www.nasdaqtrader.com/Trader.aspx?id=optionshours", "read_at": "2026-09-26",
                      "says": "Equity 与 ETF/ETN 期权常规 9:30–16:00 ET；列表内根代码交易至 16:15 ET"},

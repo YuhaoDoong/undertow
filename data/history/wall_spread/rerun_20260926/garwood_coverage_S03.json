@@ -1,0 +1,1025 @@
+{
+ "schema": 1,
+ "identity": "Poisson 精确区间用于二项事件：覆盖率由枚举给出，不宣称精确二项覆盖",
+ "alpha": 0.05,
+ "n_cells": 126,
+ "min_coverage": {
+  "n": 40,
+  "F": 0.1,
+  "theta": 1.0,
+  "E": 4.0,
+  "coverage": 0.9697,
+  "kind": "homogeneous"
+ },
+ "n_below_nominal": 0,
+ "rows": [
+  {
+   "n": 5,
+   "F": 0.05,
+   "theta": 0.3,
+   "E": 0.25,
+   "coverage": 0.9978,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.05,
+   "theta": 0.5,
+   "E": 0.25,
+   "coverage": 0.9941,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.05,
+   "theta": 0.7,
+   "E": 0.25,
+   "coverage": 0.9886,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.05,
+   "theta": 1.0,
+   "E": 0.25,
+   "coverage": 0.9988,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.05,
+   "theta": 1.3,
+   "E": 0.25,
+   "coverage": 0.9975,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.05,
+   "theta": 1.6,
+   "E": 0.25,
+   "coverage": 0.9955,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.1,
+   "theta": 0.3,
+   "E": 0.5,
+   "coverage": 0.9915,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.1,
+   "theta": 0.5,
+   "E": 0.5,
+   "coverage": 0.9988,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.1,
+   "theta": 0.7,
+   "E": 0.5,
+   "coverage": 0.9969,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.1,
+   "theta": 1.0,
+   "E": 0.5,
+   "coverage": 0.9914,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.1,
+   "theta": 1.3,
+   "E": 0.5,
+   "coverage": 0.9987,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.1,
+   "theta": 1.6,
+   "E": 0.5,
+   "coverage": 0.9971,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.2,
+   "theta": 0.3,
+   "E": 1.0,
+   "coverage": 0.998,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.2,
+   "theta": 0.5,
+   "E": 1.0,
+   "coverage": 0.9914,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.2,
+   "theta": 0.7,
+   "E": 1.0,
+   "coverage": 0.9983,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.2,
+   "theta": 1.0,
+   "E": 1.0,
+   "coverage": 0.9933,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.2,
+   "theta": 1.3,
+   "E": 1.0,
+   "coverage": 0.9988,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.2,
+   "theta": 1.6,
+   "E": 1.0,
+   "coverage": 0.9966,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.3,
+   "theta": 0.3,
+   "E": 1.5,
+   "coverage": 0.9937,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.3,
+   "theta": 0.5,
+   "E": 1.5,
+   "coverage": 0.9978,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.3,
+   "theta": 0.7,
+   "E": 1.5,
+   "coverage": 0.9919,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.3,
+   "theta": 1.0,
+   "E": 1.5,
+   "coverage": 0.9976,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.3,
+   "theta": 1.3,
+   "E": 1.5,
+   "coverage": 1.0,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.3,
+   "theta": 1.6,
+   "E": 1.5,
+   "coverage": 1.0,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.5,
+   "theta": 0.3,
+   "E": 2.5,
+   "coverage": 0.9978,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.5,
+   "theta": 0.5,
+   "E": 2.5,
+   "coverage": 0.999,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.5,
+   "theta": 0.7,
+   "E": 2.5,
+   "coverage": 1.0,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.5,
+   "theta": 1.0,
+   "E": 2.5,
+   "coverage": 1.0,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.5,
+   "theta": 1.3,
+   "E": 2.5,
+   "coverage": 1.0,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 5,
+   "F": 0.5,
+   "theta": 1.6,
+   "E": 2.5,
+   "coverage": 0.9997,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.05,
+   "theta": 0.3,
+   "E": 0.5,
+   "coverage": 0.9907,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.05,
+   "theta": 0.5,
+   "E": 0.5,
+   "coverage": 0.9984,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.05,
+   "theta": 0.7,
+   "E": 0.5,
+   "coverage": 0.9957,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.05,
+   "theta": 1.0,
+   "E": 0.5,
+   "coverage": 0.9885,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.05,
+   "theta": 1.3,
+   "E": 0.5,
+   "coverage": 0.9973,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.05,
+   "theta": 1.6,
+   "E": 0.5,
+   "coverage": 0.9942,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.1,
+   "theta": 0.3,
+   "E": 1.0,
+   "coverage": 0.9972,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.1,
+   "theta": 0.5,
+   "E": 1.0,
+   "coverage": 0.9885,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.1,
+   "theta": 0.7,
+   "E": 1.0,
+   "coverage": 0.9964,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.1,
+   "theta": 1.0,
+   "E": 1.0,
+   "coverage": 0.9872,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.1,
+   "theta": 1.3,
+   "E": 1.0,
+   "coverage": 0.9947,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.1,
+   "theta": 1.6,
+   "E": 1.0,
+   "coverage": 0.987,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.2,
+   "theta": 0.3,
+   "E": 2.0,
+   "coverage": 0.9812,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.2,
+   "theta": 0.5,
+   "E": 2.0,
+   "coverage": 0.9872,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.2,
+   "theta": 0.7,
+   "E": 2.0,
+   "coverage": 0.9927,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.2,
+   "theta": 1.0,
+   "E": 2.0,
+   "coverage": 0.9936,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.2,
+   "theta": 1.3,
+   "E": 2.0,
+   "coverage": 0.9955,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.2,
+   "theta": 1.6,
+   "E": 2.0,
+   "coverage": 0.9975,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.3,
+   "theta": 0.3,
+   "E": 3.0,
+   "coverage": 0.9912,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.3,
+   "theta": 0.5,
+   "E": 3.0,
+   "coverage": 0.9901,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.3,
+   "theta": 0.7,
+   "E": 3.0,
+   "coverage": 0.9918,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.3,
+   "theta": 1.0,
+   "E": 3.0,
+   "coverage": 0.9984,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.3,
+   "theta": 1.3,
+   "E": 3.0,
+   "coverage": 0.9915,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.3,
+   "theta": 1.6,
+   "E": 3.0,
+   "coverage": 0.9986,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.5,
+   "theta": 0.3,
+   "E": 5.0,
+   "coverage": 0.9901,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.5,
+   "theta": 0.5,
+   "E": 5.0,
+   "coverage": 0.9965,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.5,
+   "theta": 0.7,
+   "E": 5.0,
+   "coverage": 0.9995,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.5,
+   "theta": 1.0,
+   "E": 5.0,
+   "coverage": 0.999,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.5,
+   "theta": 1.3,
+   "E": 5.0,
+   "coverage": 0.9995,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": 0.5,
+   "theta": 1.6,
+   "E": 5.0,
+   "coverage": 0.9999,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.05,
+   "theta": 0.3,
+   "E": 1.0,
+   "coverage": 0.9968,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.05,
+   "theta": 0.5,
+   "E": 1.0,
+   "coverage": 0.987,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.05,
+   "theta": 0.7,
+   "E": 1.0,
+   "coverage": 0.9954,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.05,
+   "theta": 1.0,
+   "E": 1.0,
+   "coverage": 0.9841,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.05,
+   "theta": 1.3,
+   "E": 1.0,
+   "coverage": 0.9921,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.05,
+   "theta": 1.6,
+   "E": 1.0,
+   "coverage": 0.9817,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.1,
+   "theta": 0.3,
+   "E": 2.0,
+   "coverage": 0.979,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.1,
+   "theta": 0.5,
+   "E": 2.0,
+   "coverage": 0.9841,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.1,
+   "theta": 0.7,
+   "E": 2.0,
+   "coverage": 0.9893,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.1,
+   "theta": 1.0,
+   "E": 2.0,
+   "coverage": 0.9887,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.1,
+   "theta": 1.3,
+   "E": 2.0,
+   "coverage": 0.9897,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.1,
+   "theta": 1.6,
+   "E": 2.0,
+   "coverage": 0.9912,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.2,
+   "theta": 0.3,
+   "E": 4.0,
+   "coverage": 0.9944,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.2,
+   "theta": 0.5,
+   "E": 4.0,
+   "coverage": 0.9887,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.2,
+   "theta": 0.7,
+   "E": 4.0,
+   "coverage": 0.9847,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.2,
+   "theta": 1.0,
+   "E": 4.0,
+   "coverage": 0.9785,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.2,
+   "theta": 1.3,
+   "E": 4.0,
+   "coverage": 0.9921,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.2,
+   "theta": 1.6,
+   "E": 4.0,
+   "coverage": 0.9929,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.3,
+   "theta": 0.3,
+   "E": 6.0,
+   "coverage": 0.9932,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.3,
+   "theta": 0.5,
+   "E": 6.0,
+   "coverage": 0.9941,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.3,
+   "theta": 0.7,
+   "E": 6.0,
+   "coverage": 0.9872,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.3,
+   "theta": 1.0,
+   "E": 6.0,
+   "coverage": 0.9872,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.3,
+   "theta": 1.3,
+   "E": 6.0,
+   "coverage": 0.9942,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.3,
+   "theta": 1.6,
+   "E": 6.0,
+   "coverage": 0.997,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.5,
+   "theta": 0.3,
+   "E": 10.0,
+   "coverage": 0.9941,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.5,
+   "theta": 0.5,
+   "E": 10.0,
+   "coverage": 0.9929,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.5,
+   "theta": 0.7,
+   "E": 10.0,
+   "coverage": 0.9963,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.5,
+   "theta": 1.0,
+   "E": 10.0,
+   "coverage": 0.9985,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.5,
+   "theta": 1.3,
+   "E": 10.0,
+   "coverage": 0.9997,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 20,
+   "F": 0.5,
+   "theta": 1.6,
+   "E": 10.0,
+   "coverage": 0.9999,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.05,
+   "theta": 0.3,
+   "E": 2.0,
+   "coverage": 0.9779,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.05,
+   "theta": 0.5,
+   "E": 2.0,
+   "coverage": 0.9826,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.05,
+   "theta": 0.7,
+   "E": 2.0,
+   "coverage": 0.9875,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.05,
+   "theta": 1.0,
+   "E": 2.0,
+   "coverage": 0.9861,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.05,
+   "theta": 1.3,
+   "E": 2.0,
+   "coverage": 0.9863,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.05,
+   "theta": 1.6,
+   "E": 2.0,
+   "coverage": 0.9873,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.1,
+   "theta": 0.3,
+   "E": 4.0,
+   "coverage": 0.9933,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.1,
+   "theta": 0.5,
+   "E": 4.0,
+   "coverage": 0.9861,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.1,
+   "theta": 0.7,
+   "E": 4.0,
+   "coverage": 0.9801,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.1,
+   "theta": 1.0,
+   "E": 4.0,
+   "coverage": 0.9697,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.1,
+   "theta": 1.3,
+   "E": 4.0,
+   "coverage": 0.9851,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.1,
+   "theta": 1.6,
+   "E": 4.0,
+   "coverage": 0.9844,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.2,
+   "theta": 0.3,
+   "E": 8.0,
+   "coverage": 0.9909,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.2,
+   "theta": 0.5,
+   "E": 8.0,
+   "coverage": 0.9697,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.2,
+   "theta": 0.7,
+   "E": 8.0,
+   "coverage": 0.975,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.2,
+   "theta": 1.0,
+   "E": 8.0,
+   "coverage": 0.9841,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.2,
+   "theta": 1.3,
+   "E": 8.0,
+   "coverage": 0.9814,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.2,
+   "theta": 1.6,
+   "E": 8.0,
+   "coverage": 0.9901,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.3,
+   "theta": 0.3,
+   "E": 12.0,
+   "coverage": 0.9919,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.3,
+   "theta": 0.5,
+   "E": 12.0,
+   "coverage": 0.9759,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.3,
+   "theta": 0.7,
+   "E": 12.0,
+   "coverage": 0.9897,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.3,
+   "theta": 1.0,
+   "E": 12.0,
+   "coverage": 0.9851,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.3,
+   "theta": 1.3,
+   "E": 12.0,
+   "coverage": 0.9948,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.3,
+   "theta": 1.6,
+   "E": 12.0,
+   "coverage": 0.9961,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.5,
+   "theta": 0.3,
+   "E": 20.0,
+   "coverage": 0.9759,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.5,
+   "theta": 0.5,
+   "E": 20.0,
+   "coverage": 0.9907,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.5,
+   "theta": 0.7,
+   "E": 20.0,
+   "coverage": 0.9926,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.5,
+   "theta": 1.0,
+   "E": 20.0,
+   "coverage": 0.9957,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.5,
+   "theta": 1.3,
+   "E": 20.0,
+   "coverage": 0.9989,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 40,
+   "F": 0.5,
+   "theta": 1.6,
+   "E": 20.0,
+   "coverage": 1.0,
+   "kind": "homogeneous"
+  },
+  {
+   "n": 10,
+   "F": "0.05~0.45",
+   "theta": 0.5,
+   "E": 2.5,
+   "coverage": 0.9965,
+   "kind": "heterogeneous"
+  },
+  {
+   "n": 10,
+   "F": "0.05~0.45",
+   "theta": 1.0,
+   "E": 2.5,
+   "coverage": 0.998,
+   "kind": "heterogeneous"
+  },
+  {
+   "n": 10,
+   "F": "0.05~0.45",
+   "theta": 1.5,
+   "E": 2.5,
+   "coverage": 0.9943,
+   "kind": "heterogeneous"
+  },
+  {
+   "n": 20,
+   "F": "0.05~0.45",
+   "theta": 0.5,
+   "E": 5.0,
+   "coverage": 0.9928,
+   "kind": "heterogeneous"
+  },
+  {
+   "n": 20,
+   "F": "0.05~0.45",
+   "theta": 1.0,
+   "E": 5.0,
+   "coverage": 0.995,
+   "kind": "heterogeneous"
+  },
+  {
+   "n": 20,
+   "F": "0.05~0.45",
+   "theta": 1.5,
+   "E": 5.0,
+   "coverage": 0.9945,
+   "kind": "heterogeneous"
+  }
+ ]
+}

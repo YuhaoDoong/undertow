@@ -19,7 +19,8 @@
 
 ═══ 2026-09-26 修订（Codex 005 R08/R09；写于重跑之前，改的是推断方法，不改墙定义与窗口）═══
 - R08：bootstrap 在观测 0 次时退化成 [0,0] 并判「支持」。改为边界有效的精确区间：观测破墙数按 Poisson
-  处理（独立 Bernoulli 之和的方差 ≤ Poisson，故偏保守），O/E 的 Garwood 精确区间；观测 0 次给出非零上界。
+  处理，用 Poisson 精确（Garwood）区间；破墙本是固定 n 行的二项事件，所以这是近似，不宣称精确二项覆盖。
+  枚举检查（scripts/step9_coverage_check.py，126 格含异质概率）：实际覆盖率最低 0.970，无一低于 95%。观测 0 次给出非零上界。
 - 基准误差传播：同期基准 F 由重叠历史窗口估计。对基准窗口做循环移动块 bootstrap（块长 5、2000 次），
   得到期望 E 的 95% 范围 [E_lo, E_hi]；合成区间取最不利组合：下界 = Garwood_L(O, E_hi)、上界 = Garwood_U(O, E_lo)。
   这是保守合成，不是精确联合覆盖。
@@ -115,7 +116,8 @@ def pois_cdf(o: int, mu: float) -> float:
 
 
 def garwood(o: int, E: float, alpha: float = 0.05):
-    """O/E 的 Garwood 精确 (1−alpha) 区间（Poisson，E 为暴露）。o=0 → 下界 0、上界 −ln(alpha/2)/E。"""
+    """O/E 的 Garwood (1−alpha) 区间：对 Poisson 计数精确（E 为暴露）；用于二项破墙属近似，
+    覆盖率见 step9_coverage_check.py。o=0 → 下界 0、上界 −ln(alpha/2)/E。"""
     if E <= 0:
         return None, None
 
@@ -286,14 +288,15 @@ def main():
     a = ap.parse_args()
     cfg = load_config(); store = SnapshotStore(); src = CboeHistorySource()
     emit = {"schema": 2, "asof": date.today().isoformat(), "min_useful_OE": MIN_USEFUL,
-            "inference": {"primary": "Garwood 精确（观测）× 基准块 bootstrap（块 5、2000 次）最不利组合",
+            "inference": {"primary": "Poisson 精确区间 Garwood（用于二项事件属近似，枚举覆盖最低 0.970）× 基准块 bootstrap（块 5、2000 次）最不利组合（非精确联合覆盖）",
                           "simultaneous_alpha": 0.05 / N_CELLS, "family": f"{N_CELLS} 格 = 4 品种×3 墙定义×2 侧×4 窗口",
                           "legacy": "OE_ci_bootstrap_legacy（行 bootstrap，观测 0 次时退化，仅对照）",
                           "baseline_primary": "同期（Ein，预登记）", "baseline_sensitivity": "20 年（E20，只传播观测部分）"},
             "bootstrap": {"iters": B_ITERS, "seed": SEED}, "instruments": {}}
     fmt = lambda ci: f"[{ci[0]:.2f},{ci[1]:.2f}]" if ci and ci[0] is not None else "—"
     print(f"墙守住率（事前固定墙，不重画）。O/E = 不重叠子样本上 期间收盘破墙数 ÷ 同期同距离随机价位期望；最小有用效果 O/E≤{MIN_USEFUL}")
-    print(f"区间：Garwood 精确 × 基准块 bootstrap 的保守合成；「同时」列为 {N_CELLS} 格族 α=0.05/{N_CELLS}")
+    print(f"区间：Poisson 精确区间 Garwood（二项事件下为近似，枚举覆盖最低 0.970）× 基准块 bootstrap 的保守合成"
+          f"（非精确联合覆盖）；「同时」列为 {N_CELLS} 格族 α=0.05/{N_CELLS}")
     for key in KEYS:
         r = run(key, cfg, store, src); s_ = summarize(r["rows"], r["ctx"])
         emit["instruments"][key] = {"symbol": r["symbol"], "span": r["span"], "n_days": r["n_days"], "summary": s_}

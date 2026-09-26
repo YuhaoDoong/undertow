@@ -612,7 +612,7 @@ def test_non_overlap_filter():
 
 def test_windows_command(monkeypatch, capsys):
     from undertow import shadow_cli as sc
-    for d, want, rc in ((date(2026, 11, 27), "open 600 620\nclose 750 765\n", 0),
+    for d, want, rc in ((date(2026, 11, 27), "open 600 620\nclose 750 765\nchain 615 635\n", 0),
                         (date(2026, 11, 26), "", 0), (date(2027, 4, 5), "", 3)):
         monkeypatch.setattr(sc, "market_today", lambda d=d: d)
         assert sc.cmd_windows(None) == rc
@@ -828,3 +828,20 @@ def test_s05_exec_output_is_private():
     import subprocess
     r = subprocess.run(["git", "check-ignore", "-q", "data/account/shadow_exec/x.json"], cwd=ROOT)
     assert r.returncode == 0, "可执行账含账户金额，必须 gitignore"
+
+
+
+def test_open_chain_filter_and_schedule():
+    """开盘后近价全链：只留 ≤14 天到期、±10% 内；现价缺失不猜；调度走 shadow windows 的 chain 行。"""
+    from undertow.shadow_cli import filter_chain
+    pl = {"data": {"current_price": 100.0, "options": [
+        {"option": "SLV261002P00095000", "bid": 1}, {"option": "SLV261002P00085000", "bid": 1},   # 近期·近价 / 太远
+        {"option": "SLV261120C00101000", "bid": 1}, {"option": "junk"}]}}
+    f = filter_chain(pl, date(2026, 9, 28))
+    assert [o["option"] for o in f["data"]["options"]] == ["SLV261002P00095000"]
+    assert f["undertow_filter"]["n_full"] == 4 and f["undertow_filter"]["n_kept"] == 1
+    assert pl["data"]["options"][1]["option"] == "SLV261002P00085000", "不改原 payload"
+    with pytest.raises(ValueError):
+        filter_chain({"data": {"options": []}}, date(2026, 9, 28))
+    src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
+    assert 'shadow chain --status-file' in src and 'shadow_window chain' in src

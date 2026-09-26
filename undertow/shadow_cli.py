@@ -145,6 +145,9 @@ def cmd_windows(args) -> int:
         bd = sh.window_bounds(d, w)
         if bd is not None:
             print(f"{w} {bd[0]} {bd[1]}")
+    if mc.close_time(d) is not None:                  # 开盘后近价全链快照窗口（与收市时刻无关）
+        lo, hi = (int(x[:2]) * 60 + int(x[3:]) for x in CHAIN_WINDOW)
+        print(f"chain {lo} {hi}")
     return 0
 
 
@@ -492,6 +495,80 @@ def cmd_report(args) -> int:
     return 0
 
 
+# ── 开盘后近价全链快照（2026-09-26 用户要求：每天开盘后记录各价位期权价格）──────────────
+# 影子账只抓预登记候选腿的实时盘口；这里另存一份【开盘后】的近价全链，供以后在任意行权价上重做模拟，
+# 不受预登记腿位限制。来源 CBOE 延迟约 15 分钟：ET 10:15–10:35 抓到的约是 10:00–10:20 的报价，
+# 与影子账入场窗对齐；可成交性以长桥实时盘口（shadow quote）为准，这里是研究用报价。
+# 只存 ≤CHAIN_MAX_DTE 天到期、|K/现价−1| ≤ CHAIN_BAND 的合约：全链每天 15 品种约 6MB（一年约 1.5GB 进 git），
+# 策略只用 2–4 DTE、±5% 内，墙的定义看 ≤14 天 → 过滤后足够重算任何规则。
+CHAIN_WINDOW = ("10:15", "10:35")
+CHAIN_MAX_DTE, CHAIN_BAND = 14, 0.10
+
+
+def filter_chain(payload: dict, today: date, *, max_dte: int = CHAIN_MAX_DTE, band: float = CHAIN_BAND) -> dict:
+    """纯函数：保留近价、近期合约，原样字段不改；附过滤说明与前后条数。现价缺失 → ValueError（不猜）。"""
+    import re
+    data = dict(payload.get("data") or {})
+    spot = data.get("current_price")
+    if not isinstance(spot, (int, float)) or spot <= 0:
+        raise ValueError("CBOE payload 缺现价，无法按价位过滤")
+    pat = re.compile(r"^([A-Z]+)(\d{6})([CP])(\d{8})$")
+    opts = data.get("options") or []
+    keep = []
+    for o in opts:
+        m = pat.match(str(o.get("option", "")))
+        if not m:
+            continue
+        exp = date(2000 + int(m.group(2)[:2]), int(m.group(2)[2:4]), int(m.group(2)[4:]))
+        k = int(m.group(4)) / 1000
+        if 0 <= (exp - today).days <= max_dte and abs(k / spot - 1) <= band:
+            keep.append(o)
+    data["options"] = keep
+    return {**payload, "data": data,
+            "undertow_filter": {"max_dte": max_dte, "band": band, "n_full": len(opts), "n_kept": len(keep),
+                                "source": "cboe delayed ~15min", "purpose": "开盘后近价全链（研究用报价）"}}
+
+
+def _in_chain_window() -> bool:
+    t = datetime.now(ET)
+    if mc.close_time(t.date()) is None:
+        return False
+    m = t.hour * 60 + t.minute
+    lo, hi = (int(x[:2]) * 60 + int(x[3:]) for x in CHAIN_WINDOW)
+    return lo <= m <= hi
+
+
+def cmd_chain(args) -> int:
+    """开盘后近价全链快照 → data/snapshots/options_open/<SYM>/<日期>.json.gz（入 git，不可再生）。只读。"""
+    import time as _time
+    from undertow.collect.cboe_options import CboeOptionsSource
+    from undertow.collect.store import SnapshotStore
+    from undertow.core.config import load_config
+    if not args.allow_off_hours and not _in_chain_window():
+        print(f"不在开盘后全链窗口 ET {CHAIN_WINDOW[0]}–{CHAIN_WINDOW[1]}（交易日）；加 --allow-off-hours 可强制。",
+              file=sys.stderr)
+        return 2
+    cfg = load_config(); today = market_today(); src = CboeOptionsSource(); store = SnapshotStore()
+    done, issues, skipped = [], [], []
+    for inst in _instruments(cfg, args.instruments):
+        sym = inst.options.symbol
+        if store.path_of("options_open", sym, today).exists():
+            skipped.append(inst.key); continue            # 幂等：当日已有
+        try:
+            raw = src.fetch_raw(inst, use_cache=False)
+            f = filter_chain(raw, today)
+            store.save("options_open", sym, f, on_date=today, captured_at=_time.time())
+            done.append(inst.key)
+            print(f"  {inst.key:7s} {f['undertow_filter']['n_kept']}/{f['undertow_filter']['n_full']} 个合约")
+        except Exception as e:
+            issues.append({"instrument": inst.key, "error": f"{type(e).__name__}: {e}"[:200]})
+    overall = "failed" if issues and not done else ("partial" if issues else ("complete" if done else "unchanged"))
+    _status(args, "chain", done, issues, overall=overall,
+            counts={"saved": len(done), "skipped_existing": len(skipped), "failed": len(issues)})
+    print(f"  开盘后全链：保存 {len(done)}，已有跳过 {len(skipped)}，失败 {len(issues)} → {overall}")
+    return 0 if overall in ("complete", "unchanged") else 1
+
+
 EXEC_DIR = Path("data/account/shadow_exec")      # 私有：gitignore；研究账在 data/history/shadow/（公开）
 
 
@@ -585,6 +662,9 @@ def register(sub):
                         "13:00 收市日 12:30–12:45）持仓标记与到期前平仓")
     q.set_defaults(func=cmd_quote)
     w = ss.add_parser("windows", help="打印今天 ET 的影子账窗口（供调度脚本）"); w.set_defaults(func=cmd_windows)
+    ch = ss.add_parser("chain", help="开盘后近价全链快照（ET 10:15–10:35，入 git；只读）")
+    ch.add_argument("instruments", nargs="*"); ch.add_argument("--allow-off-hours", action="store_true")
+    ch.add_argument("--status-file"); ch.set_defaults(func=cmd_chain)
     e = ss.add_parser("exec", help="S05 账户可执行账（私有，写 data/account/；只读，从不下单）")
     e.add_argument("instruments", nargs="*"); e.add_argument("--session", help="YYYY-MM-DD，默认今天 ET")
     e.set_defaults(func=cmd_exec)

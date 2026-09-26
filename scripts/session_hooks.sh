@@ -71,9 +71,13 @@ shadow_window() {  # $1=open|close $2=窗口起(分) $3=窗口止(分) $4=标签
   local LK="$LOG_DIR/.lock_shadow_${W}_${ET_DATE}"
   if ! mkdir "$LK" 2>/dev/null; then hb "${TAG}：撞锁，跳过"; return; fi
   local RES RC
-  RES=$("$PY" -m undertow.cli shadow quote --window "$W" --status-file "$ST" 2>&1); RC=$?
+  if [[ "$W" == "chain" ]]; then          # 开盘后近价全链快照（同一套哨兵/重试/告警规则）
+    RES=$("$PY" -m undertow.cli shadow chain --status-file "$ST" 2>&1); RC=$?
+  else
+    RES=$("$PY" -m undertow.cli shadow quote --window "$W" --status-file "$ST" 2>&1); RC=$?
+  fi
   rmdir "$LK" 2>/dev/null
-  local SUM; SUM=$(printf '%s' "$RES" | grep -E '应有 .* 条腿' | tail -1)
+  local SUM; SUM=$(printf '%s' "$RES" | grep -E '应有 .* 条腿|开盘后全链：' | tail -1)
   if (( RC == 0 )); then
     : > "$OKF"; hb "${TAG}：✅ ${SUM}"
   else
@@ -90,6 +94,7 @@ if (( SHW_RC == 0 )); then
     [[ -z "$_W" ]] && continue
     if [[ "$_W" == "open" ]]; then shadow_window open "$_LO" "$_HI" "④影子开盘窗"; fi
     if [[ "$_W" == "close" ]]; then shadow_window close "$_LO" "$_HI" "⑤影子收盘窗"; fi
+    if [[ "$_W" == "chain" ]]; then shadow_window chain "$_LO" "$_HI" "⑥开盘后全链快照"; fi
   done <<< "$SHW"
 else
   # 日历失效（覆盖期外）或命令崩溃：窗口来源没了，不能当作「今天没窗口」静默跳过

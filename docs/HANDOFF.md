@@ -5,9 +5,10 @@
 > - 墙位卖方价差：仍未启用。9/25 研究结论已按 Codex 审查更正（见 `docs/wall_spread_3steps.md` 顶部更正注记）；
 >   修后重算见 `data/history/wall_spread/rerun_20260926/`（含 COMPARISON.md 与输入 manifest）。
 > - 现行主实验：前瞻配对影子账 `undertow shadow ...`（墙选腿 A vs 无 OI 距离 B），已接入 daily_update.sh（capture/settle）
->   与 session_hooks.sh 窗口④⑤（ET 10:00–10:20 开盘窗、15:30–15:45 收盘窗，`shadow quote`）。
->   当前版本 **shadow-v3-20260926**（Codex 005 S00/S01/R04）：主比较 A vs B1、主终点「报价入场 + 到期内在值」；
->   所有臂同美元宽度；账本只存原始盘口尝试，入场/标记/止损全部在结算时派生；缺标记 → 止损口径 None，不当作未触发。
+>   与 session_hooks.sh 窗口④⑤（开盘窗 ET 10:00–10:20；收盘窗 = 核心收市前 30~15 分钟，由 `shadow windows` 按预存日历给出）。
+>   当前版本 **shadow-v4-20260926**（Codex 006）：主比较 A vs B1，**唯一主终点「到期前最后交易日收盘窗整体平仓」**；
+>   三池（ETF/杠杆 ETF/个股）分开报告；交易日与窗口来自 `core/market_calendar.py`（NYSE，覆盖至 2027-03-31，到期前需续）；
+>   出场两腿都须合格；各终点独立成熟；块 bootstrap 沿日历；12/31 前一切判定为探索。
 >   配置 `analyze/shadow.CONFIG`，改动须升版本；首个前瞻样本 2026-09-28。
 > - 日度历史首份发布冻结（S04）：`outlook_scores / resonance / ratio_watch / signal_ledger` 同日重跑不覆盖，差异追加到 `*.revisions.jsonl`。
 > - 日报→台账时间契约（W02）：session 由 captured_at 认证（certified/provisional/unmappable），回放写 replay/，失败进状态文件并告警。

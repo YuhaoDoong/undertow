@@ -1,8 +1,9 @@
 """`undertow shadow ...` 编排（W05）：唯一把 collect 与 analyze.shadow 接起来的地方。
 
   capture  盘前：冻结当日机会（A/B1/B2 × P/C），无候选也记原因。--as-of 回放写 replay/。
-  quote    盘中两个时点（--window open ET 10:00 / close ET 15:30）：开盘窗做入场、已触发退出、持仓标记；
-           收盘窗只做持仓标记（止损口径用）。非盘中默认拒绝。
+  quote    盘中两个窗口（--window open ET 10:00–10:20 / close = 核心收市前 30~15 分钟，
+           正常日 15:30–15:45、13:00 收市日 12:30–12:45，由预存日历给出）。非窗口默认拒绝。
+  windows  打印今天（ET）的两个窗口分钟数，供 session_hooks.sh 调用 —— 窗口时刻只有这一处来源。
   settle   收盘后：认证 session、监控收盘触发、到期结算（三种突破 × 多种损益口径）。
   report   配对统计：A 绝对收益、A−B 差，按日期分块区间；披露覆盖与身份构成。
 
@@ -17,6 +18,7 @@ from pathlib import Path
 
 from undertow.analyze import shadow as sh
 from undertow.collect import jsonl_ledger as jl
+from undertow.core import market_calendar as mc
 from undertow.core.clock import ET, is_before_open, market_today
 
 DIR = Path("data/history/shadow")
@@ -44,11 +46,13 @@ def _now_iso():
 
 
 def _phase_now():
+    """盘中与否按预存日历（节假日、13:00 收市日）判断；日历未知 → off_hours（不计为有效报价）。"""
     t = datetime.now(ET)
-    if t.weekday() >= 5:
+    ct = mc.close_time(t.date())
+    if ct is None:
         return "off_hours"
     m = t.hour * 60 + t.minute
-    return "rth" if 9 * 60 + 30 <= m < 16 * 60 else "off_hours"
+    return "rth" if 9 * 60 + 30 <= m < int(ct[:2]) * 60 + int(ct[3:]) else "off_hours"
 
 
 def cmd_capture(args) -> int:
@@ -119,10 +123,29 @@ def cmd_capture(args) -> int:
 
 
 def _window_now(window: str) -> bool:
-    lo, hi = sh.CONFIG["quote"]["windows"][window]
-    t = datetime.now(ET); m = t.hour * 60 + t.minute
-    h1, m1 = map(int, lo.split(":")); h2, m2 = map(int, hi.split(":"))
-    return t.weekday() < 5 and h1 * 60 + m1 <= m <= h2 * 60 + m2
+    t = datetime.now(ET)
+    bd = sh.window_bounds(t.date(), window)
+    return bd is not None and bd[0] <= t.hour * 60 + t.minute <= bd[1]
+
+
+def _fmt_bounds(bd):
+    return "无（非交易日或日历未知）" if bd is None else f"{bd[0] // 60:02d}:{bd[0] % 60:02d}–{bd[1] // 60:02d}:{bd[1] % 60:02d}"
+
+
+def cmd_windows(args) -> int:
+    """打印今天（ET）的影子账窗口：每行「open|close 起始分 结束分」。
+
+    非交易日 → 无输出、rc=0；日历覆盖外 → rc=3（调度层必须告警：窗口来源失效不能静默）。
+    """
+    d = market_today()
+    if mc.is_trading_day(d) is None:
+        print(f"日历 {mc.VERSION} 不覆盖 {d}：请更新 core/market_calendar.py", file=sys.stderr)
+        return 3
+    for w in ("open", "close"):
+        bd = sh.window_bounds(d, w)
+        if bd is not None:
+            print(f"{w} {bd[0]} {bd[1]}")
+    return 0
 
 
 def cmd_quote(args) -> int:
@@ -137,7 +160,7 @@ def cmd_quote(args) -> int:
     phase = _phase_now()
     window = args.window
     if not args.allow_off_hours and (phase != "rth" or not _window_now(window)):
-        print(f"不在 {window} 窗口 {sh.CONFIG['quote']['windows'][window]}（ET）或非盘中；"
+        print(f"不在 {window} 窗口 {_fmt_bounds(sh.window_bounds(market_today(), window))}（ET）或非盘中；"
               "加 --allow-off-hours 可记录（phase 如实标注，不计为有效报价）。", file=sys.stderr)
         return 2
     cfg = load_config(); today = market_today(); wkey = f"{today.isoformat()}|{window}"
@@ -145,7 +168,8 @@ def cmd_quote(args) -> int:
     issues, done = [], []
 
     def expected_today(r, l):
-        if l["status"] != "candidate" or r["outcome"] is not None:
+        # v4：outcome 可以部分成熟（提前退出已结算、到期类未成熟），持仓标记一直抓到到期日收盘窗
+        if l["status"] != "candidate":
             return False
         if window == "open" and r["session"] == today.isoformat():
             return True                                     # 入场
@@ -254,31 +278,32 @@ def cmd_settle(args) -> int:
             except Exception as e:
                 issues.append({"instrument": inst.key, "error": str(e)[:200]}); continue
             bars = list(zip(ser.dates, ser.highs, ser.lows, ser.closes))
-            tdays = set(ser.dates); last = ser.dates[-1]
+            now = datetime.now(ET)
 
             def fn(r):
                 ch = False
                 idt = r["identity"]
                 T = date.fromisoformat(r["session"])
-                if idt.get("status") == "provisional" and T <= last:
-                    idt["status"] = "certified" if T in tdays else "non_trading"
-                    idt["certified_at"] = _now_iso(); ch = True
-                rederive = getattr(args, "rederive", False) and r["outcome"] is not None
-                if r["outcome"] is None or rederive:
-                    # outcome 是从冻结的事前字段 + 原始盘口尝试 + 日线【派生】的，不是观测本身：
-                    # 派生逻辑修 bug 后可 --rederive 重算（S00：保留原始记录、重算派生结果），原始观测不动。
-                    res, complete = {}, True
-                    for l in r["legs"]:
-                        if l["status"] != "candidate":
-                            continue
-                        o = sh.settle_leg(l, r, bars=bars)
-                        if o is None:
-                            complete = False; break
-                        res[l["leg_id"]] = o
-                    if complete and res and not rederive:
-                        r["outcome"] = res; r["settled_at"] = _now_iso(); ch = True
-                    elif complete and res and res != r["outcome"]:
-                        r["outcome"] = res; r["rederived_at"] = _now_iso(); ch = True
+                if idt.get("status") == "provisional":
+                    # C02：是否交易日由预存日历回答，不看那天有没有日线（缺日线 ≠ 休市）
+                    tv = mc.is_trading_day(T)
+                    if tv is not None:
+                        idt["status"] = "certified" if tv else "non_trading"
+                        idt["certified_at"] = _now_iso(); ch = True
+                old = r.get("outcome")
+                done_before = bool(old) and all(o.get("complete") for o in old.values())
+                if done_before and not getattr(args, "rederive", False):
+                    return ch
+                # outcome 由冻结事前字段 + 原始盘口尝试 + 日线【派生】，各终点独立成熟：
+                # 未全部成熟的行每次都重算；--rederive 对已全部成熟的行也重算（修派生逻辑后用），原始观测不动。
+                res = {l["leg_id"]: sh.settle_leg(l, r, bars=bars, now=now)
+                       for l in r["legs"] if l["status"] == "candidate"}
+                if res and res != old:
+                    r["outcome"] = res; ch = True
+                    if done_before:
+                        r["rederived_at"] = _now_iso()
+                    if all(o["complete"] for o in res.values()) and not r.get("settled_at"):
+                        r["settled_at"] = _now_iso()
                 return ch
             try:
                 n = jl.update(p, fn, key_field=KEY, frozen=sh.frozen_part)
@@ -313,29 +338,50 @@ def cmd_report(args) -> int:
     out = {}
     bases = args.basis or [sh.CONFIG["primary_endpoint"]] + list(sh.CONFIG["secondary_endpoints"])
     subsets = [("两侧", None, False), ("put", ["P"], False), ("call", ["C"], False), ("顺增仓方向", None, True)]
+    as_of = market_today()
+    ident = sh.formal_identity(as_of)
+    print(f"  身份：{'正式判定' if ident == 'formal' else '探索（正式检验日 ' + sh.CONFIG['formal_test']['date'] + ' 之前，一切判定都不是放行依据）'}；"
+          f"主终点 {sh.CONFIG['primary_endpoint']}，主池 {sh.CONFIG['primary_pool']}；日历 {mc.VERSION}")
+
+    def ci(x):
+        return f"{fmt(x['mean'])} [{fmt(x['lo'])},{fmt(x['hi'])}]"
+
+    def line(sm, label):
+        c = sm["coverage"]
+        return (f"  {label}: 机会 {c['opportunities']} A有价 {c['a_priced']} 配对 {c['pairs']}（同腿 {c['identical_pairs']}）"
+                f"日期 {sm['n_dates_pairs']}  A={ci(sm['A'])} {sm['A_verdict']}  "
+                f"A−B={ci(sm['AminusB'])} {sm['AminusB_verdict']}"
+                f"  （{sm['sensitivity']['block_days']}日块：A−B [{fmt(sm['sensitivity']['AminusB']['lo'])},"
+                f"{fmt(sm['sensitivity']['AminusB']['hi'])}] {sm['sensitivity']['AminusB_verdict']}）")
+
     for basis in bases:
         bd = sh.status_breakdown(rows_main, basis)
         out[f"{basis}|status"] = bd
-        line = "，".join(f"{k} {v}" for k, v in bd["status"].items()) or "无候选腿"
+        st_line = "，".join(f"{k} {v}" for k, v in bd["status"].items()) or "无候选腿"
         extra = ""
         if basis == sh.CONFIG["primary_endpoint"]:
             m = bd["marks"]
             extra = (f"；持仓标记 应有 {m['expected']} 有效 {m['valid']} 未运行 {m['not_run']} 缺失 {m['missing']}"
-                     + (f"；入场缺失原因 {bd['entry_missing_reasons']}" if bd["entry_missing_reasons"] else ""))
-        print(f"  {basis:30s} 状态：{line}{extra}")
-        for b in sh.CONFIG["b_rules"]:
-            for lab, sides, fa in subsets:
-                sm = sh.paired_summary(rows_main, basis=basis, b_rule=b, mode=mode, sides=sides, flow_aligned_only=fa)
-                out[f"{basis}|{b}|{lab}"] = sm
-                c = sm["coverage"]
-                if lab != "两侧" and not args.detail:
-                    continue
-                print(f"  {basis:30s} vs {b} [{lab}]: 机会 {c['opportunities']} A有价 {c['a_priced']} 配对 {c['pairs']}"
-                      f"（同腿 {c['identical_pairs']}）日期 {sm['n_dates_pairs']}  "
-                      f"A={fmt(sm['A_mean_norm'])} [{fmt(sm['A_ci'][0])},{fmt(sm['A_ci'][1])}] {sm['A_verdict']}  "
-                      f"A−B={fmt(sm['AminusB_mean_norm'])} [{fmt(sm['AminusB_ci'][0])},{fmt(sm['AminusB_ci'][1])}] {sm['AminusB_verdict']}"
-                      f"  （{sm['sensitivity']['block_days']}日块：A−B [{fmt(sm['sensitivity']['AminusB_ci'][0])},"
-                      f"{fmt(sm['sensitivity']['AminusB_ci'][1])}] {sm['sensitivity']['AminusB_verdict']}）")
+                     f" 未到 {m['pending']}"
+                     + (f"；入场缺失原因 {bd['entry_missing_reasons']}" if bd["entry_missing_reasons"] else "")
+                     + (f"；退出方式 {bd['exit_modes']}" if bd["exit_modes"] else ""))
+        print(f"  {basis:30s} 状态：{st_line}{extra}")
+        # 主终点：每个池都列；其它终点只列主池（--detail 全列）。池之间从不合并。
+        pools = list(sh.CONFIG["pools"]) if (basis == sh.CONFIG["primary_endpoint"] or args.detail) else [sh.CONFIG["primary_pool"]]
+        for pool in pools:
+            for b in sh.CONFIG["b_rules"]:
+                for lab, sides, fa in subsets:
+                    sm = sh.paired_summary(rows_main, basis=basis, b_rule=b, mode=mode, sides=sides,
+                                           flow_aligned_only=fa, pool=pool, as_of=as_of)
+                    out[f"{basis}|{pool}|{b}|{lab}"] = sm
+                    if lab != "两侧" and not args.detail:
+                        continue
+                    print(line(sm, f"{basis:30s} [{pool}] vs {b} [{lab}]"))
+            if basis == sh.CONFIG["primary_endpoint"]:
+                sm = sh.paired_summary(rows_main, basis=basis, b_rule=sh.CONFIG["primary_b"], mode=mode,
+                                       pool=pool, non_overlap=True, as_of=as_of)
+                out[f"{basis}|{pool}|{sh.CONFIG['primary_b']}|不重叠"] = sm
+                print(line(sm, f"{basis:30s} [{pool}] vs {sh.CONFIG['primary_b']} [不重叠入场·敏感性]"))
     if args.output:
         Path(args.output).write_text(json.dumps({"schema": 2, "generated_at": _now_iso(), "config": sh.CONFIG,
                                                  "config_hash": sh.config_hash(), "mode": mode,
@@ -365,11 +411,13 @@ def register(sub):
     q = ss.add_parser("quote", help="盘中抓两腿盘口（入场/退出）"); q.add_argument("instruments", nargs="*")
     q.add_argument("--allow-off-hours", action="store_true"); q.add_argument("--status-file")
     q.add_argument("--window", choices=("open", "close"), default="open",
-                   help="open=ET 10:00–10:20 入场与持仓标记；close=ET 15:30–15:45 持仓标记（止损/到期前平仓口径）")
+                   help="open=ET 10:00–10:20 入场与持仓标记；close=核心收市前 30~15 分钟（正常 15:30–15:45，"
+                        "13:00 收市日 12:30–12:45）持仓标记与到期前平仓")
     q.set_defaults(func=cmd_quote)
+    w = ss.add_parser("windows", help="打印今天 ET 的影子账窗口（供调度脚本）"); w.set_defaults(func=cmd_windows)
     s = ss.add_parser("settle", help="收盘后监控与到期结算"); s.add_argument("instruments", nargs="*")
     s.add_argument("--rederive", action="store_true",
-                   help="对已结算行按当前派生逻辑重算 outcome（原始观测不动；变化时记 rederived_at）")
+                   help="对已全部成熟的行也按当前派生逻辑重算 outcome（原始观测不动；变化时记 rederived_at）")
     s.add_argument("--status-file"); s.set_defaults(func=cmd_settle)
     r = ss.add_parser("report", help="配对统计"); r.add_argument("instruments", nargs="*")
     r.add_argument("--replay", action="store_true"); r.add_argument("--basis", nargs="*")

@@ -55,15 +55,6 @@ def _bars(closes, lows=None, highs=None):
 
 
 
-def test_bootstrap_and_bounds():
-    assert sh.date_block_bootstrap({})[0] is None
-    m, lo, hi = sh.date_block_bootstrap({f"d{i}": [0.1, 0.1] for i in range(4)})
-    assert m == pytest.approx(0.1) and lo is None, "少于 5 个日期不给区间"
-    m, lo, hi = sh.date_block_bootstrap({f"d{i}": [i / 10] for i in range(20)})
-    assert lo < m < hi
-    assert sh.zero_event_upper(50) == pytest.approx(0.0582, abs=1e-3), "50 笔零事件的 95% 上界 5.8%"
-    assert sh.judge(0.01, 0.2) == "支持" and sh.judge(-0.2, -0.01) == "不支持" and sh.judge(-0.1, 0.1) == "未决"
-
 
 
 def test_prospective_requires_certified_and_before_open():
@@ -98,12 +89,13 @@ def _settled_row(day, flow, a_p, b_p, a_c, b_c):
 
 def test_paired_summary_side_and_flow_subsets():
     rows = [_settled_row(f"2026-10-{i:02d}", "偏多", 10, 0, -50, -40) for i in range(1, 8)]
-    both = sh.paired_summary(rows)
-    put = sh.paired_summary(rows, sides=["P"])
-    aligned = sh.paired_summary(rows, flow_aligned_only=True)
+    both = sh.paired_summary(rows, pool=None)
+    put = sh.paired_summary(rows, sides=["P"], pool=None)
+    aligned = sh.paired_summary(rows, flow_aligned_only=True, pool=None)
     assert both["coverage"]["pairs"] == 14 and put["coverage"]["pairs"] == 7
-    assert put["A_mean_norm"] == pytest.approx(0.10) and put["AminusB_mean_norm"] == pytest.approx(0.10)
-    assert aligned["coverage"]["pairs"] == 7 and aligned["A_mean_norm"] == pytest.approx(0.10), "偏多 → 只取 put 侧"
+    assert put["A"]["mean"] == pytest.approx(0.10) and put["AminusB"]["mean"] == pytest.approx(0.10)
+    assert aligned["coverage"]["pairs"] == 7 and aligned["A"]["mean"] == pytest.approx(0.10), "偏多 → 只取 put 侧"
+    assert both["identity"] == "exploratory" and both["A_verdict"].startswith("探索·")
 
 
 def test_risk_budget_draft():
@@ -135,13 +127,6 @@ def test_pin_ranksum_sanity():
 
 # ═══════════════════ v3（Codex 005：R01/R02/R04/R05/R06/S00）═══════════════════
 
-def test_config_v3_identity_and_fee_single_source():
-    c = sh.CONFIG
-    assert c["version"] == "shadow-v3-20260926" and c["fee_round_trip"] == ws.FEE_PER_TRADE
-    assert c["primary_comparison"] == "A vs B1" and c["primary_endpoint"] == "quote_entry_expiry_intrinsic"
-    assert c["b_rules"] == {"B1": {"atr": 1.0}, "B2": {"atr": 2.0}, "B3": {"delta": 0.20}}
-    assert c["stats"]["block_days"] == 5 and c["formal_test_date"] == "2026-12-31"
-    assert "googl" in c["instruments"] and "dxy" not in c["instruments"]
 
 
 def test_same_dollar_width_on_irregular_grid():
@@ -169,8 +154,9 @@ def _q(bid, ask, bs=10, as_=10, err=None):
 def _att(wkey, quotes, phase="rth", minute=0):
     """窗口内第 minute 分钟开始、同分钟结束的一次尝试（ET 夏令时 = UTC−4）。"""
     day, w = wkey.split("|")
-    hh, mm = map(int, sh.CONFIG["quote"]["windows"][w][0].split(":"))
-    t = f"{day}T{hh:02d}:{mm + minute:02d}:10-04:00"
+    lo = sh.window_bounds(date.fromisoformat(day), w)[0] + minute
+    off = "-04:00" if date.fromisoformat(day) < date(2026, 11, 1) else "-05:00"   # EDT / EST
+    t = f"{day}T{lo // 60:02d}:{lo % 60:02d}:10{off}"
     return {"started_at": t, "ended_at": t, "phase": phase, "underlying": None, "quotes": quotes}
 
 
@@ -204,7 +190,7 @@ def test_r01_absent_marks_are_unknown_not_held():
     o = sh.settle_leg(_leg(), _vrow(_full_windows({})), bars=BARS3)
     assert o["pnl"]["quote_entry_expiry_intrinsic"] == pytest.approx(20 - 3.2)
     assert o["pnl"]["stop1x_twice_daily"] is None and o["status"]["stop1x_twice_daily"] == "path_unknown"
-    assert o["marks"] == {"expected": 5, "valid": 0, "not_run": 5, "missing": 0}
+    assert o["marks"] == {"expected": 5, "valid": 0, "not_run": 5, "missing": 0, "pending": 0}
 
 
 def test_r01_one_day_missing_and_missing_before_trigger():
@@ -262,7 +248,9 @@ def test_r06_pre_expiry_exit_and_immature_expiry():
     assert o["pnl"]["pre_expiry_close_exit"] == pytest.approx(20 - 10 - 3.2)      # 9/15 收盘窗平仓
     o2 = sh.settle_leg(_leg(), _vrow(_full_windows({})), bars=BARS3)
     assert o2["pnl"]["pre_expiry_close_exit"] is None and o2["status"]["pre_expiry_close_exit"] == "exit_not_run"
-    assert sh.settle_leg(_leg(), _vrow(_full_windows({})), bars=BARS3[:2]) is None, "到期 bar 未出不结算"
+    o3 = sh.settle_leg(_leg(), _vrow(_full_windows({})), bars=BARS3[:2])
+    assert o3["complete"] is False and o3["bars_missing"] == ["2026-09-16"], "到期日线未出：不完整、明确列出缺哪天"
+    assert o3["pnl"]["quote_entry_expiry_intrinsic"] is None and o3["status"]["quote_entry_expiry_intrinsic"] == "immature"
 
 
 def test_half_day_close_window_not_run_is_unknown_not_skipped():
@@ -346,35 +334,6 @@ def test_quote_total_api_failure_is_failed(tmp_path, monkeypatch):
     assert run() == 1 and json.loads(st.read_text())["overall"] == "failed"
 
 
-def test_session_hooks_only_mark_ok_on_success_and_run_first():
-    sh_ = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
-    body = sh_[sh_.index("shadow_window() {"):sh_.index('shadow_window open 600 620')]
-    assert 'if (( RC == 0 )); then' in body and ': > "$OKF"' in body.split("else")[0]
-    assert sh_.index("shadow_window open 600 620") < sh_.index("# ── ① 盘前简报"), "必须在可能 exit 0 的旧窗口之前"
-    assert "ET_MIN >= 930 && ET_MIN <= 945" in sh_[sh_.index("不在任何窗口"):]
-    du = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
-    assert "shadow capture" in du and "shadow settle" in du
-
-
-def test_block_bootstrap_widens_under_serial_correlation():
-    """连续 5 日同号的序列：5 日块区间应比逐日块宽（逐日块低估不确定性）。"""
-    g = {f"2026-10-{i + 1:02d}": [1.0 if (i // 5) % 2 == 0 else -0.6] for i in range(30)}
-    m, lo1, hi1 = sh.date_block_bootstrap(g, iters=4000, block_days=1)
-    _, lo5, hi5 = sh.date_block_bootstrap(g, iters=4000, block_days=5)
-    assert (hi5 - lo5) > (hi1 - lo1) * 1.3
-    assert sh.CONFIG["stats"]["block_days"] == 5 and sh.CONFIG["stats"]["sensitivity_block_days"] == 10
-    s = sh.paired_summary([])
-    assert s["sensitivity"]["block_days"] == 10 and s["stats_version"] == "stats-v1"
-
-
-def test_block_bootstrap_refuses_too_few_blocks():
-    """R08 同类退化：7 个日期配 10 日块 → 每次抽到全样本 → 零宽区间。必须报样本不足。"""
-    g = {f"2026-10-{i + 1:02d}": [0.1 * i - 0.2] for i in range(7)}
-    m, lo, hi = sh.date_block_bootstrap(g, block_days=10)
-    assert m is not None and lo is None and hi is None
-    assert sh.date_block_bootstrap(g, block_days=5)[1] is None       # 需 ≥16 个日期
-    g16 = {f"d{i:02d}": [0.1 * (i % 3)] for i in range(16)}
-    assert sh.date_block_bootstrap(g16, iters=2000, block_days=5)[1] is not None
 
 
 def test_late_or_wrong_day_attempts_do_not_count():
@@ -416,7 +375,7 @@ def test_status_breakdown_surfaces_unknowns():
     unsettled = dict(_vrow({}), legs=[_leg()], outcome=None)
     bd = sh.status_breakdown([row, unsettled], "stop1x_twice_daily")
     assert bd["status"] == {"path_unknown": 1, "unsettled": 1}
-    assert bd["marks"] == {"expected": 5, "valid": 4, "not_run": 1, "missing": 0}
+    assert bd["marks"] == {"expected": 5, "valid": 4, "not_run": 1, "missing": 0, "pending": 0}
     snap = sh.status_breakdown([row], "snapshot_model")
     assert snap["status"] == {"credit_missing": 1}, "快照无权利金不得标成正常的 stale_snapshot_quote"
 
@@ -433,12 +392,13 @@ def test_settle_rederive_recomputes_outcome_keeps_raw(tmp_path, monkeypatch):
     for l in r["legs"]:
         l["expiry"] = "2026-09-16"
     r["windows"] = _full_windows({})
-    r["outcome"] = {l["leg_id"]: {"pnl": {"x": 999}} for l in r["legs"] if l["status"] == "candidate"}  # 旧派生
+    r["outcome"] = {l["leg_id"]: {"pnl": {"x": 999}, "complete": True}
+                    for l in r["legs"] if l["status"] == "candidate"}  # 旧派生（已全部成熟）
     p = sc._path("silver", False)
     jl.insert_frozen(p, r, key_field="key", frozen=sh.frozen_part)
     ns = lambda **k: argparse.Namespace(instruments=["silver"], status_file=None, **k)
     sc.cmd_settle(ns(rederive=False))
-    assert jl.load(p, "key")[0]["outcome"] == r["outcome"], "不加 --rederive 时已结算行不动"
+    assert jl.load(p, "key")[0]["outcome"] == r["outcome"], "不加 --rederive 时已全部成熟的行不动"
     sc.cmd_settle(ns(rederive=True))
     new = jl.load(p, "key")[0]
     assert new["windows"] == r["windows"] and new["rederived_at"]
@@ -452,3 +412,217 @@ def test_marks_after_expiry_are_ignored():
     m = _marks_all(cheap); m["2026-09-17|open"] = dear
     o = sh.settle_leg(_leg(), _vrow(_full_windows(m)), bars=BARS3 + [(date(2026, 9, 17), 58.2, 57.8, 58.0)])
     assert o["status"]["stop1x_twice_daily"] == "held_all_marks_valid" and o["marks"]["expected"] == 5
+
+
+
+# ═══════════════════ v4（Codex 006：C01–C05、三个设计决定）═══════════════════
+from undertow.core import market_calendar as mc   # noqa: E402
+
+
+def test_config_v4_identity():
+    c = sh.CONFIG
+    assert c["version"] == "shadow-v4-20260926" and c["fee_round_trip"] == ws.FEE_PER_TRADE
+    assert c["primary_endpoint"] == "pre_expiry_close_exit" == c["primary_basis"], "决定 1：唯一主终点"
+    assert "quote_entry_expiry_intrinsic" in c["secondary_endpoints"] and "pre_expiry_close_exit" not in c["secondary_endpoints"]
+    assert c["primary_comparison"] == "A vs B1" and c["b_rules"]["B3"] == {"delta": 0.20}
+    assert c["stats"]["block_days"] == 5 and c["stats"]["sensitivity_block_days"] == 10 and c["stats"]["min_full_blocks"] == 4
+    assert c["formal_test"]["date"] == "2026-12-31"
+    assert c["calendar"]["hash"] == mc.calendar_hash()
+    pools = c["pools"]
+    assert sorted(k for v in pools.values() for k in v) == sorted(c["instruments"]) and len(c["instruments"]) == 15
+    assert "tqqq" not in pools["etf"] and "nvda" in pools["single_stock"] and c["primary_pool"] == "etf"
+
+
+def test_calendar_holidays_early_close_and_unknown():
+    assert mc.is_trading_day(date(2026, 11, 26)) is False and mc.is_trading_day(date(2026, 9, 7)) is False
+    assert mc.close_time(date(2026, 11, 27)) == "13:00" and mc.close_time(date(2026, 12, 24)) == "13:00"
+    assert mc.close_time(date(2026, 9, 28)) == "16:00"
+    assert mc.is_trading_day(date(2027, 4, 1)) is None, "覆盖外 = 未知，不猜"
+    assert mc.trading_days(date(2027, 3, 30), date(2027, 4, 2)) is None
+    assert mc.prev_trading_day(date(2026, 11, 30)) == date(2026, 11, 27)
+    assert mc.next_trading_day(date(2026, 11, 25)) == date(2026, 11, 27)
+
+
+def test_close_window_follows_core_close():
+    """决定 3：收盘窗 = 核心收市前 30~15 分钟。"""
+    assert sh.window_bounds(date(2026, 9, 28), "close") == (930, 945)
+    assert sh.window_bounds(date(2026, 11, 27), "close") == (750, 765)       # 12:30–12:45
+    assert sh.window_bounds(date(2026, 11, 27), "open") == (600, 620)
+    assert sh.window_bounds(date(2026, 11, 26), "close") is None             # 感恩节休市
+    assert sh.window_bounds(date(2027, 4, 5), "open") is None                # 日历未知
+
+
+# —— C01：出场必须两腿都合格 ——
+SQ = {"bid": 0.9, "ask": 1.0, "bid_size": 10, "ask_size": 10}
+
+
+def test_c01_protective_error_or_zero_size_never_earns_income():
+    bad = {"bid": 0.8, "ask": 0.9, "bid_size": 0, "ask_size": 0, "error": "stale/error"}
+    assert sh.exit_quality(SQ, bad) == "protective_leg_error"
+    assert sh.exit_quality(SQ, dict(bad, error=None)) == "protective_zero_size"
+    assert sh.exit_quality(SQ, None) == "protective_leg_missing"
+    assert sh.exit_quality(SQ, {"bid": None, "ask": 0.1, "bid_size": 0, "ask_size": 5}) == "protective_price_missing"
+    assert sh.exit_quality(dict(SQ, error="x"), {"bid": 0.1, "ask": 0.2, "bid_size": 1, "ask_size": 1}) == "sell_leg_error"
+
+
+def test_c01_worthless_long_leg_is_named_short_only():
+    worthless = {"bid": 0.0, "ask": 0.01, "bid_size": 0, "ask_size": 50}
+    assert sh.exit_quality(SQ, worthless) is None
+    assert sh.exit_mode(worthless) == "short_only_long_residual_0" and sh.exit_cost_raw(SQ, worthless) == 100.0
+    good = {"bid": 0.8, "ask": 0.85, "bid_size": 5, "ask_size": 5}
+    assert sh.exit_mode(good) == "both_legs" and sh.exit_cost_raw(SQ, good) == pytest.approx(20.0)
+
+
+def test_c01_window_with_bad_protective_is_missing_not_priced():
+    bad = {"P|57": _q(0.90, 1.00), "P|56": dict(_q(0.80, 0.90, bs=0), error="stale")}
+    x = sh.window_leg(_vrow({"2026-09-15|close": {"attempts": [_att("2026-09-15|close", bad)]}}),
+                      _leg(), "2026-09-15|close", "exit")
+    assert x == {"status": "missing", "reasons": ["protective_leg_error"]}
+
+
+# —— C02：应有窗口来自日历，缺日线 ≠ 休市 ——
+def test_c02_missing_bar_keeps_expected_windows():
+    assert sh.expected_mark_windows(date(2026, 9, 14), date(2026, 9, 16)) == [
+        "2026-09-14|close", "2026-09-15|open", "2026-09-15|close", "2026-09-16|open", "2026-09-16|close"]
+    bars = [BARS3[0], BARS3[2]]                                           # 删掉 9/15 日线
+    cheap = {"P|57": _q(0.10, 0.12), "P|56": _q(0.02, 0.03)}
+    o = sh.settle_leg(_leg(), _vrow(_full_windows(_marks_all(cheap))), bars=bars)
+    assert o["marks"]["expected"] == 5 and o["bars_missing"] == ["2026-09-15"] and o["complete"] is False
+    assert o["pnl"]["pre_expiry_close_exit"] == pytest.approx(20 - 10 - 3.2), "到期前一交易日仍是 9/15，不是 9/14"
+    assert o["status"]["close_beyond_next_open_exit"] == "bars_incomplete"
+    assert o["any_close_breach"] is None
+
+
+def test_c02_holiday_is_skipped_by_calendar_not_by_bars():
+    """周五 11/27 半日市入场、下周一到期…换成跨感恩节：11/25 入场、11/27 到期，11/26 休市。"""
+    exp_windows = sh.expected_mark_windows(date(2026, 11, 25), date(2026, 11, 27))
+    assert exp_windows == ["2026-11-25|close", "2026-11-27|open", "2026-11-27|close"]
+    assert mc.prev_trading_day(date(2026, 11, 27)) == date(2026, 11, 25)
+
+
+def test_calendar_unknown_marks_everything_unknown():
+    leg = dict(_leg(), expiry="2027-04-07")
+    o = sh.settle_leg(leg, {"session": "2027-04-05", "windows": {}}, bars=[])
+    assert set(o["status"].values()) == {"calendar_unknown"} and o["complete"] is False
+
+
+# —— C03：入场日本身就是到期前最后交易日 ——
+def _fri_mon(exit_quotes, exit_minute=0):
+    leg = dict(_leg(), expiry="2026-09-21")
+    w = {"2026-09-18|open": {"attempts": [_att("2026-09-18|open", ENTRY_OK)]},
+         "2026-09-18|close": {"attempts": [_att("2026-09-18|close", exit_quotes, minute=exit_minute)]}}
+    bars = [(date(2026, 9, 18), 58.2, 57.8, 58.0), (date(2026, 9, 21), 58.2, 57.8, 58.0)]
+    return sh.settle_leg(leg, {"session": "2026-09-18", "windows": w}, bars=bars)
+
+
+def test_c03_friday_entry_monday_expiry_exits_friday_close():
+    o = _fri_mon({"P|57": _q(0.90, 1.00), "P|56": _q(0.90, 0.95)})
+    assert o["status"]["pre_expiry_close_exit"] == "ok"
+    assert o["pnl"]["pre_expiry_close_exit"] == pytest.approx(20 - 10 - 3.2)
+    assert o["exit_mode"]["pre_expiry_close_exit"] == "both_legs"
+
+
+def test_c03_inconsistent_timestamps_never_priced():
+    """退出须严格晚于实际入场。正常数据里收盘窗必在开盘窗之后，此规则是防御：
+    构造一个时间戳早于入场的「退出」，确认它不产生损益（被窗口或先后规则拦下皆可）。"""
+    leg = dict(_leg(), expiry="2026-09-21")
+    ent = _att("2026-09-18|open", ENTRY_OK)
+    ext = _att("2026-09-18|close", {"P|57": _q(0.90, 1.00), "P|56": _q(0.90, 0.95)})
+    ent["started_at"] = "2026-09-18T10:00:00-04:00"; ent["ended_at"] = "2026-09-18T10:00:30-04:00"
+    ext["started_at"] = ext["ended_at"] = "2026-09-18T10:00:20-04:00"       # 退出时间戳早于入场结束
+    w = {"2026-09-18|open": {"attempts": [ent]}, "2026-09-18|close": {"attempts": [ext]}}
+    bars = [(date(2026, 9, 18), 58.2, 57.8, 58.0), (date(2026, 9, 21), 58.2, 57.8, 58.0)]
+    o = sh.settle_leg(leg, {"session": "2026-09-18", "windows": w}, bars=bars)
+    # 10:00:20 不在收盘窗内 → 窗口判为缺失（outside_window）；无论哪条规则拦下，都不得产生损益
+    assert o["pnl"]["pre_expiry_close_exit"] is None
+
+
+def test_endpoint_maturity_is_independent():
+    """提前退出在其退出窗结束后即可结算，不等到期日（成熟性按终点）。"""
+    now = datetime(2026, 9, 15, 16, 0, tzinfo=sh._TZ)
+    o = sh.settle_leg(_leg(), _vrow(_full_windows({"2026-09-15|close": {"P|57": _q(0.10, 0.12), "P|56": _q(0.02, 0.03)}})),
+                      bars=BARS3[:2], now=now)
+    assert o["status"]["pre_expiry_close_exit"] == "ok" and o["pnl"]["pre_expiry_close_exit"] is not None
+    assert o["status"]["quote_entry_expiry_intrinsic"] == "immature"
+    assert o["status"]["stop1x_twice_daily"] in ("immature", "path_unknown")
+    assert o["marks"]["pending"] == 2 and o["bars_missing"] == [] and o["complete"] is False
+
+
+# —— C04：日历块 bootstrap、完整块下限、退化标志 ——
+def _cal(n, start=date(2026, 9, 1)):
+    return [d.isoformat() for d in mc.trading_days(start, date(2026, 12, 31))][:n]
+
+
+def test_c04_constant_sample_is_degenerate_not_support():
+    g = {d: [0.1] for d in _cal(20)}
+    ci = sh.block_bootstrap(g, iters=1000)
+    assert ci["status"] == "degenerate" and sh.judge(ci) == "退化（不判）"
+
+
+def test_c04_full_block_floor():
+    ds = _cal(19)
+    g = {d: [0.1 * (i % 3) - 0.05] for i, d in enumerate(ds)}
+    assert sh.block_bootstrap(g, iters=500)["status"] == "insufficient", "19 // 5 = 3 < 4"
+    g20 = {d: [0.1 * (i % 3) - 0.05] for i, d in enumerate(_cal(20))}
+    assert sh.block_bootstrap(g20, iters=500)["status"] == "ok"
+    assert sh.block_bootstrap(g20, iters=500, block_days=10)["status"] == "insufficient", "10 日块需 40 个日期"
+
+
+def test_c04_calendar_gaps_are_not_compressed():
+    """有样本日之间隔着无机会交易日：块沿日历滑动，n_calendar_days 覆盖整个跨度。"""
+    days = _cal(60)
+    g = {d: [0.1 * (i % 4) - 0.1] for i, d in enumerate(days) if i % 3 == 0}   # 每 3 个交易日才有一笔
+    ci = sh.block_bootstrap(g, iters=500)
+    assert ci["n_dates"] == 20 and ci["n_calendar_days"] == len(days) - (len(days) - 1) % 3
+    assert ci["status"] == "ok"
+    assert sh.block_bootstrap({"2026-09-07": [0.1]})["status"] in ("date_not_trading_day", "insufficient")
+
+
+def test_c04_serial_correlation_widens_interval():
+    days = _cal(40)
+    g = {d: [1.0 if (i // 5) % 2 == 0 else -0.6] for i, d in enumerate(days)}
+    w1 = sh.block_bootstrap(g, iters=3000, block_days=1); w5 = sh.block_bootstrap(g, iters=3000, block_days=5)
+    assert (w5["hi"] - w5["lo"]) > (w1["hi"] - w1["lo"]) * 1.3
+
+
+def test_formal_identity_and_sample_restriction():
+    assert sh.formal_identity(date(2026, 12, 31)) == "exploratory"
+    assert sh.formal_identity(date(2027, 1, 4)) == "formal"
+    rows = [_settled_row("2026-12-30", "偏多", 10, 0, -50, -40), _settled_row("2027-01-05", "偏多", 10, 0, -50, -40)]
+    for r in rows:
+        for l in r["legs"]:
+            l.update(status="candidate", expiry=r["session"])
+        r["legs"] += [{"leg_id": "P-A", "status": "candidate", "expiry": r["session"]}]
+    sm = sh.paired_summary(rows, pool=None, sides=["P"], as_of=date(2027, 1, 10))
+    assert sm["identity"] == "formal" and sm["coverage"]["opportunities"] == 1, "检验日之后入场的行不进正式样本"
+
+
+def test_non_overlap_filter():
+    rows = []
+    for d, e in (("2026-09-14", "2026-09-16"), ("2026-09-15", "2026-09-17"), ("2026-09-17", "2026-09-18"),
+                 ("2026-09-21", "2026-09-23")):
+        r = _settled_row(d, "偏多", 10, 0, -50, -40); r["instrument"] = "silver"
+        r["legs"].append({"leg_id": "P-A", "status": "candidate", "expiry": e})
+        rows.append(r)
+    kept = [r["session"] for r in sh._non_overlap(rows, "P")]
+    assert kept == ["2026-09-14", "2026-09-17", "2026-09-21"]
+
+
+def test_windows_command(monkeypatch, capsys):
+    from undertow import shadow_cli as sc
+    for d, want, rc in ((date(2026, 11, 27), "open 600 620\nclose 750 765\n", 0),
+                        (date(2026, 11, 26), "", 0), (date(2027, 4, 5), "", 3)):
+        monkeypatch.setattr(sc, "market_today", lambda d=d: d)
+        assert sc.cmd_windows(None) == rc
+        assert capsys.readouterr().out == want
+
+
+def test_session_hooks_windows_from_calendar_and_ok_only_on_success():
+    src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
+    body = src[src.index("shadow_window() {"):src.index("# ── ① 盘前简报")]
+    assert 'if (( RC == 0 )); then' in body and ': > "$OKF"' in body
+    assert "shadow windows" in body and "930" not in body, "收盘窗时刻只由 shadow windows 给出，不写死"
+    assert src.index("shadow_window() {") < src.index('shadow_window open "$_LO"') < src.index("# ── ① 盘前简报")
+    assert "|| IN_SHADOW == 1" in src[src.index("不在任何窗口"):]
+    du = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
+    assert "shadow capture" in du and "shadow settle" in du

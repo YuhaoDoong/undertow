@@ -55,13 +55,17 @@ notify() {  # $1=标题 $2=正文
 
 # ── ④⑤ 影子账盘口窗口（v3，Codex 005 R02）──────────────────────────
 # ⚠️ 放在①②③之前：那几个窗口里有 exit 0（撞锁等），排在后面会被跳过。
-# ④ ET 10:00–10:20：当日入场 + 持仓标记；⑤ ET 15:30–15:45：持仓标记（止损/到期前平仓口径）。
+# ④ ET 10:00–10:20：当日入场 + 持仓标记；⑤ 核心收市前 30~15 分钟：持仓标记与到期前平仓（主终点）。
+# v4（Codex 006）：⑤ 在 13:00 收市日是 12:30–12:45。窗口分钟数只由 `shadow windows` 按预存交易所日历给出，
+# 这里不写死钟点 —— 写死 930–945 会让半日市的收盘窗永远不运行（AGENTS.md 静默失败第 4 条同类）。
 # 窗口内每次唤醒都可重试：quote 只重抓尚无有效报价的腿，原始尝试全部保留，取第一次有效（不择优）。
 # 只有结构化状态为 complete/unchanged（退出码 0）才写成功哨兵；partial/failed 下一次唤醒继续，
 # 到窗口最后 6 分钟仍未完成才告警 —— 原先「退出码 0 就写 .ok」会把零有效报价的一天堵死。
+IN_SHADOW=0
 shadow_window() {  # $1=open|close $2=窗口起(分) $3=窗口止(分) $4=标签
   local W="$1" LO="$2" HI="$3" TAG="$4"
   if (( ET_MIN < LO || ET_MIN > HI )); then return; fi
+  IN_SHADOW=1
   local OKF="$LOG_DIR/.shadow_${W}_${ET_DATE}.ok" ST="$LOG_DIR/.status_shadow_${W}_${ET_DATE}.json"
   if [[ -f "$OKF" ]]; then hb "${TAG}：今日已完成，跳过"; return; fi
   local LK="$LOG_DIR/.lock_shadow_${W}_${ET_DATE}"
@@ -79,8 +83,21 @@ shadow_window() {  # $1=open|close $2=窗口起(分) $3=窗口止(分) $4=标签
     fi
   fi
 }
-shadow_window open 600 620 "④影子开盘窗"
-shadow_window close 930 945 "⑤影子收盘窗"
+# 本脚本未开 set -e；分开捕获 rc（AGENTS.md 静默失败第 5 条：不用 `|| true`）
+SHW=$("$PY" -m undertow.cli shadow windows 2>&1); SHW_RC=$?
+if (( SHW_RC == 0 )); then
+  while read -r _W _LO _HI; do
+    [[ -z "$_W" ]] && continue
+    if [[ "$_W" == "open" ]]; then shadow_window open "$_LO" "$_HI" "④影子开盘窗"; fi
+    if [[ "$_W" == "close" ]]; then shadow_window close "$_LO" "$_HI" "⑤影子收盘窗"; fi
+  done <<< "$SHW"
+else
+  # 日历失效（覆盖期外）或命令崩溃：窗口来源没了，不能当作「今天没窗口」静默跳过
+  hb "④⑤影子窗口：无法取得今日窗口（rc=$SHW_RC）$(printf '%s' "$SHW" | tail -1)"
+  if (( ET_MIN >= 600 && ET_MIN <= 605 )); then
+    notify "⚠️ 影子账窗口不可用" "$(printf '%s' "$SHW" | tail -1)"
+  fi
+fi
 
 # ── ① 盘前简报（ET 09:00–09:15）：仅在有计划或有大事件时 ──
 if (( ET_MIN >= 540 && ET_MIN <= 555 )); then
@@ -245,6 +262,6 @@ fi
 # 一眼能看出调度是死是活，日志又不会涨。
 if ! (( (ET_MIN >= 540 && ET_MIN <= 555) || (ET_MIN >= 580 && ET_MIN <= 595) \
      || (ET_MIN >= 600 && ET_MIN <= 620) || (ET_MIN >= 610 && ET_MIN <= 625) \
-     || (ET_MIN >= 930 && ET_MIN <= 945) )); then
+     || IN_SHADOW == 1 )); then
   : > "$LOG_DIR/.session_alive"
 fi

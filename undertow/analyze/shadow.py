@@ -46,34 +46,60 @@ import statistics as st
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
+from undertow.core import market_calendar as mc
+
+POOLS = {"etf": ["gold", "silver", "wti", "qqq", "tlt", "spy", "iwm"],
+         "leveraged_etf": ["tqqq"],
+         "single_stock": ["googl", "tsla", "nvda", "intc", "amd", "msft", "aapl"]}
+
 CONFIG = {
-    "version": "shadow-v3-20260926",
+    "version": "shadow-v4-20260926",
     # ── S00 实验身份（机器可读；改任一项 = 新版本）──
-    "instruments": ["gold", "silver", "wti", "qqq", "tqqq", "tlt", "spy", "iwm",
-                    "googl", "tsla", "nvda", "intc", "amd", "msft", "aapl"],
+    "instruments": [k for pool in POOLS.values() for k in pool],
+    # Codex 006：ETF / 杠杆 ETF / 个股不因样本多就混成一种策略证据 —— 分池冻结、分池报告，从不合并
+    "pools": POOLS, "primary_pool": "etf",
+    "aggregation": "池内每个 (品种, 侧, 入场日) 观测等权；不同池分开报告，不合并成一个结论",
     "primary_comparison": "A vs B1",
-    "primary_endpoint": "quote_entry_expiry_intrinsic",
-    "secondary_endpoints": ["pre_expiry_close_exit", "close_beyond_next_open_exit",
+    # Codex 006 决定 1：唯一主终点 = 到期前最后交易日收盘窗整体退出（拟执行的出场政策，非「已证明更优」）
+    "primary_endpoint": "pre_expiry_close_exit",
+    "secondary_endpoints": ["quote_entry_expiry_intrinsic", "close_beyond_next_open_exit",
                             "stop1x_twice_daily", "stop2x_twice_daily", "snapshot_model"],
     "quote": {"timezone": "America/New_York",
-              "windows": {"open": ["10:00", "10:20"], "close": ["15:30", "15:45"]},
+              # 决定 3：收盘窗由预存日历的【标的核心收市】倒推 30~15 分钟：正常 15:30–15:45，13:00 收市日 12:30–12:45
+              "windows": {"open": {"start": "10:00", "end": "10:20"},
+                          "close": {"rule": "core_close_minus", "minutes_before": [30, 15]}},
               "entry_window": "open",
               "selection": "first_valid_attempt_per_leg",
-              "quality": "sell: bid>0,bid_size>0,ask>=bid; buy: ask>0,ask_size>0,ask>=bid",
+              "quality": {
+                  "entry": "sell: 无错误, bid>0, bid_size>0, ask>=bid; buy: 无错误, ask>0, ask_size>0, ask>=bid",
+                  "exit": ("sell: 无错误, ask>0, ask_size>0, ask>=bid; buy: 无错误, bid 为数, ask>=bid; "
+                           "buy bid>0 须 bid_size>0 → both_legs；buy bid==0（有效报价）→ "
+                           "short_only_long_residual_0：只买回短腿、长腿残值按 0（收益保守下界）；"
+                           "保护腿报错/缺失/零量 → 该窗口缺失，不计任何收入")},
               "source_timestamp": "unknown (longbridge depth 不提供)"},
-    "calendar_policy": "交易日以已完成日线为准；半日市或窗口未运行 → not_run，不补、不猜",
+    "calendar": {"version": mc.VERSION, "hash": mc.calendar_hash(),
+                 "source": mc.SOURCE["url"], "read_at": mc.SOURCE["read_at"]},
+    "calendar_policy": ("交易日与收市时刻只来自预存交易所日历（core.market_calendar），不从日线倒推；"
+                        "日历覆盖外 → calendar_unknown；交易日缺日线 → bars_incomplete"),
+    "maturity_policy": "各终点独立成熟：提前退出在其退出窗结束后即可结算，不等到期；到期类终点等到期日日线",
     "fee_policy": "每张每腿 $0.80，4 个合约边往返预算 $3.20；持有到期也保守计同一预算；真实费率待成交记录核实",
     "missing_policy": "未知一律 None，不折零；缺价不偷换为持有到期",
-    "stats": {"version": "stats-v1", "block": "consecutive_trading_days", "block_days": 5,
-              "sensitivity_block_days": 10, "iters": 20000, "seed": 20260926, "min_blocks": 4},
-    "formal_test_date": "2026-12-31",
+    "stats": {"version": "stats-v2", "block": "circular_moving_block_over_calendar_trading_days",
+              "block_days": 5, "sensitivity_block_days": 10, "iters": 20000, "seed": 20260926,
+              # 计算保护，不是统计充分性证明（Codex C04）：有样本的日期数 // 块长 ≥ 4
+              "min_full_blocks": 4,
+              "degenerate": "样本值全等或区间零宽 → degenerate，不判定",
+              "non_overlap_sensitivity": "同品种同侧：入场日须晚于上一笔被采纳入场的到期日"},
+    "formal_test": {"date": "2026-12-31",
+                    "sample": "入场日与全部候选腿到期日均 ≤ 该日",
+                    "identity": "该日之后的运行才是正式判定；此前一切区间与判定标 exploratory"},
     "dte": [2, 4], "width": {"rule": "2x_modal_strike_step", "band": 0.05},
     "wall": {"def": "local_max", "band": 0.05, "hi_dte": 14},
     "b_rules": {"B1": {"atr": 1.0}, "B2": {"atr": 2.0}, "B3": {"delta": 0.20}}, "primary_b": "B1",
     "stops": [1.0, 2.0],
     "term_structure": {"atm_band": 0.02, "far_dte": [20, 45]},
     "sides": ["P", "C"],
-    "primary_basis": "quote_entry_expiry_intrinsic",
+    "primary_basis": "pre_expiry_close_exit",
     "fee_round_trip": 3.20,
     "mid_give": 0.25,
 }
@@ -289,21 +315,42 @@ def entry_quality(sq: dict | None, bq: dict | None) -> str | None:
 
 
 def exit_quality(sq: dict | None, bq: dict | None) -> str | None:
-    """平仓质量（买回卖腿吃 ask、卖出买腿吃 bid；买腿 bid 缺失按 0 处理，即放弃残值）。"""
-    if not sq or sq.get("error"):
+    """平仓质量（买回卖腿吃 ask、卖出买腿吃 bid）。通过返回 None，否则返回原因。
+
+    Codex 006 C01：原先只查卖腿，保护腿报错且零挂单量时它的 bid 仍被当作卖出收入扣掉，
+    保护腿整个缺失时又按 0 放行 —— 缺失被折成了「已完整平仓」。现在保护腿报错/缺失/零量
+    一律使该窗口缺失；只有保护腿报价有效且 bid==0 时，才按「只买回短腿、长腿残值 0」计。
+    """
+    if not sq:
         return "sell_leg_missing"
+    if sq.get("error"):
+        return "sell_leg_error"
     sa, sb, sas = _num(sq.get("ask")), _num(sq.get("bid")), sq.get("ask_size") or 0
     if sa is None or sa <= 0 or (sb is not None and sa < sb):
         return "price_invalid"
     if sas <= 0:
         return "zero_size"
+    if not bq:
+        return "protective_leg_missing"
+    if bq.get("error"):
+        return "protective_leg_error"
+    bb, ba = _num(bq.get("bid")), _num(bq.get("ask"))
+    if bb is None:
+        return "protective_price_missing"
+    if bb < 0 or (ba is not None and ba < bb):
+        return "protective_price_invalid"
+    if bb > 0 and (bq.get("bid_size") or 0) <= 0:
+        return "protective_zero_size"
     return None
 
 
-def exit_cost_raw(sq: dict, bq: dict | None) -> float:
-    """平仓成本原值（每张美元），**不裁剪**：分腿吃价可能超过宽度（R05）。"""
-    bid = _num((bq or {}).get("bid")) or 0.0
-    return round((sq["ask"] - bid) * 100, 4)
+def exit_mode(bq: dict) -> str:
+    return "both_legs" if _num(bq.get("bid")) > 0 else "short_only_long_residual_0"
+
+
+def exit_cost_raw(sq: dict, bq: dict) -> float:
+    """平仓成本原值（每张美元），**不裁剪**：分腿吃价可能超过宽度（R05）。调用前须过 exit_quality。"""
+    return round((sq["ask"] - bq["bid"]) * 100, 4)
 
 
 def _credit(sell_bid, sell_ask, buy_bid, buy_ask, give):
@@ -316,25 +363,75 @@ def _credit(sell_bid, sell_ask, buy_bid, buy_ask, give):
     return {"conservative": round(cons, 4), "mid": round(mid, 4), "mid_give": round(mid + give * (cons - mid), 4)}
 
 
+# ── 窗口（v4：由预存日历给出，不从日线倒推）──────────────────────────────
+
+_TZ = ZoneInfo(CONFIG["quote"]["timezone"])
+
+
+def _m(hhmm: str) -> int:
+    return int(hhmm[:2]) * 60 + int(hhmm[3:])
+
+
+def window_bounds(day: date, wname: str) -> tuple[int, int] | None:
+    """某交易日某窗口的 [起, 止] ET 分钟（含止分钟）。非交易日或日历未知 → None。"""
+    ct = mc.close_time(day)
+    if ct is None:
+        return None
+    q = CONFIG["quote"]["windows"][wname]
+    if wname == "open":
+        return _m(q["start"]), _m(q["end"])
+    before_lo, before_hi = q["minutes_before"]
+    return _m(ct) - before_lo, _m(ct) - before_hi
+
+
+def window_end(wkey: str) -> datetime | None:
+    day, wname = wkey.split("|")
+    bd = window_bounds(date.fromisoformat(day), wname)
+    if bd is None:
+        return None
+    d = date.fromisoformat(day)
+    return datetime(d.year, d.month, d.day, bd[1] // 60, bd[1] % 60, 59, tzinfo=_TZ)
+
+
+def _passed(wkey: str, now: datetime | None) -> bool:
+    """窗口是否已结束。now=None 表示「一切已发生」（事后复算/测试）。"""
+    if now is None:
+        return True
+    end = window_end(wkey)
+    return end is not None and now > end
+
+
+def _day_closed(d: date, now: datetime | None) -> bool:
+    if now is None:
+        return True
+    ct = mc.close_time(d)
+    if ct is None:
+        return False
+    return now > datetime(d.year, d.month, d.day, _m(ct) // 60, _m(ct) % 60, tzinfo=_TZ)
+
+
 def in_window(wkey: str, started_at: str, ended_at: str) -> bool:
     """尝试是否在预登记窗口内开始【并】结束（ET、同一日期、含结束分钟）。时间戳不可解析 → False。
 
     晚到的尝试（抓取拖过窗口末）不计：否则「10:20 窗口」会悄悄变成「任何时候」。
     """
     day, wname = wkey.split("|")
-    lo, hi = CONFIG["quote"]["windows"][wname]
-    tz = ZoneInfo(CONFIG["quote"]["timezone"])
+    bd = window_bounds(date.fromisoformat(day), wname)
+    if bd is None:
+        return False
     try:
-        t0 = datetime.fromisoformat(started_at).astimezone(tz)
-        t1 = datetime.fromisoformat(ended_at).astimezone(tz)
+        t0 = datetime.fromisoformat(started_at).astimezone(_TZ)
+        t1 = datetime.fromisoformat(ended_at).astimezone(_TZ)
     except (TypeError, ValueError):
         return False
-    lo_m = int(lo[:2]) * 60 + int(lo[3:]); hi_m = int(hi[:2]) * 60 + int(hi[3:])
-    return all(t.date().isoformat() == day and lo_m <= t.hour * 60 + t.minute <= hi_m for t in (t0, t1))
+    return all(t.date().isoformat() == day and bd[0] <= t.hour * 60 + t.minute <= bd[1] for t in (t0, t1))
 
 
 def window_leg(row: dict, leg: dict, wkey: str, purpose: str) -> dict:
-    """某窗口对某条腿的状态：not_run / missing（附原因）/ valid（附价格）。取第一次通过质量的尝试。"""
+    """某窗口对某条腿的状态：no_window / not_run / missing（附原因）/ valid（附价格）。取第一次通过质量的尝试。"""
+    day, wname = wkey.split("|")
+    if window_bounds(date.fromisoformat(day), wname) is None:
+        return {"status": "no_window"}
     w = (row.get("windows") or {}).get(wkey)
     if not w or not w.get("attempts"):
         return {"status": "not_run"}
@@ -353,15 +450,21 @@ def window_leg(row: dict, leg: dict, wkey: str, purpose: str) -> dict:
             cr = _credit(sq["bid"], sq["ask"], bq["bid"], bq["ask"], CONFIG["mid_give"])
             if cr is None or not (0 < cr["conservative"] < leg["width_usd"]):
                 reasons.append("credit_outside_0_width"); continue
-            return {"status": "valid", "credit": cr, "at": a["started_at"]}
+            return {"status": "valid", "credit": cr, "at": a["started_at"], "ended_at": a["ended_at"]}
         cost = exit_cost_raw(sq, bq)
-        return {"status": "valid", "cost": cost, "exceeds_width": cost > leg["width_usd"], "at": a["started_at"]}
+        return {"status": "valid", "cost": cost, "exceeds_width": cost > leg["width_usd"],
+                "mode": exit_mode(bq), "at": a["started_at"], "ended_at": a["ended_at"]}
     return {"status": "missing", "reasons": reasons}
 
 
-def expected_mark_windows(session: date, expiry: date, trading_days: list) -> list[str]:
-    """入场（session 开盘窗）之后、到期收盘前应有的标记窗口，按时间顺序。"""
-    days = [d for d in trading_days if session <= d <= expiry]
+def expected_mark_windows(session: date, expiry: date) -> list[str] | None:
+    """入场（session 开盘窗）之后、到期收盘为止应有的标记窗口，按时间顺序；日历未知 → None。
+
+    Codex 006 C02：只看日历，不看有没有日线 —— 缺一根日线不能让那天的应有窗口消失。
+    """
+    days = mc.trading_days(session, expiry)
+    if days is None:
+        return None
     out = [f"{session.isoformat()}|close"]
     for d in days:
         if d > session:
@@ -375,25 +478,29 @@ def _beyond(kind, K, px):
     return px < K if kind == "P" else px > K
 
 
-def settle_leg(leg: dict, row: dict, *, bars: list, fee: float = CONFIG["fee_round_trip"],
-               stops=tuple(CONFIG["stops"])) -> dict | None:
-    """bars: [(date, high, low, close)]，只含已完成日线。到期日 bar 缺失 → None（未成熟，不结算）。"""
+def _after(later_iso: str, earlier_iso: str) -> bool:
+    try:
+        return datetime.fromisoformat(later_iso) > datetime.fromisoformat(earlier_iso)
+    except (TypeError, ValueError):
+        return False
+
+
+BASES = ("snapshot_model", "quote_entry_expiry_intrinsic", "pre_expiry_close_exit",
+         "close_beyond_next_open_exit") + tuple(f"stop{m:g}x_twice_daily" for m in CONFIG["stops"])
+
+
+def settle_leg(leg: dict, row: dict, *, bars: list, now: datetime | None = None,
+               fee: float = CONFIG["fee_round_trip"], stops=tuple(CONFIG["stops"])) -> dict:
+    """bars: [(date, high, low, close)] 已完成日线；now: 结算时刻（None=事后复算，视一切已发生）。
+
+    各终点独立判断成熟（status="immature"），全部成熟且日线齐全时 complete=True。
+    交易日与窗口来自预存日历；日线只用来取价，缺失记 bars_incomplete，不当作休市。
+    """
     session = date.fromisoformat(row["session"])
     exp = date.fromisoformat(leg["expiry"])
-    win = [b for b in bars if session <= b[0] <= exp]
-    if not win or win[-1][0] != exp:
-        return None
-    tdays = [b[0] for b in bars]
     k, S, W = leg["side"], leg["sell"], leg["width_usd"]
-    settle = win[-1][3]
-    intrinsic = min(W, max(0.0, ((S - settle) if k == "P" else (settle - S)) * 100))
-    ohlc = all(h is not None and lo is not None for _, h, lo, _c in win)
-    trig = next((b[0] for b in win[:-1] if _beyond(k, S, b[3])), None)
-    res = {"expiry_close": settle, "endpoint_breach": _beyond(k, S, settle),
-           "any_close_breach": any(_beyond(k, S, b[3]) for b in win),
-           "intraday_breach": (any((lo < S) if k == "P" else (h > S) for _, h, lo, _c in win) if ohlc else None),
-           "trigger_date": trig.isoformat() if trig else None, "width_usd": W,
-           "pnl": {}, "max_risk": {}, "credit": {}, "status": {}}
+    res = {"calendar": mc.VERSION, "width_usd": W, "pnl": {}, "max_risk": {}, "credit": {},
+           "status": {}, "exit_mode": {}, "complete": False}
 
     def put(basis, credit, cost, status="ok"):
         # 有价却标 ok 才可信：缺权利金 / 权利金越出 (0, W) 必须在状态上显式可见，不能混进「正常」
@@ -405,49 +512,93 @@ def settle_leg(leg: dict, row: dict, *, bars: list, fee: float = CONFIG["fee_rou
             elif cost is None:
                 status = "cost_missing"
         res["status"][basis] = status
-        if credit is None or cost is None or not (0 < credit < W):
+        if credit is None or cost is None or not (0 < credit < W) or status == "immature":
             res["pnl"][basis] = None; res["max_risk"][basis] = None; res["credit"][basis] = credit
             return
         res["pnl"][basis] = round(credit - cost - fee, 4)
         res["max_risk"][basis] = round(W - credit + fee, 4)
         res["credit"][basis] = credit
 
-    sc = (leg.get("snapshot_credit") or {}).get("mid_give")
-    put("snapshot_model", sc, intrinsic, "stale_snapshot_quote")
+    days = mc.trading_days(session, exp)
+    if days is None or session not in days or exp not in days:
+        for basis in BASES:
+            put(basis, None, None, "calendar_unknown")
+        return res
 
-    ent = window_leg(row, leg, f"{session.isoformat()}|open", "entry")
+    bar_by = {b[0]: b for b in bars}
+    eb = bar_by.get(exp)
+    missing_bars = [d for d in days if d not in bar_by and _day_closed(d, now)]
+    intrinsic = (min(W, max(0.0, ((S - eb[3]) if k == "P" else (eb[3] - S)) * 100)) if eb else None)
+    res["expiry_close"] = eb[3] if eb else None
+    res["bars_missing"] = [d.isoformat() for d in missing_bars]
+    full = eb is not None and not missing_bars
+    win = [bar_by[d] for d in days] if full else None
+    ohlc = full and all(h is not None and lo is not None for _, h, lo, _c in win)
+    res["endpoint_breach"] = _beyond(k, S, eb[3]) if eb else None
+    res["any_close_breach"] = any(_beyond(k, S, b[3]) for b in win) if full else None
+    res["intraday_breach"] = (any((lo < S) if k == "P" else (h > S) for _, h, lo, _c in win) if ohlc else None)
+
+    put("snapshot_model", (leg.get("snapshot_credit") or {}).get("mid_give"), intrinsic,
+        "stale_snapshot_quote" if eb else "immature")
+
+    ekey = f"{session.isoformat()}|open"
+    ent = window_leg(row, leg, ekey, "entry")
     res["entry"] = ent
     ec = ent["credit"]["conservative"] if ent["status"] == "valid" else None
-    tag = "ok" if ec is not None else f"entry_{ent['status']}"
-    put("quote_entry_expiry_intrinsic", ec, intrinsic, tag)
+    tag = "ok" if ec is not None else ("immature" if not _passed(ekey, now) else f"entry_{ent['status']}")
 
-    # 到期前最后一个交易日 15:30 整体平仓
-    before = [d for d in tdays if session < d < exp]
+    put("quote_entry_expiry_intrinsic", ec, intrinsic, tag if ec is None else ("ok" if eb else "immature"))
+
+    def exit_at(basis, wk):
+        """在 wk 窗口整体退出：须严格晚于实际入场（C03）。"""
+        if not _passed(wk, now):
+            return put(basis, ec, None, "immature")
+        w = window_leg(row, leg, wk, "exit")
+        if w["status"] == "valid" and not _after(w["at"], ent["ended_at"]):
+            return put(basis, ec, None, "exit_not_after_entry")
+        if w["status"] == "valid":
+            res["exit_mode"][basis] = w["mode"]
+        put(basis, ec, w.get("cost"), "ok" if w["status"] == "valid" else f"exit_{w['status']}")
+
+    # 主终点：到期前最后一个交易日的收盘窗整体平仓。入场日本身可以是这一天（周五入场、周一到期）。
+    X = mc.prev_trading_day(exp)
     if ec is None:
         put("pre_expiry_close_exit", None, None, tag)
-    elif not before:
-        put("pre_expiry_close_exit", None, None, "no_day_before_expiry")
+    elif X is None or X < session:
+        put("pre_expiry_close_exit", ec, None, "no_exit_day")
     else:
-        w = window_leg(row, leg, f"{before[-1].isoformat()}|close", "exit")
-        put("pre_expiry_close_exit", ec, w.get("cost"), "ok" if w["status"] == "valid" else f"exit_{w['status']}")
+        exit_at("pre_expiry_close_exit", f"{X.isoformat()}|close")
 
-    # 收盘越过卖腿 → 下一交易日开盘窗平仓
+    # 收盘越过卖腿 → 下一交易日开盘窗平仓；首次越线前任一交易日缺日线 → 未知（不当作没越线）
+    basis = "close_beyond_next_open_exit"
     if ec is None:
-        put("close_beyond_next_open_exit", None, None, tag)
-    elif trig is None:
-        put("close_beyond_next_open_exit", ec, intrinsic)
+        put(basis, None, None, tag)
     else:
-        nxt = [d for d in tdays if trig < d <= exp]
-        w = window_leg(row, leg, f"{nxt[0].isoformat()}|open", "exit") if nxt else {"status": "not_run"}
-        put("close_beyond_next_open_exit", ec, w.get("cost"), "ok" if w["status"] == "valid" else f"exit_{w['status']}")
+        trig, state = None, None
+        for d in days[:-1]:
+            b = bar_by.get(d)
+            if b is None:
+                state = "bars_incomplete" if _day_closed(d, now) else "immature"
+                break
+            if _beyond(k, S, b[3]):
+                trig = d; break
+        res["trigger_date"] = trig.isoformat() if trig else None
+        if trig is not None:
+            exit_at(basis, f"{mc.next_trading_day(trig).isoformat()}|open")
+        elif state:
+            put(basis, ec, None, state)
+        else:
+            put(basis, ec, intrinsic, "ok" if eb else "immature")
 
     # 离散止损（一天两次）：四态；首次触发前任何未知 → 结果未知（R01）
-    marks = expected_mark_windows(session, exp, tdays)
-    seq = [(wk, window_leg(row, leg, wk, "exit")) for wk in marks]
-    res["marks"] = {"expected": len(seq),
+    marks = expected_mark_windows(session, exp)
+    seq = [(wk, window_leg(row, leg, wk, "exit")) for wk in marks if _passed(wk, now)]
+    pending = len(marks) - len(seq)
+    res["marks"] = {"expected": len(marks),
                     "valid": sum(x["status"] == "valid" for _, x in seq),
                     "not_run": sum(x["status"] == "not_run" for _, x in seq),
-                    "missing": sum(x["status"] == "missing" for _, x in seq)}
+                    "missing": sum(x["status"] == "missing" for _, x in seq),
+                    "pending": pending}
     for mult in stops:
         basis = f"stop{mult:g}x_twice_daily"
         if ec is None:
@@ -464,8 +615,12 @@ def settle_leg(leg: dict, row: dict, *, bars: list, fee: float = CONFIG["fee_rou
             put(basis, ec, None, "path_unknown_before_trigger")
         elif unknown:
             put(basis, ec, None, "path_unknown")
+        elif pending or eb is None:
+            put(basis, ec, None, "immature")
         else:
             put(basis, ec, intrinsic, "held_all_marks_valid")
+
+    res["complete"] = full and all(v != "immature" for v in res["status"].values())
     return res
 
 
@@ -476,41 +631,53 @@ def _norm(o: dict, basis: str):
     return p / r if (p is not None and r) else None
 
 
-def date_block_bootstrap(groups: dict, iters: int = CONFIG["stats"]["iters"],
-                         seed: int = CONFIG["stats"]["seed"],
-                         block_days: int = CONFIG["stats"]["block_days"]):
-    """groups: {date: [值…]}。循环移动块 bootstrap（Politis–Romano）：按日期排序后，
-    每次抽若干个起点、各取连续 block_days 个样本日（首尾循环相接），拼够原日期数为止。
+def block_bootstrap(groups: dict, *, block_days: int = CONFIG["stats"]["block_days"],
+                    iters: int = CONFIG["stats"]["iters"], seed: int = CONFIG["stats"]["seed"],
+                    calendar_days: list | None = None) -> dict:
+    """groups: {"YYYY-MM-DD": [值…]}。按【日历交易日】做循环移动块 bootstrap（Politis–Romano）。
 
-    同日多品种/两侧整块进出；相邻交易日的残余相关由块长吸收（主口径 5 日，敏感性 10 日，
-    见 CONFIG["stats"]）。「连续」指样本中相邻的日期 —— 无机会的交易日不占位。
-    block_days=1 退化为逐日整块重采样（v2 口径）。不足 5 个日期、或每次重采样不足
-    min_blocks 个块（5 日块需 ≥16 个日期，10 日块需 ≥31 个）时返回 None 区间。
+    - 块沿真实交易日历滑动：无机会/技术缺失的交易日照样占位（贡献 0 个值），不被压缩掉，
+      也不补假收益（Codex 006 C04）。calendar_days 缺省时由预存日历给出首末样本日之间的交易日。
+    - 有样本的日期数 // 块长 < min_full_blocks → insufficient（计算保护，不是充分性证明）。
+    - 样本值全等或区间零宽 → degenerate：非参数 bootstrap 在常数样本上必然退化，不据此判定。
+    返回 {"mean","lo","hi","status","n_dates","n_calendar_days","block_days"}。
     """
-    ds = sorted(groups)
+    out = {"mean": None, "lo": None, "hi": None, "status": "empty", "n_dates": 0,
+           "n_calendar_days": None, "block_days": block_days}
+    ds = sorted(d for d in groups if groups[d])
     allv = [v for d in ds for v in groups[d]]
     if not allv:
-        return None, None, None
-    m = st.mean(allv)
-    n = len(ds)
-    if n < 5:
-        return m, None, None
+        return out
+    out["mean"] = st.mean(allv); out["n_dates"] = len(ds)
+    span = calendar_days if calendar_days is not None else mc.trading_days(
+        date.fromisoformat(ds[0]), date.fromisoformat(ds[-1]))
+    if span is None:
+        out["status"] = "calendar_unknown"; return out
+    span = [d.isoformat() if isinstance(d, date) else d for d in span]
+    out["n_calendar_days"] = len(span)
+    if set(ds) - set(span):
+        out["status"] = "date_not_trading_day"; return out
     b = max(1, block_days)
-    k = -(-n // b)
-    if k < CONFIG["stats"]["min_blocks"]:
-        # 块太少时重采样只有寥寥几种组合（b≥n 时每次都抽到全样本 → 零宽区间），
-        # 零宽区间会被 judge 判成「支持/不支持」—— 这正是 R08 的退化。宁可报样本不足。
-        return m, None, None
+    if len(ds) // b < CONFIG["stats"]["min_full_blocks"]:
+        out["status"] = "insufficient"; return out
+    if max(allv) - min(allv) <= 1e-12:
+        out["status"] = "degenerate"; return out
+    N = len(span); k = -(-N // b)
     rnd = random.Random(seed); vals = []
     for _ in range(iters):
         picked = []
         for _ in range(k):
-            s0 = rnd.randrange(n)
-            picked.extend(ds[(s0 + j) % n] for j in range(b))
-        s = [v for d in picked[:n] for v in groups[d]]
-        vals.append(st.mean(s))
-    vals.sort()
-    return m, vals[int(0.025 * iters)], vals[int(0.975 * iters) - 1]
+            s0 = rnd.randrange(N)
+            picked.extend(span[(s0 + j) % N] for j in range(b))
+        s_ = [v for d in picked[:N] for v in groups.get(d, ())]
+        if s_:
+            vals.append(st.mean(s_))
+    if len(vals) < iters * 0.95:
+        out["status"] = "insufficient"; return out
+    vals.sort(); n = len(vals)
+    out["lo"], out["hi"] = vals[int(0.025 * n)], vals[int(0.975 * n) - 1]
+    out["status"] = "degenerate" if out["hi"] - out["lo"] <= 1e-12 else "ok"
+    return out
 
 
 def zero_event_upper(n: int, alpha: float = 0.05) -> float | None:
@@ -518,12 +685,17 @@ def zero_event_upper(n: int, alpha: float = 0.05) -> float | None:
     return 1 - alpha ** (1 / n) if n > 0 else None
 
 
-def judge(lo, hi, *, min_useful: float = 0.0) -> str:
-    if lo is None:
-        return "样本不足"
-    if lo > min_useful:
+_NOT_JUDGED = {"empty": "样本不足", "insufficient": "样本不足", "degenerate": "退化（不判）",
+               "calendar_unknown": "日历未知", "date_not_trading_day": "日期不在交易日历"}
+
+
+def judge(ci: dict, *, min_useful: float = 0.0) -> str:
+    """只对 status=ok 的区间下判定；其余状态原样说出来，不折成「未决」或「支持」。"""
+    if ci["status"] != "ok":
+        return _NOT_JUDGED.get(ci["status"], ci["status"])
+    if ci["lo"] > min_useful:
         return "支持"
-    if hi <= 0:
+    if ci["hi"] <= 0:
         return "不支持"
     return "未决"
 
@@ -540,7 +712,8 @@ def status_breakdown(rows: list[dict], basis: str) -> dict:
     """
     from collections import Counter
     st_, reasons = Counter(), Counter()
-    marks = {"expected": 0, "valid": 0, "not_run": 0, "missing": 0}
+    marks = {"expected": 0, "valid": 0, "not_run": 0, "missing": 0, "pending": 0}
+    modes = Counter()
     for r in rows:
         for l in r.get("legs", []):
             if l.get("status") != "candidate":
@@ -555,19 +728,51 @@ def status_breakdown(rows: list[dict], basis: str) -> dict:
                 reasons[why] += 1
             for k in marks:
                 marks[k] += (o.get("marks") or {}).get(k, 0)
+            if (o.get("exit_mode") or {}).get(basis):
+                modes[o["exit_mode"][basis]] += 1
     return {"basis": basis, "status": dict(st_.most_common()), "entry_missing_reasons": dict(reasons.most_common()),
-            "marks": marks}
+            "marks": marks, "exit_modes": dict(modes.most_common())}
+
+
+def formal_identity(as_of: date | None) -> str:
+    return "formal" if (as_of is not None and as_of > date.fromisoformat(CONFIG["formal_test"]["date"])) else "exploratory"
+
+
+def _non_overlap(rows: list[dict], side: str) -> list[dict]:
+    """同品种同侧：入场日须晚于上一笔被采纳入场的 A 腿到期日（不重叠持有期）。"""
+    keep, last = [], {}
+    for r in sorted(rows, key=lambda x: x["session"]):
+        a = next((l for l in r["legs"] if l["leg_id"] == f"{side}-A" and l.get("status") == "candidate"), None)
+        if a is None:
+            continue
+        prev = last.get(r["instrument"])
+        if prev is not None and r["session"] <= prev:
+            continue
+        last[r["instrument"]] = a["expiry"]
+        keep.append(r)
+    return keep
 
 
 def paired_summary(rows: list[dict], basis: str = CONFIG["primary_basis"],
                    b_rule: str = CONFIG["primary_b"], *, mode: str = "prospective",
-                   sides=None, flow_aligned_only: bool = False) -> dict:
-    """A 绝对收益与 A−B 配对差（按日期分块）。只收指定 mode 的已结算行。"""
+                   sides=None, flow_aligned_only: bool = False, pool: str | None = CONFIG["primary_pool"],
+                   non_overlap: bool = False, as_of: date | None = None) -> dict:
+    """A 绝对收益与 A−B 配对差（按日历交易日块 bootstrap）。只收指定 mode、指定池的行。
+
+    pool=None 仅供单元测试；报告永远分池（ETF / 杠杆 ETF / 个股不合并成一个结论）。
+    as_of 晚于正式检验日 → formal，只收入场与到期都在检验日之前的行；否则 exploratory。
+    """
+    ident = formal_identity(as_of)
+    fdate = CONFIG["formal_test"]["date"]
+    base = [r for r in rows if (r.get("identity") or {}).get("mode") == mode and r.get("outcome")
+            and (pool is None or r.get("instrument") in CONFIG["pools"][pool])]
+    if ident == "formal":
+        base = [r for r in base if r["session"] <= fdate
+                and all(l["expiry"] <= fdate for l in r["legs"] if l.get("status") == "candidate")]
     a_by, d_by, cover = {}, {}, {"opportunities": 0, "a_priced": 0, "pairs": 0, "identical_pairs": 0}
-    for r in rows:
-        if (r.get("identity") or {}).get("mode") != mode or not r.get("outcome"):
-            continue
-        for side in (sides or CONFIG["sides"]):
+    for side in (sides or CONFIG["sides"]):
+        use = _non_overlap(base, side) if non_overlap else base
+        for r in use:
             if flow_aligned_only and flow_aligned_side(r) != side:
                 continue
             cover["opportunities"] += 1
@@ -584,20 +789,20 @@ def paired_summary(rows: list[dict], basis: str = CONFIG["primary_basis"],
             leg_b = next((l for l in r["legs"] if l["leg_id"] == f"{side}-{b_rule}"), {})
             cover["identical_pairs"] += bool(leg_b.get("same_as_A"))
             d_by.setdefault(r["session"], []).append(na - nb)
-    am, alo, ahi = date_block_bootstrap(a_by)
-    dm, dlo, dhi = date_block_bootstrap(d_by)
     sens = CONFIG["stats"]["sensitivity_block_days"]
-    _, alo10, ahi10 = date_block_bootstrap(a_by, block_days=sens)
-    _, dlo10, dhi10 = date_block_bootstrap(d_by, block_days=sens)
-    return {"basis": basis, "b_rule": b_rule, "mode": mode, "sides": list(sides or CONFIG["sides"]),
-            "flow_aligned_only": flow_aligned_only, "coverage": cover,
+    A, D = block_bootstrap(a_by), block_bootstrap(d_by)
+    A10, D10 = block_bootstrap(a_by, block_days=sens), block_bootstrap(d_by, block_days=sens)
+    tagv = (lambda v: v) if ident == "formal" else (lambda v: f"探索·{v}")
+    return {"basis": basis, "b_rule": b_rule, "mode": mode, "pool": pool, "identity": ident,
+            "sides": list(sides or CONFIG["sides"]), "flow_aligned_only": flow_aligned_only,
+            "non_overlap": non_overlap, "coverage": cover,
             "n_dates_A": len(a_by), "n_dates_pairs": len(d_by),
-            "A_mean_norm": am, "A_ci": [alo, ahi], "A_verdict": judge(alo, ahi),
-            "AminusB_mean_norm": dm, "AminusB_ci": [dlo, dhi], "AminusB_verdict": judge(dlo, dhi),
-            "stats_version": CONFIG["stats"]["version"], "block_days": CONFIG["stats"]["block_days"],
-            "sensitivity": {"block_days": sens, "A_ci": [alo10, ahi10], "A_verdict": judge(alo10, ahi10),
-                            "AminusB_ci": [dlo10, dhi10], "AminusB_verdict": judge(dlo10, dhi10)},
-            "note": "区间为循环移动块 bootstrap（主 5 日块，敏感性 10 日块）；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"}
+            "A": A, "A_verdict": tagv(judge(A)), "AminusB": D, "AminusB_verdict": tagv(judge(D)),
+            "stats_version": CONFIG["stats"]["version"],
+            "sensitivity": {"block_days": sens, "A": A10, "A_verdict": tagv(judge(A10)),
+                            "AminusB": D10, "AminusB_verdict": tagv(judge(D10))},
+            "note": ("区间为按日历交易日的循环移动块 bootstrap（主 5 日、敏感性 10 日）；同日多品种/两侧不当独立；"
+                     f"{fdate} 之前的一切判定都是探索，不是放行依据。")}
 
 
 # ── P5 风险预算（草案，未接入任何流程；实盘试点 G4 前由用户与 Codex 定稿）────────

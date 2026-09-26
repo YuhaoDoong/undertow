@@ -19,7 +19,10 @@ export PYTHONPATH="$PWD"
 LOG="data/history/events/watch.log"
 mkdir -p "$(dirname "$LOG")"
 
-source scripts/lib_publish.sh           # publish_dir：只提交本目录产物（Codex 008 G10）
+source scripts/lib_publish.sh           # publish_dirs：只提交本次运行产物（Codex 008 G10 / 009 N01）
+PUBLISH_PENDING="data/logs/.publish_pending_auto"; export PUBLISH_PENDING   # 所有自动化任务共用
+publish_begin data/history/events       # 记下运行前已有的未提交改动（他人的不发布）
+trap 'publish_record data/history/events' EXIT   # 任何退出路径都记下本次写过的文件（含 watch.log）
 
 notify() { $OSASCRIPT -e "display notification \"$2\" with title \"$1\" sound name \"Basso\"" 2>/dev/null; true; }
 

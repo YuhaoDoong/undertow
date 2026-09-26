@@ -14,6 +14,11 @@ ET_H=$((10#$(TZ=America/New_York date +%H))); ET_M=$((10#$(TZ=America/New_York d
 MIN=$((ET_H*60+ET_M))
 # 只在 ET 09:30–11:00 记录（开盘后 90 分钟足够看清收窄过程）
 (( MIN < 570 || MIN > 660 )) && exit 0
+# Codex 009 N01：登记本次写入的点差日志，由每日任务统一提交（否则会被当成「他人改动」不再备份）
+source scripts/lib_publish.sh
+PUBLISH_PENDING="data/logs/.publish_pending_auto"; export PUBLISH_PENDING
+publish_begin data/history/spreads
+trap 'publish_record data/history/spreads' EXIT
 "${PYTHON:-python3}" - <<'PY'
 import sys, json, pathlib, datetime as dt
 sys.path.insert(0, ".")

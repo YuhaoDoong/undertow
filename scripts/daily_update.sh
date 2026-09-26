@@ -40,6 +40,13 @@ if (( ET_HOUR < 1 || ET_HOUR >= 9 )); then
     exit 0
 fi
 
+# Codex 009 N01：记下运行前 data/ 三个目录里已有的未提交改动 —— 发布时只提交本次运行产物
+# （及本任务以前未发布成功的产物，见 lib_publish.sh），他人的改动留在工作区不动。
+source scripts/lib_publish.sh
+PUBLISH_PENDING="data/logs/.publish_pending_auto"; export PUBLISH_PENDING   # 所有自动化任务共用：彼此的未发布产物互认
+publish_begin data/snapshots data/history data/reports
+trap 'publish_record data/snapshots data/history data/reports' EXIT   # 早退路径也记下本次产物（如 FAILURE_ 凭证）
+
 # —— 末班车兜底：最后一个重试点（ET08:45）跑完若仍缺当日快照，必须当场告警 ——
 # 这是"整天没数据"的最后一道防线。前面每个时点失败都会推送，但如果全天所有时点
 # 都因 OCC 未结算而静默跳过（这是【正常】行为，不推送），到收盘前就没人知道
@@ -311,7 +318,7 @@ fi
 # Codex 008 G10：原先 `git add` 三个目录后用 `git diff --cached` 判断、再普通 `git commit`——
 # 索引里若有他人（交叉工作的代理/人）已暂存的文件，会被一起提交。现在只提交这三个目录；
 # 发现目录外的暂存 → 停止发布、数据留在磁盘、告警，下次运行再发（不 stash/reset 他人工作）。
-source scripts/lib_publish.sh
+# 009 N01：只提交本次运行产物（运行开始时 publish_begin 已记录运行前状态）。
 set +e
 PUB=$(publish_dirs "每日自动更新 $(TZ=America/New_York date +%F)：期权链快照+台账（launchd 定时任务）
 
@@ -319,7 +326,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" data/snapshots data/his
 set -e
 case $PUB_RC in
   0) echo "[完成] 已提交并推送（或无变更）" ;;
-  3) echo "[暂停发布] $PUB"
+  3|5) echo "[暂停发布] $PUB"
      alert "⚠️ 每日数据未提交（ET $ET_NOW）" "索引里有他人暂存的文件，已停止自动提交；数据已落盘，下次运行再发" ;;
   4) echo "[警告] 已提交但推送失败"
      alert "⚠️ 每日数据推送失败（ET $ET_NOW）" "已本地提交，git push 失败；数据未备份到远端" ;;

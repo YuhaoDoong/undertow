@@ -60,6 +60,8 @@ data/backtest/step4_holding.jsonl
 data/logs/.status_*.json
 # 事件捕捉的每日告警标记与发布清单（运行态，不入库）
 data/logs/.event_*
+# 无人值守发布的待发布记录（运行态，不入库）
+data/logs/.publish_*
 
 # ── 台账并发锁与原子写临时文件（spread_ledger，2026-09-26）──
 # 锁文件只协调同机进程，临时文件在 os.replace 前存在；两者都不是数据。

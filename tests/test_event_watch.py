@@ -114,41 +114,87 @@ def test_event_watch_both_sources_down_end_to_end(tmp_path):
     assert "不是「没有事件」" in (tmp_path / "data/history/events/watch.log").read_text()
 
 
-def _pub(tmp_path, env=None):
-    cmd = 'source scripts/lib_publish.sh; publish_dir "msg" data/history/events; echo "RC=$?"'
+def _sh(tmp_path, body, env=None):
+    cmd = "source scripts/lib_publish.sh; " + body
     return subprocess.run(["zsh", "-c", cmd], cwd=tmp_path, capture_output=True, text=True,
                           env={**os.environ, "PUBLISH_NO_PUSH": "1", **(env or {})})
 
 
+def _commit_files(tmp_path):
+    return _git(tmp_path, "show", "--name-only", "--format=", "HEAD").stdout.split()
+
+
+EV = "data/history/events"
+
+
+def _prep(tmp_path):
+    _repo(tmp_path)
+    ev = tmp_path / EV; ev.mkdir(parents=True, exist_ok=True)
+    (ev / "old.txt").write_text("v0"); _git(tmp_path, "add", "-A"); _git(tmp_path, "commit", "-qm", "base")
+    return ev
+
+
+@pytest.mark.skipif(shutil.which("zsh") is None, reason="需要 zsh")
+def test_n01_prior_dirty_file_in_same_dir_is_not_published(tmp_path):
+    """Codex 009 N01 复现：运行前他人改了 old.txt，本次新建 new.txt → 只提交 new.txt。"""
+    ev = _prep(tmp_path)
+    (ev / "old.txt").write_text("someone else's edit")
+    r = _sh(tmp_path, f'publish_begin {EV}; echo new > {EV}/new.txt; publish_dirs m {EV}; echo "RC=$?"')
+    assert "RC=0" in r.stdout, r.stdout + r.stderr
+    assert _commit_files(tmp_path) == [f"{EV}/new.txt"]
+    assert (ev / "old.txt").read_text() == "someone else's edit" and "old.txt" in _git(tmp_path, "status", "--porcelain").stdout
+
+
+@pytest.mark.skipif(shutil.which("zsh") is None, reason="需要 zsh")
+def test_n01_conflict_when_run_rewrites_foreign_dirty_path(tmp_path):
+    ev = _prep(tmp_path)
+    (ev / "old.txt").write_text("foreign")
+    r = _sh(tmp_path, f'publish_begin {EV}; echo ours > {EV}/old.txt; echo n > {EV}/new.txt; publish_dirs m {EV}; echo "RC=$?"')
+    assert "RC=5" in r.stdout and "PUBLISH_CONFLICT" in r.stdout
+    assert _git(tmp_path, "log", "--oneline").stdout.count("\n") == 2, "冲突时一件都不提交"
+
+
+@pytest.mark.skipif(shutil.which("zsh") is None, reason="需要 zsh")
+def test_n01_own_unpublished_output_is_recognised_next_run(tmp_path):
+    """本任务上次写了文件但没走到发布（早退），下次运行仍认得是自己的产物。"""
+    ev = _prep(tmp_path)
+    env = {"PUBLISH_PENDING": str(tmp_path / "pending")}
+    r1 = _sh(tmp_path, f"publish_begin {EV}; trap 'publish_record {EV}' EXIT; echo fail > {EV}/FAILURE.txt; exit 0", env)
+    assert r1.returncode == 0 and "FAILURE.txt" in (tmp_path / "pending").read_text()
+    r2 = _sh(tmp_path, f'publish_begin {EV}; publish_dirs m {EV}; echo "RC=$?"', env)
+    assert "RC=0" in r2.stdout and _commit_files(tmp_path) == [f"{EV}/FAILURE.txt"]
+    assert "FAILURE.txt" not in (tmp_path / "pending").read_text(), "已发布的从待发布记录删除"
+
+
+@pytest.mark.skipif(shutil.which("zsh") is None, reason="需要 zsh")
+def test_n01_refuses_without_begin(tmp_path):
+    _prep(tmp_path)
+    r = _sh(tmp_path, f'echo x > {EV}/new.txt; publish_dirs m {EV}; echo "RC=$?"')
+    assert "RC=6" in r.stdout and "PUBLISH_REFUSED" in r.stdout
+
+
 @pytest.mark.skipif(shutil.which("zsh") is None, reason="需要 zsh")
 def test_publish_does_not_sweep_in_foreign_staged_files(tmp_path):
-    _repo(tmp_path)
+    ev = _prep(tmp_path)
     (tmp_path / "other.py").write_text("someone else's work"); _git(tmp_path, "add", "other.py")
-    ev = tmp_path / "data/history/events"; ev.mkdir(parents=True, exist_ok=True)
-    (ev / "2026-09-28_CPI-after.json").write_text("{}")
-    r = _pub(tmp_path)
+    r = _sh(tmp_path, f'publish_begin {EV}; echo 1 > {EV}/2026-09-28_CPI-after.json; publish_dirs m {EV}; echo "RC=$?"')
     assert "RC=3" in r.stdout and "PUBLISH_BLOCKED" in r.stdout
     assert _git(tmp_path, "diff", "--cached", "--name-only").stdout.split() == ["other.py"], "他人暂存原样保留"
-    assert _git(tmp_path, "log", "--oneline").stdout.count("\n") == 1, "什么都没提交"
-    _git(tmp_path, "reset", "-q", "other.py")                   # 他人自己处理完暂存区后
-    r2 = _pub(tmp_path)
-    assert "RC=0" in r2.stdout
-    files = _git(tmp_path, "show", "--name-only", "--format=", "HEAD").stdout.split()
-    assert files == ["data/history/events/2026-09-28_CPI-after.json"], files
-    assert (tmp_path / "other.py").exists() and "other.py" in _git(tmp_path, "status", "--porcelain").stdout
 
 
 @pytest.mark.skipif(shutil.which("zsh") is None, reason="需要 zsh")
 def test_publish_dirs_multi_and_daily_wiring(tmp_path):
     _repo(tmp_path)
-    for rel in ("data/snapshots/a.json", "data/history/b.json", "outside.txt"):
-        f = tmp_path / rel; f.parent.mkdir(parents=True, exist_ok=True); f.write_text("1")
-    cmd = 'source scripts/lib_publish.sh; publish_dirs "m" data/snapshots data/history data/reports; echo "RC=$?"'
-    r = subprocess.run(["zsh", "-c", cmd], cwd=tmp_path, capture_output=True, text=True,
-                       env={**os.environ, "PUBLISH_NO_PUSH": "1"})
-    assert "RC=0" in r.stdout
-    files = sorted(_git(tmp_path, "show", "--name-only", "--format=", "HEAD").stdout.split())
-    assert files == ["data/history/b.json", "data/snapshots/a.json"], "目录外的 outside.txt 不得被卷入"
+    (tmp_path / "outside.txt").write_text("1")
+    r = _sh(tmp_path, 'publish_begin data/snapshots data/history data/reports; '
+                      'mkdir -p data/snapshots data/history; echo 1 > data/snapshots/a.json; echo 1 > data/history/b.json; '
+                      'publish_dirs m data/snapshots data/history data/reports; echo "RC=$?"')
+    assert "RC=0" in r.stdout, r.stdout + r.stderr
+    assert sorted(_commit_files(tmp_path)) == ["data/history/b.json", "data/snapshots/a.json"]
+    for f in ("daily_update", "event_watch", "session_hooks", "spread_log"):
+        src = (ROOT / "scripts" / f"{f}.sh").read_text("utf-8")
+        assert "publish_begin" in src and "trap 'publish_record" in src, f
+        assert 'PUBLISH_PENDING="data/logs/.publish_pending_auto"; export PUBLISH_PENDING' in src, f
     src = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
-    tail = src[src.index("source scripts/lib_publish.sh"):]
+    tail = src[src.index("009 N01：只提交本次运行产物"):]
     assert "publish_dirs" in tail and "\ngit commit" not in tail and "\ngit add" not in tail

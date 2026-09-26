@@ -53,6 +53,13 @@ notify() {  # $1=标题 $2=正文
   /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Glass\"" 2>/dev/null || true
 }
 
+# Codex 009 N01：本脚本写 data/history/shadow（盘中报价）与 data/snapshots/options_open（全链快照），
+# 由每日任务统一提交。登记本次写过的文件，否则每日任务会把它们当成「他人改动」不再备份。
+source scripts/lib_publish.sh
+PUBLISH_PENDING="data/logs/.publish_pending_auto"; export PUBLISH_PENDING
+publish_begin data/history data/snapshots
+trap 'publish_record data/history data/snapshots' EXIT
+
 # ── ④⑤ 影子账盘口窗口（v3，Codex 005 R02）──────────────────────────
 # ⚠️ 放在①②③之前：那几个窗口里有 exit 0（撞锁等），排在后面会被跳过。
 # ④ ET 10:00–10:20：当日入场 + 持仓标记；⑤ 核心收市前 30~15 分钟：持仓标记与到期前平仓（主终点）。

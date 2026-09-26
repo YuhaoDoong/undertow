@@ -45,9 +45,21 @@ class CboeHistorySource:
         # ⚠️ high/low 缺失时整行跳过而不是折成 close —— 折值会让 MAE 系统性偏小，
         #    而 MAE 正是卖方结构判断「有没有被盘中击穿」的唯一依据（低估风险比高估危险）。
         rowsc = []
+        by_date = {}
         for r in rows:
             try:
                 d = datetime.strptime(r["date"], "%Y-%m-%d").date()
+            except (KeyError, ValueError, TypeError):
+                continue
+            # 同日重复不能算第二根收益/第二个交易日。仅合并完全相同的 OHLCV；
+            # 冲突没有可靠先后顺序，不能用任意一条悄悄改变历史结果。
+            ohlcv = tuple(r.get(field) for field in ("open", "high", "low", "close", "volume"))
+            if d in by_date:
+                if ohlcv != by_date[d]:
+                    raise DataSourceError(f"CBOE 历史同日 OHLCV 冲突（{sym}, {d}）")
+                continue
+            by_date[d] = ohlcv
+            try:
                 c = float(r["close"])
                 h = float(r["high"])
                 lo = float(r["low"])

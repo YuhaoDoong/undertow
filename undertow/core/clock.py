@@ -42,7 +42,8 @@ PRE, INTRADAY, POST = "pre", "intraday", "post"
 def capture_phase(unix_ts: float) -> str:
     """快照抓取时刻落在美东的哪个阶段。
 
-    周末/节假日按 POST 处理（信息已完整，但要等下一个交易日才能用）。
+    周末按 POST 处理；本函数没有交易所日历。节假日由 decision_session
+    使用调用方提供的交易日列表处理。
     """
     t = datetime.fromtimestamp(unix_ts, ET)
     if t.weekday() >= 5:
@@ -66,10 +67,15 @@ def decision_session(unix_ts: float, trading_days: list[date]) -> date | None:
     trading_days 必须是升序的交易日列表（用日线序列的日期即可）。
     返回 None 也可能是因为 trading_days 没有覆盖到那之后的日子。
     """
+    d = datetime.fromtimestamp(unix_ts, ET).date()
+    # 在日历覆盖内，明确不属于交易日的日期全天都只能顺延。
+    # 不能先按钟点判“盘中”，否则休市日中午的有效快照会被无故丢掉。
+    # 覆盖之外不猜测缺日期是休市，保留原来的未知/盘中剔除行为。
+    if trading_days and trading_days[0] <= d <= trading_days[-1] and d not in trading_days:
+        return next((x for x in trading_days if x > d), None)
     phase = capture_phase(unix_ts)
     if phase == INTRADAY:
         return None
-    d = datetime.fromtimestamp(unix_ts, ET).date()
     if phase == PRE and d in trading_days:
         return d
     for x in trading_days:              # 升序，取第一个严格晚于 d 的交易日

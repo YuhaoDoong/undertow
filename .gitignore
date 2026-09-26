@@ -58,3 +58,10 @@ data/backtest/step4_holding.jsonl
 /docs/author_notes.md
 /docs/author_playbook.md
 data/logs/.status_*.json
+
+# ── 台账并发锁与原子写临时文件（spread_ledger，2026-09-26）──
+# 锁文件只协调同机进程，临时文件在 os.replace 前存在；两者都不是数据。
+# 每日自动任务会 `git add data/history`，不忽略就会把它们提交进仓库。
+# ⚠️ 损坏隔离副本 *.corrupt-* 【不忽略】—— 那是历史被损坏的唯一证据。
+data/history/**/*.lock
+data/history/**/.*.tmp

@@ -182,14 +182,16 @@ def test_台账记录无候选的日子(tmp_path):
     assert rows[0]["spot"] == 60.0
 
 
-def test_台账同日重复记录会覆盖(tmp_path):
-    """研报一天可能重跑多次（定时任务四个时点），不能累积成多条。"""
+def test_台账同日重复记录冻结首份冲突报错(tmp_path):
+    """研报重跑不能把事后候选替换进前瞻台账。"""
     from undertow.analyze import spread_ledger as sled
-    for r in ("A", "B"):
+    sled.record("silver", "SLV", date(2026, 9, 2), 60.0,
+                ws.Verdict(False, "A", params={}), root=tmp_path)
+    with pytest.raises(sled.LedgerConflictError):
         sled.record("silver", "SLV", date(2026, 9, 2), 60.0,
-                    ws.Verdict(False, r, params={}), root=tmp_path)
+                    ws.Verdict(False, "B", params={}), root=tmp_path)
     rows = sled.load("silver", root=tmp_path)
-    assert len(rows) == 1 and rows[0]["reason"] == "B"
+    assert len(rows) == 1 and rows[0]["reason"] == "A"
 
 
 def test_台账回填用到期收盘判破卖腿(tmp_path):

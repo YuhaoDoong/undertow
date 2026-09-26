@@ -66,6 +66,12 @@ def test_日历没覆盖到就返回None而不是猜():
     assert decision_session(ts(2026, 12, 25, 20, 0), TD) is None
 
 
+@pytest.mark.parametrize("hour", [6, 10, 12, 15, 20])
+def test_日历覆盖内的休市日全天顺延(hour):
+    td = [date(2026, 9, 4), date(2026, 9, 8), date(2026, 9, 9)]
+    assert decision_session(ts(2026, 9, 7, hour, 0), td) == date(2026, 9, 8)
+
+
 def test_冬令时也按美东判定():
     """1 月是 EST(-5)。用固定 UTC 偏移会在换季时错一小时，
     正好可能把盘前判成盘中。"""

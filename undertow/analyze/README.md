@@ -48,7 +48,7 @@
 | `condor.py` | 铁鹰：区间震荡 + 偏卖方环境的规则化结构映射。<br>Iron condor for range/seller regimes. |
 | `wall_spread.py` | **墙位卖方价差 v3**（三步法定版，只激活白银；候选 ≠ 建议下单，生死线未过，见文件头）。<br>⛔ 2026-09-26 更正：第三步「破卖腿即平减损 76%」前视作废；第四~八步结论已按 Codex 审查降级 —— 墙「尚未检出增量支撑」（不是无用），ATR 扩张为探索性风险标签（不是已验证过滤器），增仓定侧为待检假说。现行研究方案：墙选腿 A vs 无 OI 距离 B 的前瞻配对影子账（`shadow_ledger.py`）。详见 `docs/wall_spread_3steps.md` 顶部更正注记与 `GPTcom/` 汇总报告。 |
 | `spread_ledger.py` | **卖方价差前瞻台账**：研报每次生成时 `record()` 当日候选（无候选也记，否则覆盖率无从统计），`backfill()` 事后用真实收盘回填破卖腿/损益。2026-09-25 起随行记录 `context`：决策日 ATR 扩张比/分位、布林带宽扩张比、近价局部墙（`decision_context` + `gamma.local_wall`）——**只记录不过滤**，攒第四/五步要的前瞻样本。 |
-| `shadow.py` | **前瞻配对影子账的纯计算层**（W05/W06，Codex 004 蓝图）：预登记配置 `CONFIG`（版本+hash，改动即新版本）；v2：A=墙选腿、B1/B2=按 ATR 距离、B3=按卖腿 |Δ|≈0.20 选腿；期限结构倒挂标签；两个盘口时点与 stop1x/stop2x 口径；账本按配置版本分目录；两腿报价情景（保守/中价/中价让 25%，缺价为 None 不补 last）；三种突破分开（窗末/期间收盘/盘中）；多口径损益（hold_quote_conservative 为主终点）；按日期整块 bootstrap 的 A 与 A−B 区间、零事件精确上界。无 I/O，编排在 `undertow/shadow_cli.py`。 |
+| `shadow.py` | **前瞻配对影子账的纯计算层**（W05/W06，Codex 004 蓝图）：预登记配置 `CONFIG`（版本+hash，改动即新版本）；v3（Codex 005）：A=墙选腿、B1/B2=按 ATR 距离、B3=按卖腿 |Δ|≈0.20 选腿，主比较 A vs B1；所有臂同美元宽度（`spread_width` = 2×众数间隔，保护腿不在网格上 → `no_same_width_protective`，不偷换宽度）；账本只存原始盘口尝试，`window_leg` 按预登记质量规则（挂单量>0、无错误、盘中、第一次合格）派生入场/标记；`settle_leg` 结算：主终点 quote_entry_expiry_intrinsic，次终点 pre_expiry_close_exit / close_beyond_next_open_exit / stop1x/stop2x_twice_daily（缺标记 → path_unknown，平仓成本超宽度保留原值不截断）/ snapshot_model；循环移动块 bootstrap（5 日块、10 日敏感性、每次重采样 ≥4 块否则样本不足）；零事件精确上界。无 I/O，编排在 `undertow/shadow_cli.py`。 |
 
 ## Trade planning / 交易计划（盈亏比 + 斐波，波段交易纪律落地）
 

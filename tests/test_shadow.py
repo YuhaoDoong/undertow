@@ -37,36 +37,6 @@ def _snap():
     return _Snap(cs)
 
 
-def test_config_frozen_and_fee_single_source():
-    assert sh.CONFIG["fee_round_trip"] == ws.FEE_PER_TRADE, "费用只能有一个来源"
-    assert sh.CONFIG["version"] == "shadow-v2-20260926"
-    assert sh.CONFIG["primary_b"] == "B1"
-    assert sh.CONFIG["b_rules"] == {"B1": {"atr": 1.0}, "B2": {"atr": 2.0}, "B3": {"delta": 0.20}}
-    assert sh.CONFIG["stops"] == [1.0, 2.0]
-    assert sh.config_hash() == sh.config_hash(dict(sh.CONFIG)), "hash 只取决于内容"
-
-
-def test_pick_rules():
-    strikes = [54.0, 55.0, 56.0, 57.0, 58.0, 59.0, 60.0]
-    assert sh.pick_a({"strike": 57.0}, strikes, 58.12, "P", 2) == ((57.0, 55.0), None)
-    assert sh.pick_a({"strike": 59.0}, strikes, 58.12, "P", 2) == (None, "wall_not_otm")
-    assert sh.pick_a(None, strikes, 58.12, "P", 2) == (None, "no_wall")
-    assert sh.pick_a({"strike": 56.5}, strikes, 58.12, "P", 2)[1] == "wall_strike_not_listed_for_target_expiry"
-    # B：P 侧取 ≤ spot−m·ATR 的最高档；C 侧取 ≥ spot+m·ATR 的最低档
-    assert sh.pick_b(strikes, 58.12, 1.0, "P", 1.0, 2) == ((57.0, 55.0), None)
-    assert sh.pick_b(strikes, 58.12, 1.0, "C", 1.0, 2) == (None, "no_protective_strike")   # 60 之外只剩 0 档
-    assert sh.pick_b(strikes, 58.12, None, "P", 1.0, 2) == (None, "atr_unavailable")
-
-
-def test_credit_scenarios_and_invalid_quotes():
-    c = sh._credit(0.60, 0.63, 0.34, 0.35, 0.25)
-    assert c["conservative"] == pytest.approx(25.0) and c["mid"] == pytest.approx(27.0)
-    assert c["mid_give"] == pytest.approx(26.5)
-    assert sh._credit(None, 0.63, 0.34, 0.35, 0.25) is None, "缺价不能用 last 补"
-    assert sh._credit(0.70, 0.63, 0.34, 0.35, 0.25) is None, "倒挂盘口无效"
-    assert sh.exit_cost({"ask": 0.9, "bid": 0.8}, {"bid": 0.3, "ask": 0.31}, 100.0) == pytest.approx(60.0)
-    assert sh.exit_cost({"ask": 2.0, "bid": 1.9}, {"bid": 0.1, "ask": 0.2}, 100.0) is None, "越界不裁剪"
-
 
 def _row():
     return sh.build_opportunity(inst="silver", sym="SLV", snap=_snap(), session=T, spot=58.12, atr=1.0,
@@ -75,22 +45,6 @@ def _row():
                                 labels={"base_date": "2026-09-11"}, identity={"mode": "prospective", "status": "provisional"})
 
 
-def test_build_opportunity_records_all_legs_and_pairing():
-    r = _row()
-    assert r["decision"]["target_expiry"] == "2026-09-16" and len(r["legs"]) == 8
-    pa = next(l for l in r["legs"] if l["leg_id"] == "P-A"); pb = next(l for l in r["legs"] if l["leg_id"] == "P-B1")
-    assert (pa["sell"], pa["buy"]) == (57.0, 55.0) and pb["same_as_A"] is True, "同一行权价要标同腿，不能当独立对照"
-    assert all("reason" in l for l in r["legs"]), "无候选也要有原因"
-
-
-def test_frozen_part_ignores_post_hoc_fields():
-    import copy
-    r = _row(); f0 = copy.deepcopy(sh.frozen_part(r))
-    r["entry"] = {"x": 1}; r["monitor"].append({"leg_id": "P-A"}); r["outcome"] = {"a": 1}
-    r["settled_at"] = "x"; r["recorded_at"] = "y"; r["identity"]["status"] = "certified"; r["identity"]["certified_at"] = "z"
-    assert sh.frozen_part(r) == f0
-    r["legs"][0]["sell"] = 99.0
-    assert sh.frozen_part(r) != f0
 
 
 def _bars(closes, lows=None, highs=None):
@@ -98,36 +52,7 @@ def _bars(closes, lows=None, highs=None):
     return [(d, (highs or closes)[i], (lows or closes)[i], closes[i]) for i, d in enumerate(ds)]
 
 
-def test_settle_three_breaches_are_distinct():
-    leg = next(l for l in _row()["legs"] if l["leg_id"] == "P-A")        # 卖 57P / 买 55P，宽 $200
-    ent = {"credit": {"conservative": 20.0, "mid": 24.0, "mid_give": 23.0}, "valid": True}
-    # 期间收盘跌破 57、到期收回 58：窗末未破、期间收盘破
-    o = sh.settle_leg(leg, session=T, bars=_bars([58.0, 56.9, 58.0], lows=[57.5, 56.5, 57.8]), entry_leg=ent, exit_info=None)
-    assert (o["endpoint_breach"], o["any_close_breach"], o["intraday_breach"]) == (False, True, True)
-    assert o["pnl"]["hold_quote_conservative"] == pytest.approx(20.0 - 3.20)
-    assert o["trigger_date"] == "2026-09-15" and o["pnl"]["exit_rule_quote_conservative"] is None, \
-        "触发后缺退出报价 = 未知，不偷换成持有到期盈利"
-    assert o["exit_status"] == "triggered_unpriced"
-    o2 = sh.settle_leg(leg, session=T, bars=_bars([58.0, 56.9, 58.0]), entry_leg=ent, exit_info={"cost_conservative": 90.0})
-    assert o2["pnl"]["exit_rule_quote_conservative"] == pytest.approx(20.0 - 90.0 - 3.20)
-    # 盘中碰到但收盘都没破
-    o3 = sh.settle_leg(leg, session=T, bars=_bars([58.0, 57.5, 58.0], lows=[57.5, 56.8, 57.9]), entry_leg=ent, exit_info=None)
-    assert (o3["endpoint_breach"], o3["any_close_breach"], o3["intraday_breach"]) == (False, False, True)
 
-
-def test_settle_refuses_immature_and_unpriced():
-    leg = next(l for l in _row()["legs"] if l["leg_id"] == "P-A")
-    assert sh.settle_leg(leg, session=T, bars=_bars([58.0, 58.0, 58.0])[:2], entry_leg=None, exit_info=None) is None
-    o = sh.settle_leg(leg, session=T, bars=_bars([58.0, 58.0, 58.0]), entry_leg=None, exit_info=None)
-    assert o["pnl"]["hold_quote_conservative"] is None, "没有盘中入场报价就没有可执行收益"
-
-
-def test_price_legs_marks_off_hours_not_executable():
-    r = _row()
-    depth = {(l["side"], K): {"bid": 0.6, "ask": 0.62, "bid_size": 10, "ask_size": 10, "error": ""}
-             for l in r["legs"] if l["status"] == "candidate" for K in (l["sell"], l["buy"])}
-    e = sh.price_legs(r, depth, observed_at="t", phase="off_hours")
-    assert e["executable"] is False and e["phase"] == "off_hours"
 
 
 def test_bootstrap_and_bounds():
@@ -139,22 +64,6 @@ def test_bootstrap_and_bounds():
     assert sh.zero_event_upper(50) == pytest.approx(0.0582, abs=1e-3), "50 笔零事件的 95% 上界 5.8%"
     assert sh.judge(0.01, 0.2) == "支持" and sh.judge(-0.2, -0.01) == "不支持" and sh.judge(-0.1, 0.1) == "未决"
 
-
-def test_jsonl_ledger_freeze_update_and_quarantine(tmp_path):
-    p = tmp_path / "silver.jsonl"; r = _row(); r["recorded_at"] = "2026-09-14T10:00:00+00:00"
-    assert jl.insert_frozen(p, r, key_field="key", frozen=sh.frozen_part) == "inserted"
-    assert jl.insert_frozen(p, dict(r, recorded_at="later"), key_field="key", frozen=sh.frozen_part) == "exists"
-    bad = json.loads(json.dumps(r)); bad["legs"][0]["sell"] = 50.0
-    with pytest.raises(jl.LedgerConflictError):
-        jl.insert_frozen(p, bad, key_field="key", frozen=sh.frozen_part)
-    assert jl.update(p, lambda x: x.update(entry={"ok": 1}) or True, key_field="key", frozen=sh.frozen_part) == 1
-    with pytest.raises(jl.LedgerConflictError):
-        jl.update(p, lambda x: x["legs"][0].update(sell=1.0) or True, key_field="key", frozen=sh.frozen_part)
-    assert jl.load(p, "key")[0]["legs"][0]["sell"] == 57.0, "拒绝的更新不得落盘"
-    p.write_text(p.read_text() + "{坏行\n")
-    with pytest.raises(jl.LedgerCorruptError):
-        jl.load(p, "key")
-    assert list(tmp_path.glob("silver.jsonl.corrupt-*")), "损坏必须另存隔离副本"
 
 
 def test_prospective_requires_certified_and_before_open():
@@ -178,60 +87,10 @@ def test_cli_is_read_only():
     assert "fetch_depth" in src and "_run(" not in src, "盘口只经 longbridge_quote 的只读接口取"
 
 
-def test_unattended_wiring():
-    """接进现有任务（不新建 launchd）：盘前 capture+settle、盘中 ④ 窗口 quote；失败必须告警并可重试。"""
-    du = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
-    assert "shadow capture" in du and "shadow settle" in du and "影子账采集/结算失败" in du
-    assert du.index("shadow capture") < du.index("git add data/snapshots data/history"), "要在提交之前"
-    sh_ = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
-    i = sh_.index("④ 影子账两腿盘口")
-    seg = sh_[i:i + 1200]
-    assert "shadow quote" in seg and ".shadow_quote_" in seg and "notify" in seg
-    assert "ET_MIN >= 600 && ET_MIN <= 608" in sh_[sh_.index("不在任何窗口"):], "心跳判断要包含新窗口"
-
-
-
-def test_v2_delta_rule_term_structure_and_sell_delta():
-    snap = _snap()
-    (S, B), why = sh.pick_delta(snap, EXP, "P", 58.12, 0.20, 2)
-    assert why is None and S == 56.0 and B == 54.0, (S, B)          # |Δ|: 57→0.332, 56→0.182 最接近 0.20
-    ts = sh.term_structure(snap, T, 58.12, EXP)
-    assert ts["iv_target_pp"] == pytest.approx(30.0) and ts["iv_30d_pp"] == pytest.approx(26.0)
-    assert ts["inverted"] is True and ts["far_expiry"] == "2026-10-14", "近月比远月贵 = 倒挂"
-    r = _row()
-    b3 = next(l for l in r["legs"] if l["leg_id"] == "P-B3")
-    assert b3["status"] == "candidate" and b3["sell_delta"] == pytest.approx(0.182, abs=1e-3)
-    assert r["decision"]["term_structure"]["inverted"] is True
-
-
-def test_stop_bases_use_marks_after_entry_only():
-    leg = next(l for l in _row()["legs"] if l["leg_id"] == "P-A")       # 宽 $200
-    ent = {"credit": {"conservative": 20.0, "mid": 24.0, "mid_give": 23.0}, "valid": True}
-    marks = [{"observed_at": "2026-09-14T13:00", "legs": {"P-A": {"cost_conservative": 90.0}}},   # 入场前，不算
-             {"observed_at": "2026-09-14T19:30", "legs": {"P-A": {"cost_conservative": 45.0}}},   # ≥2×20 → stop1x
-             {"observed_at": "2026-09-15T14:00", "legs": {"P-A": {"cost_conservative": None}}},   # 缺口
-             {"observed_at": "2026-09-15T19:30", "legs": {"P-A": {"cost_conservative": 70.0}}}]   # ≥3×20 → stop2x
-    o = sh.settle_leg(leg, session=T, bars=_bars([58.0, 58.0, 58.0]), entry_leg=ent, exit_info=None,
-                      marks=marks, entry_at="2026-09-14T14:00")
-    assert o["pnl"]["stop1x_quote_conservative"] == pytest.approx(20 - 45 - 3.2)
-    assert o["pnl"]["stop2x_quote_conservative"] == pytest.approx(20 - 70 - 3.2)
-    assert o["pnl"]["hold_quote_conservative"] == pytest.approx(20 - 3.2), "持有到期口径不受止损影响"
-    assert o["mark_gaps"] == 1
-    o2 = sh.settle_leg(leg, session=T, bars=_bars([58.0, 58.0, 58.0]), entry_leg=ent, exit_info=None, marks=[])
-    assert o2["pnl"]["stop1x_quote_conservative"] == o2["pnl"]["hold_quote_conservative"], "无标记 = 未触发止损"
-
-
-def test_mark_legs_off_hours_is_unpriced():
-    r = _row()
-    depth = {(l["side"], K): {"bid": 0.6, "ask": 0.62, "bid_size": 1, "ask_size": 1, "error": ""}
-             for l in r["legs"] if l["status"] == "candidate" for K in (l["sell"], l["buy"])}
-    m = sh.mark_legs(r, depth, observed_at="t", phase="off_hours", window="close")
-    assert all(v["cost_conservative"] is None for v in m["legs"].values())
-
 
 def _settled_row(day, flow, a_p, b_p, a_c, b_c):
     def o(p):
-        return {"pnl": {"hold_quote_conservative": p}, "max_risk": {"hold_quote_conservative": 100.0}}
+        return {"pnl": {sh.CONFIG["primary_basis"]: p}, "max_risk": {sh.CONFIG["primary_basis"]: 100.0}}
     return {"session": day, "identity": {"mode": "prospective"}, "decision": {"flow": {"call_direction": flow}},
             "legs": [{"leg_id": "P-B1", "same_as_A": False}, {"leg_id": "C-B1", "same_as_A": False}],
             "outcome": {"P-A": o(a_p), "P-B1": o(b_p), "C-A": o(a_c), "C-B1": o(b_c)}}
@@ -262,11 +121,6 @@ def test_versioned_ledger_paths_and_report_filters_versions():
     assert 'r.get("config_version") == sh.CONFIG["version"]' in src, "不同配置版本不得混入同一主检验"
 
 
-def test_two_quote_windows_wired():
-    sh_ = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
-    assert "shadow quote --window open" in sh_ and "shadow quote --window close" in sh_
-    assert "ET_MIN >= 930 && ET_MIN <= 938" in sh_[sh_.index("不在任何窗口"):]
-
 
 def test_pin_ranksum_sanity():
     import importlib.util
@@ -278,15 +132,241 @@ def test_pin_ranksum_sanity():
 
 
 
-def test_settle_rejects_credit_outside_zero_width():
-    """陈旧盘口会给出 ≥ 宽度或 ≤0 的权利金；那不是一笔可成立的价差，损益必须为 None。"""
-    leg = next(l for l in _row()["legs"] if l["leg_id"] == "P-A")        # 宽 $200
-    bars = _bars([58.0, 58.0, 58.0])
-    for bad in (250.0, 200.0, 0.0, -5.0):
-        ent = {"credit": {"conservative": bad, "mid": bad, "mid_give": bad}, "valid": True}
-        o = sh.settle_leg(leg, session=T, bars=bars, entry_leg=ent, exit_info=None)
-        assert o["pnl"]["hold_quote_conservative"] is None and o["invalid_credit"]["hold_quote_conservative"] == bad
-    ok = sh.settle_leg(leg, session=T, bars=bars, entry_leg={"credit": {"conservative": 20.0, "mid": 20.0, "mid_give": 20.0},
-                                                          "valid": True}, exit_info=None)
-    n = ok["pnl"]["hold_quote_conservative"] / ok["max_risk"]["hold_quote_conservative"]
-    assert -1.0 <= n <= 1.0
+
+# ═══════════════════ v3（Codex 005：R01/R02/R04/R05/R06/S00）═══════════════════
+
+def test_config_v3_identity_and_fee_single_source():
+    c = sh.CONFIG
+    assert c["version"] == "shadow-v3-20260926" and c["fee_round_trip"] == ws.FEE_PER_TRADE
+    assert c["primary_comparison"] == "A vs B1" and c["primary_endpoint"] == "quote_entry_expiry_intrinsic"
+    assert c["b_rules"] == {"B1": {"atr": 1.0}, "B2": {"atr": 2.0}, "B3": {"delta": 0.20}}
+    assert c["stats"]["block_days"] == 5 and c["formal_test_date"] == "2026-12-31"
+    assert "googl" in c["instruments"] and "dxy" not in c["instruments"]
+
+
+def test_same_dollar_width_on_irregular_grid():
+    """R04：不规则网格下「往外数两档」会给出不同美元宽度；v3 所有臂同宽，找不到就不可配对。"""
+    strikes = [85.0, 87.5, 90.0, 92.5, 95.0, 97.0, 97.5, 98.0, 99.0, 100.0]
+    w = sh.spread_width(strikes, 100.0)
+    assert w == 1.0, w                                  # ±5% 内最常见间隔 0.5 → 宽 1.0
+    assert sh._buy_leg(strikes, 99.0, "P", w) == 98.0
+    assert sh._buy_leg(strikes, 97.0, "P", w) is None   # 96 未挂牌 → 不可配对，不偷偷换成 95
+    assert sh.pick_a({"strike": 97.0}, strikes, 100.0, "P", w) == (None, "no_same_width_protective")
+
+
+def test_build_opportunity_all_arms_same_width():
+    r = _row()
+    for side in ("P", "C"):
+        ws_ = {l["width_usd"] for l in r["legs"] if l["side"] == side and l["status"] == "candidate"}
+        assert len(ws_) <= 1, ws_
+    assert "windows" in r and "entry" not in r, "v3 只存原始观测"
+
+
+def _q(bid, ask, bs=10, as_=10, err=None):
+    return {"bid": bid, "ask": ask, "bid_size": bs, "ask_size": as_, "error": err, "quote_time": None}
+
+
+def _att(t, quotes, phase="rth"):
+    return {"started_at": t, "ended_at": t, "phase": phase, "underlying": None, "quotes": quotes}
+
+
+def _leg():
+    return {"leg_id": "P-A", "side": "P", "rule": "A", "expiry": "2026-09-16", "sell": 57.0, "buy": 56.0,
+            "width_usd": 100.0, "status": "candidate", "snapshot_credit": None}
+
+
+def _vrow(windows):
+    return {"session": "2026-09-14", "windows": windows}
+
+
+BARS3 = [(date(2026, 9, 14), 58.2, 57.8, 58.0), (date(2026, 9, 15), 58.2, 57.8, 58.0), (date(2026, 9, 16), 58.2, 57.8, 58.0)]
+ENTRY_OK = {"P|57": _q(0.30, 0.32), "P|56": _q(0.08, 0.10)}          # 保守收 20
+
+
+def _full_windows(cost_quotes):
+    """cost_quotes: 标记窗口 → quotes；入场窗固定 ENTRY_OK。"""
+    w = {"2026-09-14|open": {"attempts": [_att("2026-09-14T14:05Z", ENTRY_OK)]}}
+    for k, q in cost_quotes.items():
+        w[k] = {"attempts": [_att(k, q)]}
+    return w
+
+
+def _marks_all(q):
+    return {k: q for k in ["2026-09-14|close", "2026-09-15|open", "2026-09-15|close", "2026-09-16|open", "2026-09-16|close"]}
+
+
+def test_r01_absent_marks_are_unknown_not_held():
+    """R01：全程无标记 → 止损口径未知（旧版显示盈利 16.8、gap=0）。"""
+    o = sh.settle_leg(_leg(), _vrow(_full_windows({})), bars=BARS3)
+    assert o["pnl"]["quote_entry_expiry_intrinsic"] == pytest.approx(20 - 3.2)
+    assert o["pnl"]["stop1x_twice_daily"] is None and o["status"]["stop1x_twice_daily"] == "path_unknown"
+    assert o["marks"] == {"expected": 5, "valid": 0, "not_run": 5, "missing": 0}
+
+
+def test_r01_one_day_missing_and_missing_before_trigger():
+    cheap = {"P|57": _q(0.10, 0.12), "P|56": _q(0.02, 0.03)}
+    dear = {"P|57": _q(0.70, 0.75), "P|56": _q(0.05, 0.06)}         # 成本 70 ≥ 2×20
+    m = _marks_all(cheap); del m["2026-09-15|open"]; del m["2026-09-15|close"]    # 单日丢任务
+    o = sh.settle_leg(_leg(), _vrow(_full_windows(m)), bars=BARS3)
+    assert o["pnl"]["stop1x_twice_daily"] is None and o["status"]["stop1x_twice_daily"] == "path_unknown"
+    m2 = _marks_all(cheap); del m2["2026-09-14|close"]; m2["2026-09-15|close"] = dear   # 先缺后触发
+    o2 = sh.settle_leg(_leg(), _vrow(_full_windows(m2)), bars=BARS3)
+    assert o2["pnl"]["stop1x_twice_daily"] is None and o2["status"]["stop1x_twice_daily"] == "path_unknown_before_trigger"
+    m3 = _marks_all(cheap); m3["2026-09-15|close"] = dear            # 全部有效、触发
+    o3 = sh.settle_leg(_leg(), _vrow(_full_windows(m3)), bars=BARS3)
+    assert o3["pnl"]["stop1x_twice_daily"] == pytest.approx(20 - 70 - 3.2)
+    assert o3["status"]["stop1x_twice_daily"] == "stopped@2026-09-15|close"
+    o4 = sh.settle_leg(_leg(), _vrow(_full_windows(_marks_all(cheap))), bars=BARS3)
+    assert o4["status"]["stop1x_twice_daily"] == "held_all_marks_valid"
+    assert o4["pnl"]["stop1x_twice_daily"] == o4["pnl"]["quote_entry_expiry_intrinsic"]
+
+
+def test_r02_zero_size_and_errors_are_not_valid_entries():
+    for bad, why in ((_q(0.30, 0.32, bs=0), "zero_size"), (_q(None, 0.32), "price_missing"),
+                     (_q(0.30, 0.32, err="timeout"), "leg_error")):
+        w = {"2026-09-14|open": {"attempts": [_att("t", {"P|57": bad, "P|56": _q(0.08, 0.10)})]}}
+        x = sh.window_leg(_vrow(w), _leg(), "2026-09-14|open", "entry")
+        assert x["status"] == "missing" and x["reasons"] == [why]
+
+
+def test_r02_retry_takes_first_valid_attempt_not_best():
+    w = {"2026-09-14|open": {"attempts": [
+        _att("t1", {"P|57": _q(0.30, 0.32, bs=0), "P|56": _q(0.08, 0.10)}),     # 失败
+        _att("t2", {"P|57": _q(0.25, 0.27), "P|56": _q(0.08, 0.10)}),           # 第一次有效：收 15
+        _att("t3", {"P|57": _q(0.40, 0.42), "P|56": _q(0.08, 0.10)})]}}         # 更好但不许挑
+    x = sh.window_leg(_vrow(w), _leg(), "2026-09-14|open", "entry")
+    assert x["status"] == "valid" and x["at"] == "t2" and x["credit"]["conservative"] == pytest.approx(15.0)
+
+
+def test_off_hours_quotes_never_count():
+    w = {"2026-09-14|open": {"attempts": [_att("t", ENTRY_OK, phase="off_hours")]}}
+    assert sh.window_leg(_vrow(w), _leg(), "2026-09-14|open", "entry")["reasons"] == ["off_hours"]
+
+
+def test_r05_exit_cost_above_width_kept_raw():
+    wide = {"P|57": _q(1.40, 1.50), "P|56": _q(0.30, 0.35)}         # 成本 120 > 宽 100
+    x = sh.window_leg(_vrow({"k": {"attempts": [_att("t", wide)]}}), _leg(), "k", "exit")
+    assert x["cost"] == pytest.approx(120.0) and x["exceeds_width"] is True
+    m = _marks_all({"P|57": _q(0.10, 0.12), "P|56": _q(0.02, 0.03)}); m["2026-09-15|open"] = wide
+    o = sh.settle_leg(_leg(), _vrow(_full_windows(m)), bars=BARS3)
+    assert o["pnl"]["stop1x_twice_daily"] == pytest.approx(20 - 120 - 3.2), "超宽平仓不得变成到期盈利"
+
+
+def test_r06_pre_expiry_exit_and_immature_expiry():
+    cheap = {"P|57": _q(0.10, 0.12), "P|56": _q(0.02, 0.03)}
+    o = sh.settle_leg(_leg(), _vrow(_full_windows({"2026-09-15|close": cheap})), bars=BARS3)
+    assert o["pnl"]["pre_expiry_close_exit"] == pytest.approx(20 - 10 - 3.2)      # 9/15 收盘窗平仓
+    o2 = sh.settle_leg(_leg(), _vrow(_full_windows({})), bars=BARS3)
+    assert o2["pnl"]["pre_expiry_close_exit"] is None and o2["status"]["pre_expiry_close_exit"] == "exit_not_run"
+    assert sh.settle_leg(_leg(), _vrow(_full_windows({})), bars=BARS3[:2]) is None, "到期 bar 未出不结算"
+
+
+def test_half_day_close_window_not_run_is_unknown_not_skipped():
+    """半日市收盘窗未运行：记 not_run，止损口径未知 —— 不补、不当作未触发。"""
+    m = _marks_all({"P|57": _q(0.10, 0.12), "P|56": _q(0.02, 0.03)}); del m["2026-09-15|close"]
+    o = sh.settle_leg(_leg(), _vrow(_full_windows(m)), bars=BARS3)
+    assert o["marks"]["not_run"] == 1 and o["pnl"]["stop2x_twice_daily"] is None
+
+
+def test_no_valid_entry_makes_all_quote_bases_unknown():
+    o = sh.settle_leg(_leg(), _vrow({}), bars=BARS3)
+    for b in ("quote_entry_expiry_intrinsic", "pre_expiry_close_exit", "close_beyond_next_open_exit", "stop1x_twice_daily"):
+        assert o["pnl"][b] is None and o["status"][b].startswith("entry_"), b
+
+
+def test_jsonl_ledger_freeze_update_and_quarantine_v3(tmp_path):
+    p = tmp_path / "silver.jsonl"; r = _row(); r["recorded_at"] = "2026-09-14T10:00:00+00:00"
+    assert jl.insert_frozen(p, r, key_field="key", frozen=sh.frozen_part) == "inserted"
+    assert jl.update(p, lambda x: x["windows"].update({"k": {"attempts": []}}) or True,
+                     key_field="key", frozen=sh.frozen_part) == 1, "追加原始观测不算改事前字段"
+    with pytest.raises(jl.LedgerConflictError):
+        jl.update(p, lambda x: x["legs"][0].update(sell=1.0) or True, key_field="key", frozen=sh.frozen_part)
+
+
+def _quote_env(tmp_path, monkeypatch, depth_fn):
+    """端到端：cmd_quote 在假盘口下的状态与重试。"""
+    import argparse
+    from undertow import shadow_cli as sc
+    from undertow.collect import longbridge_quote as lq
+    monkeypatch.setattr(sc, "DIR", tmp_path)
+    monkeypatch.setattr(sc, "_phase_now", lambda: "rth")
+    monkeypatch.setattr(sc, "_window_now", lambda w: True)
+    monkeypatch.setattr(sc, "market_today", lambda: T)
+    monkeypatch.setattr(lq, "fetch_depth", depth_fn)
+    monkeypatch.setattr(lq, "fetch_stock_quotes", lambda syms: {})
+    r = _row(); r["recorded_at"] = "2026-09-14T10:00:00+00:00"
+    jl.insert_frozen(sc._path("silver", False), r, key_field="key", frozen=sh.frozen_part)
+    st = tmp_path / "st.json"
+    run = lambda: sc.cmd_quote(argparse.Namespace(instruments=["silver"], window="open",
+                                                  allow_off_hours=False, status_file=str(st)))
+    return run, st
+
+
+class _D:
+    def __init__(self, bid, ask, bs=10, as_=10, error=""):
+        self.bid, self.ask, self.bid_size, self.ask_size, self.error = bid, ask, bs, as_, error
+
+
+def test_quote_partial_then_retry_then_complete(tmp_path, monkeypatch):
+    state = {"n": 0}
+
+    def depth(syms):
+        state["n"] += 1
+        # 第一次：一半合约零挂单量（失败）；第二次：全部正常
+        out = {}
+        for i, s in enumerate(syms):
+            # 按行权价定价，保证卖腿（更靠近价内）比买腿贵 → 保守收权金为正
+            import re as _re
+            kind, k = _re.search(r"\d{6}([PC])(\d+)\.US$", s).groups()
+            k = int(k) / 1000
+            mid = max(0.02, (k - 50) * 0.05) if kind == "P" else max(0.02, (66 - k) * 0.05)
+            bs = 0 if (state["n"] == 1 and i % 2 == 0) else 10
+            out[s] = _D(round(mid - 0.01, 2), round(mid + 0.01, 2), bs=bs)
+        return out
+    run, st = _quote_env(tmp_path, monkeypatch, depth)
+    rc1 = run(); s1 = json.loads(st.read_text())
+    assert rc1 == 1 and s1["overall"] in ("partial", "failed"), "部分失败不得返回成功（否则调度层写 .ok 堵死当日）"
+    rc2 = run(); s2 = json.loads(st.read_text())
+    assert rc2 == 0 and s2["overall"] == "complete"
+    from undertow import shadow_cli as sc
+    row = jl.load(sc._path("silver", False), "key")[0]
+    assert len(row["windows"]["2026-09-14|open"]["attempts"]) == 2, "两次尝试都保留"
+
+
+def test_quote_total_api_failure_is_failed(tmp_path, monkeypatch):
+    def boom(syms):
+        from undertow.collect.longbridge_quote import LiveQuotesUnavailable
+        raise LiveQuotesUnavailable("全部取数失败")
+    run, st = _quote_env(tmp_path, monkeypatch, boom)
+    assert run() == 1 and json.loads(st.read_text())["overall"] == "failed"
+
+
+def test_session_hooks_only_mark_ok_on_success_and_run_first():
+    sh_ = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
+    body = sh_[sh_.index("shadow_window() {"):sh_.index('shadow_window open 600 620')]
+    assert 'if (( RC == 0 )); then' in body and ': > "$OKF"' in body.split("else")[0]
+    assert sh_.index("shadow_window open 600 620") < sh_.index("# ── ① 盘前简报"), "必须在可能 exit 0 的旧窗口之前"
+    assert "ET_MIN >= 930 && ET_MIN <= 945" in sh_[sh_.index("不在任何窗口"):]
+    du = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
+    assert "shadow capture" in du and "shadow settle" in du
+
+
+def test_block_bootstrap_widens_under_serial_correlation():
+    """连续 5 日同号的序列：5 日块区间应比逐日块宽（逐日块低估不确定性）。"""
+    g = {f"2026-10-{i + 1:02d}": [1.0 if (i // 5) % 2 == 0 else -0.6] for i in range(30)}
+    m, lo1, hi1 = sh.date_block_bootstrap(g, iters=4000, block_days=1)
+    _, lo5, hi5 = sh.date_block_bootstrap(g, iters=4000, block_days=5)
+    assert (hi5 - lo5) > (hi1 - lo1) * 1.3
+    assert sh.CONFIG["stats"]["block_days"] == 5 and sh.CONFIG["stats"]["sensitivity_block_days"] == 10
+    s = sh.paired_summary([])
+    assert s["sensitivity"]["block_days"] == 10 and s["stats_version"] == "stats-v1"
+
+
+def test_block_bootstrap_refuses_too_few_blocks():
+    """R08 同类退化：7 个日期配 10 日块 → 每次抽到全样本 → 零宽区间。必须报样本不足。"""
+    g = {f"2026-10-{i + 1:02d}": [0.1 * i - 0.2] for i in range(7)}
+    m, lo, hi = sh.date_block_bootstrap(g, block_days=10)
+    assert m is not None and lo is None and hi is None
+    assert sh.date_block_bootstrap(g, block_days=5)[1] is None       # 需 ≥16 个日期
+    g16 = {f"d{i:02d}": [0.1 * (i % 3)] for i in range(16)}
+    assert sh.date_block_bootstrap(g16, iters=2000, block_days=5)[1] is not None

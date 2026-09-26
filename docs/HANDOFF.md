@@ -5,7 +5,11 @@
 > - 墙位卖方价差：仍未启用。9/25 研究结论已按 Codex 审查更正（见 `docs/wall_spread_3steps.md` 顶部更正注记）；
 >   修后重算见 `data/history/wall_spread/rerun_20260926/`（含 COMPARISON.md 与输入 manifest）。
 > - 现行主实验：前瞻配对影子账 `undertow shadow ...`（墙选腿 A vs 无 OI 距离 B），已接入 daily_update.sh（capture/settle）
->   与 session_hooks.sh 窗口④（ET 10:00 quote）。配置 `analyze/shadow.CONFIG`，改动须升版本。
+>   与 session_hooks.sh 窗口④⑤（ET 10:00–10:20 开盘窗、15:30–15:45 收盘窗，`shadow quote`）。
+>   当前版本 **shadow-v3-20260926**（Codex 005 S00/S01/R04）：主比较 A vs B1、主终点「报价入场 + 到期内在值」；
+>   所有臂同美元宽度；账本只存原始盘口尝试，入场/标记/止损全部在结算时派生；缺标记 → 止损口径 None，不当作未触发。
+>   配置 `analyze/shadow.CONFIG`，改动须升版本；首个前瞻样本 2026-09-28。
+> - 日度历史首份发布冻结（S04）：`outlook_scores / resonance / ratio_watch / signal_ledger` 同日重跑不覆盖，差异追加到 `*.revisions.jsonl`。
 > - 日报→台账时间契约（W02）：session 由 captured_at 认证（certified/provisional/unmappable），回放写 replay/，失败进状态文件并告警。
 
 给**其他会话/其他人**快速接手用。按「现在能不能用 → 怎么跑 → 已知的坑」组织。

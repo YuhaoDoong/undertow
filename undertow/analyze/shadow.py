@@ -24,6 +24,17 @@
   由此新增次要口径 stop1x / stop2x：标记时点上保守平仓成本 ≥ (1+m)×入场权利金即按该报价平仓
   （离散监控，一天两次；不是连续止损）。
 - 分侧统计与「只做增仓方向一侧」子集作为次要预登记分析。
+
+═══ v3（2026-09-26，Codex 005 审查 R01/R02/R04/R05/R06 与 S00；仍在首个前瞻样本之前）═══
+- 同美元宽度（R04）：宽度 = 2 × 目标到期、现价 ±5% 内最常见的挂牌间隔（不看 OI）；所有臂按同一美元宽度找保护腿，
+  找不到记 no_same_width_protective（不可配对），不再「各自往外数两档」（v2 回放实测 8% 配对宽度不同）。
+- 原始观测与派生分离：quote 只追加原始盘口尝试（每窗口可重试），入场/标记/退出/止损全部由 settle 从原始记录推出。
+- 报价质量（R02）：卖腿 bid>0 且 bid_size>0、买腿 ask>0 且 ask_size>0、ask≥bid；每腿取窗口内「第一次通过质量检查」
+  的尝试，不择优；源报价时间长桥 depth 不提供 → 记 unknown。
+- 止损四态（R01）：未运行 / 运行缺价 / 有效未触发 / 有效触发；首次触发前任一应有窗口未知 → 该口径 None（path_unknown）。
+- 平仓成本保留原值（R05）：超过宽度不置空，标 exceeds_width。
+- 主终点改名（R06）：quote_entry_expiry_intrinsic = 报价入场—到期内在价值「研究收益」（不等于 ETF 实际到期处置）；
+  新增 pre_expiry_close_exit = 到期前最后一个交易日 ET 15:30 窗口按两腿保守报价整体平仓（小账户实际会执行的出场）。
 """
 from __future__ import annotations
 
@@ -35,14 +46,33 @@ import statistics as st
 from datetime import date
 
 CONFIG = {
-    "version": "shadow-v2-20260926",
-    "dte": [2, 4], "width_n": 2,
+    "version": "shadow-v3-20260926",
+    # ── S00 实验身份（机器可读；改任一项 = 新版本）──
+    "instruments": ["gold", "silver", "wti", "qqq", "tqqq", "tlt", "spy", "iwm",
+                    "googl", "tsla", "nvda", "intc", "amd", "msft", "aapl"],
+    "primary_comparison": "A vs B1",
+    "primary_endpoint": "quote_entry_expiry_intrinsic",
+    "secondary_endpoints": ["pre_expiry_close_exit", "close_beyond_next_open_exit",
+                            "stop1x_twice_daily", "stop2x_twice_daily", "snapshot_model"],
+    "quote": {"timezone": "America/New_York",
+              "windows": {"open": ["10:00", "10:20"], "close": ["15:30", "15:45"]},
+              "entry_window": "open",
+              "selection": "first_valid_attempt_per_leg",
+              "quality": "sell: bid>0,bid_size>0,ask>=bid; buy: ask>0,ask_size>0,ask>=bid",
+              "source_timestamp": "unknown (longbridge depth 不提供)"},
+    "calendar_policy": "交易日以已完成日线为准；半日市或窗口未运行 → not_run，不补、不猜",
+    "fee_policy": "每张每腿 $0.80，4 个合约边往返预算 $3.20；持有到期也保守计同一预算；真实费率待成交记录核实",
+    "missing_policy": "未知一律 None，不折零；缺价不偷换为持有到期",
+    "stats": {"version": "stats-v1", "block": "consecutive_trading_days", "block_days": 5,
+              "sensitivity_block_days": 10, "iters": 20000, "seed": 20260926, "min_blocks": 4},
+    "formal_test_date": "2026-12-31",
+    "dte": [2, 4], "width": {"rule": "2x_modal_strike_step", "band": 0.05},
     "wall": {"def": "local_max", "band": 0.05, "hi_dte": 14},
     "b_rules": {"B1": {"atr": 1.0}, "B2": {"atr": 2.0}, "B3": {"delta": 0.20}}, "primary_b": "B1",
     "stops": [1.0, 2.0],
     "term_structure": {"atm_band": 0.02, "far_dte": [20, 45]},
     "sides": ["P", "C"],
-    "primary_basis": "hold_quote_conservative",
+    "primary_basis": "quote_entry_expiry_intrinsic",
     "fee_round_trip": 3.20,
     "mid_give": 0.25,
 }
@@ -64,17 +94,27 @@ def listed_strikes(snap, kind: str, expiry: date) -> list[float]:
     return sorted({c.strike for c in snap.contracts if c.kind == kind and c.expiry == expiry})
 
 
-def _buy_leg(strikes, sell, kind, width_n):
-    i = strikes.index(sell)
-    j = i - width_n if kind == "P" else i + width_n
-    return strikes[j] if 0 <= j < len(strikes) else None
+def spread_width(strikes, spot, band=0.05):
+    """事前、不看 OI 的美元宽度：2 × 现价 ±band 内最常见的挂牌间隔（×100 为每张美元）。"""
+    near = [k for k in strikes if abs(k / spot - 1) <= band]
+    steps = [round(b - a, 4) for a, b in zip(near, near[1:]) if b > a]
+    if not steps:
+        return None
+    mode = max(set(steps), key=lambda x: (steps.count(x), -x))    # 并列取较小间隔
+    return round(2 * mode, 4)
+
+
+def _buy_leg(strikes, sell, kind, width):
+    """同美元宽度的保护腿：sell ∓ width 必须恰好挂牌，否则 None（不可配对）。"""
+    target = round(sell - width if kind == "P" else sell + width, 4)
+    return next((k for k in strikes if abs(k - target) < 1e-6), None)
 
 
 def _otm(kind, K, spot):
     return K < spot if kind == "P" else K > spot
 
 
-def pick_a(wall: dict | None, strikes, spot, kind, width_n):
+def pick_a(wall: dict | None, strikes, spot, kind, width):
     if not wall:
         return None, "no_wall"
     K = wall["strike"]
@@ -82,11 +122,11 @@ def pick_a(wall: dict | None, strikes, spot, kind, width_n):
         return None, "wall_strike_not_listed_for_target_expiry"
     if not _otm(kind, K, spot):
         return None, "wall_not_otm"
-    B = _buy_leg(strikes, K, kind, width_n)
-    return ((K, B), None) if B is not None else (None, "no_protective_strike")
+    B = _buy_leg(strikes, K, kind, width)
+    return ((K, B), None) if B is not None else (None, "no_same_width_protective")
 
 
-def pick_b(strikes, spot, atr, kind, mult, width_n):
+def pick_b(strikes, spot, atr, kind, mult, width):
     if not atr or atr <= 0:
         return None, "atr_unavailable"
     d = mult * atr
@@ -98,11 +138,11 @@ def pick_b(strikes, spot, atr, kind, mult, width_n):
         K = min(c) if c else None
     if K is None:
         return None, "no_strike_beyond_distance"
-    B = _buy_leg(strikes, K, kind, width_n)
-    return ((K, B), None) if B is not None else (None, "no_protective_strike")
+    B = _buy_leg(strikes, K, kind, width)
+    return ((K, B), None) if B is not None else (None, "no_same_width_protective")
 
 
-def pick_delta(snap, expiry, kind, spot, target, width_n):
+def pick_delta(snap, expiry, kind, spot, target, width):
     """|Δ| 最接近 target 的虚值挂牌档（用快照给的 delta）；并列取更虚值的一档（更保守）。"""
     strikes = listed_strikes(snap, kind, expiry)
     c = [x for x in snap.contracts if x.kind == kind and x.expiry == expiry and _otm(kind, x.strike, spot)
@@ -110,8 +150,8 @@ def pick_delta(snap, expiry, kind, spot, target, width_n):
     if not c:
         return None, "no_delta"
     best = min(c, key=lambda x: (abs(abs(x.delta) - target), x.strike if kind == "P" else -x.strike))
-    B = _buy_leg(strikes, best.strike, kind, width_n)
-    return ((best.strike, B), None) if B is not None else (None, "no_protective_strike")
+    B = _buy_leg(strikes, best.strike, kind, width)
+    return ((best.strike, B), None) if B is not None else (None, "no_same_width_protective")
 
 
 def term_structure(snap, T: date, spot: float, target_exp, cfg: dict = None) -> dict:
@@ -158,17 +198,20 @@ def build_opportunity(*, inst: str, sym: str, snap, session: date, spot: float, 
     for kind in cfg["sides"]:
         strikes = listed_strikes(snap, kind, exp) if exp else []
         wall = wall_fn(kind) if exp else None
-        picks = {"A": pick_a(wall, strikes, spot, kind, cfg["width_n"]) if exp else (None, "no_target_expiry")}
+        width = spread_width(strikes, spot, cfg["width"]["band"]) if exp else None
+        miss = "no_target_expiry" if not exp else ("no_width" if width is None else None)
+        picks = {"A": (None, miss) if miss else pick_a(wall, strikes, spot, kind, width)}
         for r, spec in cfg["b_rules"].items():
-            if not exp:
-                picks[r] = (None, "no_target_expiry")
+            if miss:
+                picks[r] = (None, miss)
             elif "atr" in spec:
-                picks[r] = pick_b(strikes, spot, atr, kind, spec["atr"], cfg["width_n"])
+                picks[r] = pick_b(strikes, spot, atr, kind, spec["atr"], width)
             else:
-                picks[r] = pick_delta(snap, exp, kind, spot, spec["delta"], cfg["width_n"])
+                picks[r] = pick_delta(snap, exp, kind, spot, spec["delta"], width)
         for rule in RULES:
             pk, why = picks[rule]
             leg = {"leg_id": f"{kind}-{rule}", "side": kind, "rule": rule, "expiry": exp.isoformat() if exp else None,
+                   "width_rule_usd": round(width * 100, 4) if (exp and width) else None,
                    "status": "candidate" if pk else "no_candidate", "reason": why}
             if pk:
                 S, B = pk
@@ -198,60 +241,111 @@ def build_opportunity(*, inst: str, sym: str, snap, session: date, spot: float, 
                      "target_expiry": exp.isoformat() if exp else None,
                      "term_structure": term_structure(snap, session, spot, exp), **labels},
         "legs": legs,
-        # —— 以下为事后字段 ——
-        "entry": None, "marks": [], "monitor": [], "exits": {}, "outcome": None,
+        # —— 以下为事后字段：只有原始观测 windows；入场/标记/退出/止损由 settle 推出 ——
+        "windows": {}, "outcome": None,
     }
 
 
 def frozen_part(row: dict) -> dict:
     """事前冻结部分：除 entry/monitor/exits/outcome/identity.status 与 recorded_at 以外的一切。"""
     out = {k: v for k, v in row.items()
-           if k not in ("entry", "marks", "monitor", "exits", "outcome", "recorded_at", "settled_at")}
+           if k not in ("windows", "entry", "marks", "monitor", "exits", "outcome", "recorded_at", "settled_at")}
     idt = dict(out.get("identity") or {})
     idt.pop("status", None); idt.pop("certified_at", None)
     out["identity"] = idt
     return out
 
 
-# ── 报价 ────────────────────────────────────────────────────────────────
+# ── 报价（v3：原始观测 → 派生）───────────────────────────────────────────
+# 行里只存原始观测 row["windows"][f"{date}|{open|close}"] = {"attempts": [attempt, ...]}，
+# attempt = {"started_at","ended_at","phase","underlying","quotes": {"P|57.0": {bid,ask,bid_size,ask_size,error}}}。
+# 入场、标记、退出、止损全部由下面的纯函数在 settle 时推出：以后修派生逻辑不动原始数据。
 
-def price_legs(row: dict, depth: dict, *, observed_at: str, phase: str, give: float = CONFIG["mid_give"]) -> dict:
-    """depth: {(kind, strike): {"bid","ask","bid_size","ask_size","error"}}。返回每条候选腿的入场情景。"""
-    out = {"observed_at": observed_at, "phase": phase,
-           "executable": phase == "rth", "legs": {}}
-    for l in row["legs"]:
-        if l["status"] != "candidate":
-            continue
-        s, b = depth.get((l["side"], l["sell"])), depth.get((l["side"], l["buy"]))
-        ok = s and b and not s.get("error") and not b.get("error")
-        cr = _credit(s["bid"], s["ask"], b["bid"], b["ask"], give) if ok else None
-        out["legs"][l["leg_id"]] = {
-            "sell": {k: s.get(k) for k in ("bid", "ask", "bid_size", "ask_size", "error")} if s else None,
-            "buy": {k: b.get(k) for k in ("bid", "ask", "bid_size", "ask_size", "error")} if b else None,
-            "credit": cr, "valid": bool(cr and cr["conservative"] > 0 and cr["conservative"] < l["width_usd"]),
-        }
-    return out
+def qkey(side: str, strike: float) -> str:
+    return f"{side}|{float(strike):g}"
 
 
-def mark_legs(row: dict, depth: dict, *, observed_at: str, phase: str, window: str) -> dict:
-    """持仓期间的盘口标记：每条候选腿的保守平仓成本（买回卖腿 ask、卖出买腿 bid）。"""
-    out = {"observed_at": observed_at, "phase": phase, "window": window, "legs": {}}
-    for l in row["legs"]:
-        if l["status"] != "candidate":
-            continue
-        s, b = depth.get((l["side"], l["sell"])), depth.get((l["side"], l["buy"]))
-        ok = s and b and not s.get("error") and not b.get("error")
-        out["legs"][l["leg_id"]] = {"cost_conservative": exit_cost(s, b, l["width_usd"]) if ok and phase == "rth" else None}
-    return out
+def _num(x):
+    return x if (isinstance(x, (int, float)) and math.isfinite(x)) else None
 
 
-def exit_cost(sell_q: dict, buy_q: dict, width_usd: float):
-    """平仓成本（买回卖腿吃 ask、卖出买腿吃 bid），每张美元；越界 → None（不裁剪成好看的数）。"""
-    try:
-        c = (sell_q["ask"] - buy_q["bid"]) * 100
-    except (TypeError, KeyError):
+def entry_quality(sq: dict | None, bq: dict | None) -> str | None:
+    """开仓质量（卖卖腿吃 bid、买买腿吃 ask）。通过返回 None，否则返回原因。"""
+    if not sq or not bq:
+        return "leg_missing"
+    if sq.get("error") or bq.get("error"):
+        return "leg_error"
+    sb, sa, sbs = _num(sq.get("bid")), _num(sq.get("ask")), sq.get("bid_size") or 0
+    bb, ba, bas = _num(bq.get("bid")), _num(bq.get("ask")), bq.get("ask_size") or 0
+    if sb is None or sa is None or ba is None or bb is None:
+        return "price_missing"
+    if sb <= 0 or ba <= 0 or sa < sb or ba < bb:
+        return "price_invalid"
+    if sbs <= 0 or bas <= 0:
+        return "zero_size"
+    return None
+
+
+def exit_quality(sq: dict | None, bq: dict | None) -> str | None:
+    """平仓质量（买回卖腿吃 ask、卖出买腿吃 bid；买腿 bid 缺失按 0 处理，即放弃残值）。"""
+    if not sq or sq.get("error"):
+        return "sell_leg_missing"
+    sa, sb, sas = _num(sq.get("ask")), _num(sq.get("bid")), sq.get("ask_size") or 0
+    if sa is None or sa <= 0 or (sb is not None and sa < sb):
+        return "price_invalid"
+    if sas <= 0:
+        return "zero_size"
+    return None
+
+
+def exit_cost_raw(sq: dict, bq: dict | None) -> float:
+    """平仓成本原值（每张美元），**不裁剪**：分腿吃价可能超过宽度（R05）。"""
+    bid = _num((bq or {}).get("bid")) or 0.0
+    return round((sq["ask"] - bid) * 100, 4)
+
+
+def _credit(sell_bid, sell_ask, buy_bid, buy_ask, give):
+    """(conservative, mid, mid_give)，每张美元。任一价缺失或倒挂 → None。"""
+    vals = (sell_bid, sell_ask, buy_bid, buy_ask)
+    if any(v is None or not math.isfinite(v) or v < 0 for v in vals) or sell_bid > sell_ask or buy_bid > buy_ask:
         return None
-    return round(c, 4) if 0 <= c <= width_usd else None
+    cons = (sell_bid - buy_ask) * 100
+    mid = ((sell_bid + sell_ask) / 2 - (buy_bid + buy_ask) / 2) * 100
+    return {"conservative": round(cons, 4), "mid": round(mid, 4), "mid_give": round(mid + give * (cons - mid), 4)}
+
+
+def window_leg(row: dict, leg: dict, wkey: str, purpose: str) -> dict:
+    """某窗口对某条腿的状态：not_run / missing（附原因）/ valid（附价格）。取第一次通过质量的尝试。"""
+    w = (row.get("windows") or {}).get(wkey)
+    if not w or not w.get("attempts"):
+        return {"status": "not_run"}
+    reasons = []
+    for a in w["attempts"]:
+        if a.get("phase") != "rth":
+            reasons.append("off_hours"); continue
+        sq = a["quotes"].get(qkey(leg["side"], leg["sell"]))
+        bq = a["quotes"].get(qkey(leg["side"], leg["buy"]))
+        bad = entry_quality(sq, bq) if purpose == "entry" else exit_quality(sq, bq)
+        if bad:
+            reasons.append(bad); continue
+        if purpose == "entry":
+            cr = _credit(sq["bid"], sq["ask"], bq["bid"], bq["ask"], CONFIG["mid_give"])
+            if cr is None or not (0 < cr["conservative"] < leg["width_usd"]):
+                reasons.append("credit_outside_0_width"); continue
+            return {"status": "valid", "credit": cr, "at": a["started_at"]}
+        cost = exit_cost_raw(sq, bq)
+        return {"status": "valid", "cost": cost, "exceeds_width": cost > leg["width_usd"], "at": a["started_at"]}
+    return {"status": "missing", "reasons": reasons}
+
+
+def expected_mark_windows(session: date, expiry: date, trading_days: list) -> list[str]:
+    """入场（session 开盘窗）之后、到期收盘前应有的标记窗口，按时间顺序。"""
+    days = [d for d in trading_days if session <= d <= expiry]
+    out = [f"{session.isoformat()}|close"]
+    for d in days:
+        if d > session:
+            out += [f"{d.isoformat()}|open", f"{d.isoformat()}|close"]
+    return out
 
 
 # ── 结算 ────────────────────────────────────────────────────────────────
@@ -260,14 +354,15 @@ def _beyond(kind, K, px):
     return px < K if kind == "P" else px > K
 
 
-def settle_leg(leg: dict, *, session: date, bars: list, entry_leg: dict | None, exit_info: dict | None,
-               fee: float = CONFIG["fee_round_trip"], marks: list | None = None,
-               stops=tuple(CONFIG["stops"]), entry_at: str | None = None) -> dict | None:
-    """bars: [(date, high, low, close)] 覆盖 session..expiry；缺到期 bar 返回 None（未成熟不结算）。"""
+def settle_leg(leg: dict, row: dict, *, bars: list, fee: float = CONFIG["fee_round_trip"],
+               stops=tuple(CONFIG["stops"])) -> dict | None:
+    """bars: [(date, high, low, close)]，只含已完成日线。到期日 bar 缺失 → None（未成熟，不结算）。"""
+    session = date.fromisoformat(row["session"])
     exp = date.fromisoformat(leg["expiry"])
     win = [b for b in bars if session <= b[0] <= exp]
     if not win or win[-1][0] != exp:
         return None
+    tdays = [b[0] for b in bars]
     k, S, W = leg["side"], leg["sell"], leg["width_usd"]
     settle = win[-1][3]
     intrinsic = min(W, max(0.0, ((S - settle) if k == "P" else (settle - S)) * 100))
@@ -276,51 +371,72 @@ def settle_leg(leg: dict, *, session: date, bars: list, entry_leg: dict | None, 
     res = {"expiry_close": settle, "endpoint_breach": _beyond(k, S, settle),
            "any_close_breach": any(_beyond(k, S, b[3]) for b in win),
            "intraday_breach": (any((lo < S) if k == "P" else (h > S) for _, h, lo, _c in win) if ohlc else None),
-           "trigger_date": trig.isoformat() if trig else None, "pnl": {}, "max_risk": {}}
+           "trigger_date": trig.isoformat() if trig else None, "width_usd": W,
+           "pnl": {}, "max_risk": {}, "credit": {}, "status": {}}
 
-    def put(basis, credit, cost):
-        # 权利金必须在 (0, 宽度) 之内才是一笔可成立的信用价差：≤0 没人会做，≥宽度说明盘口陈旧/倒挂，
-        # 最大风险会变成 ≤0、比值翻号（2026-09-26 v2 回放实测 A−B3 均值 +2.59，数学上不可能）。
-        if credit is None or not (0 < credit < W):
-            res["pnl"][basis] = None; res["max_risk"][basis] = None
-            if credit is not None:
-                res.setdefault("invalid_credit", {})[basis] = credit
+    def put(basis, credit, cost, status="ok"):
+        res["status"][basis] = status
+        if credit is None or cost is None or not (0 < credit < W):
+            res["pnl"][basis] = None; res["max_risk"][basis] = None; res["credit"][basis] = credit
             return
         res["pnl"][basis] = round(credit - cost - fee, 4)
         res["max_risk"][basis] = round(W - credit + fee, 4)
+        res["credit"][basis] = credit
 
     sc = (leg.get("snapshot_credit") or {}).get("mid_give")
-    put("snapshot_model", sc, intrinsic)
-    ec = entry_leg["credit"] if (entry_leg and entry_leg.get("valid")) else None
-    put("hold_quote_conservative", ec["conservative"] if ec else None, intrinsic)
-    put("hold_quote_mid_give", ec["mid_give"] if ec else None, intrinsic)
-    # 退出规则：收盘越过卖腿 → 下一盘中窗口平仓；缺退出报价 = 未知，不偷换成持有到期
+    put("snapshot_model", sc, intrinsic, "stale_snapshot_quote")
+
+    ent = window_leg(row, leg, f"{session.isoformat()}|open", "entry")
+    res["entry"] = ent
+    ec = ent["credit"]["conservative"] if ent["status"] == "valid" else None
+    tag = "ok" if ec is not None else f"entry_{ent['status']}"
+    put("quote_entry_expiry_intrinsic", ec, intrinsic, tag)
+
+    # 到期前最后一个交易日 15:30 整体平仓
+    before = [d for d in tdays if session < d < exp]
     if ec is None:
-        put("exit_rule_quote_conservative", None, 0)
-    elif trig is None:
-        put("exit_rule_quote_conservative", ec["conservative"], intrinsic)
+        put("pre_expiry_close_exit", None, None, tag)
+    elif not before:
+        put("pre_expiry_close_exit", None, None, "no_day_before_expiry")
     else:
-        cost = (exit_info or {}).get("cost_conservative")
-        if cost is None:
-            res["pnl"]["exit_rule_quote_conservative"] = None
-            res["max_risk"]["exit_rule_quote_conservative"] = None
-            res["exit_status"] = "triggered_unpriced"
-        else:
-            put("exit_rule_quote_conservative", ec["conservative"], cost)
-            res["exit_status"] = "exited_at_quote"
-    # 止损口径：入场之后的盘口标记里，第一次保守平仓成本 ≥ (1+m)×权利金 → 按该报价平仓
-    ms = sorted((m for m in (marks or []) if entry_at is None or m["observed_at"] > entry_at),
-                key=lambda m: m["observed_at"])
-    gaps = sum(1 for m in ms if (m["legs"].get(leg["leg_id"]) or {}).get("cost_conservative") is None)
+        w = window_leg(row, leg, f"{before[-1].isoformat()}|close", "exit")
+        put("pre_expiry_close_exit", ec, w.get("cost"), "ok" if w["status"] == "valid" else f"exit_{w['status']}")
+
+    # 收盘越过卖腿 → 下一交易日开盘窗平仓
+    if ec is None:
+        put("close_beyond_next_open_exit", None, None, tag)
+    elif trig is None:
+        put("close_beyond_next_open_exit", ec, intrinsic)
+    else:
+        nxt = [d for d in tdays if trig < d <= exp]
+        w = window_leg(row, leg, f"{nxt[0].isoformat()}|open", "exit") if nxt else {"status": "not_run"}
+        put("close_beyond_next_open_exit", ec, w.get("cost"), "ok" if w["status"] == "valid" else f"exit_{w['status']}")
+
+    # 离散止损（一天两次）：四态；首次触发前任何未知 → 结果未知（R01）
+    marks = expected_mark_windows(session, exp, tdays)
+    seq = [(wk, window_leg(row, leg, wk, "exit")) for wk in marks]
+    res["marks"] = {"expected": len(seq),
+                    "valid": sum(x["status"] == "valid" for _, x in seq),
+                    "not_run": sum(x["status"] == "not_run" for _, x in seq),
+                    "missing": sum(x["status"] == "missing" for _, x in seq)}
     for mult in stops:
-        basis = f"stop{mult:g}x_quote_conservative"
+        basis = f"stop{mult:g}x_twice_daily"
         if ec is None:
-            put(basis, None, 0); continue
-        hit = next((m["legs"][leg["leg_id"]]["cost_conservative"] for m in ms
-                    if (m["legs"].get(leg["leg_id"]) or {}).get("cost_conservative") is not None
-                    and m["legs"][leg["leg_id"]]["cost_conservative"] >= (1 + mult) * ec["conservative"]), None)
-        put(basis, ec["conservative"], hit if hit is not None else intrinsic)
-    res["mark_gaps"] = gaps
+            put(basis, None, None, tag); continue
+        unknown, hit = False, None
+        for wk, x in seq:
+            if x["status"] != "valid":
+                unknown = True; continue
+            if x["cost"] >= (1 + mult) * ec:
+                hit = (wk, x["cost"]); break
+        if hit and not unknown:
+            put(basis, ec, hit[1], f"stopped@{hit[0]}")
+        elif hit and unknown:
+            put(basis, ec, None, "path_unknown_before_trigger")
+        elif unknown:
+            put(basis, ec, None, "path_unknown")
+        else:
+            put(basis, ec, intrinsic, "held_all_marks_valid")
     return res
 
 
@@ -331,18 +447,38 @@ def _norm(o: dict, basis: str):
     return p / r if (p is not None and r) else None
 
 
-def date_block_bootstrap(groups: dict, iters: int = 20000, seed: int = 20260926):
-    """groups: {date: [值…]}。按日期整块重采样，返回 (均值, 下界, 上界)；不足 5 个日期返回 None 区间。"""
+def date_block_bootstrap(groups: dict, iters: int = CONFIG["stats"]["iters"],
+                         seed: int = CONFIG["stats"]["seed"],
+                         block_days: int = CONFIG["stats"]["block_days"]):
+    """groups: {date: [值…]}。循环移动块 bootstrap（Politis–Romano）：按日期排序后，
+    每次抽若干个起点、各取连续 block_days 个样本日（首尾循环相接），拼够原日期数为止。
+
+    同日多品种/两侧整块进出；相邻交易日的残余相关由块长吸收（主口径 5 日，敏感性 10 日，
+    见 CONFIG["stats"]）。「连续」指样本中相邻的日期 —— 无机会的交易日不占位。
+    block_days=1 退化为逐日整块重采样（v2 口径）。不足 5 个日期、或每次重采样不足
+    min_blocks 个块（5 日块需 ≥16 个日期，10 日块需 ≥31 个）时返回 None 区间。
+    """
     ds = sorted(groups)
     allv = [v for d in ds for v in groups[d]]
     if not allv:
         return None, None, None
     m = st.mean(allv)
-    if len(ds) < 5:
+    n = len(ds)
+    if n < 5:
+        return m, None, None
+    b = max(1, block_days)
+    k = -(-n // b)
+    if k < CONFIG["stats"]["min_blocks"]:
+        # 块太少时重采样只有寥寥几种组合（b≥n 时每次都抽到全样本 → 零宽区间），
+        # 零宽区间会被 judge 判成「支持/不支持」—— 这正是 R08 的退化。宁可报样本不足。
         return m, None, None
     rnd = random.Random(seed); vals = []
     for _ in range(iters):
-        s = [v for _ in ds for v in groups[ds[rnd.randrange(len(ds))]]]
+        picked = []
+        for _ in range(k):
+            s0 = rnd.randrange(n)
+            picked.extend(ds[(s0 + j) % n] for j in range(b))
+        s = [v for d in picked[:n] for v in groups[d]]
         vals.append(st.mean(s))
     vals.sort()
     return m, vals[int(0.025 * iters)], vals[int(0.975 * iters) - 1]
@@ -395,12 +531,18 @@ def paired_summary(rows: list[dict], basis: str = CONFIG["primary_basis"],
             d_by.setdefault(r["session"], []).append(na - nb)
     am, alo, ahi = date_block_bootstrap(a_by)
     dm, dlo, dhi = date_block_bootstrap(d_by)
+    sens = CONFIG["stats"]["sensitivity_block_days"]
+    _, alo10, ahi10 = date_block_bootstrap(a_by, block_days=sens)
+    _, dlo10, dhi10 = date_block_bootstrap(d_by, block_days=sens)
     return {"basis": basis, "b_rule": b_rule, "mode": mode, "sides": list(sides or CONFIG["sides"]),
             "flow_aligned_only": flow_aligned_only, "coverage": cover,
             "n_dates_A": len(a_by), "n_dates_pairs": len(d_by),
             "A_mean_norm": am, "A_ci": [alo, ahi], "A_verdict": judge(alo, ahi),
             "AminusB_mean_norm": dm, "AminusB_ci": [dlo, dhi], "AminusB_verdict": judge(dlo, dhi),
-            "note": "区间按日期整块 bootstrap；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"}
+            "stats_version": CONFIG["stats"]["version"], "block_days": CONFIG["stats"]["block_days"],
+            "sensitivity": {"block_days": sens, "A_ci": [alo10, ahi10], "A_verdict": judge(alo10, ahi10),
+                            "AminusB_ci": [dlo10, dhi10], "AminusB_verdict": judge(dlo10, dhi10)},
+            "note": "区间为循环移动块 bootstrap（主 5 日块，敏感性 10 日块）；同日多品种/两侧不当独立；50 笔只是数据复核节点，不是放行线。"}
 
 
 # ── P5 风险预算（草案，未接入任何流程；实盘试点 G4 前由用户与 Codex 定稿）────────

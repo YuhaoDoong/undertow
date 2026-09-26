@@ -53,6 +53,35 @@ notify() {  # $1=标题 $2=正文
   /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Glass\"" 2>/dev/null || true
 }
 
+# ── ④⑤ 影子账盘口窗口（v3，Codex 005 R02）──────────────────────────
+# ⚠️ 放在①②③之前：那几个窗口里有 exit 0（撞锁等），排在后面会被跳过。
+# ④ ET 10:00–10:20：当日入场 + 持仓标记；⑤ ET 15:30–15:45：持仓标记（止损/到期前平仓口径）。
+# 窗口内每次唤醒都可重试：quote 只重抓尚无有效报价的腿，原始尝试全部保留，取第一次有效（不择优）。
+# 只有结构化状态为 complete/unchanged（退出码 0）才写成功哨兵；partial/failed 下一次唤醒继续，
+# 到窗口最后 6 分钟仍未完成才告警 —— 原先「退出码 0 就写 .ok」会把零有效报价的一天堵死。
+shadow_window() {  # $1=open|close $2=窗口起(分) $3=窗口止(分) $4=标签
+  local W="$1" LO="$2" HI="$3" TAG="$4"
+  if (( ET_MIN < LO || ET_MIN > HI )); then return; fi
+  local OKF="$LOG_DIR/.shadow_${W}_${ET_DATE}.ok" ST="$LOG_DIR/.status_shadow_${W}_${ET_DATE}.json"
+  if [[ -f "$OKF" ]]; then hb "${TAG}：今日已完成，跳过"; return; fi
+  local LK="$LOG_DIR/.lock_shadow_${W}_${ET_DATE}"
+  if ! mkdir "$LK" 2>/dev/null; then hb "${TAG}：撞锁，跳过"; return; fi
+  local RES RC
+  RES=$("$PY" -m undertow.cli shadow quote --window "$W" --status-file "$ST" 2>&1); RC=$?
+  rmdir "$LK" 2>/dev/null
+  local SUM; SUM=$(printf '%s' "$RES" | grep -E '应有 .* 条腿' | tail -1)
+  if (( RC == 0 )); then
+    : > "$OKF"; hb "${TAG}：✅ ${SUM}"
+  else
+    hb "${TAG}：⏳ 未完成（rc=$RC）${SUM}，下次唤醒重试"
+    if (( ET_MIN >= HI - 6 )); then
+      notify "⚠️ 影子账${TAG}未完成" "${SUM:-$(printf '%s' "$RES" | tail -1)}"
+    fi
+  fi
+}
+shadow_window open 600 620 "④影子开盘窗"
+shadow_window close 930 945 "⑤影子收盘窗"
+
 # ── ① 盘前简报（ET 09:00–09:15）：仅在有计划或有大事件时 ──
 if (( ET_MIN >= 540 && ET_MIN <= 555 )); then
   F="$OUT/${ET_DATE}_premarket.md"
@@ -209,55 +238,13 @@ PYEOF
   fi
 fi
 
-# ── ④ 影子账两腿盘口（ET 10:00–10:08）：入场报价 + 已触发退出的报价 ──
-# W05（Codex 004 蓝图）：报价必须晚于信号、且在盘中 —— 开盘半小时后价差已收窄。
-# 只读 depth，不下单。与账户无关，产出写 data/history/shadow/（入库）。
-if (( ET_MIN >= 600 && ET_MIN <= 608 )); then
-  OK4="$LOG_DIR/.shadow_quote_${ET_DATE}.ok"
-  if [[ -f "$OK4" ]]; then hb "④影子报价：今日已完成，跳过"
-  else
-    LOCK4="$LOG_DIR/.lock_shadow_quote_${ET_DATE}"
-    if ! mkdir "$LOCK4" 2>/dev/null; then hb "④影子报价：撞锁，跳过"
-    else
-      if RES4=$("$PY" -m undertow.cli shadow quote --window open 2>&1); then
-        : > "$OK4"; hb "④影子报价：✅ $(printf '%s' "$RES4" | grep -c '更新') 个品种"
-      else
-        hb "④影子报价：❌ 失败，等下次唤醒重试"
-        notify "⚠️ 影子账报价失败" "$(printf '%s' "$RES4" | grep '⚠️' | head -1)"
-      fi
-      rmdir "$LOCK4" 2>/dev/null
-    fi
-  fi
-fi
-
-# ── ⑤ 影子账收盘前标记（ET 15:30–15:38）：持仓两腿盘口，供「k×权利金止损」口径 ──
-# P1（2026-09-26）：只有开盘一个时点时，价差止损无法前瞻检验；外部回测显示短期限信用价差
-# 的成败几乎由止损决定。一天两个标记点仍是离散监控，结论里必须写明。
-if (( ET_MIN >= 930 && ET_MIN <= 938 )); then
-  OK5="$LOG_DIR/.shadow_mark_${ET_DATE}.ok"
-  if [[ -f "$OK5" ]]; then hb "⑤影子标记：今日已完成，跳过"
-  else
-    LOCK5="$LOG_DIR/.lock_shadow_mark_${ET_DATE}"
-    if ! mkdir "$LOCK5" 2>/dev/null; then hb "⑤影子标记：撞锁，跳过"
-    else
-      if RES5=$("$PY" -m undertow.cli shadow quote --window close 2>&1); then
-        : > "$OK5"; hb "⑤影子标记：✅ $(printf '%s' "$RES5" | grep -c '更新') 个品种"
-      else
-        hb "⑤影子标记：❌ 失败，等下次唤醒重试"
-        notify "⚠️ 影子账收盘标记失败" "$(printf '%s' "$RES5" | grep '⚠️' | head -1)"
-      fi
-      rmdir "$LOCK5" 2>/dev/null
-    fi
-  fi
-fi
-
 # ── 不在任何窗口：也要留痕 ────────────────────────────────────────
 # 没有这一行，「launchd 根本没唤醒」和「唤醒了但不在窗口」看起来一模一样。
 # 5 分钟轮询一次，不在窗口就别往日志里灌（一天 288 行没人看）。
 # 改成只 touch 一个心跳文件：mtime 就是"上次被唤醒的时刻"，
 # 一眼能看出调度是死是活，日志又不会涨。
 if ! (( (ET_MIN >= 540 && ET_MIN <= 555) || (ET_MIN >= 580 && ET_MIN <= 595) \
-     || (ET_MIN >= 600 && ET_MIN <= 608) || (ET_MIN >= 610 && ET_MIN <= 625) \
-     || (ET_MIN >= 930 && ET_MIN <= 938) )); then
+     || (ET_MIN >= 600 && ET_MIN <= 620) || (ET_MIN >= 610 && ET_MIN <= 625) \
+     || (ET_MIN >= 930 && ET_MIN <= 945) )); then
   : > "$LOG_DIR/.session_alive"
 fi

@@ -21,20 +21,41 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class LegQuote:
-    """一条腿的实时盘口。bid/ask 缺失时为 None——单边空档是常态，不许用 last 顶替。"""
+    """一条腿的实时盘口。bid/ask 缺失时为 None——单边空档是常态，不许用 last 顶替。
+
+    Codex 008 G04：报价要带身份。bid_size/ask_size=None 表示数量未知（只能作报价估值）；
+    出场一侧数量为 0 → 该价不可成交，exit_price 返回 None。quote_time 为 None 表示源不提供时间
+    （长桥 depth 即如此），不能据此判断报价新旧。
+    """
     symbol: str
     qty: int                      # 正=多头，负=空头
     bid: float | None = None
     ask: float | None = None
     last: float | None = None
+    bid_size: float | None = None
+    ask_size: float | None = None
+    source: str = ""
+    quote_time: str | None = None
 
     @property
     def mid(self) -> float | None:
         return (self.bid + self.ask) / 2.0 if (self.bid and self.ask) else None
 
+    def exit_size(self) -> float | None:
+        return self.bid_size if self.qty > 0 else self.ask_size
+
     def exit_price(self) -> float | None:
-        """平掉这条腿的成交价：多头卖给买盘(bid)，空头买自卖盘(ask)。"""
+        """平掉这条腿的成交价：多头卖给买盘(bid)，空头买自卖盘(ask)。该侧挂单量为 0 → None（不可成交）。"""
+        sz = self.exit_size()
+        if sz is not None and sz <= 0:
+            return None
         return self.bid if self.qty > 0 else self.ask
+
+    @property
+    def root(self) -> str:
+        import re
+        m = re.match(r"([A-Z]+)", self.symbol.upper())
+        return m.group(1) if m else self.symbol
 
 
 @dataclass(frozen=True)
@@ -53,6 +74,9 @@ class PositionCheck:
     to_stop_pct: float | None = None   # 距止损还有多少（占当前可平仓值）
     note: str = ""
     warnings: list = field(default_factory=list)
+    roots: tuple = ()                  # 标的根代码（按产品判收市时刻）
+    size_unverified: bool = False      # 有腿的出场数量未知 → 可平仓价只是报价估值
+    time_unknown: bool = False         # 报价源不给时间
 
 
 def _value(legs, price_fn) -> float | None:
@@ -76,6 +100,9 @@ def check_position(name: str, legs: list, *, cost: float | None = None,
     mv = _value(legs, lambda l: l.mid)
     lv = _value(legs, lambda l: l.last)
     warns = []
+    zero = [l.symbol for l in legs if l.exit_size() is not None and l.exit_size() <= 0]
+    if zero:
+        warns.append(f"出场一侧挂单量为 0：{'、'.join(zero)} —— 该价不可成交，可平仓价算不出")
     if ev is None:
         warns.append("盘口单边缺失，算不出真实可平仓价——此时任何浮盈都不可信")
     # App 口径与可平仓口径的差距：这是最容易让人误判的一项
@@ -98,46 +125,88 @@ def check_position(name: str, legs: list, *, cost: float | None = None,
         ok=True, name=name, cost=cost, exit_value=ev, mid_value=mv, last_value=lv,
         pnl_exit=(ev - cost) if (ev is not None and cost is not None) else None,
         pnl_last=(lv - cost) if (lv is not None and cost is not None) else None,
-        gap=gap, stop=stop, target=target, to_stop_pct=to_stop, warnings=warns)
+        gap=gap, stop=stop, target=target, to_stop_pct=to_stop, warnings=warns,
+        roots=tuple(sorted({l.root for l in legs})),
+        size_unverified=any(l.exit_size() is None for l in legs),
+        time_unknown=any(l.quote_time is None for l in legs))
 
 
-def market_session(now=None) -> tuple[str, str]:
-    """美股【期权】市场时段。返回 (状态, 提示语)。
+def market_session(now=None, roots=()) -> tuple[str, str]:
+    """美股【期权】市场时段。返回 (状态, 提示语)；状态 ∈ 盘中 / 休市 / 部分收市 / 未知。
 
-    期权只在 09:30-16:00 ET 交易 —— 没有夜盘、没有盘前盘后（个股/ETF 正股有，期权没有）。
-    收盘后取到的 bid/ask 是昨夜残留挂单，**不是能成交的价**：点差会异常放大，
-    "真实可平仓价"因此系统性偏低，据以判止损会误触发。
-    2026-08-27 ET03:27 实测：TQQQ 价差真实可平仓显示 $67、中价 $84 —— 差 $17，
-    全部来自休市的宽点差，而报表当时毫无提示。
+    期权没有夜盘。收盘后取到的 bid/ask 是昨夜残留挂单，**不是能成交的价**：点差异常放大，
+    「真实可平仓价」系统性偏低，据以判止损会误触发（2026-08-27 ET03:27 实测 TQQQ 差 $17）。
+
+    Codex 008 G04：旧实现只看「周一到周五 09:30–16:00」，2026-11-27 14:00（提前收市后）与
+    2026-12-25 12:00（圣诞休市）都被判为盘中，报告随即写「止损判定用本表」。现在：
+    - 交易日与核心收市来自预存日历（core.market_calendar），覆盖外 → 未知，不猜；
+    - 各根代码的期权收市来自 core.option_products（16:15 类 / 16:00 类；提前收市日 13:15 / 13:00），
+      未认证的根代码按标的核心收市（较早，保守）；
+    - 带时区的 now 一律先转 ET；不带时区的 now 按 ET 解释（约定）。
     """
     from datetime import datetime
-    try:
-        from zoneinfo import ZoneInfo
-        et = (now or datetime.now(ZoneInfo("America/New_York")))
-    except Exception:
-        return "未知", ""
-    if et.weekday() >= 5:
-        return "休市", f"⚠️ 现在是 ET {et:%a %H:%M}，**周末休市**"
+    from zoneinfo import ZoneInfo
+    from undertow.core import market_calendar as mc
+    from undertow.core import option_products as op
+    ET = ZoneInfo("America/New_York")
+    if now is None:
+        et = datetime.now(ET)
+    elif now.tzinfo is None:
+        et = now.replace(tzinfo=ET)
+    else:
+        et = now.astimezone(ET)
+    d = et.date()
+    td = mc.is_trading_day(d)
+    if td is None:
+        return "未知", f"⚠️ ET {d} 不在预存交易日历覆盖内（{mc.VERSION}）：无法判定是否开市"
+    if not td:
+        why = "周末休市" if d.weekday() >= 5 else "交易所休市日"
+        return "休市", f"⚠️ 现在是 ET {et:%a %H:%M}，**{why}**"
+    core = mc.close_time(d); early = core != mc.REGULAR_CLOSE
+    core_m = int(core[:2]) * 60 + int(core[3:])
     hm = et.hour * 60 + et.minute
-    if 570 <= hm < 960:                      # 09:30 - 16:00
-        return "盘中", ""
-    return "休市", f"⚠️ 现在是 ET {et:%H:%M}，**期权盘未开**（仅 09:30-16:00 ET 交易）"
+    if hm < 570:
+        return "休市", f"⚠️ 现在是 ET {et:%H:%M}，**期权盘未开**（09:30 ET 开盘）"
+    closes = {}
+    for r in (roots or ("*",)):
+        m = op.option_close_minutes(r, early) if r != "*" else None
+        closes[r] = m if m is not None else core_m
+    open_r = [r for r, m in closes.items() if hm < m]
+    tag = f"（{'提前收市日 ' if early else ''}核心收市 {core} ET）"
+    if len(open_r) == len(closes):
+        return "盘中", ("" if not early else f"注意：今天是提前收市日{tag}")
+    if not open_r:
+        return "休市", f"⚠️ 现在是 ET {et:%H:%M}，**期权已收市**{tag}"
+    closed = [r for r in closes if r not in open_r]
+    return "部分收市", (f"⚠️ 现在是 ET {et:%H:%M}：{'、'.join(closed)} 期权已收市，"
+                        f"{'、'.join(open_r)} 仍在交易（16:15 类）{tag}")
 
 
-def render_md(checks: list, net_assets: float | None = None) -> str:
-    sess, warn = market_session()
-    title = "持仓实时体检" + ("（长桥实时盘口 · 按【真实可平仓价】计）" if sess == "盘中"
-                              else "（⚠️ 休市时段 · 报价不可成交）")
+def render_md(checks: list, net_assets: float | None = None, now=None) -> str:
+    roots = tuple(sorted({r for c in checks if c.ok for r in c.roots}))
+    sess, warn = market_session(now, roots)
+    title = "持仓实时体检" + {"盘中": "（长桥实时盘口 · 按【真实可平仓价】计）",
+                            "休市": "（⚠️ 休市时段 · 报价不可成交）",
+                            "部分收市": "（⚠️ 部分品种期权已收市 · 这些腿报价不可成交）",
+                            "未知": "（⚠️ 交易时段未知 · 不作止损依据）"}[sess]
     L = [f"# {title}", ""]
-    if warn:
-        L.append(f"> {warn}。表中 bid/ask 是**昨夜残留挂单**，点差被放大，"
+    if warn and sess == "盘中":
+        L.append(f"> {warn}")
+        L.append("")
+    elif warn:
+        L.append(f"> {warn}。表中 bid/ask 可能是**收市后残留挂单**，点差被放大，"
                  f"「真实可平仓价」会系统性偏低。")
         L.append("> **此时不得据本表判止损**——要判止损请在开盘后重跑。"
                  "参考时可看「中价」，它受宽点差影响较小。")
         L.append("")
     L.append("> 多头腿按 bid 卖、空头腿按 ask 买回——这才是「现在就走能拿回多少」。")
+    sized = all(not c.size_unverified for c in checks if c.ok)
     L.append("> 券商 App 的持仓盈亏用 last 价，对流动性差的腿会系统性高估。"
-             + ("**止损判定用本表。**" if sess == "盘中" else ""))
+             + ("**止损判定用本表。**" if (sess == "盘中" and sized) else ""))
+    if any(c.time_unknown for c in checks if c.ok):
+        L.append("> 报价时间未知（源不提供），无法判断新旧；数量为报价挂单量，不保证指定张数都能按此价成交。")
+    if not sized:
+        L.append("> ⚠️ 部分腿出场一侧挂单量未知：「真实可平仓」只是**报价估值**，不作止损依据。")
     L.append("")
     L.append("| 持仓 | 成本 | 真实可平仓 | 中价 | App(last) | 盈亏(可平仓) | 盈亏(App) | 距止损 |")
     L.append("|---|---:|---:|---:|---:|---:|---:|---:|")

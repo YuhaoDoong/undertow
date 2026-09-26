@@ -1526,7 +1526,10 @@ def cmd_live(args) -> int:
         q = quotes.get(sym)
         return LegQuote(symbol=sym, qty=held[sym],
                         bid=(d.bid if d else None), ask=(d.ask if d else None),
-                        last=(q.last if q else None))
+                        last=(q.last if q else None),
+                        bid_size=(getattr(d, "bid_size", None) if d else None),
+                        ask_size=(getattr(d, "ask_size", None) if d else None),
+                        source="longbridge depth", quote_time=None)
 
     # 按计划单里的腿分组：同一计划的腿算作一个组合；未被计划覆盖的腿单独成组
     plan_warning = None

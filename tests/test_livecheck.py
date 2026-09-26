@@ -453,3 +453,44 @@ if __name__ == "__main__":
     for fn in fns:
         fn()
     print(f"\n{len(fns)} tests passed.")
+
+
+def test_market_session_uses_calendar_and_products():
+    """Codex 008 G04：提前收市日下午、圣诞休市、16:15 类品种、跨时区、覆盖外。"""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    from undertow.analyze.livecheck import market_session
+    ET = ZoneInfo("America/New_York")
+    assert market_session(datetime(2026, 11, 27, 14, 0, tzinfo=ET))[0] == "休市"
+    assert market_session(datetime(2026, 12, 25, 12, 0, tzinfo=ET))[0] == "休市"
+    assert "交易所休市日" in market_session(datetime(2026, 12, 25, 12, 0, tzinfo=ET))[1]
+    assert market_session(datetime(2026, 11, 27, 12, 30, tzinfo=ET))[0] == "盘中"
+    # 16:00–16:15：GLD（16:15 类）仍在交易，USO（16:00 类）已收市
+    t = datetime(2026, 9, 28, 16, 5, tzinfo=ET)
+    assert market_session(t, ("GLD",))[0] == "盘中"
+    assert market_session(t, ("USO",))[0] == "休市"
+    assert market_session(t, ("GLD", "USO"))[0] == "部分收市"
+    assert market_session(t, ("TQQQ",))[0] == "休市", "未认证根代码按核心收市（保守）"
+    # 12-24 提前收市：16:15 类到 13:15
+    assert market_session(datetime(2026, 12, 24, 13, 10, tzinfo=ET), ("SPY",))[0] == "盘中"
+    assert market_session(datetime(2026, 12, 24, 13, 10, tzinfo=ET), ("USO",))[0] == "休市"
+    # 跨时区：UTC 14:00 = ET 10:00（夏令时）
+    assert market_session(datetime(2026, 9, 28, 14, 0, tzinfo=timezone.utc))[0] == "盘中"
+    assert market_session(datetime(2026, 9, 28, 22, 0, tzinfo=timezone(__import__("datetime").timedelta(hours=8))))[0] == "盘中"
+    assert market_session(datetime(2027, 4, 5, 11, 0, tzinfo=ET))[0] == "未知"
+
+
+def test_zero_size_exit_side_is_not_executable_and_size_unknown_is_estimate():
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    z = check_position("零量", [LegQuote("SLV261002P57000.US", -1, bid=0.40, ask=0.45, ask_size=0, bid_size=5)])
+    assert z.exit_value is None and any("挂单量为 0" in w for w in z.warnings)
+    u = check_position("未知量", [LegQuote("SLV261002P57000.US", -1, bid=0.40, ask=0.45)])
+    assert u.exit_value is not None and u.size_unverified
+    md = render_md([u], net_assets=1000.0, now=datetime(2026, 9, 28, 11, 0, tzinfo=ZoneInfo("America/New_York")))
+    assert "报价估值" in md and "止损判定用本表" not in md
+    ok = check_position("有量", [LegQuote("SLV261002P57000.US", -1, bid=0.40, ask=0.45, ask_size=3, bid_size=3)])
+    md2 = render_md([ok], net_assets=1000.0, now=datetime(2026, 9, 28, 11, 0, tzinfo=ZoneInfo("America/New_York")))
+    assert "止损判定用本表" in md2 and "报价时间未知" in md2
+    md3 = render_md([ok], net_assets=1000.0, now=datetime(2026, 11, 27, 14, 0, tzinfo=ZoneInfo("America/New_York")))
+    assert "不得据本表判止损" in md3 and "止损判定用本表" not in md3

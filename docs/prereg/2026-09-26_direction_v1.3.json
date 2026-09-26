@@ -1,0 +1,92 @@
+{
+ "version": "dir-analysis-v1.3-20260926",
+ "analysis": {
+  "version": "dir-analysis-v1.3-20260926",
+  "supersedes": "dir-analysis-v1.2-20260926",
+  "base_config_version": "shadow-v5-20260926",
+  "signal": "decision.flow.call_direction",
+  "mapping": {
+   "偏多": "P",
+   "偏空": "C"
+  },
+  "mapping_version": "dir-map-v1",
+  "call_code_sha": "31057c35f587532f",
+  "eligible_from": "2026-09-28",
+  "formal_date": "2026-12-31",
+  "pool": "etf",
+  "hypotheses": [
+   "H-dir",
+   "H-wall|dir"
+  ],
+  "family_size": 14,
+  "alpha_one_sided": 0.0035714285714285718,
+  "economic_delta": 0.03,
+  "min_pair_dates": 20,
+  "min_pairable_rate": 0.5,
+  "estimate": "bounds",
+  "tail_quantile": 0.1,
+  "diagnostics_version": "dir-diagnostics-v1"
+ },
+ "supersedes": {
+  "version": "dir-analysis-v1.2-20260926",
+  "frozen_commit": "42af696",
+  "sha256": {
+   "docs/prereg/2026-09-26_direction_v1.2.md": "1988cb25ee85f5d63da75c22ab38401a1c68f9cd2462e1afd4eb39ffcb50d315",
+   "docs/prereg/2026-09-26_direction_v1.2.json": "bac58343a628647f88593f6f27d7e60645e0134a23cb3894f57aa428ff59c4ff",
+   "docs/prereg/2026-09-26_direction_v1.1.md": "4e160c16b9fd3af7db8b738d64a943700441e76c4b4a8e123ab6dfbf4494e19c",
+   "docs/prereg/2026-09-26_direction_v1.1.json": "1c492ba75d1b2b44d77b1a86a8930d3e5163f632431b109ed0b4a0411938d097",
+   "docs/prereg/2026-09-26_direction_v1.md": "2c681e3475dc4d1bf68e091e202812fb94f00f24618015ccab878930aaa3b042",
+   "docs/prereg/2026-09-26_direction_v1.json": "bc6ce7146afdff274efed38996f7059833ac118cf00c6fb673c62b1f45fdd4c3"
+  },
+  "reasons": [
+   "F01 覆盖只按记录缺失判完整：入场缺报价/未定价不计入，大量收益未知时仍显示覆盖完整、判定无范围后缀"
+  ],
+  "nature": "覆盖报告与结论适用范围；检验数值、条件配对率、准入与分类均不变；无新闸门",
+  "unchanged": "假设、信号、映射、配对、区间传播、δ、α、家族、门槛、条件可配对率、准入、分类、纳入起点、检验日、v5",
+  "real_samples_seen": 0
+ },
+ "frozen_sha256": {
+  "undertow/analyze/shadow_direction.py": "9a2f5b77409bce9a6cb37908414dd9369add30478eaaeb7e781faa2cce30debf",
+  "undertow/analyze/flow.py": "e031c097b71772a79f04f88cc3bf937c8c37c5c04e46d198bfe8ffd547525c8b",
+  "docs/prereg/2026-09-26_direction_v1.3.md": "2d0f778cbfc8082554e8420894603a4e4c160953aaeff3091478e0d73540adf8"
+ },
+ "dependency_fingerprints": {
+  "shadow._vals": "b22c8a30b8309b71",
+  "shadow._norm": "a389633139c89c74",
+  "shadow.interval_ci": "7f1f917980cc4b0e",
+  "shadow.block_bootstrap": "234a2631396b2108",
+  "shadow.formal_identity": "bfab5c4a6ef30dad",
+  "shadow.window_leg": "569d40ca6bcf72e9",
+  "core.market_calendar": "060af248e083f523",
+  "shadow.entry_quality": "7a95771ae9bc1e91",
+  "shadow.exit_quality": "93c830879fc4f8df",
+  "shadow._credit": "cb38be6e821833a0",
+  "shadow.exit_cost_raw": "25dc699cc1c5c321",
+  "shadow.exit_mode": "a0941ccd793bc9b4",
+  "shadow.in_window": "af8a83f1acc2e0de",
+  "shadow.window_bounds": "ad42e5710f231413",
+  "shadow.qkey": "94a84b62f0b49c7c",
+  "shadow.config_hash": "9e60a71ac3cec0f3",
+  "signal_ledger.call_code_sha": "c890479d67096fbf",
+  "signal_ledger.CALL_CODE_FILES": [
+   "undertow/analyze/flow.py",
+   "undertow/core/models.py",
+   "undertow/collect/cboe_options.py"
+  ]
+ },
+ "informational_sha256": {
+  "undertow/analyze/shadow.py": "5197a412222a686c201d464d0107feea3930b1425eb6cdf0676b4aa667ce3ef8",
+  "undertow/shadow_cli.py": "3e439951db37a4e653ddef07d4603d25ed477ea8b04649e04b2e1b4d094b1e57",
+  "undertow/analyze/signal_ledger.py": "591f064ea141b1f089acd445b420db1ed0654e9cecb442ec8be61ac8e3ff35f1"
+ },
+ "base": {
+  "shadow_config_version": "shadow-v5-20260926",
+  "shadow_config_hash": "9e60a71ac3cec0f3",
+  "calendar": "nyse-20260101-20270331-v1",
+  "calendar_hash": "57b434b5f68f7843",
+  "b1_rule": "analyze.shadow.pick_b(mult=1.0) + _buy_leg(width=2x_modal_strike_step)",
+  "a_rule": "analyze.gamma.local_wall(mode=max, band=0.05, hi_dte=14)"
+ },
+ "time_contract": "session 认证且 recorded_at(aware) < 当日 09:30 ET；source_captured_at.current/previous 均 aware 且 < recorded_at；available_at = 二者较晚者；snapshot_sha/prev_snapshot_sha/ledger_row_sha 齐全；mapping=dir-map-v1；ledger_code_sha=call_code_sha 冻结值；结果只在 as_of > 退出日时读取",
+ "parent_head": "0e27d84"
+}

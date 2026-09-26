@@ -56,7 +56,7 @@ def st_mean(x):
 
 def test_frozen_analysis_identity():
     a = sd.ANALYSIS
-    assert a["version"].startswith("dir-analysis-v1.2") and a["supersedes"] == "dir-analysis-v1.1-20260926"
+    assert a["version"].startswith("dir-analysis-v1.3") and a["supersedes"] == "dir-analysis-v1.2-20260926"
     assert a["base_config_version"] == sh.CONFIG["version"] and a["family_size"] == 14
     assert a["alpha_one_sided"] == pytest.approx(0.05 / 14) and a["eligible_from"] == "2026-09-28"
     assert a["mapping"] == {"偏多": "P", "偏空": "C"} and a["mapping_version"] == "dir-map-v1"
@@ -221,16 +221,65 @@ def test_r02_sparse_collection_conditional_support_but_generalization_undecided(
     n_days = h["opportunities"]["days"]
     assert cov["collection"] == {"num": 20, "den": n_days, "rate": 20 / n_days}
     assert cov["end_to_end_paired"]["num"] == 20 and cov["integrity"] == "incomplete"
-    assert cov["engineering_gaps"] == n_days - 20
+    assert cov["record_gaps"] == n_days - 20 and cov["return_gaps"] == 0
     assert h["scope"]["conditional"].startswith("条件结论") and h["scope"]["generalization"].startswith("未决")
 
 
 def test_r02_complete_coverage_generalization_statement():
-    cov = sd.coverage({**dict.fromkeys(sd.CATEGORIES, 0), "complete": 5, "no_direction": 2})
+    cov = sd.coverage({**dict.fromkeys(sd.CATEGORIES, 0), "complete": 5, "no_direction": 2}, 5)
     assert cov["integrity"] == "complete" and cov["direction_present"] == {"num": 5, "den": 7, "rate": 5 / 7}
     assert sd.scope(cov)["generalization"].startswith("覆盖完整")
     empty = sd.coverage(dict.fromkeys(sd.CATEGORIES, 0))
     assert empty["integrity"] == "empty" and sd.scope(empty)["generalization"] == "未决（尚无应采集日）"
+    young = sd.coverage({**dict.fromkeys(sd.CATEGORIES, 0), "immature": 3})
+    assert young["integrity"] == "no_matured" and sd.scope(young)["generalization"] == "未决（尚无已成熟机会）"
+
+
+def test_f01_entry_missing_is_return_gap_not_complete_coverage():
+    """Codex 013 F01 反例：67 日全部生成，34 日可计价、32 日入场缺报价、1 日有效弃权 →
+    条件配对率与检验数值照旧，但收益覆盖不足、推广未决、判定串附范围。"""
+    days = mc.trading_days(date(2026, 9, 28), date(2026, 12, 31))
+    rows = []
+    for i, d in enumerate(days):
+        r = _row(d.isoformat(), "偏多", {("P", "B1"): 16 + (i % 2), ("C", "B1"): 0})
+        exp = mc.next_trading_day(d).isoformat()
+        for leg in r["legs"]:
+            leg["expiry"] = exp
+        if i >= 34:
+            r["outcome"] = {k: _o(None, None, "entry_missing") for k in r["outcome"]}
+        rows.append(r)
+    rows[-1]["decision"]["flow"]["call_direction"] = None
+    h = sd.instrument_report(rows, "gold", as_of=date(2027, 1, 5))["H-dir"]
+    op, cov = h["opportunities"], h["opportunities"]["coverage"]
+    assert op["table"]["entry_missing"] == 32 and op["table"]["complete"] == 34 and op["table"]["no_direction"] == 1
+    assert op["pairable_rate"] == pytest.approx(34 / 66)                 # 冻结的条件配对率不变
+    assert h["n_pairs"] == 34 and h["verdict"].startswith("支持")        # 检验数值不变
+    assert cov["collection"]["rate"] == 1.0 and cov["record_gaps"] == 0
+    assert cov["matured_result_object_present"] == {"num": 66, "den": 66, "rate": 1.0}
+    assert cov["matured_return_identified"] == {"num": 34, "den": 66, "rate": 34 / 66}
+    assert cov["return_gaps"] == 32 and cov["integrity"] == "incomplete"
+    assert h["verdict"].endswith("［条件样本内；全日历推广未决］")
+    assert h["scope"]["generalization"].startswith("未决") and "入场缺报价 32" in h["scope"]["generalization"]
+
+
+def test_f01_unpriced_unbounded_and_interval_are_return_gaps():
+    base = dict.fromkeys(sd.CATEGORIES, 0)
+    c = sd.coverage({**base, "complete": 20, "unpriced": 10}, 20)
+    assert c["integrity"] == "incomplete" and c["return_gaps"] == 10 and c["matured_return_breakdown"]["unpriced"] == 10
+    assert sd.scope(c)["generalization"].startswith("未决")
+    c2 = sd.coverage({**base, "complete": 20, "unbounded": 2}, 20)
+    assert c2["integrity"] == "incomplete" and c2["matured_return_breakdown"]["unbounded"] == 2
+    c3 = sd.coverage({**base, "complete": 20}, 18)                   # 2 个有限区间：有界但未完整识别
+    assert c3["integrity"] == "incomplete" and c3["matured_return_breakdown"]["finite_interval"] == 2
+    c4 = sd.coverage({**base, "complete": 20}, 20)
+    assert c4["integrity"] == "complete" and sd.scope(c4)["generalization"].startswith("覆盖完整")
+
+
+def test_collection_pending_basis_states_unknown_time():
+    d = date(2026, 9, 29)
+    assert sd.opportunity_table([], "gold", "H-dir", basis=B, as_of=d)["collection_pending_basis"].startswith("运行时刻未知")
+    at = datetime(2026, 9, 29, 13, 0, tzinfo=timezone.utc)
+    assert sd.opportunity_table([], "gold", "H-dir", basis=B, as_of=d, now=at)["collection_pending_basis"] == "当日 09:30 ET 之前"
 
 
 def test_d02_pairable_rate_below_threshold_is_insufficient():

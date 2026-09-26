@@ -693,7 +693,7 @@ def cmd_chain(args) -> int:
 
 
 def cmd_direction(args) -> int:
-    """方向次要分析（预登记 dir-analysis-v1.2，docs/prereg/2026-09-26_direction_v1.2.md）。只读、纯报告。
+    """方向次要分析（预登记 dir-analysis-v1.3，docs/prereg/2026-09-26_direction_v1.3.md）。只读、纯报告。
 
     Codex 011 D01/D02：行不在这里预先过滤 —— 准入由 shadow_direction 自己判，拒绝按原因计入机会表。"""
     from undertow.analyze import shadow_direction as sd
@@ -730,7 +730,10 @@ def cmd_direction(args) -> int:
                 fr = lambda k: f"{cov[k]['num']}/{cov[k]['den']}"
                 print(f"                 全日历覆盖：采集 {fr('collection')}，身份可审计 {fr('identity_auditable')}，"
                       f"有方向 {fr('direction_present')}，有候选 {fr('candidate_present')}，"
-                      f"成熟有结果 {fr('matured_result_complete')}，端到端可配对 {fr('end_to_end_paired')}")
+                      f"成熟有结果对象 {fr('matured_result_object_present')}，"
+                      f"成熟收益完整识别 {fr('matured_return_identified')}，端到端可配对 {fr('end_to_end_paired')}")
+                if op.get("collection_pending_basis"):
+                    print(f"                 当日采集待定（{op['collection_pending_basis']}）；运维告警另见任务状态，不受此影响")
             print(f"                 适用范围：{x['scope']['conditional']}；推广：{x['scope']['generalization']}")
         cs = rep["common_sample"]
         for rule in (sh.CONFIG["primary_b"], "A"):
@@ -848,7 +851,7 @@ def register(sub):
     ch = ss.add_parser("chain", help="开盘后近价全链快照（ET 10:15–10:35，入 git；只读）")
     ch.add_argument("instruments", nargs="*"); ch.add_argument("--allow-off-hours", action="store_true")
     ch.add_argument("--status-file"); ch.set_defaults(func=cmd_chain)
-    dr = ss.add_parser("direction", help="方向次要分析（预登记 dir-analysis-v1.2；只读报告）")
+    dr = ss.add_parser("direction", help="方向次要分析（预登记 dir-analysis-v1.3；只读报告）")
     dr.add_argument("--replay", action="store_true"); dr.add_argument("--output")
     dr.set_defaults(func=cmd_direction)
     e = ss.add_parser("exec", help="S05 账户风险预算账（私有，写 data/account/；理论预算，券商执行性未核实；只读）")

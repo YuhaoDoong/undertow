@@ -1,8 +1,8 @@
-"""方向次要分析（预登记 dir-analysis-v1.2；Codex 009/010/011/012 设计，用户 2026-09-26 论点）。纯函数，无 I/O。
+"""方向次要分析（预登记 dir-analysis-v1.3；Codex 009/010/011/012/013 设计，用户 2026-09-26 论点）。纯函数，无 I/O。
 
 用户原话（节选）：「期权墙可以提高方向性的准确率，而方向性可以提高卖方价差的胜率……卖方价差又可以反过来
 提高方向性交易的胜率，因为只要不要出现大幅度反方向即可盈利。我觉得这三者都是要结合在一起的。」
-预登记：docs/prereg/2026-09-26_direction_v1.2.md（取代 v1.1，v1/v1.1 原件保留）。本文件与依赖函数的指纹冻结在其 JSON。
+预登记：docs/prereg/2026-09-26_direction_v1.3.md（取代 v1.2，v1/v1.1/v1.2 原件保留）。本文件与依赖函数的指纹冻结在其 JSON。
 
 不改 v5 的任何东西。在 v5 已每天记录两侧的数据上：
   记 A=墙选腿、B1=距决策价 ≥1.0×ATR14 的首个挂牌虚值档（同美元宽度），a=按方向信号的顺向侧、o=逆向侧；
@@ -24,6 +24,9 @@ v1.2（Codex 012 R01–R04 + 描述性界限版）：
   R04 先看退出日截止、后读结果（as_of ≤ 退出日一律 immature）；描述性部分同样截止；
   R02 冻结的条件配对率保留；另列全日历覆盖（原始分子分母）与结论适用范围；有工程缺失时推广判「未决」。
       不新增闸门、不改门槛；当日采集窗口（09:30 ET）未结束的缺行记 collection_pending，不算漏采。
+
+v1.3（Codex 013 F01）：覆盖分成「记录完整性」与「收益可评估性」。入场缺报价、未定价、无界、有限区间
+  都算收益未完整识别，推广判未决、判定串附范围。检验数值与条件配对率不变。
 """
 from __future__ import annotations
 
@@ -37,8 +40,8 @@ from undertow.core import market_calendar as mc
 ET = ZoneInfo("America/New_York")
 
 ANALYSIS = {
-    "version": "dir-analysis-v1.2-20260926",
-    "supersedes": "dir-analysis-v1.1-20260926",
+    "version": "dir-analysis-v1.3-20260926",
+    "supersedes": "dir-analysis-v1.2-20260926",
     "base_config_version": "shadow-v5-20260926",
     "signal": "decision.flow.call_direction",
     "mapping": {"偏多": "P", "偏空": "C"},           # 其余（中性/空/None）= 无方向，只进分母
@@ -207,7 +210,8 @@ def opportunity_table(rows: list[dict], inst: str, hypothesis: str, *, basis: st
     ident, days = _window(as_of)
     if days is None:
         return {"status": "calendar_unknown", "table": None, "reasons": {}, "days": None, "items": [],
-                "pairable_rate": None, "pairable_denominator": list(PAIRABLE_DENOM), "coverage": None}
+                "pairable_rate": None, "pairable_denominator": list(PAIRABLE_DENOM), "coverage": None,
+                "collection_pending_basis": None}
     by = {r["session"]: r for r in rows if r.get("instrument") == inst}
     table, reasons, items = dict.fromkeys(CATEGORIES, 0), {}, []
     for d in days:
@@ -221,17 +225,26 @@ def opportunity_table(rows: list[dict], inst: str, hypothesis: str, *, basis: st
             reasons[why] = reasons.get(why, 0) + 1
         items.append({"session": d.isoformat(), "category": cat, "vals": vals})
     denom = sum(table[c] for c in PAIRABLE_DENOM)
+    n_point = sum(1 for it in items if it["category"] == "complete" and all(v[0] == v[1] for v in it["vals"]))
     return {"status": "ok", "table": table, "reasons": reasons, "days": len(days), "items": items,
             "pairable_rate": (table["complete"] + table["unbounded"]) / denom if denom else None,
-            "pairable_denominator": list(PAIRABLE_DENOM), "coverage": coverage(table)}
+            "pairable_denominator": list(PAIRABLE_DENOM), "coverage": coverage(table, n_point),
+            "collection_pending_basis": (None if not table["collection_pending"] else
+                                         "运行时刻未知，按窗口未结束处理" if now is None else "当日 09:30 ET 之前")}
 
 
 def _frac(num, den):
     return {"num": num, "den": den, "rate": num / den if den else None}
 
 
-def coverage(t: dict) -> dict:
-    """v1.2 R02：与冻结的条件配对率并列的全日历覆盖（描述，不是闸门）。每级给原始分子分母。"""
+def coverage(t: dict, n_point_pairs: int | None = None) -> dict:
+    """与冻结的条件配对率并列的全日历覆盖（描述，不是闸门）。每级给原始分子分母。
+
+    v1.3（Codex 013 F01）：把两件事分开 ——
+      记录完整性：该有的机会行是否生成、身份是否可审计、成熟后是否有结果对象（漏采/身份失败/成熟缺结果）；
+      收益可评估性：成熟机会的收益是否被完整识别（点值）。入场缺报价、未定价、无界、有限区间都不算完整识别。
+    入场缺报价的原因（任务没跑、源故障、还是可观测的流动性不足）目前不可区分，一律按「收益未知」计，
+    不事后改称弃权、不当作零收益；v1 起没有预先定义的流动性弃权规则，所以也不单列可确认的执行弃权。"""
     due = sum(t.values()) - t["collection_pending"]
     generated = due - t["not_generated"]
     identity_ok = generated - t["identity_fail"]
@@ -239,31 +252,52 @@ def coverage(t: dict) -> dict:
     candidate = directed - t["no_candidate"] - t["beyond_formal_date"]
     matured = sum(t[c] for c in PAIRABLE_DENOM)
     paired = t["complete"] + t["unbounded"]
-    engineering_gaps = t["not_generated"] + t["identity_fail"] + t["matured_missing_result"]
+    n_point = t["complete"] if n_point_pairs is None else n_point_pairs
+    record_gaps = t["not_generated"] + t["identity_fail"] + t["matured_missing_result"]
+    ret = {"point": n_point, "finite_interval": t["complete"] - n_point, "unbounded": t["unbounded"],
+           "unpriced": t["unpriced"], "entry_missing": t["entry_missing"],
+           "missing_result": t["matured_missing_result"], "den": matured}
+    return_gaps = matured - n_point
+    if due == 0:
+        integ = "empty"
+    elif record_gaps or return_gaps:
+        integ = "incomplete"
+    elif matured == 0:
+        integ = "no_matured"
+    else:
+        integ = "complete"
     return {"collection": _frac(generated, due),                    # 应采集日里生成了机会行
             "identity_auditable": _frac(identity_ok, generated),    # 生成的行里来源身份可审计
             "direction_present": _frac(directed, identity_ok),      # 合格行里有方向（无方向=预定弃权）
             "candidate_present": _frac(candidate, directed),
-            "matured_result_complete": _frac(matured - t["matured_missing_result"], matured),
-            "end_to_end_paired": _frac(paired, due),                # 应采集日里最终可配对
-            "engineering_gaps": engineering_gaps,
-            "integrity": ("empty" if due == 0 else "complete" if engineering_gaps == 0 else "incomplete")}
+            "matured_result_object_present": _frac(matured - t["matured_missing_result"], matured),  # 只表示有结果对象
+            "matured_return_identified": _frac(n_point, matured),   # 收益被完整识别（点值）
+            "matured_return_breakdown": ret,
+            "end_to_end_paired": _frac(paired, due),                # 应采集日里最终进入冻结配对率分子
+            "record_gaps": record_gaps, "return_gaps": return_gaps,
+            "integrity": integ}
 
 
 def scope(cov: dict | None) -> dict:
     """结论适用范围：检验结论只对「身份合格、有方向、有候选、已成熟且可配对」的条件样本成立。
-    有工程缺失（漏采/身份不合格/成熟缺结果）时，缺失机制可能与行情相关，推广到全日历另判「未决」。"""
+    记录缺失或收益未完整识别时，缺失机制可能与行情相关，推广到全日历另判「未决」。"""
     cond = "条件结论：仅限身份合格、有方向、有候选、已成熟且可配对的样本"
     if cov is None:
         return {"conditional": cond, "generalization": "未决（日历未知）"}
     if cov["integrity"] == "empty":
         return {"conditional": cond, "generalization": "未决（尚无应采集日）"}
+    if cov["integrity"] == "no_matured":
+        return {"conditional": cond, "generalization": "未决（尚无已成熟机会）"}
     if cov["integrity"] == "complete":
         return {"conditional": cond,
-                "generalization": "覆盖完整：无漏采、无身份失败、无成熟缺结果；无方向日为预定义弃权"}
+                "generalization": "覆盖完整：无漏采、无身份失败、成熟机会收益全部为点值；无方向日为预定义弃权"}
+    r = cov["matured_return_breakdown"]
     return {"conditional": cond,
-            "generalization": f"未决：工程缺失 {cov['engineering_gaps']} 格，缺失敏感性分析未做，"
-                              "条件结论不能代表全日历、更不等于可执行策略已验证"}
+            "generalization": (f"未决：记录缺失 {cov['record_gaps']} 格（漏采/身份失败/成熟缺结果）、"
+                               f"收益未完整识别 {cov['return_gaps']} 格（入场缺报价 {r['entry_missing']}、"
+                               f"未定价 {r['unpriced']}、无界 {r['unbounded']}、有限区间 {r['finite_interval']}、"
+                               f"缺结果 {r['missing_result']}）；原因未解释、缺失敏感性分析未做，"
+                               "条件结论不能代表全日历、更不等于可执行策略已验证")}
 
 
 # ── 判定（D05 用语）────────────────────────────────────────────────────
@@ -322,9 +356,10 @@ def instrument_report(rows: list[dict], inst: str, *, basis: str = sh.CONFIG["pr
         ci, n, unb, nd = _ci(ot["items"])
         v = judge(ci, nd, ot["pairable_rate"])
         if (ot["coverage"] or {}).get("integrity") != "complete" and v.startswith(("支持", "统计为正", "不支持", "排除")):
-            v += "［条件样本内；全日历推广未决］"           # R02：范围随判定一起出现，不能单独转述成整体结论
+            v += "［条件样本内；全日历推广未决］"           # R02/F01：范围随判定一起出现，不能单独转述成整体结论
         out[h] = {"opportunities": {k: ot[k] for k in ("status", "table", "reasons", "days", "pairable_rate",
-                                                         "pairable_denominator", "coverage")},
+                                                         "pairable_denominator", "coverage",
+                                                         "collection_pending_basis")},
                   "scope": scope(ot["coverage"]),
                   "n_pairs": n, "n_unbounded": unb, "n_dates": nd, "ci_one_sided_alpha": ANALYSIS["alpha_one_sided"],
                   "ci": ci, "verdict": v if ident == "formal" else f"探索·{v}"}
@@ -409,7 +444,9 @@ def common_sample(rows, basis) -> dict:
 
 
 def _env(pairs, k):
-    """[(L, U)] 的确定性计价包络。L 可为 None（下界未知）：保守侧即为未知，不以 0 补齐。"""
+    """[(L, U)] 的确定性计价包络。L 可为 None（下界未知）：均值与最差 k 均值的保守侧即为未知，不以 0 补齐。
+    胜率不同：它是二元事件，下界未知的那条最坏按「不赢」计，所以胜率下界仍可计算 —— 这是胜负的逻辑下界，
+    不是把收益补成 0。"""
     n = len(pairs)
     Ls, Us = [p[0] for p in pairs], [p[1] for p in pairs]
     known = all(x is not None for x in Ls)

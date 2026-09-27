@@ -753,18 +753,22 @@ def cmd_direction(args) -> int:
     return 0
 
 
-def bars_plan(rows: list[dict], *, last_day: date) -> dict:
+BARS_SCOPE = {"pool": "etf", "rules": ("A", "B1")}   # 长桥历史 K 线按不同代码数限额 → 只补主池的主比较两臂
+
+
+def bars_plan(rows: list[dict], *, last_day: date, insts=None, rules=None) -> dict:
     """影子账候选价差需要补的逐分钟 K 线：{(root, 交易日): {合约代码, …, 标的代码}}。
 
-    每条候选腿的卖腿与买腿，从 session 到到期日（含）的每个交易日，截到 last_day。纯函数。"""
+    每条候选腿的卖腿与买腿，从 session 到到期日（含）的每个交易日，截到 last_day。
+    insts / rules 为 None 时不筛选。纯函数。"""
     from undertow.collect import longbridge_bars as lbb
     need: dict = {}
     for r in rows:
         root = r.get("symbol")
-        if not root:
+        if not root or (insts is not None and r.get("instrument") not in insts):
             continue
         for leg in r.get("legs", []):
-            if leg.get("status") != "candidate":
+            if leg.get("status") != "candidate" or (rules is not None and leg.get("rule") not in rules):
                 continue
             days = mc.trading_days(date.fromisoformat(r["session"]), min(date.fromisoformat(leg["expiry"]), last_day))
             for d in days or []:
@@ -780,7 +784,8 @@ def cmd_bars(args) -> int:
 
     已到期合约约一周后长桥就查不到 → 按日期从早到晚补（最早的最先消失）。已存的不重抓；
     「查不到 / 无效代码」如实记为状态，不当作失败重试（下次仍会跳过）。网络/CLI 故障 → issue、rc=1。
-    口径：只有成交价、无买卖价 —— 是 v5 保守入场价之外的补充数据，不替代它。"""
+    口径：只有成交价、无买卖价 —— 是 v5 保守入场价之外的补充数据，不替代它。
+    长桥历史 K 线按【不同代码数】限额（实测 400）→ 默认只补主池 A、B1；配额用尽 → rc=3（不是故障）。"""
     from undertow.collect import longbridge_bars as lbb
     rows = []
     for d in (_vdir(False), _vdir(True)):
@@ -795,7 +800,11 @@ def cmd_bars(args) -> int:
         return 1
     if args.since:
         rows = [r for r in rows if r["session"] >= args.since]
-    plan = bars_plan(rows, last_day=last_day)
+    if args.all:
+        plan = bars_plan(rows, last_day=last_day)
+    else:
+        plan = bars_plan(rows, last_day=last_day, insts=set(sh.CONFIG["pools"][BARS_SCOPE["pool"]]),
+                         rules=BARS_SCOPE["rules"])
     todo = sorted(plan.items(), key=lambda kv: kv[0][1])
     n_new = n_ok = n_gone = 0
     issues, done = [], []
@@ -817,6 +826,15 @@ def cmd_bars(args) -> int:
                 n_new += 1
                 n_ok += res["status"] == "ok"
                 n_gone += res["status"] in ("not_found", "invalid_symbol")
+        except lbb.BarsQuotaExhausted as e:
+            if any(s in cur["contracts"] for s in missing):
+                lbb.save_day(path, cur)
+                done.append(f"{root} {day}")
+            print(f"逐分钟 K 线：长桥历史 K 线配额用尽（{e}）；本次新抓 {n_new}（有数据 {n_ok}），"
+                  f"未完成的下次自动续补。配额重置周期未查证。", file=sys.stderr)
+            _status(args, "bars", done, [], overall="quota_exhausted",
+                    counts={"new": n_new, "ok": n_ok, "gone": n_gone})
+            return 3
         except lbb.BarsUnavailable as e:
             issues.append({"instrument": f"{root} {day}", "error": str(e)})
         if missing and any(s in cur["contracts"] for s in missing):
@@ -921,6 +939,7 @@ def register(sub):
     c.set_defaults(func=cmd_capture)
     b = ss.add_parser("bars", help="补候选价差的历史盘中成交价（长桥 1 分钟 K 线；到期约一周后查不到，尽早补）")
     b.add_argument("--since", help="只补 session ≥ 该日的机会行"); b.add_argument("--status-file")
+    b.add_argument("--all", action="store_true", help="全部品种与规则（默认只补主池的 A、B1：长桥按不同代码数限额）")
     b.set_defaults(func=cmd_bars)
     q = ss.add_parser("quote", help="盘中抓两腿盘口（入场/退出）"); q.add_argument("instruments", nargs="*")
     q.add_argument("--allow-off-hours", action="store_true"); q.add_argument("--status-file")

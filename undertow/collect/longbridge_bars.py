@@ -40,6 +40,11 @@ class BarsFileCorrupt(RuntimeError):
     pass
 
 
+class BarsQuotaExhausted(BarsUnavailable):
+    """长桥历史 K 线的【不同代码数】配额用尽（2026-09-27 实测：code=301607，limit:400）。
+    重置周期官方文档未查到 —— 不猜，照实报告，下次运行自动重试。与网络故障分开，不能每次都当故障告警。"""
+
+
 def option_symbol(root: str, expiry: str, side: str, strike: float) -> str:
     """GLD, 2026-10-09, P, 380 → GLD261009P380000.US（行权价 ×1000，取整）。"""
     d = date.fromisoformat(expiry)
@@ -60,6 +65,8 @@ def _run(args: list[str], *, timeout: float = 30.0) -> tuple[str, object]:
             return "not_found", err.strip()[:200]
         if "301600" in err or "invalid symbol" in err:
             return "invalid_symbol", err.strip()[:200]
+        if "301607" in err or "count out of limit" in err:
+            raise BarsQuotaExhausted(err.strip()[:200])
         raise BarsUnavailable(err.strip()[:200] or f"rc={p.returncode}")
     try:
         return "ok", json.JSONDecoder().raw_decode(p.stdout.lstrip())[0]

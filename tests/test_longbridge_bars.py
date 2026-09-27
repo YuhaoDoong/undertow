@@ -51,3 +51,28 @@ def test_bars_plan_covers_both_legs_through_expiry_capped():
     plan = bars_plan([row], last_day=date(2026, 9, 24))
     assert sorted(d.isoformat() for _, d in plan) == ["2026-09-22", "2026-09-23", "2026-09-24"]
     assert plan[("GLD", date(2026, 9, 23))] == {"GLD.US", "GLD260925P380000.US", "GLD260925P379000.US"}
+
+
+def test_quota_error_is_distinct_from_not_found(monkeypatch):
+    class P:
+        returncode = 1
+        stdout = ""
+        stderr = "Error: WebSocket error (status=7, code=301607): history candlestick symbol count out of limit"
+    monkeypatch.setattr(lbb.shutil, "which", lambda b: "/bin/longbridge")
+    monkeypatch.setattr(lbb.subprocess, "run", lambda *a, **k: P())
+    with pytest.raises(lbb.BarsQuotaExhausted):
+        lbb._run(["kline"])
+    P.stderr = "Error: WebSocket error (status=7, code=301603): quote not found"
+    assert lbb._run(["kline"])[0] == "not_found"
+
+
+def test_bars_plan_scope_filters_instrument_and_rule():
+    from undertow.shadow_cli import bars_plan
+    rows = [{"symbol": "GLD", "instrument": "gold", "session": "2026-09-22", "legs": [
+                {"status": "candidate", "rule": "A", "side": "P", "sell": 380, "buy": 379, "expiry": "2026-09-23"},
+                {"status": "candidate", "rule": "B2", "side": "P", "sell": 370, "buy": 369, "expiry": "2026-09-23"}]},
+            {"symbol": "NVDA", "instrument": "nvda", "session": "2026-09-22", "legs": [
+                {"status": "candidate", "rule": "A", "side": "C", "sell": 230, "buy": 231, "expiry": "2026-09-23"}]}]
+    plan = bars_plan(rows, last_day=date(2026, 9, 22), insts={"gold"}, rules=("A", "B1"))
+    assert list(plan) == [("GLD", date(2026, 9, 22))]
+    assert plan[("GLD", date(2026, 9, 22))] == {"GLD.US", "GLD260923P380000.US", "GLD260923P379000.US"}

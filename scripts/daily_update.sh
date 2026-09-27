@@ -318,7 +318,14 @@ set +e
 BARS_OUT=$(python3 -m undertow shadow bars --status-file "data/logs/.status_bars_${ET_DATE}.json" 2>&1); BARS_RC=$?
 set -e
 printf '%s\n' "$BARS_OUT" | grep -E "逐分钟|⚠️" | head -5 || true
-if (( BARS_RC != 0 )); then
+if (( BARS_RC == 3 )); then
+    # 长桥历史 K 线配额用尽：不是故障，但要让人知道（每个 ET 日只提醒一次，免得一天四次狼来了）
+    QUOTA_MARK="data/logs/.bars_quota_${ET_DATE}"
+    if [[ ! -e "$QUOTA_MARK" ]]; then
+        : > "$QUOTA_MARK"
+        alert "ℹ️ 期权分钟线：长桥配额用尽（ET $ET_NOW）" "未补完的下次自动续补；到期约一周后合约会查不到"
+    fi
+elif (( BARS_RC != 0 )); then
     alert "⚠️ 期权分钟线补抓失败（ET $ET_NOW）" "rc=$BARS_RC：$(printf '%s' "$BARS_OUT" | grep '⚠️' | head -2 | tr '\n' ' ')"
 fi
 

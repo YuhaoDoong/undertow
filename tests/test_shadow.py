@@ -612,7 +612,7 @@ def test_non_overlap_filter():
 
 def test_windows_command(monkeypatch, capsys):
     from undertow import shadow_cli as sc
-    for d, want, rc in ((date(2026, 11, 27), "open 600 620\nclose 750 765\nchain 615 635\n", 0),
+    for d, want, rc in ((date(2026, 11, 27), "open 600 620\nclose 750 765\nchain 615 635\nsample 585 765\n", 0),
                         (date(2026, 11, 26), "", 0), (date(2027, 4, 5), "", 3)):
         monkeypatch.setattr(sc, "market_today", lambda d=d: d)
         assert sc.cmd_windows(None) == rc
@@ -927,3 +927,68 @@ def test_d04_chain_time_converted_to_et():
     assert filter_chain(base("2026-09-28T10:05:00-04:00"), d)["undertow_filter"]["underlying_proxy_in_window"] is True
     assert filter_chain(base("2026-09-28T10:05:00"), d)["undertow_filter"]["underlying_proxy_in_window"] is True
     assert filter_chain(base("2026-09-28T10:21:00"), d)["undertow_filter"]["underlying_proxy_in_window"] is False
+
+
+# ── 盘中时段采样（用户 2026-09-27「扩大记录时间」；与 v5 预登记无关）──
+
+def test_sample_bounds_and_slots():
+    from undertow import shadow_cli as sc
+    assert sc.sample_bounds(date(2026, 9, 28)) == (585, 780)            # 09:45–13:00
+    assert sc.sample_bounds(date(2026, 11, 27)) == (585, 765)           # 13:00 收市日截到 12:45
+    assert sc.sample_bounds(date(2026, 11, 26)) is None                 # 感恩节
+    bd = (585, 780)
+    assert sc.sample_slot(584, bd) is None and sc.sample_slot(585, bd) == "09:45"
+    assert sc.sample_slot(599, bd) == "09:45" and sc.sample_slot(600, bd) == "10:00"
+    assert sc.sample_slot(780, bd) == "13:00" and sc.sample_slot(781, bd) is None
+
+
+def test_sample_legs_entry_day_and_held_only():
+    from undertow import shadow_cli as sc
+    rows = [{"key": "k1", "session": "2026-09-28", "legs": [
+                {"leg_id": "P-A", "rule": "A", "status": "candidate", "side": "P", "expiry": "2026-09-30", "sell": 1, "buy": 0.5},
+                {"leg_id": "C-A", "rule": "A", "status": "no_candidate", "side": "C", "expiry": "2026-09-30", "sell": 2, "buy": 3}]},
+            {"key": "k0", "session": "2026-09-24", "legs": [
+                {"leg_id": "P-B1", "rule": "B1", "status": "candidate", "side": "P", "expiry": "2026-09-25", "sell": 1, "buy": 0.5}]}]
+    got = sc.sample_legs(rows, date(2026, 9, 28))
+    assert [(g["key"], g["leg_id"]) for g in got] == [("k1", "P-A")]
+
+
+def test_cmd_sample_writes_once_per_slot(tmp_path, monkeypatch):
+    from undertow import shadow_cli as sc
+    from undertow.collect import longbridge_quote as lq
+    from undertow.core.config import load_config
+    gold = load_config().get("gold")
+    ledger = tmp_path / "gold.jsonl"
+    ledger.write_text(json.dumps({"key": "gold|2026-09-28", "session": "2026-09-28", "legs": [
+        {"leg_id": "P-A", "rule": "A", "status": "candidate", "side": "P", "expiry": "2026-09-30",
+         "sell": 380.0, "buy": 379.0}]}) + "\n")
+
+    class FakeDT(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 9, 28, 10, 7, tzinfo=sc.ET)
+    monkeypatch.setattr(sc, "datetime", FakeDT)
+    monkeypatch.setattr(sc, "_phase_now", lambda: "rth")
+    monkeypatch.setattr(sc, "_path", lambda k, replay: ledger if k == "gold" else tmp_path / "none.jsonl")
+    monkeypatch.setattr(sc, "_instruments", lambda cfg, names: [gold])
+    monkeypatch.setattr(sc, "SAMPLE_DIR", tmp_path / "samples")
+    calls = []
+    monkeypatch.setattr(lq, "fetch_depth", lambda syms: calls.append(syms) or
+                        {s: lq.Depth(symbol=s, bid=1.0, bid_size=5, ask=1.2, ask_size=7) for s in syms})
+    monkeypatch.setattr(lq, "fetch_stock_quotes", lambda syms: {})
+
+    class A:
+        instruments, status_file = [], None
+    assert sc.cmd_sample(A()) == 0
+    out = tmp_path / "samples" / "2026-09-28" / "gold.jsonl"
+    recs = [json.loads(x) for x in out.read_text().splitlines()]
+    assert len(recs) == 1 and recs[0]["slot"] == "10:00" and len(recs[0]["quotes"]) == 2
+    assert recs[0]["legs"][0]["sell_sym"] in recs[0]["quotes"]
+    assert sc.cmd_sample(A()) == 0 and len(calls) == 1          # 同一时段不重复记
+    assert len(out.read_text().splitlines()) == 1
+
+
+def test_session_hooks_runs_sample_from_windows():
+    src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
+    assert src.index("shadow_sample() {") < src.index('shadow_sample "$_LO" "$_HI"')
+    assert "shadow sample" in src and "585" not in src, "采样时段只由 shadow windows 给出，不写死"

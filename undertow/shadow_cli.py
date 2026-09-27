@@ -185,6 +185,9 @@ def cmd_windows(args) -> int:
     if mc.close_time(d) is not None:                  # 开盘后近价全链快照窗口（与收市时刻无关）
         lo, hi = (int(x[:2]) * 60 + int(x[3:]) for x in CHAIN_WINDOW)
         print(f"chain {lo} {hi}")
+    sb = sample_bounds(d)                             # 盘中时段采样（用户可操作的 09:45–13:00，半日市截短）
+    if sb is not None:
+        print(f"sample {sb[0]} {sb[1]}")
     return 0
 
 
@@ -756,6 +759,107 @@ def cmd_direction(args) -> int:
 BARS_SCOPE = {"pool": "etf", "rules": ("A", "B1")}   # 长桥历史 K 线按不同代码数限额 → 只补主池的主比较两臂
 
 
+SAMPLE = {"version": "shadow-sample-v1-20260927", "start": "09:45", "end": "13:00", "step_min": 15}
+SAMPLE_DIR = Path("data/history/shadow_samples")
+
+
+def sample_bounds(d: date) -> tuple[int, int] | None:
+    """盘中采样时段（ET 分钟）：用户可操作的 09:45–13:00（用户 2026-09-27），截到收市前 15 分钟；非交易日/日历未知 → None。"""
+    ct = mc.close_time(d)
+    if ct is None:
+        return None
+    lo = int(SAMPLE["start"][:2]) * 60 + int(SAMPLE["start"][3:])
+    hi = min(int(SAMPLE["end"][:2]) * 60 + int(SAMPLE["end"][3:]), int(ct[:2]) * 60 + int(ct[3:]) - 15)
+    return (lo, hi) if hi >= lo else None
+
+
+def sample_slot(minute: int, bd: tuple[int, int]) -> str | None:
+    """所在 15 分钟时段的起点 "HH:MM"；不在时段内 → None。"""
+    if not (bd[0] <= minute <= bd[1]):
+        return None
+    m = bd[0] + (minute - bd[0]) // SAMPLE["step_min"] * SAMPLE["step_min"]
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def sample_legs(rows: list[dict], today: date) -> list[dict]:
+    """今天在场的候选腿：当日入场的 + 尚未到期的持仓（session ≤ 今天 ≤ 到期日）。纯函数。"""
+    t = today.isoformat()
+    return [{"key": r["key"], "session": r["session"], "leg_id": l["leg_id"], "rule": l.get("rule"),
+             "side": l["side"], "expiry": l["expiry"], "sell": l["sell"], "buy": l["buy"]}
+            for r in rows for l in r.get("legs", [])
+            if l.get("status") == "candidate" and r["session"] <= t <= l["expiry"]]
+
+
+def cmd_sample(args) -> int:
+    """盘中时段采样（用户 2026-09-27：「扩大记录时间」）：ET 09:45–13:00 每 15 分钟，对在场候选腿各记一次盘口。
+
+    与 v5 预登记无关：不写 v5 账本、不改入场窗（10:00–10:20）与主终点；单独存到 data/history/shadow_samples/，
+    用来回答「在用户能操作的时段开仓，实际能收多少」。同一时段已记过的品种跳过；只读，从不下单。"""
+    from undertow.collect.asof_history import locked
+    from undertow.collect.longbridge_options import _lb_symbol
+    from undertow.collect.longbridge_quote import fetch_depth, fetch_stock_quotes
+    from undertow.core.config import load_config
+    now = datetime.now(ET)
+    today = now.date()
+    bd = sample_bounds(today)
+    phase = _phase_now()
+    slot = sample_slot(now.hour * 60 + now.minute, bd) if bd else None
+    if slot is None or phase != "rth":
+        print(f"不在盘中采样时段（{_fmt_bounds(bd)} ET）或非盘中。", file=sys.stderr)
+        return 2
+    cfg = load_config()
+    issues, done, counts = [], [], {"slot": slot, "instruments": 0, "contracts": 0, "skipped": 0}
+    for inst in _instruments(cfg, args.instruments):
+        p = _path(inst.key, False)
+        if not p.exists():
+            continue
+        legs = sample_legs(jl.load(p, KEY), today)
+        if not legs:
+            continue
+        out = SAMPLE_DIR / today.isoformat() / f"{inst.key}.jsonl"
+        with locked(out):
+            old = [json.loads(x) for x in out.read_text("utf-8").splitlines() if x.strip()] if out.exists() else []
+            if any(o.get("slot") == slot for o in old):
+                counts["skipped"] += 1
+                continue
+            root = inst.options.symbol
+            for l in legs:
+                l["sell_sym"] = _lb_symbol(root, date.fromisoformat(l["expiry"]), l["side"], l["sell"])
+                l["buy_sym"] = _lb_symbol(root, date.fromisoformat(l["expiry"]), l["side"], l["buy"])
+            syms = sorted({l["sell_sym"] for l in legs} | {l["buy_sym"] for l in legs})
+            t0 = _now_iso()
+            try:
+                dep = fetch_depth(syms)
+            except Exception as e:
+                issues.append({"instrument": inst.key, "error": f"{type(e).__name__}: {e}"[:200]})
+                continue
+            try:
+                uq = fetch_stock_quotes([f"{root}.US"]).get(f"{root}.US")
+                under = {"freshest": uq.freshest, "kind": uq.freshest_kind} if uq else None
+            except Exception as e:
+                under = {"error": type(e).__name__}
+            quotes = {s: ({"bid": d.bid, "ask": d.ask, "bid_size": d.bid_size, "ask_size": d.ask_size,
+                           "error": d.error or None} if (d := dep.get(s)) is not None
+                          else {"bid": None, "ask": None, "bid_size": 0, "ask_size": 0, "error": "not_returned"})
+                      for s in syms}
+            rec = {"schema": 1, "version": SAMPLE["version"], "slot": slot, "started_at": t0, "ended_at": _now_iso(),
+                   "phase": phase, "underlying": under, "legs": legs, "quotes": quotes}
+            out.parent.mkdir(parents=True, exist_ok=True)
+            tmp = out.with_name(out.name + ".tmp")
+            body = "".join(json.dumps(o, ensure_ascii=False) + "\n" for o in old + [rec])
+            tmp.write_text(body, "utf-8")
+            if tmp.read_text("utf-8") != body:
+                tmp.unlink(missing_ok=True)
+                raise ValueError(f"{out} 回读校验失败；原文件未改")
+            tmp.replace(out)
+        counts["instruments"] += 1; counts["contracts"] += len(syms)
+        done.append(inst.key)
+    print(f"  盘中采样 {today} {slot} ET：{counts['instruments']} 个品种、{counts['contracts']} 个合约"
+          f"（已记过跳过 {counts['skipped']}）")
+    _status(args, "sample", done, issues, counts=counts)
+    return 1 if issues else 0
+
+
 def bars_plan(rows: list[dict], *, last_day: date, insts=None, rules=None) -> dict:
     """影子账候选价差需要补的逐分钟 K 线：{(root, 交易日): {合约代码, …, 标的代码}}。
 
@@ -937,6 +1041,8 @@ def register(sub):
     c = ss.add_parser("capture", help="盘前冻结当日机会"); c.add_argument("instruments", nargs="*")
     c.add_argument("--as-of", help="回放日 YYYY-MM-DD（写 replay/，不进前瞻主样本）"); c.add_argument("--status-file")
     c.set_defaults(func=cmd_capture)
+    sp = ss.add_parser("sample", help="盘中时段采样：ET 09:45–13:00 每 15 分钟记在场候选腿盘口（与 v5 预登记无关）")
+    sp.add_argument("instruments", nargs="*"); sp.add_argument("--status-file"); sp.set_defaults(func=cmd_sample)
     b = ss.add_parser("bars", help="补候选价差的历史盘中成交价（长桥 1 分钟 K 线；到期约一周后查不到，尽早补）")
     b.add_argument("--since", help="只补 session ≥ 该日的机会行"); b.add_argument("--status-file")
     b.add_argument("--all", action="store_true", help="全部品种与规则（默认只补主池的 A、B1：长桥按不同代码数限额）")

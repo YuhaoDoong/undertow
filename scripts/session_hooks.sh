@@ -94,6 +94,28 @@ shadow_window() {  # $1=open|close $2=窗口起(分) $3=窗口止(分) $4=标签
     fi
   fi
 }
+# ⑦ 盘中时段采样（用户 2026-09-27「扩大记录时间」）：ET 09:45–13:00 每 15 分钟记一次在场候选腿盘口，
+# 与 v5 预登记无关（单独存 data/history/shadow_samples/）。时段由 `shadow windows` 的 sample 行给出（半日市截短）。
+# 没有「今日完成」哨兵：每次唤醒都跑，命令自己跳过已记过的时段；失败只在时段最后 6 分钟提醒。
+shadow_sample() {  # $1=起(分) $2=止(分)
+  local LO="$1" HI="$2"
+  if (( ET_MIN < LO || ET_MIN > HI )); then return; fi
+  IN_SHADOW=1
+  local LK="$LOG_DIR/.lock_shadow_sample_${ET_DATE}"
+  if ! mkdir "$LK" 2>/dev/null; then hb "⑦盘中采样：撞锁，跳过"; return; fi
+  local RES RC
+  RES=$("$PY" -m undertow.cli shadow sample --status-file "$LOG_DIR/.status_shadow_sample_${ET_DATE}.json" 2>&1); RC=$?
+  rmdir "$LK" 2>/dev/null
+  local SUM; SUM=$(printf '%s' "$RES" | grep -E '盘中采样' | tail -1)
+  if (( RC == 0 )); then
+    hb "⑦盘中采样：✅ ${SUM}"
+  else
+    hb "⑦盘中采样：⏳ rc=$RC ${SUM}"
+    if (( RC == 1 && ET_MIN >= HI - 6 )); then
+      notify "⚠️ 影子账盘中采样有失败" "${SUM:-$(printf '%s' "$RES" | tail -1)}"
+    fi
+  fi
+}
 # 本脚本未开 set -e；分开捕获 rc（AGENTS.md 静默失败第 5 条：不用 `|| true`）
 SHW=$("$PY" -m undertow.cli shadow windows 2>&1); SHW_RC=$?
 if (( SHW_RC == 0 )); then
@@ -102,6 +124,7 @@ if (( SHW_RC == 0 )); then
     if [[ "$_W" == "open" ]]; then shadow_window open "$_LO" "$_HI" "④影子开盘窗"; fi
     if [[ "$_W" == "close" ]]; then shadow_window close "$_LO" "$_HI" "⑤影子收盘窗"; fi
     if [[ "$_W" == "chain" ]]; then shadow_window chain "$_LO" "$_HI" "⑥开盘后全链快照"; fi
+    if [[ "$_W" == "sample" ]]; then shadow_sample "$_LO" "$_HI"; fi
   done <<< "$SHW"
 else
   # 日历失效（覆盖期外）或命令崩溃：窗口来源没了，不能当作「今天没窗口」静默跳过

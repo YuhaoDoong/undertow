@@ -753,6 +753,84 @@ def cmd_direction(args) -> int:
     return 0
 
 
+def bars_plan(rows: list[dict], *, last_day: date) -> dict:
+    """影子账候选价差需要补的逐分钟 K 线：{(root, 交易日): {合约代码, …, 标的代码}}。
+
+    每条候选腿的卖腿与买腿，从 session 到到期日（含）的每个交易日，截到 last_day。纯函数。"""
+    from undertow.collect import longbridge_bars as lbb
+    need: dict = {}
+    for r in rows:
+        root = r.get("symbol")
+        if not root:
+            continue
+        for leg in r.get("legs", []):
+            if leg.get("status") != "candidate":
+                continue
+            days = mc.trading_days(date.fromisoformat(r["session"]), min(date.fromisoformat(leg["expiry"]), last_day))
+            for d in days or []:
+                s = need.setdefault((root, d), set())
+                s.add(f"{root}.US")
+                for k in ("sell", "buy"):
+                    s.add(lbb.option_symbol(root, leg["expiry"], leg["side"], leg[k]))
+    return need
+
+
+def cmd_bars(args) -> int:
+    """补影子账候选价差的【历史盘中成交价】（长桥 1 分钟 K 线，只读）。用户 2026-09-27 要求。
+
+    已到期合约约一周后长桥就查不到 → 按日期从早到晚补（最早的最先消失）。已存的不重抓；
+    「查不到 / 无效代码」如实记为状态，不当作失败重试（下次仍会跳过）。网络/CLI 故障 → issue、rc=1。
+    口径：只有成交价、无买卖价 —— 是 v5 保守入场价之外的补充数据，不替代它。"""
+    from undertow.collect import longbridge_bars as lbb
+    rows = []
+    for d in (_vdir(False), _vdir(True)):
+        for p in sorted(d.glob("*.jsonl")):
+            rows += jl.load(p, KEY)
+    today = market_today()
+    now_et = datetime.now(ET)
+    last_day = today if (mc.is_trading_day(today) and (now_et.hour, now_et.minute) >= (16, 20)) \
+        else mc.prev_trading_day(today)
+    if last_day is None:
+        _status(args, "bars", [], [{"instrument": "-", "error": "日历未覆盖今天"}])
+        return 1
+    if args.since:
+        rows = [r for r in rows if r["session"] >= args.since]
+    plan = bars_plan(rows, last_day=last_day)
+    todo = sorted(plan.items(), key=lambda kv: kv[0][1])
+    n_new = n_ok = n_gone = 0
+    issues, done = [], []
+    for (root, day), syms in todo:
+        path = lbb.path_of(root, day)
+        try:
+            cur = lbb.load_day(path) or lbb.new_day(root, day)
+        except lbb.BarsFileCorrupt as e:
+            q = lbb.quarantine(path)
+            print(f"  ⚠️ {e}；已隔离为 {q.name}，重新抓取（旧文件保留）", file=sys.stderr)
+            cur = lbb.new_day(root, day)
+        missing = sorted(s for s in syms if s not in cur["contracts"])
+        if not missing:
+            continue
+        try:
+            for s in missing:
+                res = lbb.fetch_day(s, day)
+                cur["contracts"][s] = res
+                n_new += 1
+                n_ok += res["status"] == "ok"
+                n_gone += res["status"] in ("not_found", "invalid_symbol")
+        except lbb.BarsUnavailable as e:
+            issues.append({"instrument": f"{root} {day}", "error": str(e)})
+        if missing and any(s in cur["contracts"] for s in missing):
+            lbb.save_day(path, cur)
+            done.append(f"{root} {day}")
+        if issues and len(issues) >= 3:
+            print("  ⚠️ 连续故障，停止本次补抓（下次从断点继续）", file=sys.stderr)
+            break
+    print(f"逐分钟 K 线：计划 {len(todo)} 个（标的, 日）文件、本次新抓 {n_new} 个合约日"
+          f"（有数据 {n_ok}，长桥已查不到/无此合约 {n_gone}），截至 {last_day}")
+    _status(args, "bars", done, issues, counts={"new": n_new, "ok": n_ok, "gone": n_gone})
+    return 1 if issues else 0
+
+
 EXEC_DIR = Path("data/account/shadow_exec")      # 私有：gitignore；研究账在 data/history/shadow/（公开）
 
 
@@ -841,6 +919,9 @@ def register(sub):
     c = ss.add_parser("capture", help="盘前冻结当日机会"); c.add_argument("instruments", nargs="*")
     c.add_argument("--as-of", help="回放日 YYYY-MM-DD（写 replay/，不进前瞻主样本）"); c.add_argument("--status-file")
     c.set_defaults(func=cmd_capture)
+    b = ss.add_parser("bars", help="补候选价差的历史盘中成交价（长桥 1 分钟 K 线；到期约一周后查不到，尽早补）")
+    b.add_argument("--since", help="只补 session ≥ 该日的机会行"); b.add_argument("--status-file")
+    b.set_defaults(func=cmd_bars)
     q = ss.add_parser("quote", help="盘中抓两腿盘口（入场/退出）"); q.add_argument("instruments", nargs="*")
     q.add_argument("--allow-off-hours", action="store_true"); q.add_argument("--status-file")
     q.add_argument("--window", choices=("open", "close"), default="open",

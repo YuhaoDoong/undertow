@@ -311,6 +311,17 @@ if (( SH_RC != 0 || SH_RC2 != 0 )); then
           "capture rc=$SH_RC settle rc=$SH_RC2：$(printf '%s\n%s' "$SH_OUT" "$SH_OUT2" | grep '⚠️' | head -2 | tr '\n' ' ')"
 fi
 
+# 候选价差的历史盘中成交价（长桥 1 分钟 K 线，用户 2026-09-27）：补到上一交易日为止。
+# 已到期合约约一周后长桥就查不到，所以每天补；已存的不重抓。「查不到」是状态不是失败；
+# 网络/CLI 故障 → rc=1 → 告警（数据下次补，不会被当成已抓）。
+set +e
+BARS_OUT=$(python3 -m undertow shadow bars --status-file "data/logs/.status_bars_${ET_DATE}.json" 2>&1); BARS_RC=$?
+set -e
+printf '%s\n' "$BARS_OUT" | grep -E "逐分钟|⚠️" | head -5 || true
+if (( BARS_RC != 0 )); then
+    alert "⚠️ 期权分钟线补抓失败（ET $ET_NOW）" "rc=$BARS_RC：$(printf '%s' "$BARS_OUT" | grep '⚠️' | head -2 | tr '\n' ' ')"
+fi
+
 # 只提交【不可再生】的：快照（期权链）+ 台账（data/history）。
 # data/reports 里的 HTML/PDF 已 gitignore（可由快照+代码重算），
 # 这一行留着是为了捞同目录下的 FAILURE_*/ALERT_* —— .gitignore 的两条 ! 例外，

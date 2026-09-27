@@ -14,7 +14,7 @@
 违反其中任何一条的改动都不该提交，即使用户明确要求。
 
 1. **只读，绝不交易。** 任何代码路径都不得下单、撤单、改单，包括条件单/止损单。
-   长桥 CLI 只用 `quote / depth / positions / assets / cash-flow / order`（只读子命令）
+   长桥 CLI 只用 `quote / depth / positions / assets / cash-flow / order / news / kline / option chain`（只读子命令）
    与 `order detail|executions`。**`order buy|sell|cancel|replace` 永远不出现在本仓库。**
    执行永远是用户在券商端的动作。
 2. **零第三方依赖。** 可视化是手写 SVG，不用 matplotlib；HTTP 用 `urllib`；

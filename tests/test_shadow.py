@@ -612,7 +612,7 @@ def test_non_overlap_filter():
 
 def test_windows_command(monkeypatch, capsys):
     from undertow import shadow_cli as sc
-    for d, want, rc in ((date(2026, 11, 27), "open 600 620\nclose 750 765\nchain 615 635\nsample 585 765\n", 0),
+    for d, want, rc in ((date(2026, 11, 27), "open 600 620\nclose 750 765\nchain 615 635\nsample 585 764\n", 0),
                         (date(2026, 11, 26), "", 0), (date(2027, 4, 5), "", 3)):
         monkeypatch.setattr(sc, "market_today", lambda d=d: d)
         assert sc.cmd_windows(None) == rc
@@ -929,17 +929,18 @@ def test_d04_chain_time_converted_to_et():
     assert filter_chain(base("2026-09-28T10:21:00"), d)["undertow_filter"]["underlying_proxy_in_window"] is False
 
 
-# ── 盘中时段采样（用户 2026-09-27「扩大记录时间」；与 v5 预登记无关）──
+# ── 盘中时段采样（用户 2026-09-27「扩大记录时间」；与 v5 预登记无关；Codex 014 N14-01/02）──
 
 def test_sample_bounds_and_slots():
     from undertow import shadow_cli as sc
-    assert sc.sample_bounds(date(2026, 9, 28)) == (585, 780)            # 09:45–13:00
-    assert sc.sample_bounds(date(2026, 11, 27)) == (585, 765)           # 13:00 收市日截到 12:45
+    assert sc.sample_bounds(date(2026, 9, 28)) == (585, 780)            # [09:45, 13:00)
+    assert sc.sample_bounds(date(2026, 11, 27)) == (585, 765)           # 13:00 收市日截到 [09:45, 12:45)
     assert sc.sample_bounds(date(2026, 11, 26)) is None                 # 感恩节
     bd = (585, 780)
     assert sc.sample_slot(584, bd) is None and sc.sample_slot(585, bd) == "09:45"
     assert sc.sample_slot(599, bd) == "09:45" and sc.sample_slot(600, bd) == "10:00"
-    assert sc.sample_slot(780, bd) == "13:00" and sc.sample_slot(781, bd) is None
+    assert sc.sample_slot(779, bd) == "12:45" and sc.sample_slot(780, bd) is None    # 没有只有一分钟的 13:00 桶
+    assert len(sc.sample_slots(bd)) == 13 and sc.sample_slots(bd)[-1] == "12:45"
 
 
 def test_sample_legs_entry_day_and_held_only():
@@ -953,7 +954,7 @@ def test_sample_legs_entry_day_and_held_only():
     assert [(g["key"], g["leg_id"]) for g in got] == [("k1", "P-A")]
 
 
-def test_cmd_sample_writes_once_per_slot(tmp_path, monkeypatch):
+def _sample_env(tmp_path, monkeypatch, depth_fn, under_fn=lambda syms: {}, minute=(10, 7)):
     from undertow import shadow_cli as sc
     from undertow.collect import longbridge_quote as lq
     from undertow.core.config import load_config
@@ -962,33 +963,126 @@ def test_cmd_sample_writes_once_per_slot(tmp_path, monkeypatch):
     ledger.write_text(json.dumps({"key": "gold|2026-09-28", "session": "2026-09-28", "legs": [
         {"leg_id": "P-A", "rule": "A", "status": "candidate", "side": "P", "expiry": "2026-09-30",
          "sell": 380.0, "buy": 379.0}]}) + "\n")
+    clock = {"hm": minute}
 
     class FakeDT(datetime):
         @classmethod
         def now(cls, tz=None):
-            return datetime(2026, 9, 28, 10, 7, tzinfo=sc.ET)
+            return datetime(2026, 9, 28, *clock["hm"], tzinfo=sc.ET)
     monkeypatch.setattr(sc, "datetime", FakeDT)
     monkeypatch.setattr(sc, "_phase_now", lambda: "rth")
     monkeypatch.setattr(sc, "_path", lambda k, replay: ledger if k == "gold" else tmp_path / "none.jsonl")
     monkeypatch.setattr(sc, "_instruments", lambda cfg, names: [gold])
     monkeypatch.setattr(sc, "SAMPLE_DIR", tmp_path / "samples")
+    monkeypatch.setattr(sc, "market_today", lambda: date(2026, 9, 28))
     calls = []
-    monkeypatch.setattr(lq, "fetch_depth", lambda syms: calls.append(syms) or
-                        {s: lq.Depth(symbol=s, bid=1.0, bid_size=5, ask=1.2, ask_size=7) for s in syms})
-    monkeypatch.setattr(lq, "fetch_stock_quotes", lambda syms: {})
+    monkeypatch.setattr(lq, "fetch_depth", lambda syms: calls.append(list(syms)) or depth_fn(syms))
+    monkeypatch.setattr(lq, "fetch_stock_quotes", under_fn)
 
     class A:
-        instruments, status_file = [], None
-    assert sc.cmd_sample(A()) == 0
+        instruments, check = [], None
+        status_file = str(tmp_path / "status.json")
     out = tmp_path / "samples" / "2026-09-28" / "gold.jsonl"
-    recs = [json.loads(x) for x in out.read_text().splitlines()]
+    return sc, A, calls, out, clock
+
+
+def _ok_under(syms):
+    from undertow.collect.longbridge_quote import StockQuote  # noqa: F401
+    class U:
+        freshest, freshest_kind = 393.4, "regular"
+    return {s: U() for s in syms}
+
+
+def _recs(out):
+    return [json.loads(x) for x in out.read_text().splitlines()]
+
+
+def test_cmd_sample_complete_once_per_slot(tmp_path, monkeypatch):
+    from undertow.collect import longbridge_quote as lq
+    sc, A, calls, out, _ = _sample_env(tmp_path, monkeypatch, lambda syms: {
+        s: lq.Depth(symbol=s, bid=1.0, bid_size=5, ask=1.2, ask_size=7) for s in syms}, _ok_under)
+    assert sc.cmd_sample(A()) == 0
+    st = json.loads((tmp_path / "status.json").read_text())
+    assert st["overall"] == "complete" and st["counts"]["observed_now"] == 3
+    recs = _recs(out)
     assert len(recs) == 1 and recs[0]["slot"] == "10:00" and len(recs[0]["quotes"]) == 2
-    assert recs[0]["legs"][0]["sell_sym"] in recs[0]["quotes"]
-    assert sc.cmd_sample(A()) == 0 and len(calls) == 1          # 同一时段不重复记
-    assert len(out.read_text().splitlines()) == 1
+    assert sc.cmd_sample(A()) == 0 and len(calls) == 1          # 同桶已齐 → 不再取
+    assert json.loads((tmp_path / "status.json").read_text())["overall"] == "unchanged"
 
 
-def test_session_hooks_runs_sample_from_windows():
+def test_n14_01_all_contract_errors_fail_and_retry_keeps_history(tmp_path, monkeypatch):
+    """Codex 014 反例：两条腿都返回 error → 不能 rc=0/complete，本桶下次仍重试；成功后保留先前失败尝试。"""
+    from undertow.collect import longbridge_quote as lq
+    mode = {"fail": True}
+    sc, A, calls, out, _ = _sample_env(tmp_path, monkeypatch, lambda syms: {
+        s: (lq.Depth(symbol=s, bid=None, ask=None, bid_size=0, ask_size=0, error="synthetic_source_failure")
+            if mode["fail"] else lq.Depth(symbol=s, bid=1.0, bid_size=5, ask=1.2, ask_size=7)) for s in syms}, _ok_under)
+    assert sc.cmd_sample(A()) == 1
+    st = json.loads((tmp_path / "status.json").read_text())
+    assert st["overall"] == "partial" and st["counts"]["failed_now"] == 2   # 标的成功、两腿失败
+    assert sc.cmd_sample(A()) == 1 and len(calls) == 2                       # 仍在重试
+    mode["fail"] = False
+    assert sc.cmd_sample(A()) == 0 and len(calls) == 3
+    recs = _recs(out)
+    assert len(recs) == 3 and all(r["slot"] == "10:00" for r in recs)        # 失败尝试全部保留
+    assert recs[0]["quotes"] and all(q["error"] for q in recs[0]["quotes"].values())
+    assert recs[1]["underlying"] is None                                     # 标的已成功过，不重取
+
+
+def test_n14_01_total_failure_is_failed(tmp_path, monkeypatch):
+    from undertow.collect import longbridge_quote as lq
+
+    def boom(syms):
+        raise lq.LiveQuotesUnavailable("全部失败")
+
+    def ubad(syms):
+        raise lq.LiveQuotesUnavailable("x")
+    sc, A, calls, out, _ = _sample_env(tmp_path, monkeypatch, boom, ubad)
+    assert sc.cmd_sample(A()) == 1
+    assert json.loads((tmp_path / "status.json").read_text())["overall"] == "failed"
+    assert all("LiveQuotesUnavailable" in q["error"] for q in _recs(out)[0]["quotes"].values())
+
+
+def test_n14_01_empty_book_is_an_observation_not_a_failure(tmp_path, monkeypatch):
+    """数据源正常返回、一侧无挂单（bid=None/0）是真实市场状态：算成功观测，不为「补出好价格」重试。"""
+    from undertow.collect import longbridge_quote as lq
+    sc, A, calls, out, _ = _sample_env(tmp_path, monkeypatch, lambda syms: {
+        s: lq.Depth(symbol=s, bid=None, bid_size=0, ask=0.05, ask_size=3) for s in syms}, _ok_under)
+    assert sc.cmd_sample(A()) == 0
+    assert sc.cmd_sample(A()) == 0 and len(calls) == 1
+
+
+def test_n14_01_partial_and_underlying_failure_visible(tmp_path, monkeypatch):
+    from undertow.collect import longbridge_quote as lq
+
+    def half(syms):
+        return {s: (lq.Depth(symbol=s, bid=1.0, bid_size=5, ask=1.2, ask_size=7) if i == 0
+                    else lq.Depth(symbol=s, bid=None, ask=None, bid_size=0, ask_size=0, error="timeout"))
+                for i, s in enumerate(sorted(syms))}
+    sc, A, calls, out, _ = _sample_env(tmp_path, monkeypatch, half, lambda syms: {})
+    assert sc.cmd_sample(A()) == 1
+    st = json.loads((tmp_path / "status.json").read_text())
+    assert st["overall"] == "partial" and st["counts"]["underlying_failed"] == 1
+    assert any("标的" in i["error"] for i in st["issues"]) and any("1/2" in i["error"] for i in st["issues"])
+    assert sc.cmd_sample(A()) == 1 and calls[-1] == [sorted(calls[0])[1]]  # 只重取失败的那一个
+
+
+def test_sample_check_reports_missing_and_failed_buckets(tmp_path, monkeypatch, capsys):
+    from undertow.collect import longbridge_quote as lq
+    sc, A, calls, out, clock = _sample_env(tmp_path, monkeypatch, lambda syms: {
+        s: lq.Depth(symbol=s, bid=1.0, bid_size=5, ask=1.2, ask_size=7) for s in syms}, _ok_under)
+    assert sc.cmd_sample(A()) == 0                                   # 只有 10:00 桶
+    a = A(); a.check = "2026-09-28"
+    assert sc.cmd_sample(a) == 1
+    o = capsys.readouterr().out
+    assert "13 个（品种, 桶），异常 12" in o and "gold 09:45 missing" in o and "gold 10:00" not in o
+
+
+def test_session_hooks_runs_sample_from_windows_with_per_bucket_alert():
     src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
     assert src.index("shadow_sample() {") < src.index('shadow_sample "$_LO" "$_HI"')
     assert "shadow sample" in src and "585" not in src, "采样时段只由 shadow windows 给出，不写死"
+    body = src[src.index("shadow_sample() {"):src.index('SHW=$("$PY" -m undertow.cli shadow windows')]
+    assert "BEND - 6" in body and "HI - 6" not in body, "失败提醒按当前桶，不按全天区间末"
+    du = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
+    assert "shadow sample --check" in du

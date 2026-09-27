@@ -311,6 +311,20 @@ if (( SH_RC != 0 || SH_RC2 != 0 )); then
           "capture rc=$SH_RC settle rc=$SH_RC2：$(printf '%s\n%s' "$SH_OUT" "$SH_OUT2" | grep '⚠️' | head -2 | tr '\n' ' ')"
 fi
 
+# 盘中时段采样收尾核对（Codex 014 N14-02）：上一交易日各品种各桶是否都成功观测。只读落盘记录。
+set +e
+PREV_TD=$(python3 -c 'from undertow.core import market_calendar as mc; from undertow.core.clock import market_today as t; d=mc.prev_trading_day(t()); print(d or "")')
+if [[ -n "$PREV_TD" ]]; then
+    SCK_OUT=$(python3 -m undertow shadow sample --check "$PREV_TD" 2>&1); SCK_RC=$?
+    printf '%s\n' "$SCK_OUT" | head -6
+    SCK_MK="data/logs/.sample_alerted_check_${PREV_TD}"          # 一天跑四次：同一交易日只告警一次
+    if (( SCK_RC != 0 )) && [[ ! -e "$SCK_MK" ]]; then
+        : > "$SCK_MK"
+        alert "⚠️ 盘中采样 ${PREV_TD} 有缺失/失败的桶（ET $ET_NOW）" "$(printf '%s' "$SCK_OUT" | grep '⚠️' | head -3 | tr '\n' ' ')"
+    fi
+fi
+set -e
+
 # 候选价差的历史盘中成交价（长桥 1 分钟 K 线，用户 2026-09-27）：补到上一交易日为止。
 # 已到期合约约一周后长桥就查不到，所以每天补；已存的不重抓。「查不到」是状态不是失败；
 # 网络/CLI 故障 → rc=1 → 告警（数据下次补，不会被当成已抓）。

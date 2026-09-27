@@ -185,9 +185,9 @@ def cmd_windows(args) -> int:
     if mc.close_time(d) is not None:                  # 开盘后近价全链快照窗口（与收市时刻无关）
         lo, hi = (int(x[:2]) * 60 + int(x[3:]) for x in CHAIN_WINDOW)
         print(f"chain {lo} {hi}")
-    sb = sample_bounds(d)                             # 盘中时段采样（用户可操作的 09:45–13:00，半日市截短）
+    sb = sample_bounds(d)                             # 盘中时段采样 [lo, hi)；打印闭区间末分钟 hi−1 供调度脚本
     if sb is not None:
-        print(f"sample {sb[0]} {sb[1]}")
+        print(f"sample {sb[0]} {sb[1] - 1}")
     return 0
 
 
@@ -759,26 +759,33 @@ def cmd_direction(args) -> int:
 BARS_SCOPE = {"pool": "etf", "rules": ("A", "B1")}   # 长桥历史 K 线按不同代码数限额 → 只补主池的主比较两臂
 
 
-SAMPLE = {"version": "shadow-sample-v1-20260927", "start": "09:45", "end": "13:00", "step_min": 15}
+SAMPLE = {"version": "shadow-sample-v2-20260927", "start": "09:45", "end": "13:00", "step_min": 15,
+          "selection": "每个合约取该时段内第一次成功观测（不择优）；失败尝试全部保留"}
 SAMPLE_DIR = Path("data/history/shadow_samples")
 
 
 def sample_bounds(d: date) -> tuple[int, int] | None:
-    """盘中采样时段（ET 分钟）：用户可操作的 09:45–13:00（用户 2026-09-27），截到收市前 15 分钟；非交易日/日历未知 → None。"""
+    """盘中采样区间 [lo, hi)（ET 分钟，右开）：用户可操作的 09:45–13:00（用户 2026-09-27），
+    且不晚于收市前 15 分钟；非交易日/日历未知 → None。正常日 = 09:45…12:45 共 13 个 15 分钟桶。"""
     ct = mc.close_time(d)
     if ct is None:
         return None
     lo = int(SAMPLE["start"][:2]) * 60 + int(SAMPLE["start"][3:])
     hi = min(int(SAMPLE["end"][:2]) * 60 + int(SAMPLE["end"][3:]), int(ct[:2]) * 60 + int(ct[3:]) - 15)
-    return (lo, hi) if hi >= lo else None
+    return (lo, hi) if hi > lo else None
 
 
 def sample_slot(minute: int, bd: tuple[int, int]) -> str | None:
-    """所在 15 分钟时段的起点 "HH:MM"；不在时段内 → None。"""
-    if not (bd[0] <= minute <= bd[1]):
+    """所在 15 分钟桶的标签 "HH:MM"（桶起点）；不在 [lo, hi) 内 → None。
+    标签只是桶名，不是采样时刻 —— 实际时刻看记录里的 started_at / ended_at。"""
+    if not (bd[0] <= minute < bd[1]):
         return None
     m = bd[0] + (minute - bd[0]) // SAMPLE["step_min"] * SAMPLE["step_min"]
     return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def sample_slots(bd: tuple[int, int]) -> list[str]:
+    return [f"{m // 60:02d}:{m % 60:02d}" for m in range(bd[0], bd[1], SAMPLE["step_min"])]
 
 
 def sample_legs(rows: list[dict], today: date) -> list[dict]:
@@ -790,11 +797,39 @@ def sample_legs(rows: list[dict], today: date) -> list[dict]:
             if l.get("status") == "candidate" and r["session"] <= t <= l["expiry"]]
 
 
-def cmd_sample(args) -> int:
-    """盘中时段采样（用户 2026-09-27：「扩大记录时间」）：ET 09:45–13:00 每 15 分钟，对在场候选腿各记一次盘口。
+def quote_observed(q: dict | None) -> bool:
+    """一次合约取数是否算【成功观测】：数据源正常返回（无 error）即算，哪怕一侧无挂单（bid/ask 为 None 或 0）——
+    那是真实的市场状态，不能为了补出更好的价格而反复重试。"""
+    return bool(q) and not q.get("error")
 
-    与 v5 预登记无关：不写 v5 账本、不改入场窗（10:00–10:20）与主终点；单独存到 data/history/shadow_samples/，
-    用来回答「在用户能操作的时段开仓，实际能收多少」。同一时段已记过的品种跳过；只读，从不下单。"""
+
+def _read_samples(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    return [json.loads(x) for x in path.read_text("utf-8").splitlines() if x.strip()]
+
+
+def slot_state(recs: list[dict], slot: str, wanted: set[str]) -> tuple[set[str], str]:
+    """该桶里已成功观测的代码集合，以及状态：complete / partial / failed / missing（没有任何尝试）。"""
+    tries = [r for r in recs if r.get("slot") == slot]
+    ok = {s for r in tries for s, q in (r.get("quotes") or {}).items() if quote_observed(q)}
+    ok |= {r["underlying_symbol"] for r in tries if quote_observed(r.get("underlying"))}
+    got = ok & wanted
+    if not tries:
+        return got, "missing"
+    return got, ("complete" if got == wanted else "partial" if got else "failed")
+
+
+def cmd_sample(args) -> int:
+    """盘中时段采样（用户 2026-09-27：「扩大记录时间」）：ET [09:45, 13:00) 每 15 分钟一个桶，
+    对在场候选腿与标的各记一次盘口。与 v5 预登记无关：不写 v5 账本、不改入场窗（10:00–10:20）与主终点。
+
+    v2（Codex 014 N14-01）：逐合约的取数错误算失败，不再被当成「本桶已完成」。每次运行只重取本桶内
+    尚未成功观测的代码，新尝试追加为一条记录（旧尝试不覆盖）；研究时每个合约取本桶第一次成功观测。
+    状态：complete（全部成功）/ partial / failed（本次需要的全部失败）/ unchanged（本桶已齐）→ 前两者之外 rc=1。
+    --check [DATE]：收尾核对当日各品种各桶的状态，有缺/败 → rc=1。只读，从不下单。"""
+    if getattr(args, "check", None):
+        return _sample_check(args)
     from undertow.collect.asof_history import locked
     from undertow.collect.longbridge_options import _lb_symbol
     from undertow.collect.longbridge_quote import fetch_depth, fetch_stock_quotes
@@ -805,10 +840,12 @@ def cmd_sample(args) -> int:
     phase = _phase_now()
     slot = sample_slot(now.hour * 60 + now.minute, bd) if bd else None
     if slot is None or phase != "rth":
-        print(f"不在盘中采样时段（{_fmt_bounds(bd)} ET）或非盘中。", file=sys.stderr)
+        print(f"不在盘中采样时段（{_fmt_bounds(bd)} ET，右开）或非盘中。", file=sys.stderr)
         return 2
     cfg = load_config()
-    issues, done, counts = [], [], {"slot": slot, "instruments": 0, "contracts": 0, "skipped": 0}
+    issues, done = [], []
+    counts = {"slot": slot, "wanted": 0, "observed_before": 0, "observed_now": 0, "failed_now": 0,
+              "underlying_failed": 0, "instruments": 0}
     for inst in _instruments(cfg, args.instruments):
         p = _path(inst.key, False)
         if not p.exists():
@@ -816,48 +853,116 @@ def cmd_sample(args) -> int:
         legs = sample_legs(jl.load(p, KEY), today)
         if not legs:
             continue
+        root = inst.options.symbol
+        under_sym = f"{root}.US"
+        for l in legs:
+            l["sell_sym"] = _lb_symbol(root, date.fromisoformat(l["expiry"]), l["side"], l["sell"])
+            l["buy_sym"] = _lb_symbol(root, date.fromisoformat(l["expiry"]), l["side"], l["buy"])
+        wanted = {l["sell_sym"] for l in legs} | {l["buy_sym"] for l in legs} | {under_sym}
         out = SAMPLE_DIR / today.isoformat() / f"{inst.key}.jsonl"
         with locked(out):
-            old = [json.loads(x) for x in out.read_text("utf-8").splitlines() if x.strip()] if out.exists() else []
-            if any(o.get("slot") == slot for o in old):
-                counts["skipped"] += 1
+            old = _read_samples(out)
+            got, _ = slot_state(old, slot, wanted)
+            counts["wanted"] += len(wanted); counts["observed_before"] += len(got)
+            need = sorted(wanted - got - {under_sym})
+            need_under = under_sym not in got
+            if not need and not need_under:
                 continue
-            root = inst.options.symbol
-            for l in legs:
-                l["sell_sym"] = _lb_symbol(root, date.fromisoformat(l["expiry"]), l["side"], l["sell"])
-                l["buy_sym"] = _lb_symbol(root, date.fromisoformat(l["expiry"]), l["side"], l["buy"])
-            syms = sorted({l["sell_sym"] for l in legs} | {l["buy_sym"] for l in legs})
             t0 = _now_iso()
-            try:
-                dep = fetch_depth(syms)
-            except Exception as e:
-                issues.append({"instrument": inst.key, "error": f"{type(e).__name__}: {e}"[:200]})
-                continue
-            try:
-                uq = fetch_stock_quotes([f"{root}.US"]).get(f"{root}.US")
-                under = {"freshest": uq.freshest, "kind": uq.freshest_kind} if uq else None
-            except Exception as e:
-                under = {"error": type(e).__name__}
-            quotes = {s: ({"bid": d.bid, "ask": d.ask, "bid_size": d.bid_size, "ask_size": d.ask_size,
-                           "error": d.error or None} if (d := dep.get(s)) is not None
-                          else {"bid": None, "ask": None, "bid_size": 0, "ask_size": 0, "error": "not_returned"})
-                      for s in syms}
-            rec = {"schema": 1, "version": SAMPLE["version"], "slot": slot, "started_at": t0, "ended_at": _now_iso(),
-                   "phase": phase, "underlying": under, "legs": legs, "quotes": quotes}
+            quotes = {}
+            if need:
+                try:
+                    dep = fetch_depth(need)
+                except Exception as e:            # 全部失败：照样记下失败尝试
+                    dep, err = {}, f"{type(e).__name__}: {e}"[:200]
+                else:
+                    err = "not_returned"
+                for s in need:
+                    d = dep.get(s)
+                    quotes[s] = ({"bid": d.bid, "ask": d.ask, "bid_size": d.bid_size, "ask_size": d.ask_size,
+                                  "error": d.error or None} if d is not None
+                                 else {"bid": None, "ask": None, "bid_size": 0, "ask_size": 0, "error": err})
+            under = None
+            if need_under:
+                try:
+                    uq = fetch_stock_quotes([under_sym]).get(under_sym)
+                    under = ({"freshest": uq.freshest, "kind": uq.freshest_kind, "error": None} if uq
+                             else {"error": "not_returned"})
+                except Exception as e:
+                    under = {"error": f"{type(e).__name__}"}
+            rec = {"schema": 2, "version": SAMPLE["version"], "slot": slot, "started_at": t0, "ended_at": _now_iso(),
+                   "phase": phase, "underlying_symbol": under_sym, "underlying": under, "legs": legs,
+                   "quotes": quotes}
             out.parent.mkdir(parents=True, exist_ok=True)
-            tmp = out.with_name(out.name + ".tmp")
             body = "".join(json.dumps(o, ensure_ascii=False) + "\n" for o in old + [rec])
+            tmp = out.with_name(out.name + ".tmp")
             tmp.write_text(body, "utf-8")
             if tmp.read_text("utf-8") != body:
                 tmp.unlink(missing_ok=True)
                 raise ValueError(f"{out} 回读校验失败；原文件未改")
             tmp.replace(out)
-        counts["instruments"] += 1; counts["contracts"] += len(syms)
-        done.append(inst.key)
-    print(f"  盘中采样 {today} {slot} ET：{counts['instruments']} 个品种、{counts['contracts']} 个合约"
-          f"（已记过跳过 {counts['skipped']}）")
-    _status(args, "sample", done, issues, counts=counts)
-    return 1 if issues else 0
+        ok_now = sum(quote_observed(q) for q in quotes.values())
+        bad = [s for s, q in quotes.items() if not quote_observed(q)]
+        counts["observed_now"] += ok_now + (1 if quote_observed(under) else 0)
+        counts["failed_now"] += len(bad)
+        counts["instruments"] += 1
+        if need_under and not quote_observed(under):
+            counts["underlying_failed"] += 1
+            issues.append({"instrument": inst.key, "error": f"标的 {under_sym} 取数失败（{(under or {}).get('error')}）"
+                                                            "：本桶腿报价仍有效，只缺标的价诊断"})
+        if bad:
+            issues.append({"instrument": inst.key,
+                           "error": f"{len(bad)}/{len(quotes)} 个合约取数失败（{quotes[bad[0]]['error']}），本桶内下次唤醒重试"})
+        else:
+            done.append(inst.key)
+    tried = counts["observed_now"] + counts["failed_now"] + counts["underlying_failed"]
+    if tried == 0:
+        overall = "unchanged"
+    elif not issues:
+        overall = "complete"
+    elif counts["observed_now"] > 0:
+        overall = "partial"
+    else:
+        overall = "failed"
+    print(f"  盘中采样 {today} 桶 {slot}：本次成功 {counts['observed_now']}、失败 {counts['failed_now']}"
+          f"（标的失败 {counts['underlying_failed']}）；此前已成功 {counts['observed_before']}/{counts['wanted']} → {overall}")
+    _status(args, "sample", done, issues, overall=overall, counts=counts)
+    return 0 if overall in ("complete", "unchanged") else 1
+
+
+def _sample_check(args) -> int:
+    """收尾核对：当日（或指定日）每个品种每个桶的状态。有 missing/failed/partial → rc=1，逐项列出。
+    只看落盘记录，不联网；品种范围 = 当日 v5 前瞻行里有在场候选腿的品种。"""
+    from undertow.core.config import load_config
+    d = date.fromisoformat(args.check) if args.check != "today" else market_today()
+    bd = sample_bounds(d)
+    if bd is None:
+        print(f"{d} 无采样时段（非交易日或日历未知）")
+        return 0
+    cfg = load_config()
+    bad, total = [], 0
+    for inst in _instruments(cfg, args.instruments):
+        p = _path(inst.key, False)
+        legs = sample_legs(jl.load(p, KEY), d) if p.exists() else []
+        if not legs:
+            continue
+        recs = _read_samples(SAMPLE_DIR / d.isoformat() / f"{inst.key}.jsonl")
+        wanted = set()
+        for r in recs:
+            wanted |= {x for l in r.get("legs", []) for x in (l.get("sell_sym"), l.get("buy_sym")) if x}
+            wanted.add(r.get("underlying_symbol"))
+        wanted.discard(None)
+        for sl in sample_slots(bd):
+            total += 1
+            got, st_ = slot_state(recs, sl, wanted) if wanted else (set(), "missing")
+            if st_ != "complete":
+                bad.append(f"{inst.key} {sl} {st_}（成功 {len(got)}/{len(wanted) or '?'}）")
+    print(f"盘中采样核对 {d}：{total} 个（品种, 桶），异常 {len(bad)}")
+    for b in bad:
+        print(f"  ⚠️ {b}")
+    _status(args, "sample-check", [], [{"instrument": b.split()[0], "error": b} for b in bad],
+            counts={"cells": total, "bad": len(bad)})
+    return 1 if bad else 0
 
 
 def bars_plan(rows: list[dict], *, last_day: date, insts=None, rules=None) -> dict:
@@ -887,7 +992,8 @@ def cmd_bars(args) -> int:
     """补影子账候选价差的【历史盘中成交价】（长桥 1 分钟 K 线，只读）。用户 2026-09-27 要求。
 
     已到期合约约一周后长桥就查不到 → 按日期从早到晚补（最早的最先消失）。已存的不重抓；
-    「查不到 / 无效代码」如实记为状态，不当作失败重试（下次仍会跳过）。网络/CLI 故障 → issue、rc=1。
+    「查不到 / 无效代码」如实记为状态（含查询时刻与原始返回），默认不重查；--retry-missing 可重查 ——
+    「本次通过该接口未取得」不等于永久不可得（Codex 014）。网络/CLI 故障 → issue、rc=1。
     口径：只有成交价、无买卖价 —— 是 v5 保守入场价之外的补充数据，不替代它。
     长桥历史 K 线按【不同代码数】限额（实测 400）→ 默认只补主池 A、B1；配额用尽 → rc=3（不是故障）。"""
     from undertow.collect import longbridge_bars as lbb
@@ -920,7 +1026,8 @@ def cmd_bars(args) -> int:
             q = lbb.quarantine(path)
             print(f"  ⚠️ {e}；已隔离为 {q.name}，重新抓取（旧文件保留）", file=sys.stderr)
             cur = lbb.new_day(root, day)
-        missing = sorted(s for s in syms if s not in cur["contracts"])
+        missing = sorted(s for s in syms if s not in cur["contracts"]
+                         or (args.retry_missing and cur["contracts"][s].get("status") in ("not_found", "invalid_symbol")))
         if not missing:
             continue
         try:
@@ -1042,10 +1149,15 @@ def register(sub):
     c.add_argument("--as-of", help="回放日 YYYY-MM-DD（写 replay/，不进前瞻主样本）"); c.add_argument("--status-file")
     c.set_defaults(func=cmd_capture)
     sp = ss.add_parser("sample", help="盘中时段采样：ET 09:45–13:00 每 15 分钟记在场候选腿盘口（与 v5 预登记无关）")
-    sp.add_argument("instruments", nargs="*"); sp.add_argument("--status-file"); sp.set_defaults(func=cmd_sample)
+    sp.add_argument("instruments", nargs="*"); sp.add_argument("--status-file")
+    sp.add_argument("--check", nargs="?", const="today", metavar="YYYY-MM-DD",
+                    help="收尾核对：列出该日各品种各桶的缺失/失败（只读落盘记录）")
+    sp.set_defaults(func=cmd_sample)
     b = ss.add_parser("bars", help="补候选价差的历史盘中成交价（长桥 1 分钟 K 线；到期约一周后查不到，尽早补）")
     b.add_argument("--since", help="只补 session ≥ 该日的机会行"); b.add_argument("--status-file")
     b.add_argument("--all", action="store_true", help="全部品种与规则（默认只补主池的 A、B1：长桥按不同代码数限额）")
+    b.add_argument("--retry-missing", action="store_true",
+                   help="重查此前记为 not_found / invalid_symbol 的合约日（默认不重查；「本次未取得」不等于永久不可得）")
     b.set_defaults(func=cmd_bars)
     q = ss.add_parser("quote", help="盘中抓两腿盘口（入场/退出）"); q.add_argument("instruments", nargs="*")
     q.add_argument("--allow-off-hours", action="store_true"); q.add_argument("--status-file")

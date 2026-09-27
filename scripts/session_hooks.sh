@@ -94,10 +94,12 @@ shadow_window() {  # $1=open|close $2=窗口起(分) $3=窗口止(分) $4=标签
     fi
   fi
 }
-# ⑦ 盘中时段采样（用户 2026-09-27「扩大记录时间」）：ET 09:45–13:00 每 15 分钟记一次在场候选腿盘口，
-# 与 v5 预登记无关（单独存 data/history/shadow_samples/）。时段由 `shadow windows` 的 sample 行给出（半日市截短）。
-# 没有「今日完成」哨兵：每次唤醒都跑，命令自己跳过已记过的时段；失败只在时段最后 6 分钟提醒。
-shadow_sample() {  # $1=起(分) $2=止(分)
+# ⑦ 盘中时段采样（用户 2026-09-27「扩大记录时间」）：ET [09:45, 13:00) 每 15 分钟一个桶，记在场候选腿盘口，
+# 与 v5 预登记无关（单独存 data/history/shadow_samples/）。区间由 `shadow windows` 的 sample 行给出（闭区间末分钟，半日市截短）。
+# 没有「今日完成」哨兵：每次唤醒都跑，命令只重取本桶内尚未成功观测的合约。
+# Codex 014 N14-02：失败提醒按【当前桶】判 —— 本桶最后 6 分钟仍失败就当场提醒，每桶最多一次；
+# 次日盘前 daily_update 再跑 `shadow sample --check` 收尾核对整天各桶。
+shadow_sample() {  # $1=起(分) $2=止(分，闭区间末分钟)
   local LO="$1" HI="$2"
   if (( ET_MIN < LO || ET_MIN > HI )); then return; fi
   IN_SHADOW=1
@@ -107,12 +109,15 @@ shadow_sample() {  # $1=起(分) $2=止(分)
   RES=$("$PY" -m undertow.cli shadow sample --status-file "$LOG_DIR/.status_shadow_sample_${ET_DATE}.json" 2>&1); RC=$?
   rmdir "$LK" 2>/dev/null
   local SUM; SUM=$(printf '%s' "$RES" | grep -E '盘中采样' | tail -1)
+  local BEND=$(( LO + ( (ET_MIN - LO) / 15 + 1 ) * 15 ))          # 当前桶的结束分钟（右开）
   if (( RC == 0 )); then
     hb "⑦盘中采样：✅ ${SUM}"
   else
     hb "⑦盘中采样：⏳ rc=$RC ${SUM}"
-    if (( RC == 1 && ET_MIN >= HI - 6 )); then
-      notify "⚠️ 影子账盘中采样有失败" "${SUM:-$(printf '%s' "$RES" | tail -1)}"
+    local MK="$LOG_DIR/.sample_alerted_${ET_DATE}_${BEND}"
+    if (( RC == 1 && ET_MIN >= BEND - 6 )) && [[ ! -e "$MK" ]]; then
+      : > "$MK"
+      notify "⚠️ 影子账盘中采样本桶未完成" "${SUM:-$(printf '%s' "$RES" | tail -1)}"
     fi
   fi
 }

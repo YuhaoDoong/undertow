@@ -60,6 +60,8 @@ data/backtest/step4_holding.jsonl
 data/logs/.status_*.json
 # 长桥历史 K 线配额用尽的「当日已提醒」标记（daily_update，每 ET 日一次）
 data/logs/.bars_quota_*
+# 盘中采样逐桶「已提醒」标记（session_hooks ⑦，每桶一次）
+data/logs/.sample_alerted_*
 # 事件捕捉的每日告警标记与发布清单（运行态，不入库）
 data/logs/.event_*
 # 无人值守发布的待发布记录（运行态，不入库）

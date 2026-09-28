@@ -349,16 +349,22 @@ def session_after(posted: datetime) -> date | None:
     return mc.next_trading_day(d)
 
 
-def _hit(label: str, ret):
-    """方向映射：我们的读数 防守化→跌、进攻化→涨（v1 预登记的假设）；作者只计明确的偏空/偏多。
-    作者的「防守 / 放弃做多 / 区间 / 中性」是风险姿态或区间主张，不计方向（Codex 017 §五、018 #11）。"""
-    if ret is None:
+RULE_DIRECTION = {"防守化": -1, "进攻化": 1}             # skew-reading-v1 预登记的方向假设（机器标签）
+#: 作者自然语言标签：只有明确的偏多/偏空计方向；「防守 / 放弃做多 / 区间 / 中性」是风险姿态或区间主张，不计方向。
+#: 这是【回溯方法修订】（Codex 019：旧帖已按旧口径看过结果）——旧口径（防守→看跌）的输出另存私有文件，不覆盖。
+AUTHOR_DIRECTION = {"偏空": -1, "偏多": 1}
+AUTHOR_DIRECTION_OLD = {"偏空": -1, "防守": -1, "偏多": 1}
+
+
+def _hit_with(mapping: dict, label: str, ret):
+    if ret is None or label not in mapping:
         return None
-    if label in ("防守化", "偏空"):
-        return ret < 0
-    if label in ("进攻化", "偏多"):
-        return ret > 0
-    return None
+    return (ret > 0) if mapping[label] > 0 else (ret < 0)
+
+
+def _hit(label: str, ret):
+    """机器读数与作者标签分属两个命名空间（019：作者「防守」≠ 机器「防守化」），各查各的映射。"""
+    return _hit_with(RULE_DIRECTION if label in RULE_DIRECTION else AUTHOR_DIRECTION, label, ret)
 
 
 def score_rows(rows: list[dict], bars, closed_through: date, source_sha: str, now: datetime) -> int:
@@ -413,10 +419,28 @@ def cmd_score(args) -> int:
                 c["reading"] = c["call"]
             if mine:
                 lines.append(_summary(f"{inst} 作者判断（私有，按发布时刻；回溯登记，非事前冻结）", mine, key="reading"))
+                _save_author_revision(inst, mine)
     print("\n".join(l for l in lines if l))
     print("注：以上是描述性汇总，不是预登记检验 —— 5/10 日窗口相互重叠、未与基准比较、未做多重比较校正；"
           "n 达到 50 只是一次评估的触发条件，不代表可靠（Codex 017 D17-04）。")
     return 0
+
+
+def _save_author_revision(inst: str, calls: list[dict]) -> None:
+    """同一批作者判断按新旧两种口径的命中各存一份（私有，data/soul/），旧口径结果不被新口径覆盖。"""
+    out = {"generated_at": _now().isoformat(), "instrument": inst,
+           "note": "回溯方法修订：旧帖在改口径前已看过结果；仅未来未看的作者登记可称运行前采用新语义",
+           "old_mapping": AUTHOR_DIRECTION_OLD, "new_mapping": AUTHOR_DIRECTION, "rows": []}
+    for c in calls:
+        oc = c.get("outcome") or {}
+        out["rows"].append({"posted_at": c.get("posted_at"), "session": c.get("session"), "call": c.get("call"),
+                            **{f"{tag}_{h}d": _hit_with(m, c.get("call"), oc.get(f"ret_{h}d"))
+                               for tag, m in (("old", AUTHOR_DIRECTION_OLD), ("new", AUTHOR_DIRECTION))
+                               for h in (1, 5, 10)}})
+    p = AUTHOR.parent / f"author_scoring_revision_{inst}.json"
+    tmp = p.with_suffix(".tmp")
+    tmp.write_text(json.dumps(out, ensure_ascii=False, indent=1), "utf-8")
+    tmp.replace(p)
 
 
 def _summary(title: str, rows: list[dict], *, key: str) -> str:

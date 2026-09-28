@@ -164,12 +164,15 @@ _ALL = [
        prereg_ref="skew-reading-v1-20260928", note="回放显示逐日读数频繁翻转，规则待 Codex 审"),
     _p("vp.v1.H1", "analyze/volume_profile.py：首次触及成交密集区后先反弹 1 ATR", "GLD/SLV 日线 · 2016–2026 检验集",
        "T3", "negative_sample", ["（研究，不进研报）"], "只观察",
-       ["docs/prereg/2026-09-28_volume_profile_v1.md", "data/backtest/vp_v1/test.json"],
-       note="检验集 GLD −4.6pp、SLV −1.1pp，设计集同向为负", prereg_ref="vp-v1（6159826）"),
+       ["docs/prereg/2026-09-28_volume_profile_v1.md", "data/backtest/vp_v1/test.json",
+        "docs/prereg/2026-09-28_volume_profile_v1_errata.md"],
+       note="检验集 GLD −4.6pp、SLV −1.1pp，设计集同向为负 —— 只作描述：事件窗口重叠、对照同日成对，"
+            "独立性不成立（勘误 018 #2）；触及定义含跳空（#3）", prereg_ref="vp-v1（6159826）"),
     _p("vp.v1.H2", "analyze/volume_profile.py：收盘在真空区 → 其后 5 日波动高于密集区", "GLD/SLV 日线 · 2016–2026 检验集",
        "T3", "insufficient", ["（研究，不进研报）"], "只观察；是否列 T2 待 Codex 审",
        ["docs/prereg/2026-09-28_volume_profile_v1.md", "data/backtest/vp_v1/test.json"],
-       note="检验集波动比 GLD 1.124 / SLV 1.150，单侧下界 > 1（过 Bonferroni），未达经济门槛 1.15",
+       note="检验集波动比 GLD 1.124159 / SLV 1.149803（<1.15），单侧下界 > 1（过 Bonferroni），未达经济门槛；"
+            "测的是 5 日收益标准差/ATR%，不是价差收益；年份/牛熊分层未交付（勘误 018 #9）",
        prereg_ref="vp-v1（6159826）"),
     _p("vp.v1.H3", "analyze/volume_profile.py：密集区内放量长下影 → 5 日超额收益", "GLD/SLV 日线", "T3", "insufficient",
        ["（研究，不进研报）"], "只观察", ["data/backtest/vp_v1/test.json"], note="冻结定义几乎不触发（0/2 个事件）",

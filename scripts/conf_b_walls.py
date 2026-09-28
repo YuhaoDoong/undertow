@@ -1,7 +1,10 @@
 """conf-v1 · B：期权墙 × 价格层（成交密集区 / 同向 OB）→ 墙的可信度（破墙率）。
 
   python3 scripts/conf_b_walls.py            # 历史快照 2026-06-26 ~ 最近（探索：这批快照在 step8/9 被看过）
-  python3 scripts/conf_b_walls.py --since 2026-09-28 --label prospective   # 前瞻段（12/31 后正式判定）
+
+⚠️ Codex 018 #1/#10：本脚本在结果成熟之后才组行、事后重新分类，没有盘前冻结的预测记录 —— 只按 --since 切日期
+【不是】前瞻台账，所以禁止 --label prospective。真正的前瞻需要先建冻结预测账（墙到期、实际 A 腿关联），再另立版本。
+另：按日期独立重抽没有处理三日窗口的跨日重叠；缓冲只分四个宽层、未控制品种/侧别/到期 —— 结果只作历史探索描述。
 
 每个（品种, 认证交易日, 侧）：v5 同口径局部墙 local_wall(max, ±5%, ≤14 天)；spot = 前一交易日收盘；
 墙所在价格箱 HVN/LVN/MID（vp-v1 口径，只用 t−1 以前日线）；是否落在同向有效 OB（put↔看涨、call↔看跌，t−500…t−1）；
@@ -123,6 +126,8 @@ def main():
     ap.add_argument("--since", default="2026-06-26"); ap.add_argument("--until")
     ap.add_argument("--label", default="exploratory_historical")
     a = ap.parse_args()
+    if "prospective" in a.label:
+        sys.exit("conf-B 没有盘前冻结的预测账，按日期切片不构成前瞻（Codex 018 #1）；禁止用 prospective 标签。")
     rows = collect(a.since, a.until)
     OUT.mkdir(parents=True, exist_ok=True)
     tests = {"B1_LVN_minus_HVN": (lambda r: r["cls"] == "LVN", lambda r: r["cls"] == "HVN"),

@@ -32,7 +32,7 @@ LOCK = OUT / "TEST_RUN.lock"
 SPLIT = "2016-01-01"
 LAST = "2026-09-25"
 SRC = {"GLD": ("data/history/inputs/monthly/2026-09/cboehist_GLD.json.gz", None),
-       "SLV": ("data/history/inputs/monthly/2026-09/cboehist_SLV.json.gz", "2008-07-24")}   # SLV 拆股前数据错误
+       "SLV": ("data/history/inputs/monthly/2026-09/cboehist_SLV.json.gz", "2008-07-24")}   # SLV 2008-07-24 前观察到价格数量级异常，按冻结规则截断（成因未核实公司行动）
 
 
 def _load(sym):

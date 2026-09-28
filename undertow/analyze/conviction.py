@@ -80,3 +80,78 @@ def layers(fa, read, spot_prev: float | None, spot_curr: float | None) -> dict:
     out["H1"] = h1
     out["three_layer"] = None if h1 is None else bool(h1 != 0 and V == S)
     return out
+
+
+H3_RULE = {"min_run": 10, "cooldown": 10, "merge_window": 5, "miss_reset": 2,
+           "note": "符号严格按正负（不设死区，避免看过 9/17 的 +0.05 后再定门槛）；未校准、开发期"}
+
+
+def flip_states(rows: list[dict], *, rule: dict | None = None) -> dict:
+    """H3 偏斜翻号的逐日状态（Codex 018 #8：换月、连续日、缺失、零、翼间冲突、冷却全部写死）。
+
+    rows：按交易日升序 [{session, skew25_pp, skew10_pp, expiry}]；缺一天就传 {session, missing: True}。
+    每翼独立：
+      · 值为 None / missing → 缺失；连续缺失 ≥ miss_reset 天 → 持续计数清零（未知不能算持续）。单日缺失只暂停计数。
+      · 值恰为 0 → zero，不改变持续计数。
+      · 与上一个非缺失记录的到期不同 = 换月日：当天若变号，记 roll_switch（结构切换），重置持续段，不计翻号。
+      · 变号且此前同号持续 ≥ min_run 个有值交易日、且距本翼上次事件 > cooldown → flip 事件；
+        翻成 put 贵（由负转正）记看跌 −1，翻成 call 贵记看涨 +1。持续不足 → change_short_run。
+    两翼合并：同方向事件相距 ≤ merge_window 个交易日 → 合并为一个（取较早日期）；方向相反 → conflict，均不计事件。
+    返回 {states: {session: {wing: 状态}}, wing_events: [...], events: [...]}。"""
+    rule = rule or H3_RULE
+    states: dict = {r["session"]: {} for r in rows}
+    wing_events = []
+    for wing in ("skew25_pp", "skew10_pp"):
+        run_sign, run_len, miss, prev_exp, last_ev = None, 0, 0, None, None
+        for i, r in enumerate(rows):
+            v = None if r.get("missing") else r.get(wing)
+            if v is None:
+                miss += 1
+                if miss >= rule["miss_reset"]:
+                    run_sign, run_len = None, 0
+                states[r["session"]][wing] = "missing"
+                continue
+            miss = 0
+            roll = prev_exp is not None and r.get("expiry") != prev_exp
+            prev_exp = r.get("expiry")
+            sg = (v > 0) - (v < 0)
+            if sg == 0:
+                states[r["session"]][wing] = "zero"
+                continue
+            if run_sign is None:
+                run_sign, run_len = sg, 1
+                states[r["session"]][wing] = "start"
+                continue
+            if sg == run_sign:
+                run_len += 1
+                states[r["session"]][wing] = "hold_roll" if roll else "hold"
+                continue
+            if roll:
+                st = "roll_switch"
+            elif run_len >= rule["min_run"] and (last_ev is None or i - last_ev > rule["cooldown"]):
+                st = "flip"
+                last_ev = i
+                wing_events.append({"session": r["session"], "i": i, "wing": wing, "direction": -1 if sg > 0 else 1,
+                                    "prior_run": run_len})
+            else:
+                st = "change_short_run"
+            states[r["session"]][wing] = st
+            run_sign, run_len = sg, 1
+    wing_events.sort(key=lambda e: e["i"])
+    events, used = [], set()
+    for a in wing_events:
+        if id(a) in used:
+            continue
+        partner = next((b for b in wing_events if b is not a and id(b) not in used and b["wing"] != a["wing"]
+                        and abs(b["i"] - a["i"]) <= rule["merge_window"]), None)
+        if partner is None:
+            events.append({**a, "wings": [a["wing"]], "status": "event"})
+            used.add(id(a))
+        elif partner["direction"] == a["direction"]:
+            first = min(a, partner, key=lambda e: e["i"])
+            events.append({**first, "wings": [a["wing"], partner["wing"]], "status": "event"})
+            used.update({id(a), id(partner)})
+        else:
+            events.append({**a, "wings": [a["wing"], partner["wing"]], "status": "conflict"})
+            used.update({id(a), id(partner)})
+    return {"rule": rule, "states": states, "wing_events": wing_events, "events": events}

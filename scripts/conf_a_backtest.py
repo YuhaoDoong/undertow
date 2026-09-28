@@ -13,6 +13,7 @@ import gzip
 import hashlib
 import json
 import math
+import os
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -30,6 +31,9 @@ SPLIT, LAST = "2016-01-01", "2026-09-25"
 SYMS = ("SPY", "QQQ", "TLT", "USO", "IWM")
 OB_WINDOW = 500
 ALPHA = 0.05 / 10
+#: 冻结后的预登记 sha256（Codex 018 #12：任意非空 --approved-by 都能通过是不够的）。None = 未冻结 → 检验集拒绝运行。
+#: 另：018 #2/#3 指出 A1 继承了 vp-v1 H1 的独立性/对照/触及语义问题，修订协议获审前不得冻结。
+FROZEN_SHA: str | None = None
 
 
 def load(sym):
@@ -101,13 +105,21 @@ def main():
     if a.set == "test":
         if not a.approved_by:
             sys.exit("检验集需先由 Codex 审过定义：--approved-by 写明审阅记录。新品种历史只能用一次。")
-        if LOCK.exists():
-            sys.exit(f"A 检验集已运行过：{LOCK.read_text().strip()}")
+        sha = hashlib.sha256(PREREG.read_bytes()).hexdigest()
+        if FROZEN_SHA is None or sha != FROZEN_SHA:
+            sys.exit(f"预登记未冻结或已改动（当前 {sha[:12]}，冻结 {FROZEN_SHA and FROZEN_SHA[:12]}）：检验集拒绝运行。")
+        try:                                                  # 先原子占锁再计算：崩溃/并发不会重复消费检验集
+            fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            sys.exit(f"A 检验集已运行过或正在运行：{LOCK.read_text().strip()}")
+        with os.fdopen(fd, "w") as fh:
+            fh.write(f"{datetime.now(timezone.utc).isoformat()} started prereg {sha[:12]} 审阅 {a.approved_by}\n")
     res = run(a.set)
     (OUT / f"A_{a.set}.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), "utf-8")
     if a.set == "test":
         head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, cwd=ROOT).stdout.strip()
-        LOCK.write_text(f"{res['ran_at']} HEAD {head} prereg {res['prereg_sha'][:12]} 审阅 {a.approved_by}\n")
+        with open(LOCK, "a", encoding="utf-8") as fh:
+            fh.write(f"{res['ran_at']} finished HEAD {head} prereg {res['prereg_sha'][:12]} 审阅 {a.approved_by}\n")
     for sym, r in res["results"].items():
         a1, a2 = r["A1_hvn_vs_ctrl"], r["A2_conf_vs_hvn_only"]
         f = lambda x: (f"{x['p_a']:.1%}（n={x['n_a']}）vs {x['p_b']:.1%}（n={x['n_b']}），差 {x['diff']*100:+.1f}pp，"

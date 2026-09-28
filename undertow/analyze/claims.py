@@ -17,6 +17,11 @@
   T3  研究观察：原始计算与台账照常保留，不进入任何决策路径
 
 权限只能由本表授予：未登记的预测主张默认没有决策权限，并在审计输出里可见，不会悄悄绕过。
+
+⚠️ 边界（Codex 016）：当前 decision_allowed 没有业务调用；研判的安全性来自「T1 为空时固定输出无方向依据」
+（verdict.build_verdict 遇到 T1 会 NotImplementedError），而不是一个通用的授权引擎。scope 目前是文本，
+decision_allowed 也不接收品种/周期/目标 —— 将来任何 T1 升级之前，必须先补真正的范围匹配、该主张的决策适配器
+与输出链路测试。
 升级（T3→T2→T1）必须有事前方案 + 完整证据审查 + 用途映射，不是存在一份 md 就通过；
 降级、发现前视、修错【立即生效】并留审计记录，不需要新的预登记（Codex 015 问题 5）。
 数字不在这里复制：evidence_refs 指向 validation.REGISTRY 的键或具体文件。
@@ -163,8 +168,9 @@ _ALL = [
     _o("obs.stretch_reading", "analyze/stretch.py: 距均线 ATR 数", "当前读数（事实）"),
     _o("obs.vol_surface", "analyze/vol: ATM IV、偏斜、期限结构", "当前读数（事实）"),
     _o("obs.cot_macro_raw", "collect: COT 持仓、宏观序列原值", "原始数据（事实）"),
-    _o("obs.structure_calc", "strategy/credit_spread/condor 的权利金、最大亏损、盈亏平衡、Greeks", "确定性计算",
-       note="静态到期最大亏损不是所有提前执行情景的实际亏损上界；残腿未知规则保留"),
+    _o("obs.structure_calc", "analyze/structure_calc.py：模型与报价两种情景的净收、含费最大亏损、含费盈亏平衡", "计算",
+       note="选腿按研究性启发式（|Δ|/OI/到期），不是用户给定结构、未经盈利验证；最大亏损为到期静态值，"
+            "不是提前执行情景的实际亏损上界；残腿未知规则保留"),
     _o("obs.calendar_events", "core/calendar: 已知日历事件", "事件提示（除非有用户规则或已验证主张，不自动否决方向）"),
     # ── 可行性 ──
     _f("feas.quote_quality", "报价完整、时效、倒挂", "结构计算前提"),
@@ -182,10 +188,10 @@ _ALL = [
 
 # 迁移状态（Codex 015 提交二、三之后）：已从研判/策略/渲染的决策路径移除或改为观察措辞的，记 done。
 # 仍 pending 的写明缺什么 —— 不把没做完的说成做完。
-_PENDING = {
-    "volregime.stance": "波动率栏仍显示「偏买方/偏卖方」倾向文字（不再作为任何门槛，但措辞未改为观察口径）",
-    "research.misc": "共振/强度评分/挤压等研究卡片沿用各自措辞，尚未逐一审过是否含隐性结论",
-}
+_PENDING: dict[str, str] = {}
+# Codex 016 已处理：volregime 理由改为观测口径（「是否利卖方未经验证」），卡片标题与徽章标「未验证」；
+# 研究卡片按 8 品种回放研报的【实际输出】逐行扫描操作性措辞后处理：情景卡（去「别追/高抛低吸/接刀」、
+# 取消按未验证方向排序）、到期桶一致性（去 ✅「全曲线共识」）、墙位卖方价差候选卡（不再渲染，台账照写）。
 _ALL = [c if c.role != "prediction" else
         replace(c, migration="pending" if c.claim_id in _PENDING else "done",
                                           note=(c.note + "；" if c.note else "") + _PENDING[c.claim_id]

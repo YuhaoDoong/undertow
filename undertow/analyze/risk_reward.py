@@ -25,6 +25,13 @@ STOP_BUF_PCT = 0.4       # 止损放摆动极值之外的缓冲（占价%），�
 PULLBACK_RATIO = 0.5     # "等回调"情景默认锚在斐波 0.5（0.382–0.618 区中枢）
 
 
+# 渲染出口共用的情景名与说明（Codex 016 F16-02：HTML 与 Markdown/CLI 必须同一语义，不各写一套）。
+# 自动斐波目标未经验证 → 只作「若以这些价位入场/止损/目标」的条件算术，不出追/不追、买/卖、评级。
+SCENARIO_LABEL = {"chase": "以现价入场", "pullback": "以斐波 0.5 回撤入场"}
+CONDITIONAL_NOTE = ("「若以这些价位入场/止损/目标」的条件算术；目标取自自动斐波/墙位，未经验证，"
+                    "不作追与不追的依据。你有自己的目标与止损时，按你的盈亏比下限判断。")
+
+
 @dataclass(frozen=True)
 class Setup:
     kind: str                 # chase（现价追）/ pullback（等回调）

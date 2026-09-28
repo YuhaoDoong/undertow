@@ -208,7 +208,7 @@ def render_gamma(ga: GammaAnalysis, display_name: str) -> str:
     L.append("### Gamma 状态")
     L.append(f"- 净 GEX ≈ **{ga.net_gex/1e6:+.0f}M**（相对单位）→ {ga.gex_regime}")
     if ga.net_gex < 0:
-        L.append("  - 负伽马环境：跌时做市商卖、涨时买，**助涨助跌**，趋势/波动放大，别逆势接刀。")
+        L.append("  - 负伽马环境：按模型，做市商跌时卖、涨时买，可能放大波动（未经验证）。")
     elif ga.net_gex > 0:
         L.append("  - 正伽马环境：做市商**逆向对冲**，价格倾向被钉、回归高伽马区，区间震荡概率大。")
     L.append("")
@@ -480,13 +480,12 @@ def render_expiry_ladder_all(blocks: list[str]) -> str:
 
 
 # ——————————————————————————————————————————————————————————
-# 斐波那契回撤 + 盈亏比闸门（波段交易纪律的落地）
+# 斐波结构与条件盈亏比（情景描述，Codex 015/016）
 # ——————————————————————————————————————————————————————————
 
 FIB_DISCLAIMER = (
-    "> 斐波那契回撤/扩展 + 盈亏比闸门＝「先看盈亏比、别追高、等回调」这套交易纪律的确定性落地。"
-    "摆动腿自动检测自真实期货日线；目标取自结构墙位/斐波扩展，非价格预测。"
-    "盈亏比是【必要非充分】条件——达标也要自定胜率与仓位。仅波段级情景参考，非交易指令。"
+    "> 斐波结构与条件盈亏比：摆动腿自动检测自真实期货日线（阈值未校准），价位是结构描述、不是价格预测；"
+    "盈亏比只是条件算术，自动目标未经验证，不作追与不追的依据（Codex 015/016）。非交易指令。"
 )
 
 
@@ -495,61 +494,55 @@ def _fmt(v: float) -> str:
 
 
 def render_fib_rr(fib, plan, display_name: str) -> str:
-    """斐波那契 + 盈亏比 终端详版。fib=FibAnalysis, plan=RiskRewardPlan。"""
+    """斐波结构与条件盈亏比 终端详版（与 HTML 版同一语义，Codex 016 F16-02）。fib=FibAnalysis, plan=RiskRewardPlan。
+
+    摆动腿与斐波位是情景描述；盈亏比只作条件算术，不透传 plan.headline / setup.grade / setup.verdict（含「别追」等）。"""
+    from undertow.analyze.risk_reward import CONDITIONAL_NOTE, SCENARIO_LABEL
     L: list[str] = []
-    L.append(f"## {display_name} — 斐波那契回撤 + 盈亏比闸门")
+    L.append(f"## {display_name} — 斐波结构与条件盈亏比（情景描述 · T3，不参与结论）")
     if not fib.ok:
         L.append(f"- 无有效摆动腿：{fib.note}")
         L.append("")
         return "\n".join(L)
 
-    dir_cn = "上涨腿（回撤=下方支撑，顺势=回调买）" if fib.direction == "up" \
-        else "下跌腿（回撤=上方阻力，顺势=反抽卖）"
-    L.append(f"**摆动腿**：{dir_cn}")
+    dir_cn = "上涨腿（回撤位在现价下方）" if fib.direction == "up" else "下跌腿（回撤位在现价上方）"
+    L.append(f"**摆动腿**：{dir_cn}（3%/2% 阈值未校准）")
     L.append(f"- {fib.note}；现价 {_fmt(fib.spot)}"
              + (f"（ETF {fib.etf_spot:.1f}）" if fib.etf_spot else "")
              + f" · {fib.current_zone}")
     L.append("")
-    L.append("**斐波那契回撤位**（入场/止损锚）：")
+    L.append("**斐波那契回撤位**（结构描述，不是价格预测）：")
     L.append("")
     L.append("| 比率 | 价位 | ETF 行权 | 说明 |")
     L.append("|---|---|---|---|")
     for lv in fib.retracements:
         etf = f"{lv.etf:.1f}" if lv.etf is not None else "—"
-        tag = " ⭐关键区" if lv.is_key else ""
-        L.append(f"| {lv.label} | {_fmt(lv.price)} | {etf} | 回撤{tag} |")
+        L.append(f"| {lv.label} | {_fmt(lv.price)} | {etf} | 回撤 |")
     for lv in fib.extensions:
         etf = f"{lv.etf:.1f}" if lv.etf is not None else "—"
-        L.append(f"| {lv.label} | {_fmt(lv.price)} | {etf} | 上行扩展目标 |")
+        L.append(f"| {lv.label} | {_fmt(lv.price)} | {etf} | 扩展 |")
     L.append("")
 
     if plan.ok:
-        L.append(f"**盈亏比闸门（顺势 {plan.direction}）**：{plan.headline}")
-        if plan.bias_note:
-            L.append(f"- {plan.bias_note}")
+        L.append(f"**条件盈亏比（沿摆动腿方向 {plan.direction} 的情景计算）**：{CONDITIONAL_NOTE}")
         L.append("")
-        L.append("| 情景 | 入场 | 止损 | 目标 | 盈亏比 | 评级 |")
-        L.append("|---|---|---|---|---|---|")
+        L.append("| 情景 | 入场 | 止损 | 目标 | 盈亏比 |")
+        L.append("|---|---|---|---|---|")
         for s in plan.setups:
             ee = f"（ETF {s.entry_etf:.1f}）" if s.entry_etf else ""
             se = f"（ETF {s.stop_etf:.1f}）" if s.stop_etf else ""
             te = f"（ETF {s.target_etf:.1f}）" if s.target_etf else ""
-            L.append(f"| {s.name} | {_fmt(s.entry)}{ee} | {_fmt(s.stop)}{se} | "
-                     f"{_fmt(s.target)}{te} {s.target_label} | **{s.rr:.2f}** | {s.grade} |")
+            L.append(f"| {SCENARIO_LABEL.get(s.kind, s.kind)} | {_fmt(s.entry)}{ee} | {_fmt(s.stop)}{se} | "
+                     f"{_fmt(s.target)}{te} | **{s.rr:.2f}** |")
         L.append("")
-        for s in plan.setups:
-            L.append(f"- {s.name}：{s.verdict}")
-        L.append("")
-        for c in plan.caveats:
-            L.append(f"> {c}")
     else:
-        L.append(f"- 盈亏比闸门不适用：{plan.note}")
+        L.append(f"- 条件盈亏比无法计算：{plan.note}")
     L.append("")
     return "\n".join(L)
 
 
 def render_fib_rr_all(blocks: list[str]) -> str:
-    header = "# 斐波那契回撤 + 盈亏比闸门（交易哲学落地 · 波段级情景参考）\n"
+    header = "# 斐波结构与条件盈亏比（情景描述 · 不参与结论）\n"
     return header + "\n" + FIB_DISCLAIMER + "\n\n" + "\n---\n\n".join(blocks)
 
 

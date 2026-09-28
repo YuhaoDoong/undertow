@@ -90,12 +90,12 @@ def assess_vol_regime(*, iv_reading=None, atm_iv_pp: float | None = None,
     if iv_pct is not None:
         if iv_pct >= IV_PCT_HI:
             score += 1
-            reasons.append(f"{iv_name} 近1年分位 {iv_pct:.0f}% 偏高 → 期权相对自身历史偏贵，利卖方")
+            reasons.append(f"{iv_name} 近1年分位 {iv_pct:.0f}% 偏高 → 期权相对自身历史偏贵（是否因此利卖方未经验证）")
         elif iv_pct <= IV_PCT_LO:
             score -= 1
-            reasons.append(f"{iv_name} 近1年分位 {iv_pct:.0f}% 偏低 → 期权相对自身历史偏便宜，利买方")
+            reasons.append(f"{iv_name} 近1年分位 {iv_pct:.0f}% 偏低 → 期权相对自身历史偏便宜（是否因此利买方未经验证）")
         else:
-            reasons.append(f"{iv_name} 近1年分位 {iv_pct:.0f}%（中位）→ 该维度不偏买也不偏卖")
+            reasons.append(f"{iv_name} 近1年分位 {iv_pct:.0f}%（中位）")
 
     # —— 判据 2：ATM IV − 已实现波动率 RV ——
     rv = realized_vol(closes)
@@ -106,12 +106,12 @@ def assess_vol_regime(*, iv_reading=None, atm_iv_pp: float | None = None,
             score += 1
             reasons.append(
                 f"ATM IV {atm_iv_pp:.1f} 高于近{RV_WINDOW}日实际波动 {rv:.1f}"
-                f"（+{iv_minus_rv:.1f}pp）→ 含波动率溢价，卖方有正期望空间")
+                f"（+{iv_minus_rv:.1f}pp）→ 隐含高于实际（卖方是否因此有正期望未经验证）")
         elif iv_minus_rv <= -IV_RV_SIG:
             score -= 1
             reasons.append(
                 f"ATM IV {atm_iv_pp:.1f} 低于近{RV_WINDOW}日实际波动 {rv:.1f}"
-                f"（{iv_minus_rv:.1f}pp）→ 期权定价偏低，买方占便宜")
+                f"（{iv_minus_rv:.1f}pp）→ 隐含低于实际（买方是否因此占优未经验证）")
         else:
             reasons.append(
                 f"ATM IV {atm_iv_pp:.1f} ≈ 近{RV_WINDOW}日实际波动 {rv:.1f}"
@@ -128,12 +128,12 @@ def assess_vol_regime(*, iv_reading=None, atm_iv_pp: float | None = None,
 
     if iv_chg is not None:
         if stance == "偏卖方" and iv_chg >= IV_TREND_SIG:
-            caveats.append(f"但 IV 近20日仍抬升 {iv_chg:+.1f}pp——卖方留意波动率继续扩张（如临近事件）")
+            caveats.append(f"IV 近20日抬升 {iv_chg:+.1f}pp（观测）")
         elif stance == "偏买方" and iv_chg <= -IV_TREND_SIG:
-            caveats.append(f"但 IV 近20日在回落 {iv_chg:+.1f}pp——买方留意时间价值/波动率同步流失")
+            caveats.append(f"IV 近20日回落 {iv_chg:+.1f}pp（观测）")
 
     if stance != "数据不足":
-        caveats.append("这是波动率环境倾向，非交易指令；具体行权价/到期需结合 Gamma 墙位与到期日")
+        caveats.append("「偏买方/偏卖方」是阈值（IV 分位 70/30、IV−RV 2pp）拼出的标签，未经检验，不作为任何门槛或建议（Codex 015/016）")
 
     return VolRegime(
         stance=stance, score=score,

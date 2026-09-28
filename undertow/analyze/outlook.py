@@ -146,7 +146,7 @@ def plain_summary_blocks(o: Outlook, *, day_chg_pct: float | None = None,
     elif o.near_bias and o.mid_bias:   # 不分歧时也点一句分层，供参考
         dir_txt += f"周期分层：近端 {o.near_bias} · 中期 {o.mid_bias}（同向）。"
     if "负Gamma" in o.regime or "负伽马" in o.regime:
-        dir_txt += "负伽马：对冲放大波动，易走过头，追单/接刀都需谨慎。"
+        dir_txt += "负伽马（按模型，对冲可能放大波动；未经验证）。"
     elif "正Gamma" in o.regime or "正伽马" in o.regime:
         dir_txt += "正伽马：波动易被吸收，假突破多。"
     blocks.append(("方向", dir_txt))
@@ -379,8 +379,8 @@ def _scenarios(ga: GammaAnalysis, bias_sign: int) -> list[Scenario]:
     out.append(Scenario(
         name="基准 · 区间震荡",
         trigger=f"价格在 put 墙 {px(pw)} 与 call 墙 {px(cw)} 之间",
-        path=("正伽马环境，做市商逆向对冲、价格易被钉回墙间，区间内高抛低吸为主。"
-              if not neg else "负伽马环境，墙间波动也会被放大，区间边沿假突破多，别追。"),
+        path=("正伽马环境（按模型，做市商逆向对冲可能抑制墙间波动；未经验证）。"
+              if not neg else "负伽马环境（按模型，做市商顺向对冲可能放大墙间波动；未经验证）。"),
         invalidation=f"放量收破任一墙（{px(pw)} 或 {px(cw)}）",
     ))
     # 向下
@@ -388,22 +388,18 @@ def _scenarios(ga: GammaAnalysis, bias_sign: int) -> list[Scenario]:
     out.append(Scenario(
         name="向下 · 破位走弱",
         trigger=f"收破 put 墙 {px(pw)}" + (f"／零伽马 {px(zg)}" if zg and zg < spot else ""),
-        path=("负伽马助跌：做市商越跌越卖，下行加速，别逆势接刀。"
-              if neg else "支撑失守、动能转弱，留意下一档 OI 支撑。"),
+        path=("负伽马环境下，按模型做市商对冲可能放大下行（未经验证）；下一档 OI 集中位见墙位表。"
+              if neg else "下一档 OI 集中位见墙位表。"),
         invalidation=f"快速收回 {px(down_ref)} 上方",
     ))
     # 向上
     out.append(Scenario(
         name="向上 · 突破走强",
         trigger=f"放量站上 call 墙 {px(cw)}",
-        path=("阻力翻支撑，若伴随做市商空头回补（gamma 挤压）上行可能加速。"),
+        path=("上一档 OI 集中位见墙位表；gamma 挤压之说未经验证。"),
         invalidation=f"站不稳、快速跌回 {px(cw)} 下方（假突破）",
     ))
-    # 把与 bias 一致的情景排前
-    if bias_sign < 0:
-        out[0], out[1] = out[1], out[0]
-    elif bias_sign > 0:
-        out[0], out[2] = out[2], out[0]
+    # Codex 016：不再按未验证的方向（bias_sign，T3）给情景排序 —— 固定为 区间 / 向下 / 向上
     return out
 
 
@@ -411,7 +407,7 @@ def _caveats(an: PositioningAnalysis, ga: GammaAnalysis, fa: FlowAnalysis,
             signals: list[Signal]) -> list[str]:
     cv = ["COT 滞后约 3 天，仅波段级；以下为规则化情景推演，非点位预言，须与价格行为共振后决策。"]
     if any(s.code.startswith("MM_CROWDED") for s in signals):
-        cv.append("含拥挤反指信号：回测显示其仅在均值回归品种可信，单边趋势里会失效——别在强趋势中盲做反指。")
+        cv.append("含拥挤反指信号：未经完整回测（无样本量与 p 值），单边趋势中可能失效。")
     if fa.prev_date is None:
         cv.append("资金流仅一份快照，ΔOI/ΔIV 尚不可用；连续 `snapshot` 攒够两天后，方向研判会更实。")
     elif fa.changes:

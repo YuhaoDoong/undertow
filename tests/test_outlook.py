@@ -78,7 +78,8 @@ def test_build_outlook_bearish_synthesis():
     cw = next(k for k in o.key_levels if "看涨墙" in k.label)
     assert abs(cw.commodity_level - 1100.0) < 1e-6
     # 情景：与偏空一致者排首位
-    assert "向下" in o.scenarios[0].name
+    # Codex 016：情景不再按未验证的方向排序，固定为 区间/向下/向上
+    assert [x.name.split(" · ")[0] for x in o.scenarios] == ["基准", "向下", "向上"]
     # 拥挤反指的 caveat 在
     assert any("拥挤反指" in c for c in o.caveats)
 

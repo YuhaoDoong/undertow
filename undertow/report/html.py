@@ -438,13 +438,13 @@ def render_technicals_section(tr, sr, rr=None, *, cross=None, asof="", src="", t
 
 
 def render_vol_regime_section(vr) -> str:
-    """波动率环境卡片：期权偏贵/偏便宜 → 波段级"买方 vs 卖方"倾向。"""
+    """波动率环境卡片：IV 分位、IV−RV 等观测。「偏买方/偏卖方」标签未经检验（Codex 016 F16-02），只作标签展示。"""
     if vr is None or not getattr(vr, "has_content", False):
         return ""
     palette = {"偏卖方": "#8250df", "偏买方": "#0969da", "中性": "#6e7781"}
     col = palette.get(vr.stance, "#6e7781")
     badge = (f'<span style="display:inline-block;padding:3px 12px;border-radius:12px;'
-             f'background:{col};color:#fff;font-weight:600">倾向：{_esc(vr.stance)}</span>')
+             f'background:{col};color:#fff;font-weight:600">标签（未验证）：{_esc(vr.stance)}</span>')
     # 数字行
     cells = []
     if vr.iv_index_name and vr.iv_index_latest is not None:
@@ -467,7 +467,7 @@ def render_vol_regime_section(vr) -> str:
     edu = ('<small>买方=买入期权：看对方向或波动放大才赚，怕横盘 / IV 回落；'
            '卖方=卖出期权：收权利金、赌横盘 / IV 回落，怕突发大行情。'
            '判据：IV 分位（相对自身历史贵不贵）+ ATM IV−RV（相对标的实际波动贵不贵）。</small>')
-    return (f'<div class="card"><h2>波动率环境 · 期权买方还是卖方</h2>'
+    return (f'<div class="card"><h2>波动率环境（观测 · 买卖方倾向未经验证，不参与结论）</h2>'
             f'<div style="margin:4px 0 2px">{badge}</div>{nums}{reasons_html}{caveats_html}{edu}</div>')
 
 
@@ -703,7 +703,8 @@ _GRADE_COLOR = {"差": "#cf222e", "中": "#bc4c00", "优": "#1a7f37"}
 
 
 def render_fib_rr_section(fib, plan, etf_symbol: str = "") -> str:
-    """斐波那契回撤 + 盈亏比闸门（「先看盈亏比、别追、等回调」这套交易纪律的确定性落地）。"""
+    """斐波结构与条件盈亏比（Codex 015/016）：情景描述 + 条件算术；与 Markdown 版共用 SCENARIO_LABEL / CONDITIONAL_NOTE。"""
+    from undertow.analyze.risk_reward import CONDITIONAL_NOTE, SCENARIO_LABEL
     if fib is None or not fib.ok:
         return ""
     sym = _esc(etf_symbol)
@@ -735,7 +736,7 @@ def render_fib_rr_section(fib, plan, etf_symbol: str = "") -> str:
         srows = []
         for s in plan.setups:
             srows.append(
-                f'<tr><td>{_esc({"chase": "以现价入场", "pullback": "以斐波 0.5 回撤入场"}.get(s.kind, s.name))}</td>'
+                f'<tr><td>{_esc(SCENARIO_LABEL.get(s.kind, s.kind))}</td>'
                 f'<td class="r lvl">{fnum(s.entry)}{_etf(s.entry_etf)}</td>'
                 f'<td class="r lvl">{fnum(s.stop)}{_etf(s.stop_etf)}</td>'
                 f'<td class="r lvl">{fnum(s.target)}{_etf(s.target_etf)} '
@@ -745,8 +746,7 @@ def render_fib_rr_section(fib, plan, etf_symbol: str = "") -> str:
                   '<th class="r">目标</th><th class="r">盈亏比</th></tr>'
                   + "".join(srows) + "</table>")
         rr_block = (f'<div style="font-weight:700;margin:12px 0 4px">条件盈亏比（沿摆动腿方向 {_esc(plan.direction)} 的情景计算）</div>'
-                    '<div class="sub" style="margin-bottom:4px">「若以这些价位入场/止损/目标」的算术；目标取自自动斐波/墙位，'
-                    '<b>未经验证，不作追与不追的依据</b>。你有自己的目标与止损时，按你的盈亏比下限判断。</div>'
+                    f'<div class="sub" style="margin-bottom:4px">{_esc(CONDITIONAL_NOTE)}</div>'
                     f'{rr_tbl}')
 
     etf_hint = ('<b style="color:#0969da"> 蓝色为 ETF 行权价</b>；' if show_etf else "")
@@ -1014,40 +1014,63 @@ def render_strategy_section(sp, timeline_svg: str = "") -> str:
             f'{"".join(tickets)}{opts}{cavs}</div>')
 
 
-def render_structure_calculators(calcs, timeline_svg: str = "") -> str:
-    """结构计算器（Codex 015 提交二）：方向由用户决定；这里只列确定性计算，不给「适配/不开枪」。
+# flow.py 是方向台账指纹覆盖的冻结文件（改一个字，前瞻样本就会判身份不合格），它的 expiry_split_html
+# 标题仍写「✅ 各到期桶方向一致 —— 是全曲线共识」。按 Codex 015 §六「在渲染适配层改、不碰冻结文件」，
+# 在这里替换为观测口径；tests/test_evidence_render.py 锁定原句存在，flow.py 措辞一变替换失效就会报错。
+EXPIRY_SPLIT_LEGACY_HEAD = ('<b style="color:#1a7f37">✅ 各到期桶方向一致</b> —— '
+                            '不是某个到期的孤立现象，是全曲线共识。')
+EXPIRY_SPLIT_OBS_HEAD = ('<b style="color:#57606a">· 各到期桶资金流分侧一致</b> —— '
+                         '观测：一致本身不等于方向更可靠（未经验证）。')
 
-    方向性情景、卖方价差适配度、铁鹰适用性等预测性判断未通过验证（见 `undertow claims`），不再输出。"""
+
+def neutralize_expiry_split(html_text: str) -> str:
+    return html_text.replace(EXPIRY_SPLIT_LEGACY_HEAD, EXPIRY_SPLIT_OBS_HEAD)
+
+
+def render_structure_calculators(calcs, timeline_svg: str = "") -> str:
+    """结构计算器（Codex 015/016）：方向由用户决定；只列计算，不给「适配/不开枪」。
+
+    模型情景与报价情景分开，各有状态；报价倒挂/缺失/越界 → 该情景「未知」并写原因，不给由坏报价推出的风险数字。
+    最大亏损、盈亏平衡、缓冲同为含费口径；税费前盈亏平衡只作对照。"""
     def _m(v, fmt="{:.2f}"):
         return "未知" if v is None else fmt.format(v)
+
+    def _sc(label, sc):
+        if sc is None:
+            return f'<td colspan="4" class="sub">{label}：未知</td>'
+        if sc.status != "ok":
+            extra = (f"（最大亏损 ${sc.max_loss:.0f}）" if sc.status == "no_breakeven" and sc.max_loss is not None else "")
+            return f'<td colspan="4" class="sub">{label}：{_esc(sc.reason)}{extra}</td>'
+        return (f'<td style="text-align:right">{label} {sc.credit:.2f}</td>'
+                f'<td style="text-align:right">${sc.max_loss:.0f}</td>'
+                f'<td style="text-align:right">{" / ".join(f"{b:.2f}" for b in sc.breakevens)}'
+                f'<div class="sub">税费前 {" / ".join(f"{b:.2f}" for b in sc.breakevens_pre_fee)}</div></td>'
+                f'<td style="text-align:right">{" / ".join(f"{x:+.1f}%" for x in sc.buffer_pct)}</td>')
     rows = []
     for c in calcs:
         if c is None:
             continue
         if not c.computable:
-            rows.append(f'<tr><td><b>{_esc(c.name)}</b></td><td colspan="6" class="sub">无法计算：{_esc(c.reason)}</td></tr>')
+            rows.append(f'<tr><td><b>{_esc(c.name)}</b></td><td colspan="5" class="sub">{_esc(c.reason)}</td></tr>')
             continue
-        legs = "；".join(f"{l.action} {l.strike:g}{l.kind}（Δ{l.delta:+.2f}，IV {l.iv_pp:.0f}%，"
-                        f"bid {_m(l.bid)} / ask {_m(l.ask)}）" for l in c.legs)
-        rows.append(
-            f'<tr><td><b>{_esc(c.name)}</b><div class="sub">到期 {c.expiry}（{c.dte} 天）</div></td>'
-            f'<td class="sub">{_esc(legs)}</td>'
-            f'<td style="text-align:right">{_m(c.credit_bs)}<div class="sub">保守 {_m(c.credit_conservative)}</div></td>'
-            f'<td style="text-align:right">{_m(c.width, "{:g}")}</td>'
-            f'<td style="text-align:right">${_m(c.max_loss_bs, "{:.0f}")}<div class="sub">保守 ${_m(c.max_loss_conservative, "{:.0f}")}</div></td>'
-            f'<td style="text-align:right">{" / ".join(f"{b:.2f}" for b in c.breakevens)}</td>'
-            f'<td style="text-align:right">{" / ".join(f"{x:+.1f}%" for x in c.buffer_pct)}</td></tr>')
+        legs = "；".join(f"{l.action} {l.strike:g}{l.kind}（Δ{l.delta:+.2f}，bid {_m(l.bid)} / ask {_m(l.ask)}"
+                        + (f"，{ {'missing': '缺报价', 'non_finite': '非有限', 'crossed': '倒挂'}[l.quote_issue] }" if l.quote_issue else "")
+                        + "）" for l in c.legs)
+        head = (f'<td rowspan="2"><b>{_esc(c.name)}</b><div class="sub">到期 {c.expiry}（{c.dte} 天）· 宽 {c.width:g}'
+                f' · 费用 ${c.fee:.2f}</div><div class="sub">{_esc(legs)}</div></td>')
+        rows.append(f'<tr>{head}{_sc("模型", c.model)}</tr>')
+        rows.append(f'<tr>{_sc("报价", c.quote)}</tr>')
     iv = next((c.iv_minus_rv for c in calcs if c is not None and c.iv_minus_rv is not None), None)
     notes = next((c.notes for c in calcs if c is not None), ())
     return (
         '<div class="card">'
         '<h2>🧮 结构计算器（方向由你决定）</h2>'
         '<div class="sub" style="margin-bottom:8px">方向性情景、卖方价差「适配度」、铁鹰「适用性」都是未通过验证的预测性判断，'
-        '已不再输出。下表只给确定性计算：你有方向时，挑对应的一行看数字。'
-        + (f'　观测：ATM IV−RV {iv:+.1f}pp（只作参考，不再作为「有溢价 / 可卖」的门槛）' if iv is not None else "")
+        '已不再输出。下表只给计算：你有方向时，挑对应的一行看数字。'
+        + (f'　观测：ATM IV−RV {iv:+.1f}pp（只作参考，不作为任何门槛）' if iv is not None else "")
         + '</div>'
-        '<table><thead><tr><th>结构</th><th>腿</th><th>净收（每股，BS）</th><th>宽度</th>'
-        '<th>最大亏损（每组，含费）</th><th>盈亏平衡</th><th>现价距离</th></tr></thead>'
+        '<table><thead><tr><th>结构（选腿规则见下）</th><th>净收（每股，税费前）</th><th>最大亏损（每组，含费）</th>'
+        '<th>盈亏平衡（含费）</th><th>现价距离（含费）</th></tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table>'
         + "".join(f'<div class="sub" style="margin-top:4px">· {_esc(n)}</div>' for n in notes)
         + (f'<h3 style="margin-top:14px">结构位时间线（观测）</h3>{timeline_svg}' if timeline_svg else "")
@@ -1768,9 +1791,9 @@ def _facts_html(fx: dict) -> str:
         else:
             n_b = len([b for b in sp if b["sign"]])
             word = "看跌" if sp[0]["sign"] < 0 else "看涨"
-            rows.append(f'<b style="color:#1a7f37">✅ {n_b} 个到期桶【全部同向{word}】'
-                        f'</b><span style="color:#6e7781">'
-                        f' —— 不是某个到期的孤立现象，是全曲线共识</span>')
+            rows.append(f'<b style="color:#57606a">· {n_b} 个到期桶资金流分侧同为{word}侧</b>'
+                        f'<span style="color:#6e7781">'
+                        f' —— 观测：各到期一致（一致本身不等于方向更可靠，未经验证）</span>')
 
     legs = fx.get("big_legs") or []
     if legs:

@@ -378,7 +378,8 @@ def test_index_shows_one_marker_detail_goes_to_instrument_report():
                 "sign": -1, "ratio": 40.0, "doi": 8200}]
     idx = _facts_html({"exp_split": sp_same, "exp_conflict": False,
                        "exp_agreement": "agree"})
-    assert "全部同向" in idx, "同向时必须额外标注 —— 这是更强的信号"
+    # Codex 016：一致只作观测标注，不再称「更强的信号 / 全曲线共识」（未经验证）
+    assert "同为看跌侧" in idx and "未经验证" in idx and "共识" not in idx
     assert "0-2天" not in idx, "index 不该再列各桶明细"
 
     idx2 = _facts_html({"exp_split": sp_same, "exp_conflict": True,

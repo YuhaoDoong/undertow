@@ -2274,7 +2274,8 @@ def cmd_report(args) -> int:
                 # 到期分桶明细：index 上只留一个标记，明细在品种研报里
                 from undertow.analyze.flow import (expiry_split as _exp_sp,
                                                    expiry_split_html as _exp_html)
-                _expiry_html = _exp_html(_exp_sp(fa), _e)
+                from undertow.report.html import neutralize_expiry_split as _neu
+                _expiry_html = _neu(_exp_html(_exp_sp(fa), _e))    # flow.py 冻结：在渲染层改措辞
                 # 研报顶部的综合研判卡：与 index 卡片同源同内容
                 from undertow.report.html import render_summary_card as _sum_card
                 _summary_html = _sum_card({
@@ -2325,8 +2326,10 @@ def cmd_report(args) -> int:
                 _ws_spot = _px[_prior[-1]]
                 _ws_v = _ws_propose(curr, inst.key, obs_day, _exec_day,
                                     spot=_ws_spot)
-                _ws_html = render_wall_spread(_ws_v, inst.display_name,
-                                              events=all_events)
+                # Codex 016：候选卡输出具体交易候选与 ROI，属未检验的操作板块（T3）→ 不再渲染；
+                # 下方前瞻台账照常写入（台账不依赖展示）。
+                if RENDER_T3_OPERATION_PANELS:
+                    _ws_html = render_wall_spread(_ws_v, inst.display_name, events=all_events)
                 # 落盘推荐台账（用户 2026-09-02：记录每次研报里的推荐，收集数据）。
                 # 事前记录、事后回填 —— 回测再怎么做都是事后的，只有前瞻台账
                 # 能回答"照着做结果会怎样"。

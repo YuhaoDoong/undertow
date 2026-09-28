@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import gzip
+import hashlib
 import json
 import os
 import sys
@@ -109,7 +110,14 @@ class SnapshotStore:
 
     def load(self, kind: str, symbol: str, on_date: date, *,
              quarantine: bool = True) -> Any | None:
-        """读回某日的原始 payload；文件不存在返回 None。
+        """读回某日的原始 payload；文件不存在返回 None。见 load_with_identity。"""
+        payload, _ = self.load_with_identity(kind, symbol, on_date, quarantine=quarantine)
+        return payload
+
+    def load_with_identity(self, kind: str, symbol: str, on_date: date, *,
+                           quarantine: bool = True) -> tuple[Any | None, dict | None]:
+        """一次读取原始压缩字节 → (payload, {path, sha256, captured_at})，三者出自同一份字节（Codex 019-02：
+        以前 payload、sha、captured_at 分三次按路径读，中间文件被替换就会张冠李戴）。
 
         ⚠️ **损坏 ≠ 不存在**。旧写法把二者都折成 None，后果：
           · 上层的"文件存在即算齐全"判据会把损坏文件当成有效快照；
@@ -119,11 +127,12 @@ class SnapshotStore:
         再返回 None —— 调用方看到的仍是"没有数据"，但证据留下了、不会被覆盖。
         """
         path = self._path(kind, symbol, on_date)
-        if not path.exists():
-            return None
         try:
-            with gzip.open(path, "rb") as f:
-                rec = json.loads(f.read().decode("utf-8"))
+            comp = path.read_bytes()
+        except FileNotFoundError:
+            return None, None
+        try:
+            rec = json.loads(gzip.decompress(comp).decode("utf-8"))
         except (OSError, json.JSONDecodeError, EOFError, UnicodeDecodeError) as e:
             if quarantine:
                 n = 1
@@ -137,13 +146,17 @@ class SnapshotStore:
                 except OSError:
                     print(f"[严重] 快照损坏且隔离失败：{path}（{type(e).__name__}）",
                           file=sys.stderr)
-            return None
+            return None, None
         if not isinstance(rec, dict) or "payload" not in rec:
             print(f"[严重] 快照结构异常（缺 payload 字段）：{path.name}", file=sys.stderr)
-            return None
+            return None, None
+        ca = rec.get("captured_at")
+        ident = {"path": str(path), "sha256": hashlib.sha256(comp).hexdigest(),
+                 "captured_at": float(ca) if isinstance(ca, (int, float)) else None}
         from undertow.collect import provenance
-        provenance.reference_file("snapshot", f"{kind}/{symbol}/{on_date}", path)      # 017 A02：只记路径与 sha
-        return rec.get("payload")
+        provenance.reference_bytes("snapshot", f"{kind}/{symbol}/{on_date}", path, comp,
+                                   captured_at=ident["captured_at"])          # 017 A02：同一份字节
+        return rec.get("payload"), ident
 
     def captured_at(self, kind: str, symbol: str, on_date: date) -> float | None:
         """这份快照实际是什么时候抓的（unix 秒）；缺失或损坏返回 None。

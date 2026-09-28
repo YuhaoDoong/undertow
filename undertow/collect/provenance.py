@@ -44,10 +44,12 @@ def begin(command: str, argv: list[str]) -> None:
 
 
 def _add(item: dict) -> None:
+    """同一 (来源, key, 版本) 只记一次；同 key 不同版本各记一条，按消费顺序编号 seq（Codex 019-02）。"""
     sig = (item["kind"], item["key"], item.get("sha256"))
     if sig in _run["_seen"]:
         return
     _run["_seen"].add(sig)
+    item["seq"] = len(_run["items"])
     _run["items"].append(item)
 
 
@@ -65,38 +67,39 @@ def consume_bytes(kind: str, key: str, raw: bytes, *, status: str, fetched_at: f
             "fetched_at": datetime.fromtimestamp(fetched_at, timezone.utc).isoformat() if fetched_at else None,
             "age_s": None if age_s is None else round(age_s, 1), "ttl_s": ttl_s, "stored": False}
     try:
-        cas.put(raw)
+        res = cas.put(raw)                         # put 已验证可逐字节还原才返回（019-01）
         item["stored"] = True
+        if res.get("repairs"):
+            item["cas_repairs"] = res["repairs"]
+            _err(f"{kind}:{key} 存入时发现并修复了 cas 损坏：{len(res['repairs'])} 处（已隔离保留）")
     except Exception as e:                         # 存不下也要在清单里显式可见
         _err(f"{kind}:{key} 存入 cas 失败：{type(e).__name__}: {e}")
     _add(item)
 
 
-def consume_cache_file(key: str, path: Path, *, status: str, ttl_s: float | None) -> None:
+def consume_cache_raw(key: str, raw: bytes, *, status: str, ttl_s: float | None) -> None:
+    """登记调用方【已经读到手】的那份原文 —— 绝不再按路径重读（重读之间可能被别的进程替换，Codex 019-02）。"""
     if _run is None or not key.startswith(PUBLIC_CACHE_PREFIX):
         return
     try:
-        raw = path.read_bytes()
         fetched = json.loads(raw.decode("utf-8")).get("fetched_at")
-    except (OSError, ValueError, UnicodeError, AttributeError) as e:
-        _err(f"cache:{key} 读取原文失败：{type(e).__name__}")
-        return
+    except (ValueError, UnicodeError, AttributeError) as e:
+        _err(f"cache:{key} 原文无法解析 fetched_at：{type(e).__name__}")
+        fetched = None
     age = (time.time() - fetched) if isinstance(fetched, (int, float)) else None
     if status == "cache_hit" and ttl_s is not None and age is not None and age > ttl_s:
         status = "stale_cache"
     consume_bytes("cache", key, raw, status=status, fetched_at=fetched, age_s=age, ttl_s=ttl_s)
 
 
-def reference_file(kind: str, key: str, path: Path) -> None:
-    """已按日入库的文件（期权快照）：只记路径与 sha，不重复存。"""
+def reference_bytes(kind: str, key: str, path: Path, raw: bytes, *, captured_at: float | None = None) -> None:
+    """已按日入库的文件（期权快照）：用调用方已读到的同一份字节算 sha，只记路径与 sha，不重复存。
+    ⚠️ 快照文件同日可被覆盖（store.save os.replace）；被覆盖的旧版本只能在它被 git 提交过时找回 ——
+    清单能检出「后来变了」，但不保证能还原（Codex 019-02 已知局限）。"""
     if _run is None:
         return
-    try:
-        sha = hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError as e:
-        _err(f"{kind}:{key} 读取失败：{type(e).__name__}")
-        return
-    _add({"kind": kind, "key": key, "path": str(path), "sha256": sha, "status": "stored_file"})
+    _add({"kind": kind, "key": key, "path": str(path), "sha256": hashlib.sha256(raw).hexdigest(),
+          "captured_at": captured_at, "status": "stored_file", "stored": False})
 
 
 def _git_head() -> str | None:
@@ -134,15 +137,26 @@ def finish(rc: int | None, *, out_dir: Path = MANIFEST_DIR) -> Path | None:
 
 
 def restore_inputs(manifest: Path) -> dict:
-    """按清单还原每一项（cache/kline 从 cas 取，快照核对 sha）。返回 {key: bytes}；任何一项不符 → CasCorrupt。"""
+    """按清单逐条还原（按消费顺序 seq；同 key 多版本各自保留，Codex 019-02）。
+    返回 {complete, problems, items:[{seq, kind, key, sha256, raw|None}]}。清单含 errors、某项未存入 cas、
+    或快照已与清单 sha 不符 → complete=False 并列出原因（不再笼统称可回放）。"""
     run = json.loads(manifest.read_text("utf-8"))
-    out = {}
-    for it in run["items"]:
-        if it["kind"] == "snapshot":
-            raw = Path(it["path"]).read_bytes()
-            if hashlib.sha256(raw).hexdigest() != it["sha256"]:
-                raise cas.CasCorrupt(f"快照 {it['path']} 与清单 sha 不符")
-        else:
-            raw = cas.get(it["sha256"])
-        out[f"{it['kind']}:{it['key']}"] = raw
-    return out
+    problems = [f"运行时留痕错误：{e}" for e in run.get("errors", [])]
+    items = []
+    for it in sorted(run["items"], key=lambda x: x.get("seq", 0)):
+        raw = None
+        try:
+            if it["kind"] == "snapshot":
+                b = Path(it["path"]).read_bytes()
+                if hashlib.sha256(b).hexdigest() == it["sha256"]:
+                    raw = b
+                else:
+                    problems.append(f"快照 {it['path']} 已被覆盖（与清单 sha 不符），需到 git 历史找回")
+            elif not it.get("stored"):
+                problems.append(f"{it['kind']}:{it['key']} 当时未存入 cas")
+            else:
+                raw = cas.get(it["sha256"])
+        except (OSError, cas.CasCorrupt) as e:
+            problems.append(f"{it['kind']}:{it['key']} 还原失败：{type(e).__name__}: {e}")
+        items.append({"seq": it.get("seq"), "kind": it["kind"], "key": it["key"], "sha256": it["sha256"], "raw": raw})
+    return {"complete": not problems, "problems": problems, "items": items}

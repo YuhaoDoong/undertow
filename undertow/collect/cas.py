@@ -20,6 +20,7 @@ import json
 import os
 import re
 import tempfile
+import time
 import zlib
 from pathlib import Path
 
@@ -69,68 +70,131 @@ def _atomic(path: Path, data: bytes, check) -> None:
         Path(name).unlink(missing_ok=True)
 
 
+_HEX = set("0123456789abcdef")
+
+
+def _is_sha(x) -> bool:
+    return isinstance(x, str) and len(x) == 64 and set(x) <= _HEX
+
+
+def quarantine(path: Path, bad: bytes | None = None) -> Path | None:
+    """把坏文件改名隔离（唯一名，原字节保留）。若改名后发现拿到的不是我们判定的坏字节（别的进程刚修好），换回去。"""
+    if not path.exists():
+        return None
+    q = path.with_name(f"{path.name}.corrupt-{time.time_ns()}-{os.getpid()}")
+    try:
+        os.rename(path, q)
+    except FileNotFoundError:
+        return None
+    if bad is not None and q.read_bytes() != bad:
+        if not path.exists():
+            os.rename(q, path)          # 移走的是别人刚写好的版本：放回去
+        return None
+    return q
+
+
 def _read_obj(root: Path, sha: str) -> bytes:
     p = _obj_path(root, sha)
     if not p.exists():
         raise CasCorrupt(f"缺块 {sha}")
     try:
         b = gzip.decompress(p.read_bytes())
-    except (OSError, EOFError) as e:
+    except (OSError, EOFError, zlib.error) as e:
         raise CasCorrupt(f"块 {sha} 无法解压：{e}") from e
     if hashlib.sha256(b).hexdigest() != sha:
         raise CasCorrupt(f"块 {sha} 内容与名字不符")
     return b
 
 
-def put(raw: bytes, *, root: Path | None = None) -> dict:
-    """存一版原文。返回 {sha256, size, n_chunks, new_chunks, new_recipe}。已存过（recipe 存在且可验证）→ 不重复切块。"""
-    root = root or ROOT                     # 运行时取（默认参数在定义时求值，测试替换 ROOT 会失效）
-    sha = hashlib.sha256(raw).hexdigest()
-    rp = _recipe_path(root, sha)
-    if rp.exists():
-        try:
-            rec = json.loads(rp.read_text("utf-8"))
-            if rec.get("sha256") == sha and all(_obj_path(root, c).exists() for c in rec["chunks"]):
-                return {"sha256": sha, "size": len(raw), "n_chunks": len(rec["chunks"]), "new_chunks": 0,
-                        "new_recipe": False}
-        except (ValueError, KeyError):
-            pass                        # recipe 坏了 → 下面重建（原文就在手里）；旧坏文件由 verify 负责隔离报告
-    new = 0
-    ids = []
-    for c in chunks(raw):
-        cs = hashlib.sha256(c).hexdigest()
-        ids.append(cs)
-        op = _obj_path(root, cs)
-        if op.exists():
-            continue
-        gz = gzip.compress(c, mtime=0)
-        _atomic(op, gz, lambda b, c=c: gzip.decompress(b) == c)
-        new += 1
-    rec = {"schema": RECIPE_SCHEMA, "sha256": sha, "size": len(raw), "chunks": ids}
-    body = json.dumps(rec, separators=(",", ":")).encode()
-    _atomic(rp, body, lambda b: b == body)
-    if get(sha, root=root) != raw:                      # 整份回读：拼回来必须逐字节相同
-        raise CasCorrupt(f"{sha} 存入后还原不一致")
-    return {"sha256": sha, "size": len(raw), "n_chunks": len(ids), "new_chunks": new, "new_recipe": True}
-
-
-def get(sha: str, *, root: Path | None = None) -> bytes:
-    root = root or ROOT
+def _load_recipe(root: Path, sha: str) -> dict:
+    """读并做完整结构校验；任何结构错误统一为 CasCorrupt（Codex 019-01）。"""
     rp = _recipe_path(root, sha)
     if not rp.exists():
         raise CasCorrupt(f"没有 {sha} 的 recipe")
     try:
-        rec = json.loads(rp.read_text("utf-8"))
-    except ValueError as e:
+        rec = json.loads(rp.read_bytes().decode("utf-8"))
+    except (ValueError, UnicodeError) as e:
         raise CasCorrupt(f"recipe {sha} 无法解析：{e}") from e
+    if not isinstance(rec, dict) or rec.get("schema") != RECIPE_SCHEMA or rec.get("sha256") != sha \
+            or not isinstance(rec.get("size"), int) or not isinstance(rec.get("chunks"), list) \
+            or not all(_is_sha(c) for c in rec["chunks"]):
+        raise CasCorrupt(f"recipe {sha} 结构不合法")
+    return rec
+
+
+def _put_chunk(root: Path, c: bytes, repairs: list) -> tuple[str, bool]:
+    cs = hashlib.sha256(c).hexdigest()
+    op = _obj_path(root, cs)
+    if op.exists():
+        try:
+            _read_obj(root, cs)
+            return cs, False                       # 已有且验证通过
+        except CasCorrupt as e:
+            q = quarantine(op, op.read_bytes() if op.exists() else None)
+            repairs.append({"object": cs, "why": str(e), "quarantined_as": q.name if q else None})
+    gz = gzip.compress(c, mtime=0)
+    _atomic(op, gz, lambda b, c=c: gzip.decompress(b) == c)
+    return cs, True
+
+
+def put(raw: bytes, *, root: Path | None = None) -> dict:
+    """存一版原文并【验证可还原】后才返回成功。已有 recipe → 完整还原核对；坏块/坏 recipe 先隔离保留、留痕，
+    再用手里的原文修复（Codex 019-01：以前只查文件存在就快速成功，坏 recipe 被静默覆盖）。
+    返回 {sha256, size, n_chunks, new_chunks, new_recipe, repairs}。"""
+    root = root or ROOT                     # 运行时取（默认参数在定义时求值，测试替换 ROOT 会失效）
+    sha = hashlib.sha256(raw).hexdigest()
+    repairs: list = []
+    rp = _recipe_path(root, sha)
+    if rp.exists():
+        try:
+            rec = _load_recipe(root, sha)
+            if get(sha, root=root) == raw:
+                return {"sha256": sha, "size": len(raw), "n_chunks": len(rec["chunks"]), "new_chunks": 0,
+                        "new_recipe": False, "repairs": []}
+        except CasCorrupt as e:
+            bad_recipe = False
+            try:
+                _load_recipe(root, sha)
+            except CasCorrupt:
+                bad_recipe = True
+            if bad_recipe:
+                q = quarantine(rp, rp.read_bytes() if rp.exists() else None)
+                repairs.append({"recipe": sha, "why": str(e), "quarantined_as": q.name if q else None})
+            else:
+                repairs.append({"recipe": sha, "why": str(e), "action": "块损坏，逐块验证后修复"})
+    new, ids = 0, []
+    for c in chunks(raw):
+        cs, wrote = _put_chunk(root, c, repairs)
+        ids.append(cs); new += wrote
+    rec = {"schema": RECIPE_SCHEMA, "sha256": sha, "size": len(raw), "chunks": ids}
+    body = json.dumps(rec, separators=(",", ":")).encode()
+    if rp.exists():
+        try:
+            same = rp.read_bytes() == body
+        except OSError:
+            same = False
+        if not same:
+            q = quarantine(rp, rp.read_bytes())
+            repairs.append({"recipe": sha, "why": "recipe 与重建内容不同", "quarantined_as": q.name if q else None})
+    if not rp.exists():
+        _atomic(rp, body, lambda b: b == body)
+    if get(sha, root=root) != raw:                      # 整份回读：拼回来必须逐字节相同
+        raise CasCorrupt(f"{sha} 存入后还原不一致")
+    return {"sha256": sha, "size": len(raw), "n_chunks": len(ids), "new_chunks": new, "new_recipe": True,
+            "repairs": repairs}
+
+
+def get(sha: str, *, root: Path | None = None) -> bytes:
+    root = root or ROOT
+    rec = _load_recipe(root, sha)
     raw = b"".join(_read_obj(root, c) for c in rec["chunks"])
-    if hashlib.sha256(raw).hexdigest() != sha or len(raw) != rec.get("size"):
+    if hashlib.sha256(raw).hexdigest() != sha or len(raw) != rec["size"]:
         raise CasCorrupt(f"{sha} 拼接后哈希/长度不符")
     return raw
 
 
 def verify(*, root: Path | None = None) -> dict:
-    """逐个 recipe 还原核对。返回 {recipes, ok, bad:[(sha, 原因)]}。只报告、不删除。"""
+    """逐个 recipe 还原核对。任何异常都记为该项 bad 并继续（不因一项崩溃中断整批）。只报告、不删除。"""
     root = root or ROOT
     bad, n = [], 0
     for rp in sorted((root / "recipes").glob("*/*.json")):
@@ -138,6 +202,6 @@ def verify(*, root: Path | None = None) -> dict:
         sha = rp.stem
         try:
             get(sha, root=root)
-        except CasCorrupt as e:
-            bad.append((sha, str(e)))
+        except Exception as e:
+            bad.append((sha, f"{type(e).__name__}: {e}"))
     return {"recipes": n, "ok": n - len(bad), "bad": bad}

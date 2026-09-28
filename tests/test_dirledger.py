@@ -123,6 +123,11 @@ class _Store:
         return self.caps.get(d)
     def path_of(self, kind, sym, d):
         return self.tmp / f"{d}.gz"
+    def load_with_identity(self, kind, sym, d):
+        if d not in self.files:
+            return None, None
+        import hashlib as _h
+        return {"x": 1}, {"sha256": _h.sha256(str(d).encode()).hexdigest(), "captured_at": self.caps.get(d)}
 
 
 S0, S1 = date(2026, 9, 25), date(2026, 9, 28)
@@ -219,3 +224,48 @@ def test_level_recorded_even_when_previous_snapshot_missing(tmp_path, monkeypatc
     row = dl.build_row("gold", "GLD", S1, store, now=datetime(2026, 9, 28, 6, 0, tzinfo=ET_), replay=False,
                        index={S1: S1}, level_fn=lambda snap, q: {"skew10_pp": 0.1, "expiry": "2026-10-30"})
     assert row["reading"] == "数据不足" and row["curr_level"]["skew10_pp"] == 0.1
+
+
+# —— Codex 019-03：身份与质量分开；中性合格；H3 水平独立 ——
+def test_quality_missing_is_not_frozen_then_complete_freezes(tmp_path, monkeypatch):
+    from undertow import dirledger_cli as dl
+    monkeypatch.setattr(dl, "DIR", tmp_path / "dl")
+    monkeypatch.setattr(dl, "session_index", lambda st, sym: IDX)
+    monkeypatch.setattr("undertow.collect.cboe_options.snapshot_from_payload",
+                        lambda p, i, s: type("S", (), {"contracts": []})())
+    ok = datetime(2026, 9, 28, 5, 0, tzinfo=ET_).timestamp()
+    store = _Store(tmp_path, {S0: ok - 86400 * 3, S1: ok}, {S0, S1})
+    calls = iter([{"reading": "数据不足", "reason": "无满足条件的共同到期"}, {"reading": "中性", "features": {}}])
+    monkeypatch.setattr(dl.skr, "read", lambda p, c, asof: next(calls))
+    s1, r1 = dl.record_one("gold", "GLD", S1, store, datetime(2026, 9, 28, 6, 0, tzinfo=ET_))
+    assert s1 == "not_ready" and r1["identity_ok"] and not r1["quality_ok"]      # 以前：identity_ok 即 eligible
+    s2, _ = dl.record_one("gold", "GLD", S1, store, datetime(2026, 9, 28, 7, 0, tzinfo=ET_))
+    assert s2 == "eligible"                                                      # 中性是合法读数，正常冻结
+
+
+def test_h3_level_has_own_eligibility(tmp_path, monkeypatch):
+    from undertow import dirledger_cli as dl
+    monkeypatch.setattr(dl, "DIR", tmp_path / "dl")
+    monkeypatch.setattr(dl, "session_index", lambda st, sym: {S1: S1})
+    monkeypatch.setattr("undertow.collect.cboe_options.snapshot_from_payload",
+                        lambda p, i, s: type("S", (), {"contracts": []})())
+    ok = datetime(2026, 9, 28, 5, 0, tzinfo=ET_).timestamp()
+    store = _Store(tmp_path, {S1: ok}, {S1})                                      # 前一交易日缺 → H1 不可冻结
+    st, row = dl.record_one("gold", "GLD", S1, store, datetime(2026, 9, 28, 6, 0, tzinfo=ET_),
+                            level_fn=lambda snap, q: {"skew25_pp": -0.2, "skew10_pp": 0.1, "expiry": "2026-10-30"})
+    assert st == "not_ready" and row["level_status"] == "eligible"
+    lv = dl.jl.load(dl._path("gold", "levels"), dl.KEY)
+    assert len(lv) == 1 and lv[0]["level"]["skew10_pp"] == 0.1
+
+
+def test_certification_changed_after_index_is_rejected(tmp_path, monkeypatch):
+    now = datetime(2026, 9, 28, 6, 0, tzinfo=ET_)
+    intraday = datetime(2026, 9, 25, 11, 0, tzinfo=ET_).timestamp()             # 前一份被换成盘中抓取的版本
+    r = _row(tmp_path, {S0: intraday, S1: datetime(2026, 9, 28, 5, 0, tzinfo=ET_).timestamp()}, now, monkeypatch)
+    assert "prev_certification_changed" in r["identity_problems"] and not r["identity_ok"]
+
+
+def test_forward_returns_across_month_boundary():
+    bars = [(date(2026, 9, 30), 100, 101), (date(2026, 10, 1), 101, 102), (date(2026, 10, 2), 102, 104)]
+    fr = skr.forward_returns(bars, date(2026, 9, 30), horizons=(1, 3), closed_through=date(2026, 10, 2))
+    assert fr["end_3d"] == "2026-10-02" and fr["ret_3d"] == pytest.approx(0.04)

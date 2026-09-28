@@ -102,14 +102,42 @@ def _ts(x) -> datetime | None:
 
 
 def skew_reader(prev_snap, curr_snap, quote_day, inst) -> dict:
-    return skr.read(prev_snap.contracts, curr_snap.contracts, asof=quote_day)
+    res = skr.read(prev_snap.contracts, curr_snap.contracts, asof=quote_day)
+    res["complete"] = res.get("reading") != "数据不足"          # 规则所需分量是否齐全（019-03）
+    return res
+
+
+def _load_ident(store, sym: str, d, problems: list, name: str):
+    """一次读取得到 (payload, ident)（019-02）。旧式 store 桩（无 load_with_identity）→ 多次读取，标身份问题。"""
+    if d is None:
+        return None, None
+    loader = getattr(store, "load_with_identity", None)
+    if loader is not None:
+        return loader("options", sym, d)
+    problems.append(f"{name}_multi_read_identity")
+    p = store.path_of("options", sym, d)
+    ident = {"sha256": hashlib.sha256(p.read_bytes()).hexdigest() if (p and p.exists()) else None,
+             "captured_at": store.captured_at("options", sym, d)}
+    return store.load("options", sym, d), ident
+
+
+def _certified(ca: float | None, session: date) -> bool:
+    from undertow.core.clock import certify_session
+    if ca is None:
+        return False
+    cert = certify_session(ca, mc.trading_days(date(2026, 1, 1), session) or [])
+    return cert.get("status") == "certified" and cert.get("session") == session
 
 
 def build_row(inst: str, sym: str, session: date, store, *, now: datetime, replay: bool, index=None,
               reader=None, rule_version: str | None = None, level_fn=None) -> dict:
-    """某品种某 session 的读数行（纯组装；读快照由 store 提供）。返回行带 identity（身份检查结果）。
+    """某品种某 session 的读数行（纯组装；读快照由 store 提供）。
 
-    当日快照 = 认证到 session 的那份；前一份 = 认证到 session 前一交易日的那份。缺任一 → 输入不齐（不顶替）。"""
+    身份（identity）与质量（quality）分开判（Codex 019-03）：
+      identity —— 两份快照都在、同一次读取得到 payload/sha/抓取时刻、抓取时刻已知且 ≤ 记录时刻 < 开盘、
+                  各自抓取时刻重新认证到对应交易日（索引建好后文件被替换也能发现）；
+      quality  —— reader 返回 complete=True（规则所需分量齐全）。合法的「中性」/H1=0 属于 complete。
+    两者都过才可能冻结。H3 用的当日水平另有资格（record_one 里单独判），不借 H1 的正式记录。"""
     from undertow.collect.cboe_options import snapshot_from_payload
     row = {KEY: f"{inst}|{session.isoformat()}", "schema": LEDGER_SCHEMA, "instrument": inst,
            "session": session.isoformat(), "rule_version": rule_version or skr.RULE["version"],
@@ -123,42 +151,54 @@ def build_row(inst: str, sym: str, session: date, store, *, now: datetime, repla
     row.update({"curr_file": cur_file.isoformat() if cur_file else None,
                 "prev_file": prev_file.isoformat() if prev_file else None,
                 "quote_day": quote_day.isoformat() if quote_day else None})
-    problems = []
-    for name, d in (("curr", cur_file), ("prev", prev_file)):
-        p = store.path_of("options", sym, d) if d else None
-        row[f"{name}_sha"] = hashlib.sha256(p.read_bytes()).hexdigest()[:16] if (p and p.exists()) else None
-        ca = _ts(store.captured_at("options", sym, d)) if d else None
+    problems: list = []
+    curr_problems: list = []
+    loaded = {}
+    for name, d, want in (("curr", cur_file, session), ("prev", prev_file, prev_td)):
+        payload, ident = _load_ident(store, sym, d, problems, name)
+        loaded[name] = payload
+        ca = _ts(ident.get("captured_at")) if ident else None
+        row[f"{name}_sha"] = (ident.get("sha256") or "")[:16] or None if ident else None
         row[f"{name}_captured_at"] = ca.isoformat() if ca else None
+        mine = []
         if d is None:
-            problems.append(f"{name}_file_missing")
+            mine.append(f"{name}_file_missing")
+        elif payload is None:
+            mine.append(f"{name}_payload_unloadable")
         elif ca is None:
-            problems.append(f"{name}_captured_at_unknown")
-        elif ca > now:
-            problems.append(f"{name}_captured_after_record")
-        if d is not None and row[f"{name}_sha"] is None:
-            problems.append(f"{name}_file_unreadable")
+            mine.append(f"{name}_captured_at_unknown")
+        else:
+            if ca > now:
+                mine.append(f"{name}_captured_after_record")
+            if want is not None and not replay and not _certified(ident.get("captured_at"), want):
+                mine.append(f"{name}_certification_changed")
+        problems += mine
+        if name == "curr":
+            curr_problems += mine
     if now >= open_time(session):
-        problems.append("recorded_after_open")
+        problems.append("recorded_after_open"); curr_problems.append("recorded_after_open")
     row["before_open"] = now < open_time(session)
-    cur_p = store.load("options", sym, cur_file) if cur_file else None
-    prev_p = store.load("options", sym, prev_file) if prev_file else None
+    cur_p, prev_p = loaded["curr"], loaded["prev"]
     if cur_p is not None and level_fn is not None:
-        # H3 水平序列只需当日快照：前一交易日缺失时仍记录水平（不影响读数的「数据不足」判定）
         try:
-            row["curr_level"] = level_fn(snapshot_from_payload(cur_p, inst, sym), quote_day)
+            lv = level_fn(snapshot_from_payload(cur_p, inst, sym), quote_day)
         except Exception as e:
-            row["curr_level"] = {"error": f"{type(e).__name__}: {e}"[:160]}
+            lv = {"error": f"{type(e).__name__}: {e}"[:160]}
+        row["curr_level"] = lv
+        row["level_identity_problems"] = [x for x in curr_problems if not x.startswith("curr_multi")] + \
+            [x for x in problems if x == "curr_multi_read_identity"]
     if cur_p is None or prev_p is None:
         row.update({"reading": "数据不足", "reason": "认证到当日或前一交易日的快照缺失（不以更早快照顶替）",
-                    "inputs_complete": False})
-        if "curr_file_missing" not in problems and "prev_file_missing" not in problems:
-            problems.append("payload_unloadable")
+                    "inputs_complete": False, "quality_ok": False})
     else:
         cur = snapshot_from_payload(cur_p, inst, sym)
         prv = snapshot_from_payload(prev_p, inst, sym)
         res = (reader or skew_reader)(prv, cur, quote_day, inst)
+        complete = res.get("complete")
+        if complete is None:
+            complete = res.get("reading") != "数据不足"
         row.update({"reading": res["reading"], "reason": res.get("reason", ""), "features": res.get("features"),
-                    "inputs_complete": True})
+                    "inputs_complete": True, "quality_ok": bool(complete)})
     row["identity_problems"] = problems
     row["identity_ok"] = not problems
     return row
@@ -183,15 +223,15 @@ def decide(existing: dict | None, row: dict, now: datetime) -> tuple[str, dict |
     """正式记录政策（纯函数，便于测试）。返回 (状态, 要插入的正式行或 None)。"""
     after = now >= open_time(date.fromisoformat(row["session"]))
     if existing is not None:
-        if existing.get("status") == "eligible" and _input_sig(existing) != _input_sig(row) and row.get("inputs_complete"):
+        if existing.get("status") == "eligible" and _input_sig(existing) != _input_sig(row) and row.get("quality_ok"):
             return "changed_after_freeze", None
         return "exists", None
     if not after:
-        if row["identity_ok"]:
+        if row["identity_ok"] and row.get("quality_ok", False):
             return "eligible", dict(row, status="eligible")
         return "not_ready", None
     miss = {k: row.get(k) for k in (KEY, "schema", "instrument", "session", "rule_version", "recorded_at", "mode",
-                                     "decision_cutoff", "curr_file", "prev_file", "identity_problems")}
+                                     "decision_cutoff", "curr_file", "prev_file", "identity_problems", "quality_ok")}
     return "missing_at_cutoff", dict(miss, status="missing_at_cutoff", reading=None,
                                      reason="截止（开盘）前没有身份合格的记录；截止后的读数只进 attempts，不补成预测")
 
@@ -213,7 +253,30 @@ def record_one(inst: str, sym: str, session: date, store, now: datetime, *, read
     else:
         status_for_attempt = status
     _append_attempt(inst, row, status_for_attempt, note, rule_version)
+    if level_fn is not None:
+        row["level_status"] = _record_level(inst, row, now, rule_version)
     return status, row
+
+
+def _record_level(inst: str, row: dict, now: datetime, rule_version: str | None) -> str:
+    """H3 用的当日偏斜水平：独立资格（只看当日快照身份 + 水平已算出），独立正式记录（019-03）。
+    与 H1 共享截止政策：截止前首份合格冻结；截止后无记录 → missing_at_cutoff。"""
+    lv = row.get("curr_level")
+    lrow = {k: row.get(k) for k in (KEY, "schema", "instrument", "session", "rule_version", "recorded_at", "mode",
+                                     "decision_cutoff", "curr_file", "curr_sha", "curr_captured_at")}
+    probs = list(row["level_identity_problems"]) if "level_identity_problems" in row else ["curr_file_missing"]
+    lrow.update({"level": lv, "identity_problems": probs, "identity_ok": not probs,
+                 "quality_ok": isinstance(lv, dict) and "error" not in lv and lv.get("skew25_pp") is not None
+                 and lv.get("skew10_pp") is not None,
+                 "prev_sha": None, "inputs_complete": True})
+    p = _path(inst, "levels", rule_version)
+    existing = next((r for r in jl.load(p, KEY) if r[KEY] == lrow[KEY]), None)
+    status, formal = decide(existing, lrow, now)
+    if formal is not None:
+        formal = {k: v for k, v in formal.items() if k not in ("prev_sha", "inputs_complete")}
+        st = jl.insert_frozen(p, formal, key_field=KEY, frozen=_frozen)
+        status = status if st == "inserted" else "exists"
+    return status
 
 
 def cmd_record(args) -> int:
@@ -432,7 +495,8 @@ def conviction_reader(prev_snap, curr_snap, quote_day, inst) -> dict:
     fa = analyze_flow(prev_snap, curr_snap, today=quote_day, prev_date="prev", curr_date="curr")
     read = sr.analyze_structure(fa, _live(prev_snap, quote_day, 60), _live(curr_snap, quote_day, 60))
     feats = cv.layers(fa, read, prev_snap.spot, curr_snap.spot)
-    return {"reading": _CONV_LABEL[feats["H1"]], "reason": "" if read.ok else (read.reason or ""), "features": feats}
+    return {"reading": _CONV_LABEL[feats["H1"]], "reason": "" if read.ok else (read.reason or ""), "features": feats,
+            "complete": feats["H1"] is not None}             # H1 未知 → 不得冻结（019-03）；H1=0 是合法读数
 
 
 def conviction_level(curr_snap, quote_day) -> dict | None:
@@ -464,7 +528,8 @@ def cmd_conviction_record(args) -> int:
         except Exception as e:
             print(f"  ⚠️ {inst}：{type(e).__name__}: {e}", file=sys.stderr); rc = 1; continue
         f = row.get("features") or {}
-        print(f"  {inst:6s} {session} {row['reading']}（{status}）S={f.get('S')} F={f.get('F')} V={f.get('V')}"
+        print(f"  {inst:6s} {session} {row['reading']}（{status}；水平 {row.get('level_status')}）"
+              f"S={f.get('S')} F={f.get('F')} V={f.get('V')}"
               + (f"；身份问题：{','.join(row['identity_problems'])}" if row["identity_problems"] else ""))
     print(f"  规则 {cv.RULE['version']}：{cv.RULE['status']}")
     return rc

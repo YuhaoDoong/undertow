@@ -51,7 +51,12 @@ def _run(sym: str, period: str, count: int, timeout: float = 40.0) -> list[dict]
     from undertow.collect import provenance
     provenance.consume_bytes("longbridge_kline", f"{sym}|{period}|{count}", (p.stdout or "").encode("utf-8"),
                              status="fresh_fetch", fetched_at=__import__("time").time())            # 017 A02
-    txt = (p.stdout or "").lstrip()
+    return parse_rows((p.stdout or "").encode("utf-8"), sym)
+
+
+def parse_rows(raw: bytes, sym: str = "") -> list[dict]:
+    """把 CLI 原始输出解析成行。单独成函数：离线回放时直接吃清单里还原的原文（017 A02 / 019-02）。"""
+    txt = raw.decode("utf-8").lstrip()
     if not txt:
         raise KlineUnavailable(f"longbridge kline {sym} 返回空")
     try:
@@ -88,8 +93,12 @@ def fetch_bars(symbol: str, *, period: str = "1h", count: int = 200) -> list[dic
 
     返回 [{ts(UTC aware datetime), open, high, low, close, volume}]，按时间升序。
     """
+    return bars_from_rows(_run(symbol, period, count))
+
+
+def bars_from_rows(rows: list[dict]) -> list[dict]:
     out = []
-    for r in _run(symbol, period, count):
+    for r in rows:
         t = str(r.get("time") or "")
         if not t:
             continue

@@ -81,10 +81,48 @@ def test_roll_day_change_is_not_a_flip_and_missing_resets():
     assert out["events"] == []                                                   # 连续缺 2 天 → 持续段清零
 
 
-def test_opposite_wing_flips_are_conflict_and_zero_does_not_count():
+def test_opposite_wing_flips_same_day_are_conflict_and_zero_does_not_count():
     v25 = [-1.0] * 10 + [0.5]
     v10 = [1.0] * 10 + [-0.5]
     out = cv.flip_states(_series(v25, v10))
     assert [e["status"] for e in out["events"]] == ["conflict"]
     z = cv.flip_states(_series([-1.0] * 10 + [0.0]))
     assert z["events"] == [] and z["states"]["d10"]["skew25_pp"] == "zero"
+
+
+def _pub(events):
+    return [(e["session"], e["direction"], e["status"], tuple(e["wings"]) if e["status"] != "event" else e["wing"])
+            for e in events]
+
+
+def test_h3_prefix_invariance_future_opposite_wing_does_not_rewrite():
+    """Codex 019-04 反例：d10 25Δ 翻号已发布；d11 10Δ 反向翻号只能另记 conflict_after，d10 仍是 event。"""
+    rows = [{"session": f"d{i:02}", "expiry": "E", "skew25_pp": -1, "skew10_pp": 1} for i in range(10)]
+    rows.append({"session": "d10", "expiry": "E", "skew25_pp": 1, "skew10_pp": 1})
+    pre = cv.flip_states(rows)["events"]
+    rows.append({"session": "d11", "expiry": "E", "skew25_pp": 1, "skew10_pp": -1})
+    full = cv.flip_states(rows)["events"]
+    assert full[0]["status"] == "event" and full[0]["session"] == "d10"
+    assert full[1]["status"] == "conflict_after" and full[1]["refers_to"] == "d10"
+    assert _pub(full)[:len(pre)] == _pub(pre)
+
+
+def test_h3_prefix_invariance_all_prefixes():
+    import random
+    rng = random.Random(7)
+    rows, s25, s10 = [], -1.0, 1.0
+    for i in range(160):
+        if rng.random() < 0.06:
+            s25 = -s25
+        if rng.random() < 0.06:
+            s10 = -s10
+        exp = f"E{i // 40}"
+        r = {"session": f"d{i:03}", "expiry": exp, "skew25_pp": s25 * rng.uniform(0.1, 2), "skew10_pp": s10 * rng.uniform(0.1, 2)}
+        if rng.random() < 0.04:
+            r = {"session": f"d{i:03}", "missing": True}
+        rows.append(r)
+    full = _pub(cv.flip_states(rows)["events"])
+    for k in range(1, len(rows) + 1):
+        pre = _pub(cv.flip_states(rows[:k])["events"])
+        assert full[:len(pre)] == pre, k                                     # 已发布的日期/方向/状态永不改变
+    assert any(x[2] == "event" for x in full)

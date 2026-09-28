@@ -96,7 +96,9 @@ def flip_states(rows: list[dict], *, rule: dict | None = None) -> dict:
       · 与上一个非缺失记录的到期不同 = 换月日：当天若变号，记 roll_switch（结构切换），重置持续段，不计翻号。
       · 变号且此前同号持续 ≥ min_run 个有值交易日、且距本翼上次事件 > cooldown → flip 事件；
         翻成 put 贵（由负转正）记看跌 −1，翻成 call 贵记看涨 +1。持续不足 → change_short_run。
-    两翼合并：同方向事件相距 ≤ merge_window 个交易日 → 合并为一个（取较早日期）；方向相反 → conflict，均不计事件。
+    两翼合并（前缀不变，Codex 019-04）：首翼事件当天发布、不可撤改；窗口内另一翼后来同向 → 追加 confirmations 注释；
+    后来反向 → 当天另记 conflict_after。同一天两翼反向 → 当天 conflict。
+    「此前同号持续」= 允许单日缺失与零值暂停的 ≥ min_run 个有值观察（不是严格连续交易日）。
     返回 {states: {session: {wing: 状态}}, wing_events: [...], events: [...]}。"""
     rule = rule or H3_RULE
     states: dict = {r["session"]: {} for r in rows}
@@ -137,21 +139,27 @@ def flip_states(rows: list[dict], *, rule: dict | None = None) -> dict:
                 st = "change_short_run"
             states[r["session"]][wing] = st
             run_sign, run_len = sg, 1
-    wing_events.sort(key=lambda e: e["i"])
-    events, used = [], set()
-    for a in wing_events:
-        if id(a) in used:
+    wing_events.sort(key=lambda e: (e["i"], e["wing"]))
+    # 两翼合并（Codex 019-04：已发布事件不得被未来改写）——
+    #   · 当天两翼同时翻号：同向合并为一个事件；反向当天即判 conflict（两翼数据同时可得，不涉及未来）。
+    #   · 首翼事件当天发布、此后不可撤改；merge_window 内另一翼后来同向翻号 → 只在原事件上追加 confirmations 注释；
+    #     后来反向翻号 → 在【它发生的那天】另记一条 conflict_after（引用原事件），原事件仍是 event。
+    events: list = []
+    for w in wing_events:
+        same_day = next((e for e in events if e["i"] == w["i"] and w["wing"] not in e["wings"]), None)
+        if same_day is not None:
+            same_day["wings"].append(w["wing"])
+            if same_day["direction"] != w["direction"]:
+                same_day["status"] = "conflict"
             continue
-        partner = next((b for b in wing_events if b is not a and id(b) not in used and b["wing"] != a["wing"]
-                        and abs(b["i"] - a["i"]) <= rule["merge_window"]), None)
-        if partner is None:
-            events.append({**a, "wings": [a["wing"]], "status": "event"})
-            used.add(id(a))
-        elif partner["direction"] == a["direction"]:
-            first = min(a, partner, key=lambda e: e["i"])
-            events.append({**first, "wings": [a["wing"], partner["wing"]], "status": "event"})
-            used.update({id(a), id(partner)})
+        prior = next((e for e in reversed(events) if e["status"] == "event" and w["wing"] not in e["wings"]
+                      and 0 < w["i"] - e["i"] <= rule["merge_window"]), None)
+        if prior is not None and prior["direction"] == w["direction"]:
+            prior.setdefault("confirmations", []).append({"session": w["session"], "wing": w["wing"]})
+        elif prior is not None:
+            events.append({"session": w["session"], "i": w["i"], "wing": w["wing"], "direction": w["direction"],
+                           "prior_run": w["prior_run"], "wings": [w["wing"]], "status": "conflict_after",
+                           "refers_to": prior["session"]})
         else:
-            events.append({**a, "wings": [a["wing"], partner["wing"]], "status": "conflict"})
-            used.update({id(a), id(partner)})
+            events.append({**w, "wings": [w["wing"]], "status": "event"})
     return {"rule": rule, "states": states, "wing_events": wing_events, "events": events}

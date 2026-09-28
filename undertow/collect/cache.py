@@ -30,19 +30,18 @@ class FileCache:
         if ttl_seconds is not None and (time.time() - path.stat().st_mtime) > ttl_seconds:
             return None
         try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
+            raw = path.read_bytes()                     # 只读一次：返回的数据与留痕的原文是同一份字节（Codex 019-02）
+            payload = json.loads(raw.decode("utf-8"))
             data = payload["data"]
-        except (json.JSONDecodeError, KeyError):
+        except (OSError, UnicodeError, json.JSONDecodeError, KeyError, TypeError):
             return None
         from undertow.collect import provenance
-        provenance.consume_cache_file(path.stem, path, status="cache_hit", ttl_s=ttl_seconds)   # 017 A02：消费即留痕
+        provenance.consume_cache_raw(path.stem, raw, status="cache_hit", ttl_s=ttl_seconds)     # 017 A02：消费即留痕
         return data
 
     def set(self, key: str, data: Any) -> None:
         path = self._path(key)
-        path.write_text(
-            json.dumps({"fetched_at": time.time(), "data": data}, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        raw = json.dumps({"fetched_at": time.time(), "data": data}, ensure_ascii=False).encode("utf-8")
+        path.write_bytes(raw)
         from undertow.collect import provenance
-        provenance.consume_cache_file(path.stem, path, status="fresh_fetch", ttl_s=None)       # 017 A02
+        provenance.consume_cache_raw(path.stem, raw, status="fresh_fetch", ttl_s=None)          # 017 A02：用写入的同一份字节

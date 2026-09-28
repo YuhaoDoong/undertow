@@ -1104,6 +1104,10 @@ def _fc_env(tmp_path, monkeypatch, rows_by_inst, hm):
     for inst, rows in rows_by_inst.items():
         (tmp_path / f"{inst}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
     monkeypatch.setattr(sc, "_path", lambda k, replay: tmp_path / f"{k}.jsonl")
+    # 隔离快照存储（Codex 023）：以前读真实 data/snapshots，当日全链快照一落盘，「待定」断言就随运行时刻失效
+    from undertow.collect import store as _store
+    _Real = _store.SnapshotStore
+    monkeypatch.setattr(_store, "SnapshotStore", lambda root=None: _Real(root=tmp_path / "snap"))
 
     class A:
         session, status_file = None, None
@@ -1142,6 +1146,36 @@ def test_fieldcheck_open_windows_pending_before_end(tmp_path, monkeypatch):
     assert sc.cmd_fieldcheck(a) == 0
     rep = (tmp_path / "fc" / "2026-09-28_open.md").read_text()
     assert "open 窗：待定" in rep and "全链快照：待定" in rep
+
+
+def _chain_file(tmp_path, sc, inst, status="ok", n_kept=5):
+    import gzip
+    from undertow.core.config import load_config
+    sym = load_config().get(inst).options.symbol
+    p = tmp_path / "snap" / "options_open" / sym
+    p.mkdir(parents=True, exist_ok=True)
+    rec = {"payload": {"undertow_filter": {"status": status, "n_kept": n_kept, "n_full": 9, "n_unparsed": 0}}}
+    (p / "2026-09-28.json.gz").write_bytes(gzip.compress(json.dumps(rec).encode()))
+
+
+def test_fieldcheck_chain_missing_after_window_is_flagged(tmp_path, monkeypatch):
+    pool = sh.CONFIG["pools"][sh.CONFIG["primary_pool"]]
+    sc, A = _fc_env(tmp_path, monkeypatch, {i: [_fc_row(i)] for i in pool}, (10, 50))
+    a = A(); a.phase = "open"
+    sc.cmd_fieldcheck(a)
+    rep = (tmp_path / "fc" / "2026-09-28_open.md").read_text()
+    assert "❌ 全链快照：窗口已过仍无文件" in rep
+
+
+def test_fieldcheck_chain_existing_file_is_read(tmp_path, monkeypatch):
+    pool = sh.CONFIG["pools"][sh.CONFIG["primary_pool"]]
+    sc, A = _fc_env(tmp_path, monkeypatch, {i: [_fc_row(i)] for i in pool}, (10, 50))
+    for i in pool:
+        _chain_file(tmp_path, sc, i)
+    a = A(); a.phase = "open"
+    sc.cmd_fieldcheck(a)
+    rep = (tmp_path / "fc" / "2026-09-28_open.md").read_text()
+    assert "全链快照：status ok；保留 5/9" in rep and "全链快照缺失" not in rep
 
 
 def test_fieldcheck_skips_non_trading_day(tmp_path, monkeypatch):

@@ -42,3 +42,59 @@ def test_freeze_manifest_marks_frozen_fields():
     assert m["formal_start"] == "2026-09-29" and "FAMILY_D_START" in m["rules"]["direction_stats"]
     d = fm.build()
     assert d["status"].startswith("draft") and d["effective_commit"] is None
+
+
+# —— Codex 023：健康检查区分 not_started/pending/complete/partial/missing；空目录不算通过 ——
+def _dh():
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from scripts import direction_health as dh
+    return dh
+
+
+def test_health_states_without_rows():
+    from datetime import datetime, timezone
+    dh = _dh()
+    cut = datetime(2026, 9, 29, 13, 30, tzinfo=timezone.utc)
+    before, after = datetime(2026, 9, 29, 12, 0, tzinfo=timezone.utc), datetime(2026, 9, 29, 15, 0, tzinfo=timezone.utc)
+    kw = dict(start="2026-09-29", cutoff=cut, post_start=True)
+    assert dh.session_status({}, ("gold",), "2026-09-28", now=after, **kw)[0] == "not_started"
+    assert dh.session_status({}, ("gold",), "2026-09-29", now=before, **kw)[0] == "pending"
+    assert dh.session_status({}, ("gold",), "2026-09-29", now=after, **kw)[0] == "missing"      # 空目录 ≠ 通过
+    st, per = dh.session_status({"gold": {"status": "missing_at_cutoff"}}, ("gold", "silver"), "2026-09-29",
+                                now=after, **kw)
+    assert st == "missing" and per == {"gold": "missing_at_cutoff", "silver": "absent"}
+
+
+def test_health_complete_partial_and_quality_after_start(monkeypatch):
+    from datetime import datetime, timezone
+    dh = _dh()
+    cut = datetime(2026, 9, 29, 13, 30, tzinfo=timezone.utc)
+    after = datetime(2026, 9, 29, 15, 0, tzinfo=timezone.utc)
+    monkeypatch.setattr(dh, "check_formal", lambda r, post_start, level=False:
+                        [] if r.get("quality_ok") is True or not post_start else ["起点后 quality_ok 必须为 True"])
+    ok = {"status": "eligible", "quality_ok": True}
+    kw = dict(start="2026-09-29", cutoff=cut, now=after, post_start=True)
+    assert dh.session_status({"gold": ok, "silver": ok}, ("gold", "silver"), "2026-09-29", **kw)[0] == "complete"
+    st, per = dh.session_status({"gold": ok, "silver": {"status": "eligible", "quality_ok": None}},
+                                ("gold", "silver"), "2026-09-29", **kw)
+    assert st == "partial" and per["silver"].startswith("bad")
+
+
+def test_health_check_formal_real_blob_roundtrip(tmp_path, monkeypatch):
+    """levels 行的单快照身份与原文恢复（真实 cas，临时目录）。"""
+    import gzip, hashlib, json
+    from undertow.collect import cas
+    dh = _dh()
+    monkeypatch.setattr(cas, "ROOT", tmp_path / "cas")
+    comp = gzip.compress(json.dumps({"payload": {"a": 1}, "captured_at": 1.0}).encode())
+    sha = cas.put_blob(comp)
+    row = {"status": "eligible", "identity_ok": True, "quality_ok": True, "curr_blob": sha,
+           "curr_sha": hashlib.sha256(comp).hexdigest()[:16],
+           "decision_cutoff": "2026-09-29T09:30:00-04:00", "recorded_at": "2026-09-29T10:00:00+00:00",
+           "curr_captured_at": "2026-09-29T09:00:00+00:00", "level": {"skew25_pp": -0.1, "skew10_pp": 0.2}}
+    assert dh.check_formal(row, post_start=True, level=True) == []
+    bad = dict(row, curr_sha="0" * 16, level={"skew25_pp": None, "skew10_pp": 0.1})
+    probs = dh.check_formal(bad, post_start=True, level=True)
+    assert any("sha 不符" in p for p in probs) and any("水平缺失" in p for p in probs)

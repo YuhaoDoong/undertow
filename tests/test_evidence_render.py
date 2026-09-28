@@ -33,7 +33,7 @@ def test_tradeable_gate_is_observation():
 def test_no_legacy_authority_wording_in_renderers_and_consult():
     src = (ROOT / "undertow" / "report" / "html.py").read_text("utf-8")
     for banned in ("推翻已校准的综合研判", "教科书组合 · ", "<h2>④ 综合研判", "· 综合研判</h1>",
-                   '<span class="pill">可信度 '):
+                   '<span class="pill">可信度 ', "按回测可信度加权", "<th>可信度</th>"):
         assert banned not in src, banned
     from undertow.consult.packet import GUIDANCE, _evidence_brief
     g = " ".join(GUIDANCE)

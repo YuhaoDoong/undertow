@@ -81,7 +81,7 @@ def _votes_table(o: Outlook) -> str:
     if not rows:
         rows.append('<tr><td colspan="6"><small>当前无触发的方向性因子。</small></td></tr>')
     return ("<table><tr><th>层</th><th>因子</th><th>方向</th><th class='r'>权重</th>"
-            "<th>可信度</th><th>依据</th></tr>" + "".join(rows) + "</table>")
+            "<th>可靠性标注（未回测）</th><th>依据</th></tr>" + "".join(rows) + "</table>")
 
 
 def _levels_table(o: Outlook) -> str:
@@ -789,7 +789,7 @@ def render_macro_section(ma) -> str:
         f'<div class="sub">宏观倾向 <b style="color:{color}">{_esc(ma.macro_bias)}</b>'
         f'（分 {ma.macro_score:+.1f}）· 数据 {_esc(ma.asof)}</div>'
         "<table><tr><th>指标</th><th class='r'>最新</th><th class='r'>近20日Δ</th>"
-        "<th>对金银</th><th>可信度</th></tr>" + "".join(rows) + "</table>"
+        "<th>对金银</th><th>可靠性标注（未回测）</th></tr>" + "".join(rows) + "</table>"
         f'{vol_html}'
         '<div class="sub" style="margin-top:6px">实际利率↓/美元↓ → 利多金银；波动率高位=区间放大、'
         '追单谨慎。宏观为背景维度，与持仓·期权微观结构共振时才加重。</div></div>'
@@ -1585,7 +1585,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         f'{expiry_html}'
         f'{vol_analysis_html}'
         f'{volregime_html}'
-        f'<div class="card"><h2>方向因子投票（按回测可信度加权）</h2>{_votes_table(o)}</div>'
+        f'<div class="card"><h2>方向因子投票（权重未回测 · T3 观察，不参与结论）</h2>{_votes_table(o)}</div>'
         f'{macro_html}'
         f'<div class="card"><h2>持仓结构</h2>{conc_html}<div class="chart">{cot_svg}</div></div>'
         f'<div class="card"><h2>情景推演（规则化 if-then，非点位预言）</h2>{_scenarios_html(o)}</div>'

@@ -1156,3 +1156,4 @@ def test_session_hooks_fieldcheck_phases():
     for ph, cond in (("pre", "ET_MIN >= 540 && ET_MIN < 570"), ("open", "ET_MIN >= 640 && ET_MIN < 980"),
                      ("close", "ET_MIN >= 980")):
         assert f"{cond} )); then fieldcheck {ph}" in src
+    assert src.index("thesisq() {") < src.index("thesisq pre") and "thesisq close" in src

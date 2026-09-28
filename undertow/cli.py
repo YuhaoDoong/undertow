@@ -3034,6 +3034,38 @@ def cmd_soul(args) -> int:
     return 0
 
 
+THESIS_QUOTES = pathlib.Path("data/soul/thesis_quotes.jsonl")     # 私有（data/soul 已 gitignore）
+
+
+def _capture_thesis_quotes(theses, *, days: int = 10) -> int:
+    """给近期【未验证】事前判断涉及的品种存一份行情原文（用户 2026-09-28：该捕获的数据自动捕获）。
+
+    存长桥 `quote` 的原始 JSON（含常规盘、夜盘、盘前、盘后各自的 last 与时间戳），事后按判断里写明的
+    评分口径打分 —— 捕获时不做任何判定。session_hooks 在盘前与收盘后各调一次。只读行情，从不下单。"""
+    import datetime as _dt
+    import os
+    cutoff = (market_today() - timedelta(days=days)).isoformat()
+    syms = sorted({f"{t.instrument.upper()}.US" for t in theses
+                   if t.outcome == "未验证" and t.date >= cutoff and t.instrument.isalpha()})
+    if not syms:
+        print("没有近期未验证的事前判断，不需要捕获。")
+        return 0
+    try:
+        pr = subprocess.run(["longbridge", "quote", *syms, "--format", "json"], capture_output=True, text=True, timeout=60)
+        raw = json.JSONDecoder().raw_decode(pr.stdout.lstrip())[0] if pr.returncode == 0 else None
+    except Exception as e:
+        raw, pr = None, None
+        err = f"{type(e).__name__}: {e}"[:200]
+    else:
+        err = None if raw is not None else (pr.stderr or pr.stdout)[:200]
+    rec = {"at": _dt.datetime.now(_dt.timezone.utc).isoformat(), "symbols": syms, "raw": raw, "error": err}
+    THESIS_QUOTES.parent.mkdir(parents=True, exist_ok=True)
+    with open(THESIS_QUOTES, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(rec, ensure_ascii=False) + "\n"); fh.flush(); os.fsync(fh.fileno())
+    print(f"事前判断行情：{', '.join(syms)} {'✅' if raw is not None else '❌ ' + str(err)}")
+    return 0 if raw is not None else 1
+
+
 def cmd_journal(args) -> int:
     """交易日记：记录成交明细/复盘/盖棺定论/心情。--capture 从券商自动抓当日成交。**只读。**"""
     from undertow.soul.journal import (load_journal, save_journal, capture_trades,
@@ -3048,6 +3080,8 @@ def cmd_journal(args) -> int:
     if getattr(args, "theses", False):
         print(render_theses_md(load_theses()))
         return 0
+    if getattr(args, "thesis_quotes", False):
+        return _capture_thesis_quotes(load_theses())
     if getattr(args, "capture", False):
         from undertow.collect import longbridge_account as lb
         day = market_today().isoformat()
@@ -3850,6 +3884,8 @@ def build_parser() -> argparse.ArgumentParser:
     pjr.add_argument("--date", metavar="YYYY-MM-DD", help="只看某天")
     pjr.add_argument("--limit", type=int, default=0, help="最多显示几条")
     pjr.add_argument("--theses", action="store_true", help="看【事前判断】记录与命中率（判断对错 vs 交易盈亏分开统计）")
+    pjr.add_argument("--thesis-quotes", action="store_true",
+                     help="给近期未验证的事前判断涉及的品种存一份行情原文（私有，session_hooks 自动调用）")
     pjr.set_defaults(func=cmd_journal)
 
     pev = sub.add_parser("event", help="事件影响捕捉：数据落地前后各捕一次横截面快照并对比（只读）")

@@ -141,6 +141,20 @@ fieldcheck() {  # $1=phase
     notify "⚠️ 现场核验 ${PH} 有异常" "$(printf '%s' "$RES" | grep '^- ⚠️' | head -3 | tr '\n' ' ') 详见 data/history/fieldcheck/"
   fi
 }
+# ⑨ 事前判断行情捕获（用户 2026-09-28）：近期未验证的事前判断涉及的品种，盘前（含夜盘结果）与收盘后各存一份行情原文，
+# 写 data/soul/thesis_quotes.jsonl（私有，不入库）。只存不判，打分事后按判断里写明的口径做。
+thesisq() {  # $1=pre|close
+  local OKF="$LOG_DIR/.thesisq_${1}_${ET_DATE}.ok"
+  [[ -f "$OKF" ]] && return
+  IN_SHADOW=1
+  local RES RC
+  RES=$("$PY" -m undertow.cli journal --thesis-quotes 2>&1); RC=$?
+  if (( RC == 0 )); then
+    : > "$OKF"; hb "⑨事前判断行情 ${1}：✅ $(printf '%s' "$RES" | tail -1 | cut -c1-60)"
+  else
+    hb "⑨事前判断行情 ${1}：⏳ rc=$RC，下次唤醒重试"
+  fi
+}
 # 本脚本未开 set -e；分开捕获 rc（AGENTS.md 静默失败第 5 条：不用 `|| true`）
 SHW=$("$PY" -m undertow.cli shadow windows 2>&1); SHW_RC=$?
 if (( SHW_RC == 0 )); then
@@ -152,9 +166,9 @@ if (( SHW_RC == 0 )); then
     if [[ "$_W" == "sample" ]]; then shadow_sample "$_LO" "$_HI"; fi
   done <<< "$SHW"
   if [[ -n "$SHW" ]]; then                      # 交易日
-    if (( ET_MIN >= 540 && ET_MIN < 570 )); then fieldcheck pre; fi
+    if (( ET_MIN >= 540 && ET_MIN < 570 )); then fieldcheck pre; thesisq pre; fi
     if (( ET_MIN >= 640 && ET_MIN < 980 )); then fieldcheck open; fi
-    if (( ET_MIN >= 980 )); then fieldcheck close; fi
+    if (( ET_MIN >= 980 )); then fieldcheck close; thesisq close; fi
   fi
 else
   # 日历失效（覆盖期外）或命令崩溃：窗口来源没了，不能当作「今天没窗口」静默跳过

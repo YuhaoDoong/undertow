@@ -62,6 +62,9 @@ data/logs/.status_*.json
 data/logs/.bars_quota_*
 # 盘中采样逐桶「已提醒」标记（session_hooks ⑦，每桶一次）
 data/logs/.sample_alerted_*
+# session_hooks 的「今日已完成」哨兵与互斥锁目录（影子账窗口 ④⑤⑥、现场核验 ⑧；运行态，不入库）
+data/logs/.*.ok
+data/logs/.lock_*
 # 事件捕捉的每日告警标记与发布清单（运行态，不入库）
 data/logs/.event_*
 # 无人值守发布的待发布记录（运行态，不入库）

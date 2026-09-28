@@ -121,6 +121,26 @@ shadow_sample() {  # $1=起(分) $2=止(分，闭区间末分钟)
     fi
   fi
 }
+# ⑧ 每日现场核验（用户 2026-09-28：「设置好自动触发，不要等我来提醒」）。三个阶段各跑一次：
+#   pre   ET 09:00–09:29（盘前 daily 各次运行之后、开盘之前）
+#   open  ET 10:40 起（开盘窗与全链窗口都已结束）
+#   close ET 16:20 起
+# 成功（无异常）或已跑过 → 写 .ok 哨兵；有异常 → 通知一次并写哨兵（报告已落盘，不必每 5 分钟重复）。
+# 只在交易日跑：由 `shadow windows` 是否有输出判断（日历给出，脚本不自己判节假日）。
+fieldcheck() {  # $1=phase
+  local PH="$1" OKF="$LOG_DIR/.fieldcheck_${1}_${ET_DATE}.ok"
+  [[ -f "$OKF" ]] && return
+  IN_SHADOW=1
+  local RES RC
+  RES=$("$PY" -m undertow.cli shadow fieldcheck --phase "$PH" --status-file "$LOG_DIR/.status_fieldcheck_${PH}_${ET_DATE}.json" 2>&1); RC=$?
+  : > "$OKF"
+  if (( RC == 0 )); then
+    hb "⑧现场核验 ${PH}：✅ 无异常"
+  else
+    hb "⑧现场核验 ${PH}：⚠️ rc=$RC $(printf '%s' "$RES" | grep '⚠️' | head -2 | tr '\n' ' ')"
+    notify "⚠️ 现场核验 ${PH} 有异常" "$(printf '%s' "$RES" | grep '^- ⚠️' | head -3 | tr '\n' ' ') 详见 data/history/fieldcheck/"
+  fi
+}
 # 本脚本未开 set -e；分开捕获 rc（AGENTS.md 静默失败第 5 条：不用 `|| true`）
 SHW=$("$PY" -m undertow.cli shadow windows 2>&1); SHW_RC=$?
 if (( SHW_RC == 0 )); then
@@ -131,6 +151,11 @@ if (( SHW_RC == 0 )); then
     if [[ "$_W" == "chain" ]]; then shadow_window chain "$_LO" "$_HI" "⑥开盘后全链快照"; fi
     if [[ "$_W" == "sample" ]]; then shadow_sample "$_LO" "$_HI"; fi
   done <<< "$SHW"
+  if [[ -n "$SHW" ]]; then                      # 交易日
+    if (( ET_MIN >= 540 && ET_MIN < 570 )); then fieldcheck pre; fi
+    if (( ET_MIN >= 640 && ET_MIN < 980 )); then fieldcheck open; fi
+    if (( ET_MIN >= 980 )); then fieldcheck close; fi
+  fi
 else
   # 日历失效（覆盖期外）或命令崩溃：窗口来源没了，不能当作「今天没窗口」静默跳过
   hb "④⑤影子窗口：无法取得今日窗口（rc=$SHW_RC）$(printf '%s' "$SHW" | tail -1)"

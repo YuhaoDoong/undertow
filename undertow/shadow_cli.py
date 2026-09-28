@@ -965,6 +965,137 @@ def _sample_check(args) -> int:
     return 1 if bad else 0
 
 
+FIELDCHECK_DIR = Path("data/history/fieldcheck")
+
+
+def cmd_fieldcheck(args) -> int:
+    """每日现场核验（用户 2026-09-28：「设置好自动触发，不要等我来提醒」；项目源自 Codex 013/014 的周一验收清单）。
+
+    --phase pre   盘前：主池各品种当日机会行、两份来源时刻、台账方向指纹、方向准入结论
+    --phase open  开盘后：开盘窗各腿入场报价、近价全链快照内容、已结束的盘中采样桶
+    --phase close 收盘后：收盘窗各腿报价、全天采样桶、待发布记录中「已发布却未清理」的条目
+    未到时点的项目记「待定」，不算异常。报告写 data/history/fieldcheck/<日>_<阶段>.md（随每日任务入库）；
+    有异常 → rc=1（调度层弹通知）。只读，从不下单；不含账户数据。"""
+    import gzip
+    import subprocess
+    from undertow.analyze import shadow_direction as sd
+    from undertow.collect.store import SnapshotStore
+    from undertow.core.config import load_config
+    phase = args.phase
+    day = date.fromisoformat(args.session) if args.session else market_today()
+    now = datetime.now(ET)
+    cfg, store = load_config(), SnapshotStore()
+    lines = [f"# 现场核验 {day} · {phase}", "", f"运行于 {now:%Y-%m-%d %H:%M} ET；方向分析 {sd.ANALYSIS['version']}；"
+             f"影子账 {sh.CONFIG['version']}", ""]
+    bad = []
+
+    def ended(minute: int) -> bool:
+        return now.date() > day or (now.date() == day and now.hour * 60 + now.minute >= minute)
+
+    if mc.is_trading_day(day) is not True:
+        known = mc.is_trading_day(day) is False
+        print(f"{day} {'非交易日' if known else '日历未覆盖'}：不核验。", file=sys.stderr)
+        return 0 if known else 1
+    for inst in sh.CONFIG["pools"][sh.CONFIG["primary_pool"]]:
+        p = _path(inst, False)
+        lines.append(f"## {inst}")
+        try:
+            rows_i = jl.load(p, KEY) if p.exists() else []
+        except Exception as e:                        # 台账损坏：报告出来，不让核验本身崩掉
+            lines.append(f"- ❌ 台账无法读取：{str(e)[:160]}"); bad.append(f"{inst} 台账无法读取")
+            continue
+        r = next((x for x in rows_i if x["session"] == day.isoformat()), None)
+        if r is None:
+            lines.append("- ❌ 无当日机会行（盘前 capture 未跑或失败）"); bad.append(f"{inst} 无机会行")
+            continue
+        if phase == "pre":
+            f = (r.get("decision") or {}).get("flow") or {}
+            src = f.get("source_captured_at") or {}
+            el = sd.eligibility(r)
+            lines += [f"- recorded_at {r.get('recorded_at')}；identity {(r.get('identity') or {}).get('status')}",
+                      f"- 来源抓取 current {src.get('current')} / previous {src.get('previous')}；available_at {f.get('available_at')}",
+                      f"- 方向 {f.get('call_direction')!r}；ledger_code_sha {f.get('ledger_code_sha')}"
+                      f"（冻结 {sd.ANALYSIS['call_code_sha']}）；准入 {el[0]} {el[1]}"]
+            if el[0] == "identity_fail":
+                bad.append(f"{inst} 方向准入 identity_fail：{el[1]}")
+            continue
+        legs = [l for l in r.get("legs", []) if l.get("status") == "candidate"]
+        for w in (("open",) if phase == "open" else ("open", "close")):
+            bd = sh.window_bounds(day, w)
+            wk = f"{day.isoformat()}|{w}"
+            if bd is None:
+                continue
+            if not ended(bd[1] + 1):
+                lines.append(f"- {w} 窗：待定（{_fmt_bounds(bd)} 未结束）"); continue
+            if w == "open":
+                st_ = {l["leg_id"]: sh.window_leg(r, l, wk, "entry")["status"] for l in legs}
+            else:
+                st_ = {l["leg_id"]: sh.window_leg(r, l, wk, "exit")["status"]
+                       for l in legs if r["session"] <= day.isoformat() <= l["expiry"]}
+            nv = sum(v == "valid" for v in st_.values())
+            lines.append(f"- {w} 窗：有效 {nv}/{len(st_)}；{st_}")
+            if st_ and nv == 0:
+                bad.append(f"{inst} {w} 窗零有效报价")
+        if phase == "open":
+            sym = cfg.get(inst).options.symbol
+            cp = store.path_of("options_open", sym, day)
+            lo, hi = (int(x[:2]) * 60 + int(x[3:]) for x in CHAIN_WINDOW)
+            if not cp.exists():
+                if ended(hi + 1):
+                    lines.append(f"- ❌ 全链快照：窗口已过仍无文件"); bad.append(f"{inst} 全链快照缺失")
+                else:
+                    lines.append("- 全链快照：待定（窗口未结束）")
+            else:
+                rec = json.loads(gzip.decompress(cp.read_bytes()))
+                m = (rec.get("payload") or rec).get("undertow_filter") or {}
+                lines.append(f"- 全链快照：status {m.get('status')}；保留 {m.get('n_kept')}/{m.get('n_full')}（未解析 "
+                             f"{m.get('n_unparsed')}）；报价时刻代理 {m.get('quote_time_et_proxy')}；标的代理在窗内 "
+                             f"{m.get('underlying_proxy_in_window')}")
+                if not m.get("n_kept"):
+                    bad.append(f"{inst} 全链快照无合约")
+        # 盘中采样：只核已经结束的桶
+        sb = sample_bounds(day)
+        if sb is not None:
+            legs_s = sample_legs(rows_i, day)
+            recs = _read_samples(SAMPLE_DIR / day.isoformat() / f"{inst}.jsonl")
+            wanted = {x for rr in recs for l in rr.get("legs", []) for x in (l.get("sell_sym"), l.get("buy_sym")) if x}
+            wanted |= {rr.get("underlying_symbol") for rr in recs if rr.get("underlying_symbol")}
+            done_slots = [s_ for s_ in sample_slots(sb)
+                          if ended(int(s_[:2]) * 60 + int(s_[3:]) + SAMPLE["step_min"])]
+            if legs_s and done_slots:
+                states = {s_: slot_state(recs, s_, wanted)[1] if wanted else "missing" for s_ in done_slots}
+                badslots = {k: v for k, v in states.items() if v != "complete"}
+                lines.append(f"- 盘中采样：已结束 {len(done_slots)} 桶，异常 {len(badslots)} {badslots or ''}")
+                if badslots:
+                    bad.append(f"{inst} 采样异常桶 {len(badslots)}")
+    if phase == "close":
+        pend = Path("data/logs/.publish_pending_auto")
+        rows_ = [x.split("\t") for x in pend.read_text().splitlines() if x.strip()] if pend.exists() else []
+        stale = []
+        for path, h in rows_:
+            rp = subprocess.run(["git", "rev-parse", "--verify", "-q", f"HEAD:{path}"], capture_output=True, text=True)
+            if rp.returncode == 0 and rp.stdout.strip() == h:
+                stale.append(path)
+        lines += ["", f"## 待发布记录", f"- 共 {len(rows_)} 行；已发布却未清理 {len(stale)} 行 {sorted(set(stale))[:5]}"]
+        if stale:
+            bad.append(f"待发布记录有 {len(stale)} 行已发布却未清理")
+    lines += ["", "## 结论", *(f"- ⚠️ {b}" for b in bad)] if bad else ["", "## 结论", "- 无异常（待定项除外）"]
+    _write_fieldcheck(day, phase, lines)
+    print("\n".join(lines))
+    _status(args, f"fieldcheck-{phase}", [], [{"instrument": b.split()[0], "error": b} for b in bad],
+            counts={"problems": len(bad)})
+    return 1 if bad else 0
+
+
+def _write_fieldcheck(day, phase, lines):
+    FIELDCHECK_DIR.mkdir(parents=True, exist_ok=True)
+    out = FIELDCHECK_DIR / f"{day.isoformat()}_{phase}.md"
+    tmp = out.with_name(out.name + ".tmp")
+    body = "\n".join(lines) + "\n"
+    tmp.write_text(body, "utf-8")
+    tmp.replace(out)
+
+
 def bars_plan(rows: list[dict], *, last_day: date, insts=None, rules=None) -> dict:
     """影子账候选价差需要补的逐分钟 K 线：{(root, 交易日): {合约代码, …, 标的代码}}。
 
@@ -1148,6 +1279,10 @@ def register(sub):
     c = ss.add_parser("capture", help="盘前冻结当日机会"); c.add_argument("instruments", nargs="*")
     c.add_argument("--as-of", help="回放日 YYYY-MM-DD（写 replay/，不进前瞻主样本）"); c.add_argument("--status-file")
     c.set_defaults(func=cmd_capture)
+    fc = ss.add_parser("fieldcheck", help="每日现场核验（pre/open/close；session_hooks 自动触发，报告入 data/history/fieldcheck/）")
+    fc.add_argument("--phase", choices=("pre", "open", "close"), required=True)
+    fc.add_argument("--session", help="核验哪一天（默认今天 ET）"); fc.add_argument("--status-file")
+    fc.set_defaults(func=cmd_fieldcheck)
     sp = ss.add_parser("sample", help="盘中时段采样：ET 09:45–13:00 每 15 分钟记在场候选腿盘口（与 v5 预登记无关）")
     sp.add_argument("instruments", nargs="*"); sp.add_argument("--status-file")
     sp.add_argument("--check", nargs="?", const="today", metavar="YYYY-MM-DD",

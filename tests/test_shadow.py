@@ -1086,3 +1086,73 @@ def test_session_hooks_runs_sample_from_windows_with_per_bucket_alert():
     assert "BEND - 6" in body and "HI - 6" not in body, "失败提醒按当前桶，不按全天区间末"
     du = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
     assert "shadow sample --check" in du
+
+
+# ── 每日现场核验 fieldcheck（用户 2026-09-28：自动触发）──
+
+def _fc_env(tmp_path, monkeypatch, rows_by_inst, hm):
+    from undertow import shadow_cli as sc
+
+    class FakeDT(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 9, 28, *hm, tzinfo=sc.ET)
+    monkeypatch.setattr(sc, "datetime", FakeDT)
+    monkeypatch.setattr(sc, "market_today", lambda: date(2026, 9, 28))
+    monkeypatch.setattr(sc, "FIELDCHECK_DIR", tmp_path / "fc")
+    monkeypatch.setattr(sc, "SAMPLE_DIR", tmp_path / "samples")
+    for inst, rows in rows_by_inst.items():
+        (tmp_path / f"{inst}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    monkeypatch.setattr(sc, "_path", lambda k, replay: tmp_path / f"{k}.jsonl")
+
+    class A:
+        session, status_file = None, None
+    return sc, A
+
+
+def _fc_row(inst):
+    from undertow.analyze import shadow_direction as sd
+    return {"key": f"{inst}|2026-09-28", "instrument": inst, "session": "2026-09-28",
+            "recorded_at": "2026-09-28T11:00:00+00:00", "identity": {"mode": "prospective", "status": "certified"},
+            "decision": {"flow": {"call_direction": "中性",
+                                  "source_captured_at": {"current": "2026-09-28T10:00:00+00:00",
+                                                         "previous": "2026-09-25T10:00:00+00:00"},
+                                  "available_at": "2026-09-28T10:00:00+00:00", "snapshot_sha": "a",
+                                  "prev_snapshot_sha": "b", "ledger_row_sha": "c",
+                                  "ledger_code_sha": sd.ANALYSIS["call_code_sha"], "mapping": "dir-map-v1"}},
+            "legs": []}
+
+
+def test_fieldcheck_pre_ok_and_missing_row(tmp_path, monkeypatch):
+    pool = sh.CONFIG["pools"][sh.CONFIG["primary_pool"]]
+    sc, A = _fc_env(tmp_path, monkeypatch, {i: [_fc_row(i)] for i in pool}, (9, 5))
+    a = A(); a.phase = "pre"
+    assert sc.cmd_fieldcheck(a) == 0
+    rep = (tmp_path / "fc" / "2026-09-28_pre.md").read_text()
+    assert "无异常" in rep and "no_direction" in rep
+    other = _fc_row("gold"); other["session"] = "2026-09-25"; other["key"] = "gold|2026-09-25"
+    (tmp_path / "gold.jsonl").write_text(json.dumps(other) + "\n")
+    assert sc.cmd_fieldcheck(a) == 1 and "gold 无机会行" in (tmp_path / "fc" / "2026-09-28_pre.md").read_text()
+
+
+def test_fieldcheck_open_windows_pending_before_end(tmp_path, monkeypatch):
+    pool = sh.CONFIG["pools"][sh.CONFIG["primary_pool"]]
+    sc, A = _fc_env(tmp_path, monkeypatch, {i: [_fc_row(i)] for i in pool}, (10, 10))
+    a = A(); a.phase = "open"
+    assert sc.cmd_fieldcheck(a) == 0
+    rep = (tmp_path / "fc" / "2026-09-28_open.md").read_text()
+    assert "open 窗：待定" in rep and "全链快照：待定" in rep
+
+
+def test_fieldcheck_skips_non_trading_day(tmp_path, monkeypatch):
+    sc, A = _fc_env(tmp_path, monkeypatch, {}, (9, 5))
+    a = A(); a.phase = "pre"; a.session = "2026-09-27"
+    assert sc.cmd_fieldcheck(a) == 0 and not (tmp_path / "fc").exists()
+
+
+def test_session_hooks_fieldcheck_phases():
+    src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
+    assert src.index("fieldcheck() {") < src.index("fieldcheck pre")
+    for ph, cond in (("pre", "ET_MIN >= 540 && ET_MIN < 570"), ("open", "ET_MIN >= 640 && ET_MIN < 980"),
+                     ("close", "ET_MIN >= 980")):
+        assert f"{cond} )); then fieldcheck {ph}" in src

@@ -19,7 +19,9 @@ sys.path.insert(0, str(ROOT))
 
 FILES = ["docs/prereg/2026-09-28_skew_reading_v1.md", "docs/prereg/2026-09-28_skew_reading_v1_addendum.md",
          "docs/prereg/2026-09-28_skew_reading_v1_addendum2.md", "docs/prereg/2026-09-28_conviction_v1.1.md",
+         "docs/prereg/2026-09-28_skew_reading_v1_addendum3.md",
          "docs/prereg/2026-09-28_conviction_v1.2.md", "docs/prereg/2026-09-28_conviction_v1.3.md",
+         "docs/prereg/2026-09-28_conviction_v1.4.md",
          "undertow/analyze/skew_reading.py", "undertow/analyze/conviction.py", "undertow/analyze/direction_stats.py",
          "undertow/analyze/structure_read.py", "undertow/analyze/flow.py", "undertow/dirledger_cli.py",
          "undertow/core/market_calendar.py", "undertow/core/clock.py", "undertow/collect/store.py",

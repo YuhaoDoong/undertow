@@ -208,3 +208,18 @@ def test_offline_replay_reproduces_analysis(tmp_path, monkeypatch):
     f = lambda bars: skr.forward_returns([(b["ts"].date(), b["open"], b["close"]) for b in bars], date(2026, 9, 28),
                                          (1, 2), closed_through=date(2026, 9, 29))
     assert f(offline) == f(online) and f(offline)["ret_2d"] == pytest.approx(0.03)
+
+
+# —— Codex 021 运维：blobs 纳入巡检，修复可见 ——
+def test_verify_covers_blobs_and_blob_repair_is_visible(tmp_path, capsys):
+    sha = cas.put_blob(b"snapshot-gz-bytes", root=tmp_path)
+    assert cas.verify(root=tmp_path)["blobs"] == 1
+    p = tmp_path / "blobs" / sha[:2] / f"{sha}.bin"
+    p.write_bytes(b"tampered")
+    v = cas.verify(root=tmp_path)
+    assert v["blobs_ok"] == 0 and v["blobs_bad"][0][0] == sha
+    reps = []
+    assert cas.put_blob(b"snapshot-gz-bytes", root=tmp_path, repairs=reps) == sha
+    assert reps and reps[0]["blob"] == sha and "损坏" in capsys.readouterr().err
+    assert any(q.read_bytes() == b"tampered" for q in (tmp_path / "blobs").rglob("*.corrupt-*"))
+    assert cas.verify(root=tmp_path)["blobs_ok"] == 1

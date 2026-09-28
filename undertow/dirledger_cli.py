@@ -161,7 +161,10 @@ def build_row(inst: str, sym: str, session: date, store, *, now: datetime, repla
         if not replay and payload is not None and ident and ident.get("raw") is not None:
             try:
                 from undertow.collect import cas
-                row[f"{name}_blob"] = cas.put_blob(ident["raw"])
+                reps: list = []
+                row[f"{name}_blob"] = cas.put_blob(ident["raw"], repairs=reps)
+                if reps:
+                    row[f"{name}_blob_repairs"] = reps
             except Exception as e:
                 row[f"{name}_blob"] = None
                 problems.append(f"{name}_blob_store_failed")

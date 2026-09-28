@@ -91,3 +91,44 @@ def test_bootstrap_deterministic():
     a, _ = ds.block_bootstrap(rows, ds.d_reg, block=10, iters=50)
     b, _ = ds.block_bootstrap(rows, ds.d_reg, block=10, iters=50)
     assert a == b
+
+
+# —— Codex 021-01：预测资格与结果资格分开 ——
+@pytest.mark.parametrize("h", [5, 10])
+def test_ineligible_direction_row_does_not_occupy_cooldown(h):
+    base = [_row("gold", t, 0, 0.0) for t in range(20, 30)]
+    rows = [_row("gold", 0, 1, None, eligible=False), _row("gold", 1, 1, 0.01)] + base
+    assert ds.final_event_count(ds.nonoverlap(rows, h)) == 1               # 以前 t0 占冷却 → 0
+
+
+@pytest.mark.parametrize("h", [5, 10])
+def test_published_event_with_missing_result_still_occupies_cooldown(h):
+    base = [_row("gold", t, 0, 0.0) for t in range(20, 30)]
+    rows = [_row("gold", 0, 1, None), _row("gold", 2, 1, 0.01)] + base      # t0 已合格发布、结果缺价
+    kept = ds.nonoverlap(rows, h)
+    assert [r["t"] for r in kept if r["kept"]] == [0]                        # 事前政策：占冷却，不因缺价改写序列
+    assert ds.final_event_count(kept) == 0                                   # t0 本身不进统计
+
+
+# —— Codex 021-02：共同支持在原始唯一日期上冻结，重抽复制不能复活排除层 ——
+def test_duplicated_nonevent_rows_cannot_revive_excluded_stratum():
+    ok = [_row("gold", t, 0, 0.0) for t in range(10, 16)] + [_row("gold", 0, 1, 0.02)]
+    thin = [_row("silver", 0, 1, 0.50), _row("silver", 1, 0, 0.0)]         # 仅 1 个唯一对照日 → 原始排除
+    rows = ds.nonoverlap(ok + thin, 5)
+    sup = ds.support(rows)
+    assert ("silver", "up", "2026Q4") not in sup["valid"] and sup["no_support"] == 1
+    dup = rows + [r for r in rows if r["inst"] == "silver" and r["s"] == 0] * 6   # 模拟重抽复制同一对照日
+    d_frozen, _ = ds.d_reg(dup, sup)
+    d_orig, _ = ds.d_reg(rows, sup)
+    assert d_frozen == pytest.approx(d_orig)                                 # silver 那 +0.50 事件仍不进入
+    d_refrozen, _ = ds.d_reg(dup)                                            # 若按副本重新冻结则会（旧行为）
+    assert ds.support(dup)["no_support"] == 1                                # 唯一日期口径下复制也不算新对照
+    assert d_refrozen == pytest.approx(d_orig)
+
+
+def test_resample_without_events_or_baseline_is_invalid():
+    rows = ds.nonoverlap([_row("gold", t, 0, 0.0) for t in range(10, 16)] + [_row("gold", 0, 1, 0.02)], 5)
+    sup = ds.support(rows)
+    only_base = [r for r in rows if r["s"] == 0]
+    only_event = [r for r in rows if r["s"] == 1]
+    assert ds.d_reg(only_base, sup)[0] is None and ds.d_reg(only_event, sup)[0] is None

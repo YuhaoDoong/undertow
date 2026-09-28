@@ -50,18 +50,28 @@ def quarter(session: date) -> str:
     return f"{session.year}Q{(session.month - 1) // 3 + 1}"
 
 
+def published(row: dict) -> bool:
+    """【决策时】已作为合格正式预测发布的方向事件（与结果是否成熟无关）。"""
+    return bool(row.get("eligible")) and row.get("s") in (1, -1)
+
+
 def usable(row: dict) -> bool:
+    """进入统计的行：决策时合格 + 结果已成熟 + regime 与 s 已知。"""
     return bool(row.get("eligible")) and row.get("r") is not None and row.get("regime") is not None \
         and row.get("s") is not None
 
 
 def nonoverlap(rows: list[dict], h: int) -> list[dict]:
-    """在【原始时间轴】上固定事件资格：同品种按 t 升序，与上一个保留事件相隔 ≥ h 个交易日才保留。重抽时不重选。
-    非事件（s=0）行原样保留作对照。返回加了 kept 标记的新行列表。"""
+    """在【原始时间轴】上固定事件资格（Codex 021-01：预测资格与结果资格分开）：
+      · 只有决策时合格发布的方向事件（published）参与冷却；从未合格发布的行（eligible=False）不占冷却；
+      · 已发布但结果缺价/未成熟的事件【照样占冷却】（事前政策：不让后续数据可得性改写事件序列），
+        它本身因 r=None 不进统计；
+      · 同品种按 t 升序，与上一个保留事件相隔 ≥ h 个交易日才保留。重抽时不重选。
+    非事件行原样保留作对照。返回加了 kept 标记的新行列表。"""
     out, last = [], {}
     for r in sorted(rows, key=lambda x: (x["inst"], x["t"])):
         r = dict(r)
-        if r.get("s") in (1, -1):
+        if published(r):
             lt = last.get(r["inst"])
             r["kept"] = lt is None or r["t"] - lt >= h
             if r["kept"]:
@@ -72,40 +82,65 @@ def nonoverlap(rows: list[dict], h: int) -> list[dict]:
     return out
 
 
-def d_reg(rows: list[dict]) -> tuple[float | None, dict]:
-    """D_reg = Σ_k n_k·mean_{事件∈k}[s·(r−μ_k)] / Σ_k n_k。
-    层 k = (品种, regime, 季度)；μ_k = 层内全部可用日（含事件日）的 r 均值；事件 = kept 且 s=±1。
-    共同支持：层内非事件可用日 ≥ MIN_NONEVENT_DAYS 且至少 1 个事件，否则整层排除（计数报告）。
-    没有任何合格层 → (None, diag)，由调用方记为无效。"""
-    strata: dict = {}
+def _stratum(r: dict) -> tuple:
+    return (r["inst"], r["regime"], r["quarter"])
+
+
+def support(rows: list[dict]) -> dict:
+    """在【原始面板的唯一 (品种, t)】上冻结共同支持（Codex 021-02）：层内 ≥1 个 kept 事件且
+    ≥ MIN_NONEVENT_DAYS 个唯一非事件可用日。重抽只改变权重与 μ_k 重估，不能让原先被排除的层复活。
+    返回 {"valid": set(层), "events": set((inst,t)) 最终可比事件, "strata": n, "no_support": n, "excluded_events": n}。"""
+    uniq = {}
     for r in rows:
-        if not usable(r):
-            continue
-        strata.setdefault((r["inst"], r["regime"], r["quarter"]), []).append(r)
-    num = den = 0.0
-    diag = {"strata": len(strata), "strata_used": 0, "strata_no_support": 0, "events_used": 0,
-            "events_excluded_no_support": 0}
-    for rs in strata.values():
+        if usable(r):
+            uniq.setdefault((r["inst"], r["t"]), r)
+    by: dict = {}
+    for r in uniq.values():
+        by.setdefault(_stratum(r), []).append(r)
+    valid, events, no_sup, excl = set(), set(), 0, 0
+    for k, rs in by.items():
         ev = [r for r in rs if r.get("kept") and r["s"] in (1, -1)]
         non = [r for r in rs if r["s"] == 0]
         if not ev:
             continue
         if len(non) < MIN_NONEVENT_DAYS:
-            diag["strata_no_support"] += 1
-            diag["events_excluded_no_support"] += len(ev)
+            no_sup += 1; excl += len(ev)
+            continue
+        valid.add(k)
+        events.update((r["inst"], r["t"]) for r in ev)
+    return {"valid": valid, "events": events, "strata": len(by), "no_support": no_sup, "excluded_events": excl}
+
+
+def d_reg(rows: list[dict], sup: dict | None = None) -> tuple[float | None, dict]:
+    """D_reg = Σ_k n_k·mean_{事件∈k}[s·(r−μ_k)] / Σ_k n_k，只在冻结的合格层 sup["valid"] 内、只对冻结的事件集计算。
+    μ_k = 该层在本次（重抽）样本中全部可用行的 r 均值（含事件，副本按出现次数加权）。
+    某层在本次样本中没有事件或没有非事件对照行 → 该层本次不贡献；所有层都不贡献 → (None, diag) = 无效重抽。
+    sup=None → 以本批 rows 自身冻结（点估计用）。"""
+    sup = sup or support(rows)
+    strata: dict = {}
+    for r in rows:
+        if usable(r) and _stratum(r) in sup["valid"]:
+            strata.setdefault(_stratum(r), []).append(r)
+    num = den = 0.0
+    diag = {"strata_valid": len(sup["valid"]), "strata_no_support": sup["no_support"],
+            "events_excluded_no_support": sup["excluded_events"], "strata_contributing": 0, "event_rows": 0}
+    for rs in strata.values():
+        ev = [r for r in rs if r.get("kept") and r["s"] in (1, -1) and (r["inst"], r["t"]) in sup["events"]]
+        non = [r for r in rs if r["s"] == 0]
+        if not ev or not non:
             continue
         mu = sum(r["r"] for r in rs) / len(rs)
         num += sum(r["s"] * (r["r"] - mu) for r in ev)
         den += len(ev)
-        diag["strata_used"] += 1
-        diag["events_used"] += len(ev)
+        diag["strata_contributing"] += 1
+        diag["event_rows"] += len(ev)
     return (num / den if den else None), diag
 
 
 def final_event_count(rows: list[dict]) -> int:
-    """「只数事件」：最终可纳入统计的事件数（剔除无共同支持层之后）。只看 r 是否成熟（is not None），不读收益值。"""
+    """「只数事件」：最终可比事件数 = 冻结共同支持后的唯一事件数。只看 r 是否成熟（is not None），不读收益值。"""
     masked = [dict(r, r=0.0 if r.get("r") is not None else None) for r in rows]
-    return d_reg(masked)[1]["events_used"]
+    return len(support(masked)["events"])
 
 
 def block_bootstrap(rows: list[dict], stat, *, block: int, iters: int = ITERS, seed: int = SEED) -> tuple[list, int]:
@@ -147,8 +182,10 @@ def judge(rows: list[dict], h: int, *, min_events: int, block: int | None = None
            "min_events": min_events}
     if n_final < min_events:
         return {**res, "verdict": "insufficient", "reason": "最终可比事件数不足（未计算任何收益统计）"}
-    point, diag = d_reg(rows)
-    samples, bad = block_bootstrap(rows, d_reg, block=block or BLOCK_DAYS.get(h, 2 * h), iters=iters, seed=seed)
+    sup = support(rows)                                   # 原始面板上冻结一次，点估计与重抽用同一分析对象
+    point, diag = d_reg(rows, sup)
+    samples, bad = block_bootstrap(rows, lambda rs: d_reg(rs, sup), block=block or BLOCK_DAYS.get(h, 2 * h),
+                                   iters=iters, seed=seed)
     res.update({"point": point, "diag": diag, "iters": iters, "invalid": bad})
     if not samples or bad / iters > MAX_INVALID_FRAC:
         return {**res, "verdict": "insufficient", "reason": f"无效重抽 {bad}/{iters} 超过 {MAX_INVALID_FRAC:.0%}"}

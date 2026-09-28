@@ -19,6 +19,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import tempfile
 import time
 import zlib
@@ -194,7 +195,8 @@ def get(sha: str, *, root: Path | None = None) -> bytes:
 
 
 def verify(*, root: Path | None = None) -> dict:
-    """逐个 recipe 还原核对。任何异常都记为该项 bad 并继续（不因一项崩溃中断整批）。只报告、不删除。"""
+    """逐个 recipe 还原核对 + 逐个整份对象（blobs）核对哈希（Codex 021：巡检范围覆盖 blobs）。
+    任何异常都记为该项 bad 并继续（不因一项崩溃中断整批）。只报告、不删除。"""
     root = root or ROOT
     bad, n = [], 0
     for rp in sorted((root / "recipes").glob("*/*.json")):
@@ -204,7 +206,14 @@ def verify(*, root: Path | None = None) -> dict:
             get(sha, root=root)
         except Exception as e:
             bad.append((sha, f"{type(e).__name__}: {e}"))
-    return {"recipes": n, "ok": n - len(bad), "bad": bad}
+    bbad, nb = [], 0
+    for bp in sorted((root / "blobs").glob("*/*.bin")):
+        nb += 1
+        try:
+            get_blob(bp.stem, root=root)
+        except Exception as e:
+            bbad.append((bp.stem, f"{type(e).__name__}: {e}"))
+    return {"recipes": n, "ok": n - len(bad), "bad": bad, "blobs": nb, "blobs_ok": nb - len(bbad), "blobs_bad": bbad}
 
 
 # —— 整份原样存储（Codex 020-02：被正式预测消费的快照版本必须可恢复）——
@@ -217,8 +226,9 @@ def _blob_path(root: Path, sha: str) -> Path:
     return root / "blobs" / sha[:2] / f"{sha}.bin"
 
 
-def put_blob(raw: bytes, *, root: Path | None = None) -> str:
-    """原样存入并回读核对；已有且完好 → 直接返回；已有但损坏 → 隔离保留后重写。返回 sha256。"""
+def put_blob(raw: bytes, *, root: Path | None = None, repairs: list | None = None) -> str:
+    """原样存入并回读核对；已有且完好 → 直接返回；已有但损坏 → 隔离保留后重写，并把修复记进 repairs、
+    打印到 stderr（Codex 021：修复必须可见）。返回 sha256。"""
     root = root or ROOT
     sha = hashlib.sha256(raw).hexdigest()
     p = _blob_path(root, sha)
@@ -226,7 +236,11 @@ def put_blob(raw: bytes, *, root: Path | None = None) -> str:
         old = p.read_bytes()
         if hashlib.sha256(old).hexdigest() == sha:
             return sha
-        quarantine(p, old)
+        q = quarantine(p, old)
+        info = {"blob": sha, "why": "内容与名字不符", "quarantined_as": q.name if q else None}
+        if repairs is not None:
+            repairs.append(info)
+        print(f"[存档] ⚠️ 整份对象 {sha[:12]} 损坏，已隔离为 {info['quarantined_as']} 并重写", file=sys.stderr)
     _atomic(p, raw, lambda b: b == raw)
     return sha
 

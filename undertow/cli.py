@@ -3058,11 +3058,13 @@ def cmd_archive_inputs(args) -> int:
     st = res["stats"]
     v = cas.verify()                                     # 017 A01：每份完整原文都要能逐字节还原，坏了当天告警
     st["cas_recipes"], st["cas_bad"] = v["recipes"], len(v["bad"])
-    for sha, why in v["bad"]:
+    st["cas_blobs"], st["cas_blobs_bad"] = v["blobs"], len(v["blobs_bad"])       # 021：整份快照对象也巡检
+    for sha, why in v["bad"] + v["blobs_bad"]:
         res["issues"].append(f"cas 还原失败 {sha[:12]}：{why}")
     print(f"输入存档 {market_today()}：{st['files']} 个序列，新版本 {st['new_versions']}、未变 {st['unchanged']}、"
           f"新月度全量 {st['monthly_new']}、未知格式整份 {st['unknown_full']}（跳过期权链 {st['skipped_options']}）；"
-          f"完整原文 cas 新块 {st['cas_new_chunks']}、新版本 {st['cas_new_recipes']}，核对 {v['ok']}/{v['recipes']} 可还原")
+          f"完整原文 cas 新块 {st['cas_new_chunks']}、新版本 {st['cas_new_recipes']}，核对 {v['ok']}/{v['recipes']} 可还原；"
+          f"整份快照对象 {v['blobs_ok']}/{v['blobs']} 完好")
     for i in res["issues"]:
         print(f"  ⚠️ {i}", file=sys.stderr)
     if getattr(args, "status_file", None):

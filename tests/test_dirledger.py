@@ -208,3 +208,14 @@ def test_author_defensive_calls_are_not_directional():
     from undertow.dirledger_cli import _hit
     assert _hit("防守", -0.02) is None and _hit("区间", 0.01) is None
     assert _hit("偏空", -0.02) is True and _hit("防守化", -0.02) is True
+
+
+def test_level_recorded_even_when_previous_snapshot_missing(tmp_path, monkeypatch):
+    from undertow import dirledger_cli as dl
+    monkeypatch.setattr("undertow.collect.cboe_options.snapshot_from_payload",
+                        lambda p, i, s: type("S", (), {"contracts": []})())
+    ok = datetime(2026, 9, 28, 5, 0, tzinfo=ET_).timestamp()
+    store = _Store(tmp_path, {S1: ok}, {S1})                                        # 只有当日快照
+    row = dl.build_row("gold", "GLD", S1, store, now=datetime(2026, 9, 28, 6, 0, tzinfo=ET_), replay=False,
+                       index={S1: S1}, level_fn=lambda snap, q: {"skew10_pp": 0.1, "expiry": "2026-10-30"})
+    assert row["reading"] == "数据不足" and row["curr_level"]["skew10_pp"] == 0.1

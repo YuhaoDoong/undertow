@@ -106,7 +106,7 @@ def skew_reader(prev_snap, curr_snap, quote_day, inst) -> dict:
 
 
 def build_row(inst: str, sym: str, session: date, store, *, now: datetime, replay: bool, index=None,
-              reader=None, rule_version: str | None = None) -> dict:
+              reader=None, rule_version: str | None = None, level_fn=None) -> dict:
     """某品种某 session 的读数行（纯组装；读快照由 store 提供）。返回行带 identity（身份检查结果）。
 
     当日快照 = 认证到 session 的那份；前一份 = 认证到 session 前一交易日的那份。缺任一 → 输入不齐（不顶替）。"""
@@ -142,6 +142,12 @@ def build_row(inst: str, sym: str, session: date, store, *, now: datetime, repla
     row["before_open"] = now < open_time(session)
     cur_p = store.load("options", sym, cur_file) if cur_file else None
     prev_p = store.load("options", sym, prev_file) if prev_file else None
+    if cur_p is not None and level_fn is not None:
+        # H3 水平序列只需当日快照：前一交易日缺失时仍记录水平（不影响读数的「数据不足」判定）
+        try:
+            row["curr_level"] = level_fn(snapshot_from_payload(cur_p, inst, sym), quote_day)
+        except Exception as e:
+            row["curr_level"] = {"error": f"{type(e).__name__}: {e}"[:160]}
     if cur_p is None or prev_p is None:
         row.update({"reading": "数据不足", "reason": "认证到当日或前一交易日的快照缺失（不以更早快照顶替）",
                     "inputs_complete": False})
@@ -191,8 +197,9 @@ def decide(existing: dict | None, row: dict, now: datetime) -> tuple[str, dict |
 
 
 def record_one(inst: str, sym: str, session: date, store, now: datetime, *, reader=None,
-               rule_version: str | None = None) -> tuple[str, dict]:
-    row = build_row(inst, sym, session, store, now=now, replay=False, reader=reader, rule_version=rule_version)
+               rule_version: str | None = None, level_fn=None) -> tuple[str, dict]:
+    row = build_row(inst, sym, session, store, now=now, replay=False, reader=reader, rule_version=rule_version,
+                    level_fn=level_fn)
     p = _path(inst, "prospective", rule_version)
     existing = next((r for r in jl.load(p, KEY) if r[KEY] == row[KEY]), None)
     status, formal = decide(existing, row, now)
@@ -428,6 +435,16 @@ def conviction_reader(prev_snap, curr_snap, quote_day, inst) -> dict:
     return {"reading": _CONV_LABEL[feats["H1"]], "reason": "" if read.ok else (read.reason or ""), "features": feats}
 
 
+def conviction_level(curr_snap, quote_day) -> dict | None:
+    """H3 用的单快照偏斜水平（read_vol 主力到期口径）。"""
+    from undertow.analyze.flow import read_vol
+    v = read_vol(curr_snap, today=quote_day)
+    if v is None:
+        return None
+    return {"skew25_pp": round(v.skew25_pp, 3), "skew10_pp": round(v.skew10_pp, 3), "atm_iv_pp": round(v.atm_iv_pp, 3),
+            "expiry": v.expiry.isoformat(), "dte": v.days_out}
+
+
 def cmd_conviction_record(args) -> int:
     """每个交易日盘前记录多层读数（开发期，status 仍按 v2 截止政策；不得称确认样本）。"""
     from undertow.analyze import conviction as cv
@@ -443,7 +460,7 @@ def cmd_conviction_record(args) -> int:
         try:
             sym = cfg.get(inst).options.symbol
             status, row = record_one(inst, sym, session, store, now, reader=conviction_reader,
-                                     rule_version=cv.RULE["version"])
+                                     rule_version=cv.RULE["version"], level_fn=conviction_level)
         except Exception as e:
             print(f"  ⚠️ {inst}：{type(e).__name__}: {e}", file=sys.stderr); rc = 1; continue
         f = row.get("features") or {}

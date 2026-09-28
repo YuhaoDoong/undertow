@@ -1021,6 +1021,46 @@ def render_strategy_section(sp, timeline_svg: str = "") -> str:
             f'{"".join(tickets)}{opts}{cavs}</div>')
 
 
+def render_structure_calculators(calcs, timeline_svg: str = "") -> str:
+    """结构计算器（Codex 015 提交二）：方向由用户决定；这里只列确定性计算，不给「适配/不开枪」。
+
+    方向性情景、卖方价差适配度、铁鹰适用性等预测性判断未通过验证（见 `undertow claims`），不再输出。"""
+    def _m(v, fmt="{:.2f}"):
+        return "未知" if v is None else fmt.format(v)
+    rows = []
+    for c in calcs:
+        if c is None:
+            continue
+        if not c.computable:
+            rows.append(f'<tr><td><b>{_esc(c.name)}</b></td><td colspan="6" class="sub">无法计算：{_esc(c.reason)}</td></tr>')
+            continue
+        legs = "；".join(f"{l.action} {l.strike:g}{l.kind}（Δ{l.delta:+.2f}，IV {l.iv_pp:.0f}%，"
+                        f"bid {_m(l.bid)} / ask {_m(l.ask)}）" for l in c.legs)
+        rows.append(
+            f'<tr><td><b>{_esc(c.name)}</b><div class="sub">到期 {c.expiry}（{c.dte} 天）</div></td>'
+            f'<td class="sub">{_esc(legs)}</td>'
+            f'<td style="text-align:right">{_m(c.credit_bs)}<div class="sub">保守 {_m(c.credit_conservative)}</div></td>'
+            f'<td style="text-align:right">{_m(c.width, "{:g}")}</td>'
+            f'<td style="text-align:right">${_m(c.max_loss_bs, "{:.0f}")}<div class="sub">保守 ${_m(c.max_loss_conservative, "{:.0f}")}</div></td>'
+            f'<td style="text-align:right">{" / ".join(f"{b:.2f}" for b in c.breakevens)}</td>'
+            f'<td style="text-align:right">{" / ".join(f"{x:+.1f}%" for x in c.buffer_pct)}</td></tr>')
+    iv = next((c.iv_minus_rv for c in calcs if c is not None and c.iv_minus_rv is not None), None)
+    notes = next((c.notes for c in calcs if c is not None), ())
+    return (
+        '<div class="card">'
+        '<h2>🧮 结构计算器（方向由你决定）</h2>'
+        '<div class="sub" style="margin-bottom:8px">方向性情景、卖方价差「适配度」、铁鹰「适用性」都是未通过验证的预测性判断，'
+        '已不再输出。下表只给确定性计算：你有方向时，挑对应的一行看数字。'
+        + (f'　观测：ATM IV−RV {iv:+.1f}pp（只作参考，不再作为「有溢价 / 可卖」的门槛）' if iv is not None else "")
+        + '</div>'
+        '<table><thead><tr><th>结构</th><th>腿</th><th>净收（每股，BS）</th><th>宽度</th>'
+        '<th>最大亏损（每组，含费）</th><th>盈亏平衡</th><th>现价距离</th></tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table>'
+        + "".join(f'<div class="sub" style="margin-top:4px">· {_esc(n)}</div>' for n in notes)
+        + (f'<h3 style="margin-top:14px">结构位时间线（观测）</h3>{timeline_svg}' if timeline_svg else "")
+        + '</div>')
+
+
 def render_strategy_hub(proposals) -> str:
     """策略总纲（统筹层）：把各独立策略子模块的适配结论汇成一张调度表。"""
     if not proposals:
@@ -1188,14 +1228,15 @@ def render_concentration_html(cs) -> str:
 
 
 def render_verdict_section(v, display_name: str = "") -> str:
-    """当日决策研判卡片：做空?/现价追?/短线/长线 四问的规则化结论（置于报告靠前）。
+    """当日研判卡片（证据门控，Codex 015）：方向 / 入场 / 已有短线仓 / 已有底仓。
 
-    确定性合成（近中分层＋资金流＋强信号＋斐波盈亏比闸门），无 LLM、数字来自上游。
+    结论只由登记表中有决策权限的主张产生（当前 T1 为空）；T2 历史探索单独列出，不参与结论。
     """
     if v is None or not getattr(v, "ok", False):
         return ""
-    rows_data = [("做空？", v.short_answer), ("现价追？", v.chase_answer),
+    rows_data = [("方向", v.short_answer), ("入场", v.chase_answer),
                  ("短线仓", v.swing_action), ("长线仓", v.core_action)]
+    rows_data += [("探索观察", x) for x in (getattr(v, "exploratory", None) or [])]
     rows = ""
     for label, ans in rows_data:
         rows += (f'<tr>'
@@ -1204,7 +1245,7 @@ def render_verdict_section(v, display_name: str = "") -> str:
                  f'<td style="padding:6px 0;line-height:1.65">{_esc(ans.strip())}</td></tr>')
     return (
         '<div class="card" style="border-left:4px solid #0969da">'
-        f'<h2 style="margin-top:0">🧭 当日决策研判 · {_esc(display_name)}</h2>'
+        f'<h2 style="margin-top:0">🧭 当日研判（证据门控） · {_esc(display_name)}</h2>'
         f'<div style="font-size:16px;font-weight:800;margin:2px 0 10px;color:#0969da">{_esc(v.headline)}</div>'
         f'<table style="border-collapse:collapse;width:100%">{rows}</table>'
         f'<div class="sub" style="margin-top:10px;font-size:12px">{_esc(v.note)}</div>'

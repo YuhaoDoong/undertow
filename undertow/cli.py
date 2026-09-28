@@ -52,6 +52,9 @@ from undertow.analyze.expiry_ladder import build_ladder
 from undertow.analyze.fibonacci import build_fibonacci
 from undertow.analyze.risk_reward import build_risk_reward
 from undertow.analyze.verdict import build_verdict
+# Codex 015：credit-wall v1 与成本闸门都由 ≥2× 闸门（T3）解锁、自身为 T3 → 不再作为操作板块渲染。
+# 模块与台账保留；要重新启用须先在 analyze/claims.py 通过升级审查，而不是改这个开关。
+RENDER_T3_OPERATION_PANELS = False
 from undertow.analyze.macro import analyze_macro, series_ids_for
 from undertow.analyze.backtest import run_backtest
 from undertow.report import markdown as report_mod
@@ -73,7 +76,7 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_tldr_section, render_strategy_section,
                           render_concentration_html, render_vol_regime_section,
                           render_vol_analysis_section,
-                          render_strategy_hub, render_condor_section,
+                          render_strategy_hub, render_condor_section, render_structure_calculators,
                           render_credit_spread_section, render_expiry_ladder_section,
                           render_fib_rr_section, render_strong_signal_banner,
                           render_structure_section, render_vintage_banner,
@@ -1995,17 +1998,17 @@ def cmd_report(args) -> int:
                 tech_series = _truncate_before(tech_series, today)
                 series_done = _truncate_before(series_done, today)
 
+            # 方向性情景：方向取自近端研判（T3，未检验）→ 仍计算供研究，但不再渲染其方向、情景与否决
+            # （Codex 015；见 analyze/claims.py outlook.near_bias / strategy.vetoes）。
             plan = build_strategy(outlook, vol=fa.vol, series=series_done,
                                   struct_history=struct_hist or None)
-            strategy_html = render_strategy_section(plan, timeline_svg=timeline_svg)
+            strategy_html = ""
             # —— 分块速读：方向 / 关键位 / 持仓异动(ΔOI) / 对手盘警示 ——
             tilt = fa.flow_tilt if not fa.flow_tilt.startswith("—") else ""
             conv = ga.to_commodity if ratio is not None else None
             moves = structural_moves(fa, conv=conv)
-            counters = counter_signals(fa, plan.direction, conv=conv)
-            if plan.vetoes:  # 全文在策略卡，速读只留短标签
-                labels = "、".join(v.split("：")[0] for v in plan.vetoes)
-                counters.append(f"实时层否决票 ×{len(plan.vetoes)}（{labels}，详见策略卡）")
+            # 对手盘警示以研判方向为参照；研判方向未经验证（T3）→ 不再生成（Codex 015）
+            counters = []
             # —— 结构对昨变化（墙增/削、零伽马位移）+ 综合分趋势 ——
             struct_notes = []
             ga_prev = None
@@ -2069,13 +2072,13 @@ def cmd_report(args) -> int:
                           file=sys.stderr)
             vol_analysis_html = render_vol_analysis_section(vr, vol_svg)
             # —— 铁鹰策略子模块 + 策略统筹（多子模块调度）——
-            condor_plan = assess_condor(snap=curr, vr=vr, today=today, fa=fa)
-            cs_plan = assess_credit_spread(snap=curr, vr=vr, outlook=outlook, today=today, fa=fa)
-            strategy_props = assemble_strategies(directional=plan, condor=condor_plan,
-                                                 credit_spread=cs_plan)
-            strategy_html = (render_strategy_hub(strategy_props) + strategy_html
-                             + render_credit_spread_section(cs_plan)
-                             + render_condor_section(condor_plan))
+            # —— 结构计算器（Codex 015）：不判「适配/不开枪」、不替用户选方向，只算确定性的数 ——
+            from undertow.analyze.structure_calc import condor_calc, credit_spread_calc
+            _ivrv = getattr(vr, "iv_minus_rv", None)
+            strategy_html = render_structure_calculators(
+                [credit_spread_calc(curr, today, "P", iv_minus_rv=_ivrv),
+                 credit_spread_calc(curr, today, "C", iv_minus_rv=_ivrv),
+                 condor_calc(curr, today, iv_minus_rv=_ivrv)], timeline_svg=timeline_svg)
             # —— 可交易信息闸门（压力倍数 <2× = 今天没信息，见 flow.tradeable_info）——
             gate_html = ""
             try:
@@ -2106,9 +2109,10 @@ def cmd_report(args) -> int:
                 print(f"⚠️ {inst.key} 远月扫描失败：{type(e).__name__}: {e}", file=sys.stderr)
 
             # —— 墙位卖方价差候选（analyze/credit_wall）——
+            # credit-wall v1 三档收益全负、≥2× 闸门校正后不显著（T3）→ 不再作为操作推荐渲染（Codex 015）
             credit_wall_html = ""
             try:
-                if _ti and _ti.get("side") in ("看涨", "看跌"):
+                if RENDER_T3_OPERATION_PANELS and _ti and _ti.get("side") in ("看涨", "看跌"):
                     _bp = _na = None
                     try:
                         from undertow.collect.longbridge_account import fetch_assets
@@ -2129,9 +2133,10 @@ def cmd_report(args) -> int:
                 print(f"⚠️ {inst.key} 卖方价差失败：{type(e).__name__}: {e}", file=sys.stderr)
 
             # —— 成本闸门：预期波动 vs 回本门槛（见 cost_gate 模块注释）——
+            # 成本闸门由 ≥2× 闸门解锁、自身证据不足（T3）→ 不再渲染（Codex 015）
             cost_html = ""
             try:
-                if _ti and _ti.get("side") in ("看涨", "看跌"):
+                if RENDER_T3_OPERATION_PANELS and _ti and _ti.get("side") in ("看涨", "看跌"):
                     # 可执行日 = 本品种认证后的 session（见循环开头），DTE 按下单日算
                     _cands = cost_candidates(curr, curr.spot, _ti["side"], _exec_day,
                                              decidable=_ti["decidable"])
@@ -2227,11 +2232,17 @@ def cmd_report(args) -> int:
                             spot=(real_price if real_price else ga.spot)))
             except Exception as e:
                 print(f"[提示] {inst.key} 技术面跳过: {e}", file=sys.stderr)
-            # —— 当日决策研判：规则化合成 近中分层＋资金流＋强信号＋盈亏比闸门（无 LLM）——
+            # —— 当日研判（证据门控，Codex 015）：只有登记表授权的主张影响结论；T1 为空时如实说明 ——
             verdict = None
             verdict_html = ""
             try:
-                verdict = build_verdict(outlook, fa, strong_sig, fib_an, rr_plan)
+                # 证据门控（Codex 015）：只有登记表授权的主张影响结论；增仓层方向仅供 T2 展示
+                try:
+                    _flow_dir = probe_strong_signal(fa).get("call_direction")
+                except Exception:
+                    _flow_dir = None
+                verdict = build_verdict(outlook, fa, strong_sig, fib_an, rr_plan,
+                                        instrument=inst.key, flow_direction=_flow_dir)
                 verdict_html = render_verdict_section(verdict, inst.display_name)
             except Exception as e:
                 print(f"[提示] {inst.key} 决策研判跳过: {e}", file=sys.stderr)
@@ -2748,7 +2759,7 @@ def _account_context(inst, store, sources, today, *, no_cache, live_quotes=None)
         fib_an = build_fibonacci(real_series, ratio=ratio,
                                  spot=(real_price if real_price else curr.spot)) if real_series is not None else None
         rr_plan = build_risk_reward(fib_an, o=outlook) if fib_an is not None else None
-        verdict = build_verdict(outlook, fa, strong_sig, fib_an, rr_plan)
+        verdict = build_verdict(outlook, fa, strong_sig, fib_an, rr_plan, instrument=inst.key)
     except Exception:
         pass
 

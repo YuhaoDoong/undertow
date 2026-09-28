@@ -1,23 +1,24 @@
-"""当日决策研判合成的确定性测试（函数式，不依赖 pytest）。
+"""当日研判（证据门控，Codex 015）行为测试：结论字段只由有决策权限的主张产生。
 
-锚定：复现"做空?/现价追?/短线/长线"四问的规则化结论，且不自相矛盾——
-尤其逆势微腿（上升趋势里的回调/下降趋势里的反抽）不能被套成"顺腿追"。
+不镜像实现：固定输入、只改变 T2/T3 输入（研判方向、强信号、斐波腿、自动盈亏比、增仓层），
+可决策字段必须完全不变；无 T1 时任何观察组合都不产生已验证方向；T2 只在适用范围内展示。
 """
-import sys
-from datetime import date
-from pathlib import Path
+from datetime import date, timedelta
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import pytest
 
-from undertow.analyze.verdict import build_verdict
+from undertow.analyze import claims as cl
 from undertow.analyze.fibonacci import FibAnalysis, FibLevel
-from undertow.analyze.risk_reward import RiskRewardPlan, Setup
 from undertow.analyze.flow import StrongSignal
+from undertow.analyze.risk_reward import RiskRewardPlan, Setup
+from undertow.analyze.verdict import NO_T1, build_verdict
+
+DECISION = ("headline", "short_answer", "chase_answer", "swing_action", "core_action")
 
 
 class _O:
-    def __init__(self, near, mid, bias):
-        self.near_bias, self.mid_bias, self.bias = near, mid, bias
+    def __init__(self, near, mid):
+        self.near_bias, self.mid_bias, self.bias = near, mid, mid
 
 
 class _FA:
@@ -32,91 +33,77 @@ def _fib(direction, zone):
                        extensions=[], current_zone=zone, note="")
 
 
-def _setup(kind, direction, rr, grade, entry=4648.0, entry_label="现价 4648"):
-    return Setup(kind=kind, name=kind, direction=direction, entry=entry, entry_label=entry_label,
-                 stop=4000.0, stop_label="", target=4900.0, target_label="", rr=rr, grade=grade, verdict="")
+def _rr(grade, rr):
+    s = Setup(kind="chase", name="chase", direction="做多", entry=4648.0, entry_label="现价", stop=4000.0,
+              stop_label="", target=4900.0, target_label="", rr=rr, grade=grade, verdict="")
+    return RiskRewardPlan(ok=True, direction="做多", spot=4648.0, setups=[s], note="")
 
 
-def _plan(direction, chase_rr, chase_grade, pull_rr=None, pull_grade=None):
-    setups = [_setup("chase", direction, chase_rr, chase_grade)]
-    if pull_rr is not None:
-        setups.append(_setup("pullback", direction, pull_rr, pull_grade,
-                             entry=4494.0, entry_label="斐波 0.5 回撤 4494"))
-    return RiskRewardPlan(ok=True, direction=direction, spot=4648.0, setups=setups)
+def _sig(direction, level="极强", low=False):
+    try:
+        return StrongSignal(direction=direction, level=level, low_confidence=low)
+    except TypeError:
+        class S:
+            pass
+        s = S(); s.direction, s.level, s.low_confidence = direction, level, low
+        return s
 
 
-def test_uptrend_extended_take_profit():
-    """上升趋势、腿顶、追多 R:R 差 → 不做空 / 别追 / 短线止盈 / 长线拿住（复刻黄金）。"""
-    o = _O("中性", "偏多", "偏多(弱)")
-    fib = _fib("up", "现价位于 0.236–摆动高(0) 之间")
-    plan = _plan("做多", 0.3, "差", 1.4, "中")
-    v = build_verdict(o, _FA(), None, fib, plan)
-    assert v.ok
-    assert "不做空" in v.headline and "短线止盈" in v.headline, v.headline
-    assert "别追" in v.chase_answer and "回调" in v.chase_answer, v.chase_answer
-    assert "获利了结" in v.swing_action or "止盈" in v.swing_action, v.swing_action
-    assert "底仓" in v.core_action, v.core_action
-    print(f"PASS test_uptrend_extended_take_profit → {v.headline}")
+OBSERVATION_VARIANTS = [
+    (_O("偏多", "偏多"), None, None, None),
+    (_O("偏空", "偏空"), _sig("看跌"), _fib("down", "0.236"), _rr("优", 3.0)),
+    (_O("偏多(弱)", "偏空"), _sig("看涨"), _fib("up", "摆动高"), _rr("差", 0.4)),
+    (_O("中性", "中性"), _sig("看跌", low=True), _fib("up", "0.5"), None),
+    (_O("", ""), None, None, _rr("中", 1.2)),
+]
 
 
-def test_no_short_when_trend_intact():
-    """趋势未坏时"做空?"必须答"不是做空位置"，绝不建议逆势空。"""
-    o = _O("中性", "偏多", "偏多")
-    fib = _fib("up", "现价位于 0.382–0.5 之间")
-    plan = _plan("做多", 1.5, "中", 2.5, "优")
-    v = build_verdict(o, _FA(), None, fib, plan)
-    assert "不是做空位置" in v.short_answer, v.short_answer
-    print("PASS test_no_short_when_trend_intact")
+def _decision(v):
+    return tuple(getattr(v, k) for k in DECISION)
 
 
-def test_counter_trend_pullback_is_buy_not_short():
-    """下跌微腿 + 中期偏多 = 回调（买点），不能说成"现价做空"（复刻 QQQ 修复）。"""
-    o = _O("偏多(弱)", "偏多", "偏多")
-    fib = _fib("down", "现价位于 0.382–0.5 之间")
-    plan = _plan("做空", 0.6, "差", 1.3, "中")   # 顺下跌腿是做空票，但不该被采信为方向
-    v = build_verdict(o, _FA(), None, fib, plan)
-    assert "回调" in v.chase_answer and "做多" in v.chase_answer, v.chase_answer
-    assert "做空" not in v.chase_answer.replace("别追空", ""), v.chase_answer
-    assert "回调买" in v.headline, v.headline
-    assert "不做空" in v.headline, v.headline
-    print(f"PASS test_counter_trend_pullback_is_buy_not_short → {v.headline}")
+def test_t2_t3_inputs_do_not_change_decision_fields():
+    base = _decision(build_verdict(*OBSERVATION_VARIANTS[0][:1], _FA(), *OBSERVATION_VARIANTS[0][1:]))
+    for o, sig, fib, rr in OBSERVATION_VARIANTS:
+        for inst, fdir in (("gold", "偏多"), ("gold", "偏空"), ("wti", "偏空"), (None, None)):
+            v = build_verdict(o, _FA(), sig, fib, rr, instrument=inst, flow_direction=fdir)
+            assert _decision(v) == base, (o.near_bias, o.mid_bias, inst, fdir)
 
 
-def test_strong_bearish_allows_short():
-    """近端⚡强看跌 → 做空有支持、短线可跟空。"""
-    o = _O("偏空", "偏空", "偏空")
-    fib = _fib("down", "现价位于 0.5–0.618 之间")
-    plan = _plan("做空", 1.2, "中")
-    ss = StrongSignal("看跌", "极强", 5.0, 6.0, 30000, True, ["x"], False, "偏空")
-    v = build_verdict(o, _FA(), ss, fib, plan)
-    assert "可空" in v.headline or "跟空" in v.swing_action, v.headline
-    assert "强看跌" in v.short_answer, v.short_answer
-    assert "跟空" in v.swing_action, v.swing_action
-    print(f"PASS test_strong_bearish_allows_short → {v.headline}")
+@pytest.mark.parametrize("o,sig,fib,rr", OBSERVATION_VARIANTS)
+def test_no_t1_means_no_validated_direction_whatever_observations_say(o, sig, fib, rr):
+    v = build_verdict(o, _FA(), sig, fib, rr)
+    assert v.headline == NO_T1 and NO_T1 in v.evidence
+    text = " ".join(_decision(v))
+    for banned in ("可空", "跟空", "跟多", "可考虑波段空", "不是做空位置", "别追", "追不划算",
+                   "现价结构占优", "长线拿住", "长线减", "已校准的中期", "不开枪"):
+        assert banned not in text, banned
+    assert "不等于市场不适合交易" in v.short_answer        # 模型无依据 ≠ 市场不值得交易
+    assert "持仓风险监测照常" in v.swing_action             # 不因 T1 为空自动平现仓
 
 
-def test_weak_short_when_mid_neutral():
-    """近端偏空、中期中性 → 轻仓短空（弱势跟随，不是趋势空）。"""
-    o = _O("偏空(弱)", "中性", "偏空(弱)")
-    fib = _fib("down", "现价位于 0.236–摆动低 之间")
-    plan = _plan("做空", 0.8, "差", 1.3, "中")
-    v = build_verdict(o, _FA(), None, fib, plan)
-    assert "轻仓短空" in v.headline, v.headline
-    assert "中期未背书" in v.short_answer or "弱势跟随" in v.short_answer, v.short_answer
-    print(f"PASS test_weak_short_when_mid_neutral → {v.headline}")
+def test_t2_shown_only_in_scope_and_never_in_decision_fields():
+    g = build_verdict(_O("偏多", "偏多"), _FA(), None, None, None, instrument="gold", flow_direction="偏空")
+    assert len(g.exploratory) == 1 and "T2" in g.exploratory[0] and "偏空" in g.exploratory[0]
+    assert all("偏空" not in f for f in _decision(g))
+    for inst in ("wti", "qqq", "spy", None):                # 适用范围外不借用
+        assert build_verdict(None, None, None, None, None, instrument=inst, flow_direction="偏空").exploratory == []
+    assert not cl.decision_allowed("flow.direction.gold_silver", "direction")
 
 
-def test_no_fib_degrades_gracefully():
-    """无斐波腿/盈亏比闸门时不崩、给保守措辞。"""
-    o = _O("中性", "偏多", "偏多(弱)")
-    v = build_verdict(o, _FA(), None, None, None)
-    assert v.ok
-    assert "观望" in v.chase_answer, v.chase_answer
-    print("PASS test_no_fib_degrades_gracefully")
+def test_a_t1_claim_without_adapter_fails_loudly(monkeypatch):
+    fake = cl.Claim("x.t1", "p", "prediction", "s", "T1", "", ("direction",), prereg_ref="r",
+                    evidence_refs=("wall_space_vote",))
+    monkeypatch.setitem(cl.CLAIMS, "x.t1", fake)
+    with pytest.raises(NotImplementedError):
+        build_verdict()
 
 
-if __name__ == "__main__":
-    fns = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
-    for fn in fns:
-        fn()
-    print(f"\n{len(fns)} tests passed.")
+def test_verdict_card_render_has_no_legacy_bypass():
+    from undertow.report.html import render_verdict_section
+    v = build_verdict(_O("偏空", "偏空"), _FA(), _sig("看跌"), _fib("down", "0.236"), _rr("优", 3.0),
+                      instrument="silver", flow_direction="偏空")
+    html = render_verdict_section(v, "白银")
+    assert "证据门控" in html and NO_T1 in html and "探索观察" in html
+    for banned in ("做空？", "现价追？", "可空", "跟空", "已校准的中期趋势"):
+        assert banned not in html, banned

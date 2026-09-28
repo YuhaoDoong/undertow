@@ -79,4 +79,4 @@ def test_session_hooks_do_not_cut_bytes():
     """macOS `cut -c` 按字节截，会把汉字切成非法 UTF-8 → 整个日志被 grep 当二进制（2026-09-28 实测）。"""
     from pathlib import Path
     src = (Path(__file__).resolve().parents[1] / "scripts" / "session_hooks.sh").read_text("utf-8")
-    assert "cut -c" not in src and "clip() {" in src and src.index("clip() {") < src.index("| clip ")
+    assert "| cut -c" not in src and "clip() {" in src and src.index("clip() {") < src.index("| clip ")

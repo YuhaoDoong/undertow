@@ -114,7 +114,7 @@ class OptionQuote:
     timestamp: str = ""
 
 
-def _freshest(r: dict) -> tuple[float, str]:
+def _freshest(r: dict, now=None) -> tuple[float, str]:
     """从股票报价里挑【当前时段】的价。
 
     ⚠️ 不能用固定优先级。旧版写死「夜盘 > 盘后 > 盘前 > 常规」，
@@ -133,7 +133,7 @@ def _freshest(r: dict) -> tuple[float, str]:
     try:
         from datetime import datetime
         from zoneinfo import ZoneInfo
-        et = datetime.now(ZoneInfo("America/New_York"))
+        et = (now or datetime.now(ZoneInfo("America/New_York"))).astimezone(ZoneInfo("America/New_York"))
         if et.weekday() < 5:
             hm = et.hour * 60 + et.minute
             rth = 570 <= hm < 960          # 09:30 - 16:00 ET

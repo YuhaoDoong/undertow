@@ -108,12 +108,15 @@ def test_signed_liquidation_value_is_not_called_exposure():
 
 
 def test_render_contains_exit_basis_warning():
-    md = render_md([check_position("spread", _tqqq(), cost=90.0, stop=45.0)], net_assets=436.77)
-    # ⚠️ 断言不得与运行时刻相关：盘中/休市两版措辞不同，但「止损该看什么」
-    # 这条指引必须始终在场（休市版是"不得据本表判止损"）。
-    assert "真实可平仓" in md
-    assert ("止损判定用本表" in md) or ("不得据本表判止损" in md)
-    assert "净清算价值" in md and "不是风险敞口" in md
+    # ⚠️ 断言不得与运行时刻相关（旧版取真实时钟，美股盘中跑就失败）：固定盘中与休市两个时刻各测一次。
+    # 「止损该看什么」三种合法措辞：盘中且挂单量已核实 → 用本表；休市 → 不得据本表；挂单量未知 → 不作止损依据。
+    import datetime, zoneinfo
+    et = zoneinfo.ZoneInfo("America/New_York")
+    for now in (datetime.datetime(2026, 9, 28, 11, 0, tzinfo=et), datetime.datetime(2026, 9, 27, 11, 0, tzinfo=et)):
+        md = render_md([check_position("spread", _tqqq(), cost=90.0, stop=45.0)], net_assets=436.77, now=now)
+        assert "真实可平仓" in md
+        assert ("止损判定用本表" in md) or ("不得据本表判止损" in md) or ("不作止损依据" in md)
+        assert "净清算价值" in md and "不是风险敞口" in md
     print("PASS test_render_contains_exit_basis_warning")
 
 

@@ -54,7 +54,9 @@ def test_offhours_picks_latest_timestamp_not_fixed_priority():
                           "timestamp": "2026-09-18T23:59:46"},
              pre_market={"last": "60.10", "prev_close": "58.97",
                          "timestamp": "2026-09-18T13:30:00"})
-    v, kind, prev = _freshest(r)
+    import datetime, zoneinfo
+    sat = datetime.datetime(2026, 9, 19, 12, 0, tzinfo=zoneinfo.ZoneInfo("America/New_York"))   # 周六：固定时刻，不依赖运行时钟
+    v, kind, prev = _freshest(r, now=sat)
     assert kind == "盘后", f"应取时间戳最新的盘后段，得到 {kind}"
     assert abs(v - 60.00) < 1e-9
     assert abs(prev - 59.93) < 1e-9, "必须带回该时段自己的基准"

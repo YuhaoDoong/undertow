@@ -147,7 +147,7 @@ def scan(bars: list[dict], lo_idx: int, hi_idx: int) -> dict:
         touched_any = any(b["l"] <= zhi and b["h"] >= zlo for zlo, zhi in zones)
         if cands:
             _, side, zlo, zhi = min(cands)
-            h1_ev.append({"i": i, "date": b["date"], "side": side,
+            h1_ev.append({"i": i, "date": b["date"], "side": side, "zlo": zlo, "zhi": zhi,
                           "res": first_passage(bars, i, a_now, up_is_rebound=(side == "above"))})
         if not touched_any:
             if b["l"] < c1:

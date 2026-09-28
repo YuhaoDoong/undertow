@@ -152,7 +152,8 @@ class SnapshotStore:
             return None, None
         ca = rec.get("captured_at")
         ident = {"path": str(path), "sha256": hashlib.sha256(comp).hexdigest(),
-                 "captured_at": float(ca) if isinstance(ca, (int, float)) else None}
+                 "captured_at": float(ca) if isinstance(ca, (int, float)) else None,
+                 "raw": comp}                     # 同一次读取的原字节：调用方需要保全证据时直接存它（020-02）
         from undertow.collect import provenance
         provenance.reference_bytes("snapshot", f"{kind}/{symbol}/{on_date}", path, comp,
                                    captured_at=ident["captured_at"])          # 017 A02：同一份字节

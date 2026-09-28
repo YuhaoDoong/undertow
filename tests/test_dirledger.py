@@ -269,3 +269,35 @@ def test_forward_returns_across_month_boundary():
     bars = [(date(2026, 9, 30), 100, 101), (date(2026, 10, 1), 101, 102), (date(2026, 10, 2), 102, 104)]
     fr = skr.forward_returns(bars, date(2026, 9, 30), horizons=(1, 3), closed_through=date(2026, 10, 2))
     assert fr["end_3d"] == "2026-10-02" and fr["ret_3d"] == pytest.approx(0.04)
+
+
+# —— Codex 020-02：被正式预测消费的快照版本可恢复 ——
+def test_consumed_snapshot_recoverable_after_same_day_overwrite(tmp_path, monkeypatch):
+    from undertow import dirledger_cli as dl
+    from undertow.collect import cas
+    from undertow.collect.store import SnapshotStore
+    monkeypatch.setattr(dl, "DIR", tmp_path / "dl")
+    monkeypatch.setattr(cas, "ROOT", tmp_path / "cas")
+    st = SnapshotStore(root=tmp_path / "snap")
+    cap0 = datetime(2026, 9, 25, 5, 0, tzinfo=ET_).timestamp()
+    cap1 = datetime(2026, 9, 28, 5, 0, tzinfo=ET_).timestamp()
+    st.save("options", "GLD", {"v": "prev"}, on_date=S0, captured_at=cap0)
+    st.save("options", "GLD", {"v": "A"}, on_date=S1, captured_at=cap1)
+    monkeypatch.setattr(dl, "session_index", lambda s, sym: IDX)
+    seen = []
+
+    def reader(prv, cur, q, inst):
+        seen.append(cur)
+        return {"reading": f"读到{cur['v']}", "features": {"v": cur["v"]}, "complete": True}
+    monkeypatch.setattr("undertow.collect.cboe_options.snapshot_from_payload", lambda p, i, s: p)
+    status, row = dl.record_one("gold", "GLD", S1, st, datetime(2026, 9, 28, 6, 0, tzinfo=ET_), reader=reader)
+    assert status == "eligible" and row["curr_blob"]
+    st.save("options", "GLD", {"v": "B"}, on_date=S1, captured_at=cap1 + 60)       # 同日覆盖成 B
+    import shutil
+    shutil.rmtree(tmp_path / "snap")                                               # 原快照目录也没了
+    formal = dl.jl.load(dl._path("gold", "prospective"), dl.KEY)[0]
+    got = dl.restore_row_inputs(formal)
+    assert got["curr"]["payload"] == {"v": "A"} and got["curr"]["captured_at"] == cap1
+    assert got["prev"]["payload"] == {"v": "prev"}
+    again = reader(got["prev"]["payload"], got["curr"]["payload"], None, "gold")    # 用恢复的原文重算特征
+    assert again["features"] == formal["features"]

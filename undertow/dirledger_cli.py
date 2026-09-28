@@ -157,6 +157,19 @@ def build_row(inst: str, sym: str, session: date, store, *, now: datetime, repla
     for name, d, want in (("curr", cur_file, session), ("prev", prev_file, prev_td)):
         payload, ident = _load_ident(store, sym, d, problems, name)
         loaded[name] = payload
+        # 020-02：前瞻记录把本次读到的快照原字节整份存 cas，正式行引用其 sha256 —— 同日被覆盖也能恢复
+        if not replay and payload is not None and ident and ident.get("raw") is not None:
+            try:
+                from undertow.collect import cas
+                row[f"{name}_blob"] = cas.put_blob(ident["raw"])
+            except Exception as e:
+                row[f"{name}_blob"] = None
+                problems.append(f"{name}_blob_store_failed")
+                if name == "curr":
+                    curr_problems.append(f"{name}_blob_store_failed")
+                print(f"  ⚠️ {inst} {name} 快照原文存档失败：{type(e).__name__}: {e}", file=sys.stderr)
+        elif not replay and payload is not None:
+            row[f"{name}_blob"] = None
         ca = _ts(ident.get("captured_at")) if ident else None
         row[f"{name}_sha"] = (ident.get("sha256") or "")[:16] or None if ident else None
         row[f"{name}_captured_at"] = ca.isoformat() if ca else None
@@ -202,6 +215,25 @@ def build_row(inst: str, sym: str, session: date, store, *, now: datetime, repla
     row["identity_problems"] = problems
     row["identity_ok"] = not problems
     return row
+
+
+def restore_row_inputs(row: dict) -> dict:
+    """按正式记录引用的整份原字节恢复两份快照 payload 与 captured_at（不读 data/snapshots，不联网）。"""
+    import gzip as _gz
+    from undertow.collect import cas
+    out = {}
+    for name in ("prev", "curr"):
+        sha = row.get(f"{name}_blob")
+        if not sha and row.get(f"{name}_sha"):
+            # 020-02 上线前冻结的行只有 16 位 sha 前缀：按前缀找整份原文（找不到就是找不到，不补造）
+            hits = sorted((cas.ROOT / "blobs").glob(f"{row[f'{name}_sha'][:2]}/{row[f'{name}_sha']}*.bin"))
+            sha = hits[0].stem if len(hits) == 1 else None
+        if not sha:
+            out[name] = None
+            continue
+        rec = json.loads(_gz.decompress(cas.get_blob(sha)).decode("utf-8"))
+        out[name] = {"payload": rec.get("payload"), "captured_at": rec.get("captured_at"), "sha256": sha}
+    return out
 
 
 def _append_attempt(inst: str, row: dict, status: str, note: str = "", rule_version: str | None = None) -> None:
@@ -263,7 +295,7 @@ def _record_level(inst: str, row: dict, now: datetime, rule_version: str | None)
     与 H1 共享截止政策：截止前首份合格冻结；截止后无记录 → missing_at_cutoff。"""
     lv = row.get("curr_level")
     lrow = {k: row.get(k) for k in (KEY, "schema", "instrument", "session", "rule_version", "recorded_at", "mode",
-                                     "decision_cutoff", "curr_file", "curr_sha", "curr_captured_at")}
+                                     "decision_cutoff", "curr_file", "curr_sha", "curr_blob", "curr_captured_at")}
     probs = list(row["level_identity_problems"]) if "level_identity_problems" in row else ["curr_file_missing"]
     lrow.update({"level": lv, "identity_problems": probs, "identity_ok": not probs,
                  "quality_ok": isinstance(lv, dict) and "error" not in lv and lv.get("skew25_pp") is not None

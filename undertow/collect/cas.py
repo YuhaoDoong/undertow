@@ -205,3 +205,38 @@ def verify(*, root: Path | None = None) -> dict:
         except Exception as e:
             bad.append((sha, f"{type(e).__name__}: {e}"))
     return {"recipes": n, "ok": n - len(bad), "bad": bad}
+
+
+# —— 整份原样存储（Codex 020-02：被正式预测消费的快照版本必须可恢复）——
+# 快照是已压缩的 gzip，分块去重几乎无效；这里按原字节整份存，文件名即 sha256。与 data/snapshots 下同一版本
+# 字节完全相同 → 该版本也被 git 提交时，git 按内容只存一份 blob，几乎不增加仓库体积；
+# 若同日被覆盖、中间版本从未提交，这里的副本就是唯一证据。
+
+
+def _blob_path(root: Path, sha: str) -> Path:
+    return root / "blobs" / sha[:2] / f"{sha}.bin"
+
+
+def put_blob(raw: bytes, *, root: Path | None = None) -> str:
+    """原样存入并回读核对；已有且完好 → 直接返回；已有但损坏 → 隔离保留后重写。返回 sha256。"""
+    root = root or ROOT
+    sha = hashlib.sha256(raw).hexdigest()
+    p = _blob_path(root, sha)
+    if p.exists():
+        old = p.read_bytes()
+        if hashlib.sha256(old).hexdigest() == sha:
+            return sha
+        quarantine(p, old)
+    _atomic(p, raw, lambda b: b == raw)
+    return sha
+
+
+def get_blob(sha: str, *, root: Path | None = None) -> bytes:
+    root = root or ROOT
+    p = _blob_path(root, sha)
+    if not p.exists():
+        raise CasCorrupt(f"缺整份对象 {sha}")
+    b = p.read_bytes()
+    if hashlib.sha256(b).hexdigest() != sha:
+        raise CasCorrupt(f"整份对象 {sha} 内容与名字不符")
+    return b

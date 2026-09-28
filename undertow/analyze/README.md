@@ -88,3 +88,9 @@
 imports `core`（+ 少量分析层内部互引，如 `outlook` 吃 gamma/flow 结果；`portfolio` 吃 blackscholes）；**不 import** `collect`/`report`（`portfolio` 只吃调用方喂入的 `InstrumentContext`，账户数据由 CLI 层从 `collect/longbridge_account` 取后注入）。输出只作**波段级风险情境**，非交易指令、非投资建议。
 - `direction.py` —— **方向裁决与弃权**。区分【硬弃权】（无前日快照/ΔOI 全零/数据已过期，属逻辑约束）与【软弃权】（压力比不足/两口径反向，阈值**未校准**）。所有软弃权理由强制带「未经校准」标注；实测没有任何门槛的 Wilson 95% 下界超过 50%。
 - `structure_read.py` —— 机构口径的结构读数，**不输出方向票**（防守强度轴与多空正交）。
+
+### `conviction.py`（开发期，2026-09-28）
+期权多层同向读数：S（同到期 Δskew25）、F（近价 ±5% 可用腿按 |ΔOI×Δ| 推断分侧，纯净度未知不计入）、
+V（ΔATM ≥ +0.3pp 时取数据日价格方向）。H1 = S=F≠0 且 V∈{0,S}；任一层未知 → None（不当 0）。
+规则 `conviction-dev-20260928` 未冻结：`dirledger conviction-record` 每日盘前只记录分量，不计分、不进研报。
+已知边界：三层来自同一 IV 曲面，不是独立证据；F 是 OI/IV 推断的买卖方，不是已确认的主动方；阈值未校准。

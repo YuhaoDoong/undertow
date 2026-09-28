@@ -101,13 +101,19 @@ def _ts(x) -> datetime | None:
     return datetime.fromtimestamp(x, timezone.utc) if x is not None else None
 
 
-def build_row(inst: str, sym: str, session: date, store, *, now: datetime, replay: bool, index=None) -> dict:
+def skew_reader(prev_snap, curr_snap, quote_day, inst) -> dict:
+    return skr.read(prev_snap.contracts, curr_snap.contracts, asof=quote_day)
+
+
+def build_row(inst: str, sym: str, session: date, store, *, now: datetime, replay: bool, index=None,
+              reader=None, rule_version: str | None = None) -> dict:
     """某品种某 session 的读数行（纯组装；读快照由 store 提供）。返回行带 identity（身份检查结果）。
 
     当日快照 = 认证到 session 的那份；前一份 = 认证到 session 前一交易日的那份。缺任一 → 输入不齐（不顶替）。"""
     from undertow.collect.cboe_options import snapshot_from_payload
     row = {KEY: f"{inst}|{session.isoformat()}", "schema": LEDGER_SCHEMA, "instrument": inst,
-           "session": session.isoformat(), "rule_version": skr.RULE["version"], "recorded_at": now.astimezone(timezone.utc).isoformat(),
+           "session": session.isoformat(), "rule_version": rule_version or skr.RULE["version"],
+           "recorded_at": now.astimezone(timezone.utc).isoformat(),
            "mode": "replay" if replay else "prospective", "session_map": SESSION_MAP,
            "decision_cutoff": open_time(session).isoformat()}
     idx = index if index is not None else session_index(store, sym)
@@ -142,9 +148,9 @@ def build_row(inst: str, sym: str, session: date, store, *, now: datetime, repla
         if "curr_file_missing" not in problems and "prev_file_missing" not in problems:
             problems.append("payload_unloadable")
     else:
-        cur = snapshot_from_payload(cur_p, inst, sym).contracts
-        prv = snapshot_from_payload(prev_p, inst, sym).contracts
-        res = skr.read(prv, cur, asof=quote_day)
+        cur = snapshot_from_payload(cur_p, inst, sym)
+        prv = snapshot_from_payload(prev_p, inst, sym)
+        res = (reader or skew_reader)(prv, cur, quote_day, inst)
         row.update({"reading": res["reading"], "reason": res.get("reason", ""), "features": res.get("features"),
                     "inputs_complete": True})
     row["identity_problems"] = problems
@@ -152,8 +158,8 @@ def build_row(inst: str, sym: str, session: date, store, *, now: datetime, repla
     return row
 
 
-def _append_attempt(inst: str, row: dict, status: str, note: str = "") -> None:
-    p = _path(inst, "attempts")
+def _append_attempt(inst: str, row: dict, status: str, note: str = "", rule_version: str | None = None) -> None:
+    p = _path(inst, "attempts", rule_version)
     rec = dict(row, attempt_status=status, attempt_note=note)
     rec.pop(KEY, None)
     jl._check_finite(rec)
@@ -184,9 +190,10 @@ def decide(existing: dict | None, row: dict, now: datetime) -> tuple[str, dict |
                                      reason="截止（开盘）前没有身份合格的记录；截止后的读数只进 attempts，不补成预测")
 
 
-def record_one(inst: str, sym: str, session: date, store, now: datetime) -> tuple[str, dict]:
-    row = build_row(inst, sym, session, store, now=now, replay=False)
-    p = _path(inst, "prospective")
+def record_one(inst: str, sym: str, session: date, store, now: datetime, *, reader=None,
+               rule_version: str | None = None) -> tuple[str, dict]:
+    row = build_row(inst, sym, session, store, now=now, replay=False, reader=reader, rule_version=rule_version)
+    p = _path(inst, "prospective", rule_version)
     existing = next((r for r in jl.load(p, KEY) if r[KEY] == row[KEY]), None)
     status, formal = decide(existing, row, now)
     if formal is not None:
@@ -198,7 +205,7 @@ def record_one(inst: str, sym: str, session: date, store, now: datetime) -> tupl
         status_for_attempt = "late"
     else:
         status_for_attempt = status
-    _append_attempt(inst, row, status_for_attempt, note)
+    _append_attempt(inst, row, status_for_attempt, note, rule_version)
     return status, row
 
 
@@ -406,6 +413,46 @@ def cmd_author_add(args) -> int:
     return 0
 
 
+CONVICTION_INSTRUMENTS = ("gold", "silver", "wti", "qqq", "tqqq", "tlt", "spy", "iwm")
+_CONV_LABEL = {1: "多层看涨", -1: "多层看跌", 0: "无", None: "未知"}
+
+
+def conviction_reader(prev_snap, curr_snap, quote_day, inst) -> dict:
+    """期权多层同向（开发期规则，analyze/conviction.py）。只记录原始分量与判定，不计分、不进研报。"""
+    from undertow.analyze import conviction as cv
+    from undertow.analyze import structure_read as sr
+    from undertow.analyze.flow import _live, analyze_flow
+    fa = analyze_flow(prev_snap, curr_snap, today=quote_day, prev_date="prev", curr_date="curr")
+    read = sr.analyze_structure(fa, _live(prev_snap, quote_day, 60), _live(curr_snap, quote_day, 60))
+    feats = cv.layers(fa, read, prev_snap.spot, curr_snap.spot)
+    return {"reading": _CONV_LABEL[feats["H1"]], "reason": "" if read.ok else (read.reason or ""), "features": feats}
+
+
+def cmd_conviction_record(args) -> int:
+    """每个交易日盘前记录多层读数（开发期，status 仍按 v2 截止政策；不得称确认样本）。"""
+    from undertow.analyze import conviction as cv
+    from undertow.collect.store import SnapshotStore
+    from undertow.core.config import load_config
+    cfg, store = load_config(), SnapshotStore()
+    session = market_today()
+    if mc.is_trading_day(session) is not True:
+        print(f"{session} 非交易日（或日历未覆盖）：不记录。")
+        return 0 if mc.is_trading_day(session) is False else 1
+    rc, now = 0, _now()
+    for inst in CONVICTION_INSTRUMENTS:
+        try:
+            sym = cfg.get(inst).options.symbol
+            status, row = record_one(inst, sym, session, store, now, reader=conviction_reader,
+                                     rule_version=cv.RULE["version"])
+        except Exception as e:
+            print(f"  ⚠️ {inst}：{type(e).__name__}: {e}", file=sys.stderr); rc = 1; continue
+        f = row.get("features") or {}
+        print(f"  {inst:6s} {session} {row['reading']}（{status}）S={f.get('S')} F={f.get('F')} V={f.get('V')}"
+              + (f"；身份问题：{','.join(row['identity_problems'])}" if row["identity_problems"] else ""))
+    print(f"  规则 {cv.RULE['version']}：{cv.RULE['status']}")
+    return rc
+
+
 def cmd_migrate(args) -> int:
     for m in migrate_v0():
         print("  归档", m)
@@ -419,6 +466,8 @@ def register(sub):
     r.add_argument("--as-of"); r.set_defaults(func=cmd_record)
     s = ss.add_parser("score", help="回填 1/5/10 日走势并按读数分组汇总（含作者判断，私有）")
     s.set_defaults(func=cmd_score)
+    c = ss.add_parser("conviction-record", help="盘前记录期权多层同向读数（开发期规则，只记录不计分）")
+    c.set_defaults(func=cmd_conviction_record)
     m = ss.add_parser("migrate-v0", help="把无版本旧台账移入 _superseded_v0_ledger/（保留）")
     m.set_defaults(func=cmd_migrate)
     a = ss.add_parser("author-add", help="登记外部作者的一条判断（按发布时刻；私有、不入库）")

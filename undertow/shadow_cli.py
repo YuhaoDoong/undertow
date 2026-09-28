@@ -882,6 +882,21 @@ def cmd_sample(args) -> int:
                     quotes[s] = ({"bid": d.bid, "ask": d.ask, "bid_size": d.bid_size, "ask_size": d.ask_size,
                                   "error": d.error or None} if d is not None
                                  else {"bid": None, "ask": None, "bid_size": 0, "ask_size": 0, "error": err})
+                # 当场重试一次出错的代码（2026-09-28 IWM 10:00 桶：一次 connect timeout，下次唤醒已进下一桶，
+                # 这一格就永久缺了）。重试结果另记 retried=True；仍失败保留原错误，不改变桶状态判定逻辑。
+                retry = [s for s in need if quotes[s].get("error")] if SAMPLE_INLINE_RETRY else []
+                if retry:
+                    import time as _t
+                    _t.sleep(SAMPLE_RETRY_SLEEP_S)
+                    try:
+                        dep2 = fetch_depth(retry)
+                    except Exception:
+                        dep2 = {}
+                    for s in retry:
+                        d = dep2.get(s)
+                        if d is not None and not d.error:
+                            quotes[s] = {"bid": d.bid, "ask": d.ask, "bid_size": d.bid_size, "ask_size": d.ask_size,
+                                         "error": None, "retried": True}
             under = None
             if need_under:
                 try:
@@ -1192,6 +1207,8 @@ def cmd_bars(args) -> int:
     return 1 if issues else 0
 
 
+SAMPLE_INLINE_RETRY = True      # 采样：出错代码当场重试一次（下次唤醒可能已进下一桶）
+SAMPLE_RETRY_SLEEP_S = 2.0
 INTRADAY_PACE_S = 0.55          # 长桥行情接口约 60 次 / 30 秒（官方文档写于 history candlestick 页）；留余量
 
 

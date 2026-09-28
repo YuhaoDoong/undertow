@@ -975,6 +975,7 @@ def _sample_env(tmp_path, monkeypatch, depth_fn, under_fn=lambda syms: {}, minut
     monkeypatch.setattr(sc, "_instruments", lambda cfg, names: [gold])
     monkeypatch.setattr(sc, "SAMPLE_DIR", tmp_path / "samples")
     monkeypatch.setattr(sc, "market_today", lambda: date(2026, 9, 28))
+    monkeypatch.setattr(sc, "SAMPLE_INLINE_RETRY", False)        # 这组测试验的是跨唤醒重试语义（N14-01）；当场重试另测
     calls = []
     monkeypatch.setattr(lq, "fetch_depth", lambda syms: calls.append(list(syms)) or depth_fn(syms))
     monkeypatch.setattr(lq, "fetch_stock_quotes", under_fn)
@@ -1191,3 +1192,21 @@ def test_session_hooks_fieldcheck_phases():
                      ("close", "ET_MIN >= 980")):
         assert f"{cond} )); then fieldcheck {ph}" in src
     assert src.index("thesisq() {") < src.index("thesisq pre") and "thesisq close" in src
+
+
+def test_sample_inline_retry_recovers_transient_error(tmp_path, monkeypatch):
+    """2026-09-28 IWM 10:00：一次 connect timeout，下次唤醒已进下一桶 → 当场重试一次补回。"""
+    from types import SimpleNamespace as NS
+    state = {"n": 0}
+
+    def depth(syms):
+        state["n"] += 1
+        if state["n"] == 1:
+            return {s: NS(bid=None, ask=None, bid_size=0, ask_size=0, error="connect timeout") for s in syms}
+        return {s: NS(bid=1.0, ask=1.1, bid_size=5, ask_size=5, error=None) for s in syms}
+    sc, A, calls, out, clock = _sample_env(tmp_path, monkeypatch, depth)
+    monkeypatch.setattr(sc, "SAMPLE_INLINE_RETRY", True)
+    monkeypatch.setattr(sc, "SAMPLE_RETRY_SLEEP_S", 0)
+    sc.cmd_sample(A())
+    rec = [json.loads(l) for l in out.read_text().splitlines()][-1]
+    assert len(calls) == 2 and all(q["error"] is None and q.get("retried") for q in rec["quotes"].values())

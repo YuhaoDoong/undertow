@@ -119,6 +119,13 @@ def replay(inst: str, sym: str) -> list[dict]:
     return rows
 
 
+def _closed():
+    """已收市（含缓冲）的最后交易日：长桥日线可能含当日未收盘的 bar，不能当最终结果（Codex 017 D17-03）。"""
+    from datetime import timezone
+    from undertow.dirledger_cli import last_closed_session
+    return last_closed_session(datetime.now(timezone.utc))
+
+
 def binom_two_sided(k: int, n: int, p: float) -> float | None:
     if n == 0:
         return None
@@ -158,7 +165,7 @@ def compare_author(inst: str, rows: list[dict], bars) -> dict | None:
         s = session_after(datetime.fromisoformat(c["posted_at"]))
         if s is None:
             continue
-        c = {**c, "session": s.isoformat(), "outcome": skr.forward_returns(bars, s)}
+        c = {**c, "session": s.isoformat(), "outcome": skr.forward_returns(bars, s, closed_through=_closed())}
         by_sess.setdefault((c.get("type", "期权"), s.isoformat()), []).append(c)
     last = {k: v[-1] for k, v in by_sess.items()}              # 同 session 多帖取最后一帖（开盘前最新看法）
     opt = [c for (t, _), c in sorted(last.items()) if t == "期权"]
@@ -207,7 +214,7 @@ def main():
     bars, src = _bars(sym)
     rows = replay(a.inst, sym)
     for r in rows:
-        r["outcome"] = skr.forward_returns(bars, date.fromisoformat(r["session"]))
+        r["outcome"] = skr.forward_returns(bars, date.fromisoformat(r["session"]), closed_through=_closed())
     OUT.mkdir(parents=True, exist_ok=True)
     p = OUT / f"{a.inst}.jsonl"
     tmp = p.with_suffix(".tmp")

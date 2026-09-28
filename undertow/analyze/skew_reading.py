@@ -89,16 +89,48 @@ def read(prev_contracts, curr_contracts, *, asof: date) -> dict:
     return {"rule_version": RULE["version"], "reading": reading, "features": feats}
 
 
-def forward_returns(bars: list[tuple[date, float, float]], session: date, horizons=(1, 5, 10)) -> dict:
-    """bars: [(交易日, 开盘, 收盘)] 升序。基准 = session 当日开盘（信号开盘前可得、最早可执行价）；
-    h 日结果 = 第 h 个交易日（含 session 当日）的收盘。数据不够 → None（未成熟），不折零。"""
-    idx = next((i for i, b in enumerate(bars) if b[0] == session), None)
-    if idx is None or not bars[idx][1]:
-        return {"base_open": None, **{f"ret_{h}d": None for h in horizons}}
-    base = bars[idx][1]
-    out = {"base_date": session.isoformat(), "base_open": base}
+def forward_returns(bars: list[tuple[date, float, float]], session: date, horizons=(1, 5, 10), *,
+                    closed_through: date | None = None) -> dict:
+    """bars: [(交易日, 开盘, 收盘)]。基准 = session 当日开盘（信号开盘前可得、最早可执行价）；
+    h 日结果 = 按【交易日历】从 session 起第 h 个交易日（含 session 当日）的收盘。
+
+    Codex 017 D17-03：旧版按数组下标取第 h 根 bar —— 缺一天行情就把后一天当成终点（缺 9/29 时 h=2 取到 9/30）。
+    现在先用日历定终点，再找该日价格：
+      · 终点晚于 closed_through（尚未收市、或调用方未确认已收市）→ status=immature，结果 None；
+      · 终点已收市但该日无价格 → status=missing_price，结果 None（不顺延）；
+      · 日历不覆盖 → status=calendar_unknown。
+    closed_through=None 时按 bars 里最后一根的日期（旧行为；调用方应显式传入已收市的最后交易日）。"""
+    from undertow.core import market_calendar as mc
+    by = {b[0]: b for b in bars}
+    last = closed_through if closed_through is not None else (max(by) if by else None)
+    out: dict = {"base_date": session.isoformat(), "closed_through": last.isoformat() if last else None}
+    b0 = by.get(session)
+    if last is None or session > last:
+        out.update({"base_open": None, "base_status": "immature"})
+    elif b0 is None or not b0[1]:
+        out.update({"base_open": None, "base_status": "missing_price"})
+    else:
+        out.update({"base_open": b0[1], "base_status": "ok"})
+    far = max(horizons)
+    days = [session]
+    while len(days) < far:
+        nx = mc.next_trading_day(days[-1])
+        if nx is None:
+            break
+        days.append(nx)
     for h in horizons:
-        j = idx + h - 1
-        out[f"ret_{h}d"] = round(bars[j][2] / base - 1, 6) if j < len(bars) else None
-        out[f"end_{h}d"] = bars[j][0].isoformat() if j < len(bars) else None
+        end = days[h - 1] if h <= len(days) else None
+        out[f"end_{h}d"] = end.isoformat() if end else None
+        if end is None:
+            st = "calendar_unknown"
+        elif last is None or end > last:
+            st = "immature"
+        elif end not in by or not by[end][2]:
+            st = "missing_price"
+        elif out["base_open"] is None:
+            st = out["base_status"]
+        else:
+            st = "ok"
+        out[f"status_{h}d"] = st
+        out[f"ret_{h}d"] = round(by[end][2] / out["base_open"] - 1, 6) if st == "ok" else None
     return out

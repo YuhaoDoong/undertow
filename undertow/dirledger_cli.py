@@ -1,19 +1,32 @@
 """方向判断台账（用户 2026-09-28：「[外部作者]的方向性判断……你能否也给出这样类似的方向性判断」）。
 
 两条独立记录、同一套价格计分：
-- 我们的偏度读数（analyze/skew_reading.py，预登记 docs/prereg/2026-09-28_skew_reading_v1.md）：
-  每个交易日开盘前自动记录，首份记录冻结（jsonl_ledger.insert_frozen），写 data/history/direction_ledger/（入库）。
+- 我们的偏度读数（analyze/skew_reading.py，预登记 docs/prereg/2026-09-28_skew_reading_v1.md）。
 - 外部作者的判断：用户给帖子后手动登记，按【发布时刻】对应到第一个在其后开盘的交易日，
   写 data/soul/author_calls.jsonl（私有、gitignore —— 付费内容，不入库；只存概括，不存原文）。
-计分：基准 = 该交易日开盘价（信号开盘前可得、最早可执行），结果 = 第 1/5/10 个交易日收盘（含当日）。
+
+台账 v2（Codex 017 D17-01～04）：
+- 目录按规则版本分开：data/history/direction_ledger/<rule_version>/{prospective,attempts,replay}/<inst>.jsonl，
+  v2 规则不会与 v1 冲突或覆盖。旧的无版本文件归档在 _superseded_v0_ledger/。
+- attempts/ 只追加：每次运行（含数据不足、晚到、冻结后输入变化）都留一行，不删不改。
+- prospective/ 每个 (品种, 交易日) 至多一条正式记录，**截止 = 该交易日 09:30 ET 开盘**：
+  · 截止前第一次【身份合格】的计算冻结为正式预测（status=eligible）。合格 = 当日与前一交易日两份快照都存在、
+    抓取时刻都已知且 ≤ 记录时刻 < 开盘、两份都经 captured_at 认证到对应交易日、读数已按规则算出。
+  · 截止前输入不齐 → 只记 attempts，不占正式 key（旧版把凌晨第一次「数据不足」冻结，快照到齐后反而冲突）。
+  · 截止后仍无正式记录 → 写一条 status=missing_at_cutoff（缺失本身入账，不能事后补成预测）；截止后算出的读数只进 attempts（late）。
+  · 已有正式记录时重复运行：输入相同 → exists（保留首次记录时刻）；输入变了 → attempts 记 changed_after_freeze，正式记录不动。
+- 计分：终点按交易日历（skew_reading.forward_returns），缺行情不顺延、未收市不计；只有 eligible 行进前瞻汇总，
+  其余按原因列分母。结果变动时旧结果留在 outcome_history。汇总只是描述，不是预登记检验。
 只读行情，从不下单。
 """
 from __future__ import annotations
 
 import hashlib
 import json
+import os
+import shutil
 import sys
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time as dtime, timezone
 from pathlib import Path
 
 from undertow.analyze import skew_reading as skr
@@ -24,28 +37,52 @@ from undertow.core.clock import ET, market_today
 DIR = Path("data/history/direction_ledger")
 AUTHOR = Path("data/soul/author_calls.jsonl")
 KEY = "key"
-POST_FIELDS = ("outcome", "scored_at")
+LEDGER_SCHEMA = 2
+POST_FIELDS = ("outcome", "scored_at", "outcome_history")
+SESSION_MAP = "captured_at→certify_session（NYSE 日历）"
+OPEN = dtime(9, 30)
+CLOSE_BUFFER_MIN = 15          # 收市后 15 分钟才认为日线收盘价定格（运营缓冲，非统计阈值）
 
 
 def _frozen(r: dict) -> dict:
     return {k: v for k, v in r.items() if k not in POST_FIELDS}
 
 
-def _path(inst: str, replay: bool) -> Path:
-    return (DIR / "replay" if replay else DIR) / f"skew_{inst}.jsonl"
+def vdir(rule_version: str | None = None) -> Path:
+    return DIR / (rule_version or skr.RULE["version"])
+
+
+def _path(inst: str, kind: str, rule_version: str | None = None) -> Path:
+    """kind ∈ prospective / attempts / replay。"""
+    return vdir(rule_version) / kind / f"{inst}.jsonl"
 
 
 def _now():
     return datetime.now(timezone.utc)
 
 
-SESSION_MAP = "captured_at→certify_session（NYSE 日历）"
+def open_time(session: date) -> datetime:
+    return datetime.combine(session, OPEN, tzinfo=ET)
+
+
+def last_closed_session(now: datetime) -> date | None:
+    """now 时刻已收市（含缓冲）的最后一个交易日。"""
+    t = now.astimezone(ET)
+    d = t.date()
+    ct = mc.close_time(d)
+    if ct:
+        hh, mm = map(int, ct.split(":"))
+        if (t.hour * 60 + t.minute) >= hh * 60 + mm + CLOSE_BUFFER_MIN:
+            return d
+    return mc.prev_trading_day(d)
 
 
 def session_index(store, sym: str) -> dict:
     """{交易日: 快照文件日}：按【实际抓取时刻】认证每份快照可用于哪个交易日（盘前→当日；盘后/周末→下一交易日；
     盘中→剔除）。早期快照文件日与数据日大量错位（记忆 snapshot-date-alignment-p0），不能用文件名日期。
-    同一交易日有多份时取抓取最晚的一份（报价最新）。"""
+    同一交易日有多份时取抓取最晚的一份（报价最新）。
+    ⚠️ 这只认证「可用于哪个交易日」，不认证「在某次决策时已经可得」—— 前瞻记录另查 captured_at ≤ recorded_at；
+    历史重放用它时只能称「盘前最后版本重放」（Codex 018 #1）。"""
     from undertow.core.clock import certify_session
     tdays = mc.trading_days(date(2026, 1, 1), market_today()) or []
     best: dict = {}
@@ -60,65 +97,157 @@ def session_index(store, sym: str) -> dict:
     return {s: d for s, (d, _) in best.items()}
 
 
-def build_row(inst: str, sym: str, session: date, store, *, now: datetime, replay: bool, index=None) -> dict:
-    """某品种某 session 的读数行（纯组装；读快照由 store 提供）。
+def _ts(x) -> datetime | None:
+    return datetime.fromtimestamp(x, timezone.utc) if x is not None else None
 
-    当日快照 = 认证到 session 的那份；前一份 = 认证到 session 前一交易日的那份。缺任一 → 数据不足（不顶替）。"""
+
+def build_row(inst: str, sym: str, session: date, store, *, now: datetime, replay: bool, index=None) -> dict:
+    """某品种某 session 的读数行（纯组装；读快照由 store 提供）。返回行带 identity（身份检查结果）。
+
+    当日快照 = 认证到 session 的那份；前一份 = 认证到 session 前一交易日的那份。缺任一 → 输入不齐（不顶替）。"""
     from undertow.collect.cboe_options import snapshot_from_payload
-    row = {KEY: f"{inst}|{session.isoformat()}", "instrument": inst, "session": session.isoformat(),
-           "rule_version": skr.RULE["version"], "recorded_at": now.isoformat(),
-           "mode": "replay" if replay else "prospective", "session_map": SESSION_MAP}
+    row = {KEY: f"{inst}|{session.isoformat()}", "schema": LEDGER_SCHEMA, "instrument": inst,
+           "session": session.isoformat(), "rule_version": skr.RULE["version"], "recorded_at": now.astimezone(timezone.utc).isoformat(),
+           "mode": "replay" if replay else "prospective", "session_map": SESSION_MAP,
+           "decision_cutoff": open_time(session).isoformat()}
     idx = index if index is not None else session_index(store, sym)
     prev_td = mc.prev_trading_day(session)
     quote_day = prev_td                       # 认证到 session 的快照，其报价 ≈ session 前一交易日收盘
     cur_file, prev_file = idx.get(session), (idx.get(prev_td) if prev_td else None)
-    cur_p = store.load("options", sym, cur_file) if cur_file else None
-    prev_p = store.load("options", sym, prev_file) if prev_file else None
-    ca = store.captured_at("options", sym, cur_file) if cur_file else None
     row.update({"curr_file": cur_file.isoformat() if cur_file else None,
                 "prev_file": prev_file.isoformat() if prev_file else None,
-                "quote_day": quote_day.isoformat() if quote_day else None,
-                "curr_captured_at": datetime.fromtimestamp(ca, timezone.utc).isoformat() if ca else None})
+                "quote_day": quote_day.isoformat() if quote_day else None})
+    problems = []
     for name, d in (("curr", cur_file), ("prev", prev_file)):
         p = store.path_of("options", sym, d) if d else None
         row[f"{name}_sha"] = hashlib.sha256(p.read_bytes()).hexdigest()[:16] if (p and p.exists()) else None
-    open_t = datetime(session.year, session.month, session.day, 9, 30, tzinfo=ET)
-    row["before_open"] = now < open_t and (ca is None or datetime.fromtimestamp(ca, timezone.utc) < open_t)
+        ca = _ts(store.captured_at("options", sym, d)) if d else None
+        row[f"{name}_captured_at"] = ca.isoformat() if ca else None
+        if d is None:
+            problems.append(f"{name}_file_missing")
+        elif ca is None:
+            problems.append(f"{name}_captured_at_unknown")
+        elif ca > now:
+            problems.append(f"{name}_captured_after_record")
+        if d is not None and row[f"{name}_sha"] is None:
+            problems.append(f"{name}_file_unreadable")
+    if now >= open_time(session):
+        problems.append("recorded_after_open")
+    row["before_open"] = now < open_time(session)
+    cur_p = store.load("options", sym, cur_file) if cur_file else None
+    prev_p = store.load("options", sym, prev_file) if prev_file else None
     if cur_p is None or prev_p is None:
-        row.update({"reading": "数据不足", "reason": "认证到当日或前一交易日的快照缺失（不以更早快照顶替）"})
-        return row
-    cur = snapshot_from_payload(cur_p, inst, sym).contracts
-    prv = snapshot_from_payload(prev_p, inst, sym).contracts
-    res = skr.read(prv, cur, asof=quote_day)
-    row.update({"reading": res["reading"], "reason": res.get("reason", ""), "features": res.get("features")})
+        row.update({"reading": "数据不足", "reason": "认证到当日或前一交易日的快照缺失（不以更早快照顶替）",
+                    "inputs_complete": False})
+        if "curr_file_missing" not in problems and "prev_file_missing" not in problems:
+            problems.append("payload_unloadable")
+    else:
+        cur = snapshot_from_payload(cur_p, inst, sym).contracts
+        prv = snapshot_from_payload(prev_p, inst, sym).contracts
+        res = skr.read(prv, cur, asof=quote_day)
+        row.update({"reading": res["reading"], "reason": res.get("reason", ""), "features": res.get("features"),
+                    "inputs_complete": True})
+    row["identity_problems"] = problems
+    row["identity_ok"] = not problems
     return row
+
+
+def _append_attempt(inst: str, row: dict, status: str, note: str = "") -> None:
+    p = _path(inst, "attempts")
+    rec = dict(row, attempt_status=status, attempt_note=note)
+    rec.pop(KEY, None)
+    jl._check_finite(rec)
+    with jl.locked(p):
+        with open(p, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(rec, ensure_ascii=False, allow_nan=False) + "\n")
+            fh.flush(); os.fsync(fh.fileno())
+
+
+def _input_sig(r: dict) -> tuple:
+    return (r.get("curr_sha"), r.get("prev_sha"), r.get("rule_version"))
+
+
+def decide(existing: dict | None, row: dict, now: datetime) -> tuple[str, dict | None]:
+    """正式记录政策（纯函数，便于测试）。返回 (状态, 要插入的正式行或 None)。"""
+    after = now >= open_time(date.fromisoformat(row["session"]))
+    if existing is not None:
+        if existing.get("status") == "eligible" and _input_sig(existing) != _input_sig(row) and row.get("inputs_complete"):
+            return "changed_after_freeze", None
+        return "exists", None
+    if not after:
+        if row["identity_ok"]:
+            return "eligible", dict(row, status="eligible")
+        return "not_ready", None
+    miss = {k: row.get(k) for k in (KEY, "schema", "instrument", "session", "rule_version", "recorded_at", "mode",
+                                     "decision_cutoff", "curr_file", "prev_file", "identity_problems")}
+    return "missing_at_cutoff", dict(miss, status="missing_at_cutoff", reading=None,
+                                     reason="截止（开盘）前没有身份合格的记录；截止后的读数只进 attempts，不补成预测")
+
+
+def record_one(inst: str, sym: str, session: date, store, now: datetime) -> tuple[str, dict]:
+    row = build_row(inst, sym, session, store, now=now, replay=False)
+    p = _path(inst, "prospective")
+    existing = next((r for r in jl.load(p, KEY) if r[KEY] == row[KEY]), None)
+    status, formal = decide(existing, row, now)
+    if formal is not None:
+        st = jl.insert_frozen(p, formal, key_field=KEY, frozen=_frozen)
+        status = status if st == "inserted" else "exists"
+    note = {"not_ready": "截止前输入/身份未齐，等下一次运行", "changed_after_freeze": "正式记录已冻结，本次输入不同，只留痕",
+            "missing_at_cutoff": "截止后首次运行，缺失入账", "exists": "", "eligible": "冻结为正式预测"}.get(status, "")
+    if status == "exists" and now >= open_time(session):
+        status_for_attempt = "late"
+    else:
+        status_for_attempt = status
+    _append_attempt(inst, row, status_for_attempt, note)
+    return status, row
 
 
 def cmd_record(args) -> int:
     from undertow.collect.store import SnapshotStore
     from undertow.core.config import load_config
     cfg, store = load_config(), SnapshotStore()
-    replay = bool(args.as_of)
-    session = date.fromisoformat(args.as_of) if replay else market_today()
+    if args.as_of:
+        return _record_replay(cfg, store, date.fromisoformat(args.as_of))
+    session = market_today()
     if mc.is_trading_day(session) is not True:
         print(f"{session} 非交易日（或日历未覆盖）：不记录。")
         return 0 if mc.is_trading_day(session) is False else 1
     rc = 0
+    now = _now()
     for inst in skr.RULE["instruments"]:
         sym = cfg.get(inst).options.symbol
         try:
-            row = build_row(inst, sym, session, store, now=_now(), replay=replay)
-            st = jl.insert_frozen(_path(inst, replay), row, key_field=KEY, frozen=_frozen)
-        except jl.LedgerConflictError as e:
+            status, row = record_one(inst, sym, session, store, now)
+        except (jl.LedgerConflictError, jl.LedgerCorruptError) as e:
             print(f"  ⚠️ {inst}：{e}", file=sys.stderr); rc = 1; continue
         except Exception as e:
             print(f"  ⚠️ {inst}：{type(e).__name__}: {e}", file=sys.stderr); rc = 1; continue
         f = row.get("features") or {}
-        print(f"  {inst:6s} {session} {row['reading']}（{st}）"
-              + (f" Δskew25 {f.get('d_skew25_pp'):+.2f}pp，put 更贵档 {f.get('rungs_put_richer')}/6，"
+        extra = (f" Δskew25 {f.get('d_skew25_pp'):+.2f}pp，put 更贵档 {f.get('rungs_put_richer')}/6，"
                  f"skew25 {f.get('skew25_curr_pp'):+.2f}，到期 {f.get('expiry')}" if f.get("d_skew25_pp") is not None
                  else f" {row.get('reason', '')}")
-              + ("" if row["before_open"] or replay else "　⚠️ 开盘后才记录：不计入前瞻样本"))
+        probs = "；身份问题：" + ",".join(row["identity_problems"]) if row["identity_problems"] else ""
+        print(f"  {inst:6s} {session} {row['reading']}（{status}）{extra}{probs}")
+        if status == "changed_after_freeze":
+            print(f"  ⚠️ {inst}：正式记录冻结后输入发生变化 —— 已留痕于 attempts，正式记录不改。", file=sys.stderr)
+    return rc
+
+
+def _record_replay(cfg, store, session: date) -> int:
+    if mc.is_trading_day(session) is not True:
+        print(f"{session} 非交易日：不回放。")
+        return 0
+    rc = 0
+    for inst in skr.RULE["instruments"]:
+        sym = cfg.get(inst).options.symbol
+        try:
+            row = build_row(inst, sym, session, store, now=_now(), replay=True)
+            row["status"] = "replay"
+            st = jl.insert_frozen(_path(inst, "replay"), row, key_field=KEY,
+                                  frozen=lambda r: {k: v for k, v in _frozen(r).items() if k != "recorded_at"})
+        except Exception as e:
+            print(f"  ⚠️ {inst}：{type(e).__name__}: {e}", file=sys.stderr); rc = 1; continue
+        print(f"  {inst:6s} {session} {row['reading']}（回放 {st}，盘前最后版本重放，非前瞻）")
     return rc
 
 
@@ -130,6 +259,10 @@ def _bars(sym: str) -> list[tuple[date, float, float]]:
     return sorted(out)
 
 
+def _bars_sha(bars) -> str:
+    return hashlib.sha256(json.dumps([[b[0].isoformat(), b[1], b[2]] for b in bars]).encode()).hexdigest()[:16]
+
+
 def session_after(posted: datetime) -> date | None:
     """发布时刻之后第一个开盘的交易日（09:30 ET 前发布 → 当日；之后 → 下一交易日）。"""
     t = posted.astimezone(ET)
@@ -139,19 +272,42 @@ def session_after(posted: datetime) -> date | None:
     return mc.next_trading_day(d)
 
 
-def _hit(call: str, ret):
+def _hit(label: str, ret):
+    """方向映射：我们的读数 防守化→跌、进攻化→涨（v1 预登记的假设）；作者只计明确的偏空/偏多。
+    作者的「防守 / 放弃做多 / 区间 / 中性」是风险姿态或区间主张，不计方向（Codex 017 §五、018 #11）。"""
     if ret is None:
         return None
-    if call in ("防守化", "偏空", "防守"):
+    if label in ("防守化", "偏空"):
         return ret < 0
-    if call in ("进攻化", "偏多"):
+    if label in ("进攻化", "偏多"):
         return ret > 0
     return None
+
+
+def score_rows(rows: list[dict], bars, closed_through: date, source_sha: str, now: datetime) -> int:
+    """原地回填 outcome；变化时把旧结果推入 outcome_history。返回改动行数。"""
+    n = 0
+    for r in rows:
+        if r.get("status") not in ("eligible", "replay"):
+            continue
+        new = skr.forward_returns(bars, date.fromisoformat(r["session"]), closed_through=closed_through)
+        new["price_source_sha"] = source_sha
+        old = r.get("outcome")
+        if old is not None and {k: v for k, v in old.items() if k != "price_source_sha"} == \
+                {k: v for k, v in new.items() if k != "price_source_sha"}:
+            continue
+        if old is not None:
+            r.setdefault("outcome_history", []).append({"outcome": old, "scored_at": r.get("scored_at")})
+        r["outcome"], r["scored_at"] = new, now.isoformat()
+        n += 1
+    return n
 
 
 def cmd_score(args) -> int:
     from undertow.core.config import load_config
     cfg = load_config()
+    now = _now()
+    closed = last_closed_session(now)
     lines = []
     for inst in skr.RULE["instruments"]:
         sym = cfg.get(inst).options.symbol
@@ -160,51 +316,72 @@ def cmd_score(args) -> int:
         except Exception as e:
             print(f"  ⚠️ {inst} 取日线失败：{type(e).__name__}: {e}", file=sys.stderr)
             return 1
-        for replay in (False, True):
-            p = _path(inst, replay)
+        sha = _bars_sha(bars)
+        for kind in ("prospective", "replay"):
+            p = _path(inst, kind)
             if not p.exists():
                 continue
-
-            def fn(r):
-                new = skr.forward_returns(bars, date.fromisoformat(r["session"]))
-                if new != r.get("outcome"):
-                    r["outcome"], r["scored_at"] = new, _now().isoformat()
-                    return True
-                return False
-            jl.update(p, fn, key_field=KEY, frozen=_frozen)
+            jl.update(p, lambda r: score_rows([r], bars, closed, sha, now) > 0, key_field=KEY, frozen=_frozen)
             rows = jl.load(p, KEY)
-            lines.append(_summary(f"{inst}{'（回放，探索）' if replay else '（前瞻）'}", rows, key="reading"))
+            title = f"{inst}（前瞻，只计 eligible）" if kind == "prospective" else f"{inst}（盘前最后版本重放，探索）"
+            lines.append(_summary(title, rows, key="reading"))
         if AUTHOR.exists():
             calls = [json.loads(x) for x in AUTHOR.read_text("utf-8").splitlines() if x.strip()]
             mine = [c for c in calls if c.get("instrument") == inst]
             for c in mine:
                 s = session_after(datetime.fromisoformat(c["posted_at"]))
                 c["session"] = s.isoformat() if s else None
-                c["outcome"] = skr.forward_returns(bars, s) if s else None
+                c["status"] = "eligible"
+                c["outcome"] = skr.forward_returns(bars, s, closed_through=closed) if s else None
                 c["reading"] = c["call"]
             if mine:
-                lines.append(_summary(f"{inst} 作者判断（私有，按发布时刻）", mine, key="reading"))
+                lines.append(_summary(f"{inst} 作者判断（私有，按发布时刻；回溯登记，非事前冻结）", mine, key="reading"))
     print("\n".join(l for l in lines if l))
-    print("注：样本很少时命中率没有统计意义；按预登记，前瞻 n ≥ 50 且检验通过之前，所有读数都是未验证的（T3）。")
+    print("注：以上是描述性汇总，不是预登记检验 —— 5/10 日窗口相互重叠、未与基准比较、未做多重比较校正；"
+          "n 达到 50 只是一次评估的触发条件，不代表可靠（Codex 017 D17-04）。")
     return 0
 
 
 def _summary(title: str, rows: list[dict], *, key: str) -> str:
     out = [f"【{title}】"]
-    groups: dict = {}
+    elig = [r for r in rows if r.get("status") in ("eligible", "replay")]
+    rej: dict = {}
     for r in rows:
+        if r not in elig:
+            rej[r.get("status") or "unknown"] = rej.get(r.get("status") or "unknown", 0) + 1
+    if rej:
+        out.append("  不计入：" + "，".join(f"{k} {v}" for k, v in sorted(rej.items())))
+    groups: dict = {}
+    for r in elig:
         groups.setdefault(r.get(key), []).append(r)
     for lab, rs in sorted(groups.items(), key=lambda x: str(x[0])):
         cells = []
         for h in (1, 5, 10):
-            rets = [(r.get("outcome") or {}).get(f"ret_{h}d") for r in rs]
-            rets = [x for x in rets if x is not None]
-            hits = [_hit(lab, x) for x in rets]
-            hits = [x for x in hits if x is not None]
+            oc = [(r.get("outcome") or {}) for r in rs]
+            rets = [o.get(f"ret_{h}d") for o in oc if o.get(f"ret_{h}d") is not None]
+            miss = sum(1 for o in oc if o.get(f"status_{h}d") == "missing_price")
+            hits = [x for x in (_hit(lab, v) for v in rets) if x is not None]
             cells.append(f"{h}日 n={len(rets)}" + (f" 均 {sum(rets) / len(rets) * 100:+.2f}%" if rets else "")
-                         + (f" 命中 {sum(hits)}/{len(hits)}" if hits else ""))
+                         + (f" 命中 {sum(hits)}/{len(hits)}" if hits else "") + (f" 缺价 {miss}" if miss else ""))
         out.append(f"  {lab}：{len(rs)} 条；" + "；".join(cells))
     return "\n".join(out)
+
+
+def migrate_v0() -> list[str]:
+    """把无版本旧文件移到 _superseded_v0_ledger/（保留，不删）。幂等。"""
+    moved = []
+    dst = DIR / "_superseded_v0_ledger"
+    for p in list(DIR.glob("skew_*.jsonl")) + ([DIR / "replay"] if (DIR / "replay").exists() else []):
+        dst.mkdir(parents=True, exist_ok=True)
+        target = dst / p.name
+        if target.exists():
+            raise FileExistsError(f"{target} 已存在，拒绝覆盖")
+        shutil.move(str(p), str(target))
+        lk = p.with_suffix(p.suffix + ".lock")
+        if lk.exists():
+            lk.unlink()
+        moved.append(f"{p} → {target}")
+    return moved
 
 
 def cmd_author_add(args) -> int:
@@ -215,7 +392,7 @@ def cmd_author_add(args) -> int:
         return 2
     rec = {"posted_at": posted.isoformat(), "instrument": args.inst, "call": args.call,
            "horizon": args.horizon or "", "levels": args.levels or "", "summary": args.summary or "",
-           "source": args.source or "", "added_at": _now().isoformat()}
+           "source": args.source or "", "added_at": _now().isoformat(), "retrospective": bool(args.retrospective)}
     AUTHOR.parent.mkdir(parents=True, exist_ok=True)
     existing = AUTHOR.read_text("utf-8").splitlines() if AUTHOR.exists() else []
     if any(json.loads(x).get("posted_at") == rec["posted_at"] and json.loads(x).get("instrument") == rec["instrument"]
@@ -229,6 +406,12 @@ def cmd_author_add(args) -> int:
     return 0
 
 
+def cmd_migrate(args) -> int:
+    for m in migrate_v0():
+        print("  归档", m)
+    return 0
+
+
 def register(sub):
     p = sub.add_parser("dirledger", help="方向判断台账：偏度读数（事前冻结）+ 外部作者判断（私有）+ 价格计分")
     ss = p.add_subparsers(dest="dir_cmd", required=True)
@@ -236,9 +419,12 @@ def register(sub):
     r.add_argument("--as-of"); r.set_defaults(func=cmd_record)
     s = ss.add_parser("score", help="回填 1/5/10 日走势并按读数分组汇总（含作者判断，私有）")
     s.set_defaults(func=cmd_score)
+    m = ss.add_parser("migrate-v0", help="把无版本旧台账移入 _superseded_v0_ledger/（保留）")
+    m.set_defaults(func=cmd_migrate)
     a = ss.add_parser("author-add", help="登记外部作者的一条判断（按发布时刻；私有、不入库）")
     a.add_argument("--inst", required=True, choices=list(skr.RULE["instruments"]))
     a.add_argument("--posted", required=True, help="发布时刻，带时区，如 2026-09-25T19:33+08:00")
     a.add_argument("--call", required=True, choices=("防守", "偏空", "偏多", "中性", "区间"))
     a.add_argument("--horizon"); a.add_argument("--levels"); a.add_argument("--summary"); a.add_argument("--source")
+    a.add_argument("--retrospective", action="store_true", help="事后才读到的旧帖（回溯登记，不与事前冻结同列）")
     a.set_defaults(func=cmd_author_add)

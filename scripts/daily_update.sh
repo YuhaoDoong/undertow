@@ -355,7 +355,9 @@ set -e
 # 已到期合约约一周后长桥就查不到，所以每天补；已存的不重抓。「查不到」是状态不是失败；
 # 网络/CLI 故障 → rc=1 → 告警（数据下次补，不会被当成已抓）。
 set +e
-BARS_OUT=$(python3 -m undertow shadow bars --status-file "data/logs/.status_bars_${ET_DATE}.json" 2>&1); BARS_RC=$?
+# --all（2026-09-28 起）：当天的逐分钟已由 session ⑩ intraday 存下、不再占历史配额 → 月配额（10/1 起补满 400）
+# 只花在真正缺的旧日子上，覆盖全部品种与规则。只抓缺的，已存/已记查不到的不重抓。
+BARS_OUT=$(python3 -m undertow shadow bars --all --status-file "data/logs/.status_bars_${ET_DATE}.json" 2>&1); BARS_RC=$?
 set -e
 printf '%s\n' "$BARS_OUT" | grep -E "逐分钟|⚠️" | head -5 || true
 if (( BARS_RC == 3 )); then

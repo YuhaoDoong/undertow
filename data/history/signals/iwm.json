@@ -992,7 +992,7 @@
   "forward_2d": 0.073,
   "forward_3d": -0.8898,
   "forward_5d": -0.789,
-  "forward_10d": null,
+  "forward_10d": -2.0994,
   "mfe_1d": -0.3719,
   "mae_1d": -1.3,
   "mfe_2d": 0.2259,
@@ -1000,7 +1000,9 @@
   "mfe_3d": 1.2583,
   "mae_3d": -1.3,
   "mfe_5d": 2.3184,
-  "mae_5d": -1.3
+  "mae_5d": -1.3,
+  "mfe_10d": 3.0066,
+  "mae_10d": -1.3
  },
  {
   "instrument": "iwm",
@@ -1440,7 +1442,7 @@
   "forward_1d": -0.466,
   "forward_2d": 0.0526,
   "forward_3d": 0.6236,
-  "forward_5d": null,
+  "forward_5d": -1.3208,
   "forward_10d": null
  },
  {
@@ -1617,13 +1619,15 @@
   "drift_60d": -0.076,
   "forward_1d": 0.5708,
   "forward_2d": -1.2816,
-  "forward_3d": null,
+  "forward_3d": -1.3726,
   "forward_5d": null,
   "forward_10d": null,
   "mfe_1d": 1.1766,
   "mae_1d": 0.1646,
   "mfe_2d": 1.1766,
-  "mae_2d": -1.3096
+  "mae_2d": -1.3096,
+  "mfe_3d": 1.1766,
+  "mae_3d": -2.2866
  },
  {
   "instrument": "iwm",

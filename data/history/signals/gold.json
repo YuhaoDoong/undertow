@@ -4643,7 +4643,7 @@
   "forward_2d": -0.8881,
   "forward_3d": -0.5576,
   "forward_5d": 0.5046,
-  "forward_10d": null
+  "forward_10d": -1.1782
  },
  {
   "instrument": "gold",
@@ -5089,7 +5089,7 @@
   "forward_1d": 0.7054,
   "forward_2d": 0.005,
   "forward_3d": 0.4293,
-  "forward_5d": null,
+  "forward_5d": -1.6744,
   "forward_10d": null
  },
  {
@@ -5266,13 +5266,15 @@
   "drift_60d": 0.12569,
   "forward_1d": 0.4242,
   "forward_2d": -1.3806,
-  "forward_3d": null,
+  "forward_3d": -1.6793,
   "forward_5d": null,
   "forward_10d": null,
   "mfe_1d": 0.6024,
   "mae_1d": -0.7028,
   "mfe_2d": 0.6024,
-  "mae_2d": -1.6341
+  "mae_2d": -1.6341,
+  "mfe_3d": 0.6024,
+  "mae_3d": -2.342
  },
  {
   "instrument": "gold",

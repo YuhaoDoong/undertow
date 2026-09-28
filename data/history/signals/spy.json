@@ -966,7 +966,7 @@
   "forward_2d": 0.4025,
   "forward_3d": -0.0581,
   "forward_5d": 0.6294,
-  "forward_10d": null,
+  "forward_10d": 1.2338,
   "mfe_1d": -0.7614,
   "mae_1d": -1.1282,
   "mfe_2d": -0.0132,
@@ -974,7 +974,9 @@
   "mfe_3d": 0.2217,
   "mae_3d": -1.1282,
   "mfe_5d": 1.086,
-  "mae_5d": -1.1282
+  "mae_5d": -1.1282,
+  "mfe_10d": 1.086,
+  "mae_10d": -2.2842
  },
  {
   "instrument": "spy",
@@ -1420,7 +1422,7 @@
   "forward_1d": -0.1193,
   "forward_2d": 1.4293,
   "forward_3d": 1.4136,
-  "forward_5d": null,
+  "forward_5d": 0.6006,
   "forward_10d": null
  },
  {
@@ -1592,7 +1594,7 @@
   "drift_60d": 0.08672,
   "forward_1d": -0.0155,
   "forward_2d": -0.7356,
-  "forward_3d": null,
+  "forward_3d": -0.8171,
   "forward_5d": null,
   "forward_10d": null
  },

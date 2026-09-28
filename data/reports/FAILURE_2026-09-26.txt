@@ -1,0 +1,2 @@
+2026-09-26 18:23 +08 | ET 2026-09-26 06:23 | 🚨 快照全部失败（ET 2026-09-26 06:23）
+  15 个品种抓取失败：gold,silver,wti,qqq,tqqq,tlt,spy,iwm,googl,tsla,nvda,intc,amd,msft,aapl。请检查网络/接口。

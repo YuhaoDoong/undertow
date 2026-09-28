@@ -1,0 +1,96 @@
+{
+ "prereg_sha": "dbba188efd5b14b51ce5892ecb36ef2c4bef5aa7985fb432fbc7753576efd839",
+ "set": "design",
+ "code_sha": "8143b768fa245a4d",
+ "ran_at": "2026-09-28T04:33:29.342015+00:00",
+ "alpha": 0.008333333333333333,
+ "thresholds": {
+  "H1": 0.05,
+  "H2": 1.15,
+  "H3": 0.003
+ },
+ "results": {
+  "GLD": {
+   "data_sha": "38830627f0ab5338",
+   "first_date": "2004-11-18",
+   "last_date": "2015-12-31",
+   "H1": {
+    "n_events": 204,
+    "n_ctrl": 1577,
+    "rebound_events": 0.46568627450980393,
+    "rebound_ctrl": 0.5034876347495244,
+    "diff": -0.03780136023972047,
+    "z": -1.0161013073817031,
+    "p_one_sided": 0.8452094267231083,
+    "n_undecided_events": 8,
+    "verdict": "不支持",
+    "by_regime": {
+     "牛": {
+      "n": 120,
+      "rebound": 0.45
+     },
+     "熊": {
+      "n": 84,
+      "rebound": 0.4880952380952381
+     }
+    }
+   },
+   "H2": {
+    "n_lvn": 541,
+    "n_hvn": 1033,
+    "n_mid": 956,
+    "ratio": 1.212898565380962,
+    "lower_one_sided": 1.0932765984536597,
+    "p_boot_le1": 0.0,
+    "verdict": "支持"
+   },
+   "H3": {
+    "n_events": 0,
+    "status": "insufficient",
+    "verdict": "证据不足（事件数 < 30）",
+    "by_regime": {}
+   }
+  },
+  "SLV": {
+   "data_sha": "4fed1928782d4637",
+   "first_date": "2008-07-24",
+   "last_date": "2015-12-31",
+   "H1": {
+    "n_events": 121,
+    "n_ctrl": 941,
+    "rebound_events": 0.4628099173553719,
+    "rebound_ctrl": 0.5037194473963869,
+    "diff": -0.04090953004101494,
+    "z": -0.8471893638987734,
+    "p_one_sided": 0.8015552095117199,
+    "n_undecided_events": 10,
+    "verdict": "不支持",
+    "by_regime": {
+     "牛": {
+      "n": 57,
+      "rebound": 0.47368421052631576
+     },
+     "熊": {
+      "n": 64,
+      "rebound": 0.453125
+     }
+    }
+   },
+   "H2": {
+    "n_lvn": 349,
+    "n_hvn": 693,
+    "n_mid": 563,
+    "ratio": 1.1178408725576316,
+    "lower_one_sided": 0.9441117030221436,
+    "p_boot_le1": 0.0548,
+    "verdict": "未决（方向为正但未显著）"
+   },
+   "H3": {
+    "n_events": 0,
+    "status": "insufficient",
+    "verdict": "证据不足（事件数 < 30）",
+    "by_regime": {}
+   }
+  }
+ }
+}

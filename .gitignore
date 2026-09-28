@@ -54,6 +54,8 @@ data/backtest/step4_holding.jsonl
 # 含订阅者水印的截图与逐字原文/摘要，公开发布涉版权与水印追责；本地照常用于交叉验证。
 # （2026-08 已从 git 历史清洗，见 Trading_private_content/ 本地备份。）
 /article
+# 用户放入的文章 PDF（2026-09-28，可能为付费内容，涉版权；AGENTS.md 第一节第 4 条）
+/docs/articles/
 /docs/screenshot/
 /docs/author_notes.md
 /docs/author_playbook.md

@@ -23,7 +23,7 @@
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 ROLES = ("observation", "prediction", "feasibility", "policy")
 USES = ("direction", "filter", "confidence", "ranking", "sizing", "holding", "display")
@@ -179,6 +179,18 @@ _ALL = [
     _pol("policy.rr_minimum", "analyze/risk_reward.py RR_MIN", "盈亏比下限",
          "AGENTS.md 金融语义 + 用户纪律", note="只在用户给定目标与止损时适用；自动斐波目标不适用"),
 ]
+
+# 迁移状态（Codex 015 提交二、三之后）：已从研判/策略/渲染的决策路径移除或改为观察措辞的，记 done。
+# 仍 pending 的写明缺什么 —— 不把没做完的说成做完。
+_PENDING = {
+    "volregime.stance": "波动率栏仍显示「偏买方/偏卖方」倾向文字（不再作为任何门槛，但措辞未改为观察口径）",
+    "research.misc": "共振/强度评分/挤压等研究卡片沿用各自措辞，尚未逐一审过是否含隐性结论",
+}
+_ALL = [c if c.role != "prediction" else
+        replace(c, migration="pending" if c.claim_id in _PENDING else "done",
+                                          note=(c.note + "；" if c.note else "") + _PENDING[c.claim_id]
+                                          if c.claim_id in _PENDING else c.note)
+        for c in _ALL]
 
 CLAIMS: dict[str, Claim] = {}
 for _c in _ALL:

@@ -33,7 +33,7 @@
 | 文件 | 作用 |
 |---|---|
 | `backtest.py` | COT 信号事件研究：无前视、发布滞后、对齐收益、分位分桶（校准上面的阈值）。<br>Look-ahead-free COT event study. |
-| `outlook.py` | **综合研判**：COT/Gamma/Flow + 宏观按【回测校准可信度】加权投票 → 方向+分数+可信度；**近端(墙/流) vs 中期(COT/宏观)双周期分层**；关键位；情景。<br>Weighted multi-factor vote with near/mid horizon split. |
+| `outlook.py` | **近端/中期投票**：COT/Gamma/Flow + 宏观加权投票 → 分数与标签；权重【未回测】（模块 docstring 已写明）。Codex 015 起为 T3 观察：照常计算与展示，不参与研判结论。<br>Weighted multi-factor vote (uncalibrated; observation only). |
 
 ## Strategy modules / 策略层
 
@@ -42,10 +42,10 @@
 
 | 文件 | 作用 |
 |---|---|
-| `strategy_hub.py` | 策略统筹：把多个子模块输出汇成一张"策略总纲"。<br>Assembles sub-module outputs into one overview. |
-| `strategy.py` | 方向性情景参数化（期货）：方向随研判、位点随结构、缓冲随 ATR、实时层否决票。<br>Directional futures scenarios. |
-| `credit_spread.py` | 方向性信用价差：偏空→熊市看涨价差 / 偏多→牛市看跌价差（跟近端 bias）。<br>Directional credit spreads. |
-| `condor.py` | 铁鹰：区间震荡 + 偏卖方环境的规则化结构映射。<br>Iron condor for range/seller regimes. |
+| `strategy_hub.py` | 策略统筹（旧）：汇总各子模块的「适配」结论。Codex 015 起研报不再使用（适配结论为 T3）。<br>Legacy strategy overview (unused in reports). |
+| `strategy.py` | 方向性情景参数化（方向随近端投票、否决票）。Codex 015 起方向与否决为 T3：仍计算供研究，研报不再渲染其方向、情景与「不开枪」。<br>Directional scenarios (research only). |
+| `credit_spread.py` | 方向性信用价差（旧：跟近端 bias、IV−RV≥2 才适配）。Codex 015 起适配判断为 T3，研报改用 `structure_calc.py`；选腿函数被复用。<br>Legacy credit-spread fit (research only). |
+| `condor.py` | 铁鹰（旧：偏卖方 stance + 双墙夹持 + 适配评分）。Codex 015 起适用判断为 T3，研报改用 `structure_calc.py`；选到期/选腿函数被复用。<br>Legacy condor fit (research only). |
 | `wall_spread.py` | **墙位卖方价差 v3**（三步法定版，只激活白银；候选 ≠ 建议下单，生死线未过，见文件头）。<br>⛔ 2026-09-26 更正：第三步「破卖腿即平减损 76%」前视作废；第四~八步结论已按 Codex 审查降级 —— 墙「尚未检出增量支撑」（不是无用），ATR 扩张为探索性风险标签（不是已验证过滤器），增仓定侧为待检假说。现行研究方案：墙选腿 A vs 无 OI 距离 B 的前瞻配对影子账（`shadow_ledger.py`）。详见 `docs/wall_spread_3steps.md` 顶部更正注记与 `GPTcom/` 汇总报告。 |
 | `spread_ledger.py` | **卖方价差前瞻台账**：研报每次生成时 `record()` 当日候选（无候选也记，否则覆盖率无从统计），`backfill()` 事后用真实收盘回填破卖腿/损益。2026-09-25 起随行记录 `context`：决策日 ATR 扩张比/分位、布林带宽扩张比、近价局部墙（`decision_context` + `gamma.local_wall`）——**只记录不过滤**，攒第四/五步要的前瞻样本。 |
 | `risk_policy.py` | **账户风控政策的唯一来源（带版本）**：AGENTS.md 双层限额（单笔止损情景 ≤10%、单笔最大亏损 ≤20%）+ 同簇合计 ≤20%（草案）；全账户合计上限未设定时只报告不判定。`max_units` 取政策、购买力的最小值；非有限/缺失/≤0 → 0 组并说明原因。Kelly（`sizing.py`）与影子账预算只能在此上限内减少组数（Codex 008 G07）。 |
@@ -63,7 +63,9 @@
 |---|---|
 | `fibonacci.py` | zigzag 定位【当前摆动腿】→ 0.382/0.5/0.618 黄金回撤 + 1.272/1.618 扩展目标；传 ratio 补 ETF 行权价锚。<br>Zigzag swing → Fibonacci retracements/extensions (+ ETF strike anchor). |
 | `risk_reward.py` | 盈亏比闸门：对每个方向算「现价追」vs「等回调(0.5)」两情景的 R:R 并评级（差/中/优），入场锚斐波、止损锚起涨点、目标取结构墙位（退回扩展位），落地"先看盈亏比、别追、等回调"。<br>R:R gate grading chase-vs-pullback setups; fib entry, structural stop/target. |
-| `verdict.py` | **当日决策研判**：规则化合成 近中分层＋资金流＋强信号＋盈亏比闸门 → 做空?/现价追?/短线/长线 四问。逆势微腿识别为回调买/反抽卖（不误报顺腿追）。全程确定性、无 LLM、数字来自上游，可跑无人值守定时任务；交互时 LLM 读它再叠流畅叙述。<br>Rule-based daily decision synthesis (short? chase? swing? core?); deterministic, LLM-free. |
+| `verdict.py` | **当日研判（证据门控，Codex 015）**：方向/入场/短线仓/长线仓的结论只接收 `claims.py` 中有决策权限的主张。T1 为空 → 「本系统暂无通过验证的方向依据」（不等于市场不适合交易、不自动平仓）；T2（金银增仓层）只列「探索观察」；近中分层、强信号、斐波腿、自动盈亏比都是 T3，不影响结论。<br>Evidence-gated daily verdict; only claims with decision permission affect conclusions. |
+| `claims.py` | **主张权限登记表（Codex 015）**：按「具体主张 × 用途」登记角色（观测/预测/可行性/政策）、证据等级（T1/T2/T3，T3 写明原因）、允许用途与证据引用；`decision_allowed` 默认拒绝未登记主张。T1 当前为空。`undertow claims` 打印清单。<br>Claim permission registry. |
+| `structure_calc.py` | **结构计算器（Codex 015）**：卖 put 价差、卖 call 价差、铁鹰的确定性计算（BS 与报价保守两种净收、含费最大亏损、盈亏平衡、缓冲）；不判适配、不替用户选方向；缺报价为未知、缺腿写明原因。<br>Deterministic structure calculator. |
 
 ## Live account review / 实盘持仓复盘
 

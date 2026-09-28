@@ -15,12 +15,26 @@ from __future__ import annotations
 import dataclasses
 from datetime import date
 
+def _evidence_brief() -> dict:
+    """主张证据等级摘要（Codex 015）：让接入的 AI 知道哪些读数能当结论、哪些只能描述。"""
+    from undertow.analyze import claims as cl
+    preds = [c for c in cl.CLAIMS.values() if c.role == "prediction"]
+    return {"t1_count": len(cl.t1_claims()),
+            "t1": [c.claim_id for c in cl.t1_claims()],
+            "t2": [{"claim": c.claim_id, "scope": c.scope, "note": c.note} for c in preds if c.tier == "T2"],
+            "t3": sorted(c.claim_id for c in preds if c.tier == "T3"),
+            "rule": "T1 才可用于方向/过滤/置信度/仓位；T2 只作探索展示；T3 只作观察描述"}
+
+
 # 交给 AI 的硬规则（放进包里，任何模型都看得到）
 GUIDANCE = [
     "所有数字（价位、盈亏比、盈亏平衡、Delta、最大盈亏、资金）都已在本包内由 undertow "
     "确定性模块算好；你只解读、组织与权衡，**不得自行改动或臆算任何数字**（LLM 不碰算术）。",
-    "方向研判以 instruments[].bias/near_bias/mid_bias/verdict_head 为准；持仓结构以 "
-    "portfolio.groups[].combos 为准；风险以 healthcheck 为准。",
+    "**方向：本系统当前没有通过验证的方向依据**（evidence.t1_count=0，见 evidence）。"
+    "instruments[].bias/near_bias/mid_bias、强信号、墙位、斐波等都是未验证的观察（T3），"
+    "只能如实描述，**不得作为方向结论、加仓理由或「不建议开仓」的否决理由**；T2（evidence.t2）只能作为探索性参考列出。"
+    "verdict_head 是证据门控后的结论。持仓结构以 portfolio.groups[].combos 为准；风险以 healthcheck 为准；"
+    "用户纪律（soul）与风险政策照常生效。",
     "输出是**波段级风险情景与权衡参考，不是投资建议、不是交易指令**；是否下单、下什么，由用户自己决定。",
     "你（及任何接入的 AI）**只读**：绝不代替用户下单/撤单/改单；执行永远由用户在券商端完成。",
     "如信息不足以回答（如缺某标的的期权代理、快照过期），如实说明，不要编造。",
@@ -214,6 +228,7 @@ def build_consult_packet(*, review, health, contexts, capital=None,
         "asof": asof.isoformat(),
         "question": question,
         "guidance": GUIDANCE,
+        "evidence": _evidence_brief(),
         "account": ({
             "buy_power": capital.buy_power, "net_assets": capital.net_assets,
             "cash_usd": capital.cash_usd,
@@ -290,9 +305,9 @@ def render_prompt(packet: dict) -> str:
     L.append("")
     L.append("【品种研判】")
     for k, ins in packet["instruments"].items():
-        L.append(f"  · {ins['display_name']}({k})：综合 {ins['bias']}（近 {ins['near_bias']}/"
-                 f"中 {ins['mid_bias']}）；现价 {ins['spot']:.2f}；put墙 {ins['put_wall']:.1f}/"
-                 f"call墙 {ins['call_wall']:.1f}；决策：{ins['verdict_head']}")
+        L.append(f"  · {ins['display_name']}({k})：观察（未验证投票）近 {ins['near_bias']}/"
+                 f"中 {ins['mid_bias']}；现价 {ins['spot']:.2f}；put墙 {ins['put_wall']:.1f}/"
+                 f"call墙 {ins['call_wall']:.1f}（OI 位置，观测）；证据门控结论：{ins['verdict_head']}")
         tc = ins.get("technicals")
         if tc:
             L.append(f"      技术面：{tc['trend']} · 短线{tc['heat']}(过热分{tc['heat_score']:+d})"

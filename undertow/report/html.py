@@ -61,10 +61,10 @@ def _bias_badge(o: Outlook) -> str:
         return (f'<span class="badge" style="background:{nc}">近端 {_esc(o.near_bias)}</span>'
                 f'<span class="badge" style="background:{mc}">中期 {_esc(o.mid_bias)}</span>'
                 f'<span class="pill">近中分歧</span>'
-                f'<span class="pill">综合分 {o.bias_score:+.1f}·可信度 {_esc(o.confidence)}</span>')
+                f'<span class="pill">综合分 {o.bias_score:+.1f}·投票一致度 {_esc(o.confidence)}（不是可信度）</span>')
     color = _BIAS_COLOR.get(o.bias, "#6e7781")
     return (f'<span class="badge" style="background:{color}">{_esc(o.bias)}</span>'
-            f'<span class="pill">可信度 {_esc(o.confidence)}</span>'
+            f'<span class="pill">投票一致度 {_esc(o.confidence)}（不是可信度）</span>'
             f'<span class="pill">综合分 {o.bias_score:+.1f}</span>')
 
 
@@ -714,8 +714,8 @@ def render_fib_rr_section(fib, plan, etf_symbol: str = "") -> str:
         return (f' <span style="color:#0969da;font-weight:600">{sym}{v:.1f}</span>'
                 if (show_etf and v is not None) else "")
 
-    dir_cn = ("上涨腿（回撤=下方支撑，顺势=回调买）" if fib.direction == "up"
-              else "下跌腿（回撤=上方阻力，顺势=反抽卖）")
+    dir_cn = ("上涨腿（回撤位在现价下方）" if fib.direction == "up"
+              else "下跌腿（回撤位在现价上方）")
 
     # 回撤位表
     rrows = []
@@ -734,33 +734,26 @@ def render_fib_rr_section(fib, plan, etf_symbol: str = "") -> str:
     if plan is not None and plan.ok:
         srows = []
         for s in plan.setups:
-            gcol = _GRADE_COLOR.get(s.grade, "#6e7781")
             srows.append(
-                f'<tr><td>{_esc(s.name)}</td>'
+                f'<tr><td>{_esc({"chase": "以现价入场", "pullback": "以斐波 0.5 回撤入场"}.get(s.kind, s.name))}</td>'
                 f'<td class="r lvl">{fnum(s.entry)}{_etf(s.entry_etf)}</td>'
                 f'<td class="r lvl">{fnum(s.stop)}{_etf(s.stop_etf)}</td>'
                 f'<td class="r lvl">{fnum(s.target)}{_etf(s.target_etf)} '
                 f'<span class="sub">{_esc(s.target_label)}</span></td>'
-                f'<td class="r" style="color:{gcol};font-weight:700">{s.rr:.2f}</td>'
-                f'<td style="color:{gcol};font-weight:600">{_esc(s.grade)}</td></tr>')
+                f'<td class="r" style="font-weight:700">{s.rr:.2f}</td></tr>')
         rr_tbl = ('<table><tr><th>情景</th><th class="r">入场</th><th class="r">止损</th>'
-                  '<th class="r">目标</th><th class="r">盈亏比</th><th>评级</th></tr>'
+                  '<th class="r">目标</th><th class="r">盈亏比</th></tr>'
                   + "".join(srows) + "</table>")
-        bias = (f'<div class="sub" style="margin-top:2px">{_esc(plan.bias_note)}</div>'
-                if plan.bias_note else "")
-        verds = "".join(f'<div class="sub">· {_esc(s.verdict)}</div>' for s in plan.setups)
-        cav = "".join(f'<div class="sub">› {_esc(c)}</div>' for c in plan.caveats)
-        rr_block = (f'<div style="font-weight:700;margin:12px 0 4px">盈亏比闸门（顺势 {_esc(plan.direction)}）</div>'
-                    f'<div class="sub" style="margin-bottom:4px"><b>{_esc(plan.headline)}</b></div>'
-                    f'{bias}{rr_tbl}{verds}'
-                    f'<div class="sub" style="margin-top:6px;color:#6e7781">{cav}</div>')
+        rr_block = (f'<div style="font-weight:700;margin:12px 0 4px">条件盈亏比（沿摆动腿方向 {_esc(plan.direction)} 的情景计算）</div>'
+                    '<div class="sub" style="margin-bottom:4px">「若以这些价位入场/止损/目标」的算术；目标取自自动斐波/墙位，'
+                    '<b>未经验证，不作追与不追的依据</b>。你有自己的目标与止损时，按你的盈亏比下限判断。</div>'
+                    f'{rr_tbl}')
 
     etf_hint = ('<b style="color:#0969da"> 蓝色为 ETF 行权价</b>；' if show_etf else "")
     return (
-        '<div class="card"><h2>斐波那契回撤 + 盈亏比闸门</h2>'
-        '<div class="sub">波段交易纪律的确定性落地：<b>先看盈亏比、别追高、等回调给出好盈亏比再动手</b>。'
-        '摆动腿自动检测自真实期货日线；' + etf_hint
-        + '目标取自结构墙位/斐波扩展，非价格预测，仅波段级情景参考。</div>'
+        '<div class="card"><h2>斐波结构与条件盈亏比（情景描述 · T3，不参与结论）</h2>'
+        '<div class="sub">摆动腿自动检测自真实期货日线（3%/2% 阈值未校准）；' + etf_hint
+        + '价位是结构描述，不是价格预测。</div>'
         f'<div style="font-weight:700;margin:10px 0 4px">摆动腿：{_esc(dir_cn)}</div>'
         f'<div class="sub">{_esc(fib.note)}；现价 {fnum(fib.spot)}'
         + (f'（{sym}{fib.etf_spot:.1f}）' if fib.etf_spot else "")
@@ -1378,7 +1371,7 @@ def render_strong_signal_banner(ss, display_name: str = "", stale_note: str = ""
             f'连当日的近端层都没站在这一侧。<b>本层未经回测校准</b>'
             f'（核心闸门需历史逐行 OI，免费源拿不到，正在用 signal_ledger 向前累积样本）——'
             f'"领先"只是一次黄金复盘得来的猜想，<b>没有统计证据</b>，'
-            f'不足以据此推翻已校准的综合研判与超买超卖层。</div>'
+            f'综合研判与超买超卖同样未通过验证（Codex 015），都只作观察。</div>'
         )
     if lowc:
         diverge = (f'<div style="margin-top:8px;padding:8px 10px;background:#fff8c5;'
@@ -1396,8 +1389,10 @@ def render_strong_signal_banner(ss, display_name: str = "", stale_note: str = ""
     return (
         f'<div class="card" style="border:2px solid {accent};background:{bg}">'
         f'<div style="font-size:20px;font-weight:800;color:{accent}">'
-        f'⚡ {name}近端资金流 <span style="font-size:23px">{arrow} {_esc(ss.level)}{_esc(ss.direction)}</span></div>'
-        f'<div class="sub" style="margin:4px 0 6px">期权端"一边倒"教科书组合 · '
+        f'🔎 {name}资金流异常观察 <span style="font-size:23px">{arrow} {_esc(ss.level)}{_esc(ss.direction)}侧压力</span></div>'
+        f'<div class="sub" style="margin:2px 0 4px;color:#57606a">T3 研究观察：强信号历史检验未通过（见 undertow claims），'
+        f'<b>不参与本系统结论</b>；数字如实列出供参考。</div>'
+        f'<div class="sub" style="margin:4px 0 6px">期权端"一边倒"组合（观测） · '
         f'加权增仓比 {ss.pressure_ratio}× · 主翼买卖比 {ss.wing_ratio}×'
         f'{" · 波动率面追认" if ss.vol_confirms else ""}</div>'
         f'<ul style="margin:6px 0 0;padding-left:20px;font-size:13.5px">{reasons}</ul>'
@@ -1527,11 +1522,12 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
         price_line = f'代理 {_esc(o.proxy_symbol)} · 现价 {o.spot:.2f}{com}'
         basis_line = ""
     head = (
-        f'<div class="card"><h1>{_esc(o.display_name)} · 综合研判</h1>'
+        f'<div class="card"><h1>{_esc(o.display_name)} · 每日研报</h1>'
         f'<div class="sub">{price_line} · 数据 {_esc(o.asof)}</div>'
         f'{vintage_html}'
         f'{basis_line}'
-        f'<div style="margin:10px 0">{_bias_badge(o)}</div>'
+        '<div class="sub" style="margin-top:6px;color:#0969da"><b>模型证据：本系统暂无通过验证的方向依据</b>（T1 可决策主张为 0；下方偏多/偏空、强信号、墙位等读数都是未验证的观察，不参与结论。这不等于市场不适合交易；`undertow claims` 可查每条主张的证据等级）</div>'
+        f'<div style="margin:10px 0"><span class="sub">观察（未验证投票，不参与结论）：</span>{_bias_badge(o)}</div>'
         + (f'<div style="margin:8px 0 2px">{stretch_pill(stretch_read)}</div>'
            if stretch_read is not None else "")
         + f'<div class="sub">环境：{_esc(o.regime)}</div></div>'
@@ -1605,7 +1601,7 @@ def render_report_html(o: Outlook, price_svg: str, oi_svg: str, cot_svg: str,
     return (
         '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f'<title>{_esc(o.display_name)} 综合研判</title><style>{_CSS}</style></head>'
+        f'<title>{_esc(o.display_name)} 每日研报</title><style>{_CSS}</style></head>'
         f'<body><div class="wrap">{head}{body}{foot}</div></body></html>'
     )
 
@@ -1834,7 +1830,7 @@ def render_summary_card(it: dict) -> str:
         labels_div = _pills(it["labels"], _esc, scores=it.get("scores"))
     return (
         '<div class="card">'
-        '<h2>④ 综合研判（与索引页同源）</h2>'
+        '<h2>④ 观察汇总：近端 / 中期投票（未验证，不参与结论；与索引页同源）</h2>'
         f'<span class="badge" style="background:'
         f'{"#bf8700" if (split or near_edge) else _near_color(ns)}">'
         f'近端 {_esc(nb or "—")}{_f(ns)} ｜ 中期 {_esc(mb or "—")}{_f(ms)}'
@@ -2011,11 +2007,11 @@ def render_index_html(items: list[dict], asof: str, *, family_notes=None,
             # 那个东西：白银近端 −0.7 看跌、中期 +3.1 看涨，合成出来一个"偏多"，
             # 而它那天 −4.38%。两层摊开，读者自己按持仓周期取舍。
             # （综合分仍在内部用于 verdict/策略层，只是不再上索引页。）
-            + (f'<span class="badge" style="background:'
+            + (f'<span class="sub">观察（未验证投票）：</span><span class="badge" style="background:'
                f'{"#bf8700" if (split or near_edge) else _near_color(ns)}">'
                f'近端 {_esc(nb or "—")}{_f(ns)} ｜ 中期 {_esc(mb or "—")}{_f(ms)}'
                f'{" ⚠分歧" if split else ""}</span>')
-            + f'<span class="pill">可信度 {_esc(conf)}</span>{vt}{sig_pill}{os_pill}{edge_note}'
+            + f'{vt}{sig_pill}{os_pill}{edge_note}'
             f'{labels_div}'
             f'{verdict_div}'
             f'{summary_div}'
@@ -2031,14 +2027,15 @@ def render_index_html(items: list[dict], asof: str, *, family_notes=None,
     alert_block = ""
     if alerts:
         alert_block = (f'<div class="card" style="background:none;border:none;padding:6px 2px 0">'
-                       f'<h2 style="margin:0;font-size:15px">⚡ 强信号告警（近端资金流一边倒）</h2></div>'
+                       f'<h2 style="margin:0;font-size:15px">🔎 资金流异常观察（强信号 · T3 未验证，不参与结论）</h2></div>'
                        + "".join(alerts))
     return (
         '<!DOCTYPE html><html lang="zh"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        f'<title>综合研判 {_esc(asof)}</title><style>{_CSS}</style></head>'
-        f'<body><div class="wrap"><div class="card"><h1>大宗商品综合研报</h1>'
-        f'<div class="sub">{_esc(asof)} · 各品种摘要 + 强信号告警 · 点击进入详情</div></div>'
+        f'<title>每日研报 {_esc(asof)}</title><style>{_CSS}</style></head>'
+        f'<body><div class="wrap"><div class="card"><h1>大宗商品每日研报</h1>'
+        f'<div class="sub">{_esc(asof)} · 各品种摘要 + 资金流异常观察 · 点击进入详情</div>'
+        '<div class="sub" style="margin-top:6px;color:#0969da"><b>模型证据：本系统暂无通过验证的方向依据</b>（T1 可决策主张为 0；下方偏多/偏空、强信号、墙位等读数都是未验证的观察，不参与结论。这不等于市场不适合交易；`undertow claims` 可查每条主张的证据等级）</div></div>'
         # 事件横幅排在强信号之前 —— 数据公布会在几分钟内推翻结构读数，
         # 先让人看见"今晚有雷"，再看方向判断（用户 2026-09-02）
         f'{ev_html}{alert_block}{fam_block}{"".join(cards)}'
@@ -2393,9 +2390,9 @@ def render_tradeable_gate(ti, display_name: str = "") -> str:
     ratio = ti.get("ratio", 0.0)
     rtxt = "∞" if ratio == float("inf") else f"{ratio:.1f}×"
     if ok:
-        bg, bd, fg, icon, head = "#1a7f370d", "#1a7f37", "#1a7f37", "✅", "今天有可交易信息"
+        bg, bd, fg, icon, head = "#6e77810d", "#6e7781", "#57606a", "🔎", "资金流压力比 ≥2×（观察，不作可交易判断）"
     else:
-        bg, bd, fg, icon, head = "#bc4c000d", "#bc4c00", "#bc4c00", "⛔", "今天没有可交易信息"
+        bg, bd, fg, icon, head = "#6e77810d", "#6e7781", "#57606a", "🔎", "资金流压力比 <2×（观察，不作可交易判断）"
     # 证据行：样本量必须和结论同时出现，不得只写结论
     eb = ""
     if ev:

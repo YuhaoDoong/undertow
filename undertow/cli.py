@@ -2576,8 +2576,9 @@ def cmd_report(args) -> int:
         # 与索引页一致：不报综合，只报近端/中期两层（用户 2026-08-29）
         _nb = (o.near_bias or "—")
         _mb = (o.mid_bias or "—")
-        print(f"  {inst.key:7s} 近{_nb:9s}中{_mb:9s}(可信度{o.confidence})"
-              f"{flag}{vh}  → {reports_dir / fn}")
+        # Codex 015：近端/中期、强信号都是未验证观察（T3）；结论只看证据门控后的 headline
+        print(f"  {inst.key:7s} 观察[近{_nb} 中{_mb}{flag.strip() and ' ' + flag.strip()}]"
+              f"{vh}  → {reports_dir / fn}")
     if index_path:
         print(f"  索引页 → {index_path}")
 

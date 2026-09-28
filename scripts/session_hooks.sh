@@ -155,6 +155,27 @@ thesisq() {  # $1=pre|close
     hb "⑨事前判断行情 ${1}：⏳ rc=$RC，下次唤醒重试"
   fi
 }
+# ⑩ 收盘后存当天逐分钟（用户 2026-09-28「记住数据最重要」）：longbridge intraday 只能取【当天】、不占按自然月计的
+# 历史 K 线配额（400 代码/月，主池两周即用掉 349）。ET 16:05 起每次唤醒尝试，成功写哨兵；rc≠0 连续 3 次后通知一次。
+intraday_capture() {
+  local OKF="$LOG_DIR/.intraday_${ET_DATE}.ok" FAILF="$LOG_DIR/.intraday_fail_${ET_DATE}"
+  [[ -f "$OKF" ]] && return
+  IN_SHADOW=1
+  local LK="$LOG_DIR/.lock_intraday_${ET_DATE}"           # 约 10 分钟 > 唤醒间隔：防两次同时读改写同一文件
+  if ! mkdir "$LK" 2>/dev/null; then hb "⑩当天逐分钟：上一轮仍在跑，跳过"; return; fi
+  local RES RC
+  RES=$("$PY" -m undertow.cli shadow intraday --status-file "$LOG_DIR/.status_intraday_${ET_DATE}.json" 2>&1); RC=$?
+  rmdir "$LK" 2>/dev/null
+  if (( RC == 0 )); then
+    : > "$OKF"; hb "⑩当天逐分钟：✅ $(printf '%s' "$RES" | grep '当天逐分钟' | tail -1 | cut -c1-80)"
+  else
+    printf 'x' >> "$FAILF"
+    hb "⑩当天逐分钟：⏳ rc=$RC，下次唤醒重试"
+    if [[ $(wc -c < "$FAILF") -eq 3 ]]; then
+      notify "⚠️ 当天逐分钟采集连续失败" "$(printf '%s' "$RES" | tail -2 | tr '\n' ' ' | cut -c1-160)"
+    fi
+  fi
+}
 # 本脚本未开 set -e；分开捕获 rc（AGENTS.md 静默失败第 5 条：不用 `|| true`）
 SHW=$("$PY" -m undertow.cli shadow windows 2>&1); SHW_RC=$?
 if (( SHW_RC == 0 )); then
@@ -168,6 +189,7 @@ if (( SHW_RC == 0 )); then
   if [[ -n "$SHW" ]]; then                      # 交易日
     if (( ET_MIN >= 540 && ET_MIN < 570 )); then fieldcheck pre; thesisq pre; fi
     if (( ET_MIN >= 640 && ET_MIN < 980 )); then fieldcheck open; fi
+    if (( ET_MIN >= 965 )); then intraday_capture; fi
     if (( ET_MIN >= 980 )); then fieldcheck close; thesisq close; fi
   fi
 else

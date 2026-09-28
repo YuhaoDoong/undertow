@@ -144,3 +144,52 @@ def save_day(path: Path, obj: dict) -> None:
 def new_day(root: str, day: date) -> dict:
     return {"schema": SCHEMA, "root": root, "date": day.isoformat(), "basis": BASIS, "fields": list(FIELDS),
             "contracts": {}}
+
+
+# ── 当日逐分钟（`longbridge intraday`，今天）──────────────────────────────
+# 2026-09-28 实测：`intraday <期权> --date <历史日>` 对美股返回空（GLD.US 9/24 也空）→ 只能取【当天】；
+# 当天查询没有报历史 K 线配额错误（配额已用尽时照常返回）。长桥历史 K 线配额按自然月计（官方文档：
+# 月初补满、不结转；400/月档；同月重复查同一代码只算一次）→ 每天收盘后用它存当天的逐分钟，给历史配额省量。
+# 口径：每分钟一个成交价 + 成交量/成交额（无 OHLC、无买卖价），与 kline 分开存。
+INTRADAY_DIR = Path("data/history/option_intraday")
+INTRADAY_FIELDS = ("time", "price", "volume", "turnover", "avg_price")
+BASIS_INTRADAY = ("longbridge intraday（当天）：每分钟成交价、成交量、成交额（UTC）；无 OHLC、无买卖价。"
+                  "收盘后抓取，补充而非替代 v5 保守入场价。")
+
+
+def parse_intraday(raw, day: date) -> list[list[str]]:
+    if not isinstance(raw, list):
+        raise BarsUnavailable(f"intraday 结构异常：{type(raw).__name__}")
+    out = []
+    for b in raw:
+        if not isinstance(b, dict) or any(k not in b for k in INTRADAY_FIELDS):
+            raise BarsUnavailable(f"intraday 字段缺失：{str(b)[:80]}")
+        out.append([str(b[k]) for k in INTRADAY_FIELDS])
+    bad = [r for r in out if not r[0].startswith(day.isoformat())]
+    if bad:
+        raise BarsUnavailable(f"intraday 返回了别的日期：{bad[0][0]}（期望 {day}）")
+    return out
+
+
+def fetch_intraday_today(symbol: str, day: date, *, runner=_run) -> dict:
+    """当天逐分钟。day 必须是今天（ET）—— 调用方保证；返回行的日期不符即报错，不静默存错日。"""
+    st, data = runner(["intraday", symbol])
+    at = datetime.now(timezone.utc).isoformat()
+    if st != "ok":
+        return {"status": st, "error": data, "fetched_at": at}
+    rows = parse_intraday(data, day)
+    return {"status": "ok" if rows else "empty", "rows": rows, "fetched_at": at}
+
+
+def new_intraday_day(root: str, day: date) -> dict:
+    return {"schema": SCHEMA, "root": root, "date": day.isoformat(), "basis": BASIS_INTRADAY,
+            "fields": list(INTRADAY_FIELDS), "contracts": {}}
+
+
+def intraday_covered(root: str, day: date, base: Path = INTRADAY_DIR) -> set:
+    """该 (标的, 日) 当天逐分钟已存且非空的代码集合（坏文件 → 空集合，由抓取命令负责隔离）。"""
+    try:
+        cur = load_day(path_of(root, day, base))
+    except BarsFileCorrupt:
+        return set()
+    return {s for s, v in ((cur or {}).get("contracts") or {}).items() if v.get("status") == "ok"}

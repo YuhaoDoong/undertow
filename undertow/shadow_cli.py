@@ -1157,8 +1157,9 @@ def cmd_bars(args) -> int:
             q = lbb.quarantine(path)
             print(f"  ⚠️ {e}；已隔离为 {q.name}，重新抓取（旧文件保留）", file=sys.stderr)
             cur = lbb.new_day(root, day)
-        missing = sorted(s for s in syms if s not in cur["contracts"]
-                         or (args.retry_missing and cur["contracts"][s].get("status") in ("not_found", "invalid_symbol")))
+        covered = lbb.intraday_covered(root, day)          # 当天逐分钟已存 → 不占按月计的历史 K 线配额
+        missing = sorted(s for s in syms if s not in covered and (s not in cur["contracts"]
+                         or (args.retry_missing and cur["contracts"][s].get("status") in ("not_found", "invalid_symbol"))))
         if not missing:
             continue
         try:
@@ -1188,6 +1189,72 @@ def cmd_bars(args) -> int:
     print(f"逐分钟 K 线：计划 {len(todo)} 个（标的, 日）文件、本次新抓 {n_new} 个合约日"
           f"（有数据 {n_ok}，长桥已查不到/无此合约 {n_gone}），截至 {last_day}")
     _status(args, "bars", done, issues, counts={"new": n_new, "ok": n_ok, "gone": n_gone})
+    return 1 if issues else 0
+
+
+INTRADAY_PACE_S = 0.55          # 长桥行情接口约 60 次 / 30 秒（官方文档写于 history candlestick 页）；留余量
+
+
+def cmd_intraday(args) -> int:
+    """收盘后存【当天】候选合约与标的的逐分钟成交价量（longbridge intraday；不占按月计的历史 K 线配额）。
+
+    用户 2026-09-28：「记住数据最重要」。长桥历史 K 线 400 代码/自然月，主池两周就用掉 349 个，
+    缺口只能等下月初；而已到期合约约一周后查不到 → 当天就存下来最稳。覆盖全部品种与规则（不占配额）。
+    只在交易日 ET 16:05 之后运行（当天盘中数据完整）；已存 ok 的不重抓，其余（未抓/空/查不到）重试。
+    只读、从不下单。"""
+    import time as _time
+    from undertow.collect import longbridge_bars as lbb
+    today = market_today()
+    now_et = datetime.now(ET)
+    if mc.is_trading_day(today) is not True:
+        print(f"{today} 非交易日：不抓当天逐分钟。")
+        _status(args, "intraday", [], [], overall="unchanged", counts={"new": 0, "ok": 0})
+        return 0
+    if (now_et.hour, now_et.minute) < (16, 5) and not args.force:
+        print(f"ET {now_et:%H:%M} 未到 16:05：当天逐分钟未完整，不抓（--force 可强制）。")
+        _status(args, "intraday", [], [], overall="unchanged", counts={"new": 0, "ok": 0})
+        return 0
+    rows = []
+    for d in (_vdir(False), _vdir(True)):
+        for p in sorted(d.glob("*.jsonl")):
+            rows += jl.load(p, KEY)
+    plan = {k: v for k, v in bars_plan(rows, last_day=today).items() if k[1] == today}
+    n_new = n_ok = 0
+    issues, done = [], []
+    for (root, day), syms in sorted(plan.items()):
+        path = lbb.path_of(root, day, lbb.INTRADAY_DIR)
+        try:
+            cur = lbb.load_day(path) or lbb.new_intraday_day(root, day)
+        except lbb.BarsFileCorrupt as e:
+            q = lbb.quarantine(path)
+            print(f"  ⚠️ {e}；已隔离为 {q.name}，重新抓取（旧文件保留）", file=sys.stderr)
+            cur = lbb.new_intraday_day(root, day)
+        def _complete(v):                  # 只有收盘后（ET 16:05 起）抓到的 ok 才算当天完整；盘中 --force 的要重抓
+            if (v or {}).get("status") != "ok" or not v.get("fetched_at"):
+                return False
+            t = datetime.fromisoformat(v["fetched_at"]).astimezone(ET)
+            return t.date() == day and (t.hour, t.minute) >= (16, 5)
+        todo = sorted(s for s in syms if not _complete(cur["contracts"].get(s)))
+        if not todo:
+            continue
+        try:
+            for s in todo:
+                res = lbb.fetch_intraday_today(s, day)
+                cur["contracts"][s] = res
+                n_new += 1
+                n_ok += res["status"] == "ok"
+                _time.sleep(INTRADAY_PACE_S)
+        except (lbb.BarsUnavailable, lbb.BarsQuotaExhausted) as e:
+            issues.append({"instrument": f"{root} {day}", "error": str(e)[:200]})
+        if todo and any(s in cur["contracts"] for s in todo):
+            lbb.save_day(path, cur)
+            done.append(f"{root} {day}")
+        if len(issues) >= 3:
+            print("  ⚠️ 连续故障，停止本次（下次从断点继续）", file=sys.stderr)
+            break
+    total = sum(len(v) for v in plan.values())
+    print(f"当天逐分钟 {today}：计划 {len(plan)} 个（标的, 日）、{total} 个代码；本次抓 {n_new}（有成交数据 {n_ok}）")
+    _status(args, "intraday", done, issues, counts={"new": n_new, "ok": n_ok, "planned": total})
     return 1 if issues else 0
 
 
@@ -1294,6 +1361,9 @@ def register(sub):
     b.add_argument("--retry-missing", action="store_true",
                    help="重查此前记为 not_found / invalid_symbol 的合约日（默认不重查；「本次未取得」不等于永久不可得）")
     b.set_defaults(func=cmd_bars)
+    it = ss.add_parser("intraday", help="收盘后存当天候选合约与标的的逐分钟成交价量（不占历史 K 线月配额）")
+    it.add_argument("--status-file"); it.add_argument("--force", action="store_true", help="16:05 前也抓（盘中不完整）")
+    it.set_defaults(func=cmd_intraday)
     q = ss.add_parser("quote", help="盘中抓两腿盘口（入场/退出）"); q.add_argument("instruments", nargs="*")
     q.add_argument("--allow-off-hours", action="store_true"); q.add_argument("--status-file")
     q.add_argument("--window", choices=("open", "close"), default="open",

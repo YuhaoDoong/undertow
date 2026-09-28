@@ -3049,6 +3049,24 @@ def cmd_soul(args) -> int:
     return 0
 
 
+def cmd_archive_inputs(args) -> int:
+    """研报输入存档（用户 2026-09-28：数据永远是最主要的）。见 collect/input_archive.py。"""
+    from undertow.collect import input_archive as ia
+    from undertow.collect.asof_history import atomic_write_json
+    res = ia.archive(market_today().isoformat())
+    st = res["stats"]
+    print(f"输入存档 {market_today()}：{st['files']} 个序列，新版本 {st['new_versions']}、未变 {st['unchanged']}、"
+          f"新月度全量 {st['monthly_new']}、未知格式整份 {st['unknown_full']}（跳过期权链 {st['skipped_options']}）")
+    for i in res["issues"]:
+        print(f"  ⚠️ {i}", file=sys.stderr)
+    if getattr(args, "status_file", None):
+        atomic_write_json(pathlib.Path(args.status_file),
+                          {"schema": 1, "command": "archive-inputs", "stats": st, "issues": res["issues"],
+                           "overall": "failed" if (res["issues"] and not st["files"]) else
+                                      ("partial" if res["issues"] else "complete")})
+    return 1 if res["issues"] else 0
+
+
 THESIS_QUOTES = pathlib.Path("data/soul/thesis_quotes.jsonl")     # 私有（data/soul 已 gitignore）
 
 
@@ -3893,6 +3911,10 @@ def build_parser() -> argparse.ArgumentParser:
     psl.add_argument("--check", action="store_true", help="用档案的限额核查当前实盘持仓")
     psl.add_argument("--json", action="store_true", help="输出结构化档案")
     psl.set_defaults(func=cmd_soul)
+
+    pai = sub.add_parser("archive-inputs", help="研报输入存档：价格/波动率/FRED/COT 的每日尾部 + 每月全量（只读缓存，不联网）")
+    pai.add_argument("--status-file")
+    pai.set_defaults(func=cmd_archive_inputs)
 
     pcl = sub.add_parser("claims", help="主张权限清单：每条指标主张的角色、证据等级、允许用途（Codex 015）")
     pcl.set_defaults(func=lambda a: (print(__import__("undertow.analyze.claims", fromlist=["x"]).render_md()), 0)[1])

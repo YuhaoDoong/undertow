@@ -313,6 +313,16 @@ if (( SH_RC != 0 || SH_RC2 != 0 )); then
           "capture rc=$SH_RC settle rc=$SH_RC2：$(printf '%s\n%s' "$SH_OUT" "$SH_OUT2" | grep '⚠️' | head -2 | tr '\n' ' ')"
 fi
 
+# 研报输入存档（用户 2026-09-28：「数据永远是最主要的」）：价格/波动率/FRED/COT 原始下载只在 data/cache
+# （gitignore、被覆盖、无版本）。研报刚跑完、缓存最新 → 存每日尾部 + 每月全量到 data/history/inputs/，随下方提交入库。
+set +e
+AI_OUT=$(python3 -m undertow archive-inputs --status-file "data/logs/.status_inputs_${ET_DATE}.json" 2>&1); AI_RC=$?
+set -e
+printf '%s\n' "$AI_OUT" | head -3
+if (( AI_RC != 0 )); then
+    alert "⚠️ 研报输入存档失败（ET $ET_NOW）" "rc=$AI_RC：$(printf '%s' "$AI_OUT" | grep '⚠️' | head -2 | tr '\n' ' ')"
+fi
+
 # 盘中时段采样收尾核对（Codex 014 N14-02）：上一交易日各品种各桶是否都成功观测。只读落盘记录。
 set +e
 PREV_TD=$(python3 -c 'from undertow.core import market_calendar as mc; from undertow.core.clock import market_today as t; d=mc.prev_trading_day(t()); print(d or "")')

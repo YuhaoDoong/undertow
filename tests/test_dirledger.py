@@ -55,14 +55,33 @@ def test_missing_previous_snapshot_is_not_substituted(tmp_path):
 
     class Store:
         def load(self, kind, sym, d):
-            return {"x": 1} if d == date(2026, 9, 24) else None     # 只有当日，前一交易日缺
+            return {"x": 1} if d == date(2026, 9, 24) else None
         def captured_at(self, kind, sym, d):
             return None
         def path_of(self, kind, sym, d):
             return tmp_path / f"{d}.gz"
+    # 只有认证到当日的快照，前一交易日没有 → 数据不足，不以更早快照顶替
     row = build_row("gold", "GLD", date(2026, 9, 24), Store(), now=datetime(2026, 9, 24, 10, tzinfo=timezone.utc),
-                    replay=True)
-    assert row["reading"] == "数据不足" and "不以更早快照顶替" in row["reason"] and row["prev_file"] == "2026-09-23"
+                    replay=True, index={date(2026, 9, 24): date(2026, 9, 24), date(2026, 9, 21): date(2026, 9, 21)})
+    assert row["reading"] == "数据不足" and "不以更早快照顶替" in row["reason"] and row["prev_file"] is None
+
+
+def test_session_index_uses_capture_time_not_file_name():
+    """周六文件（盘后抓）应认证到下一交易日；盘中抓剔除；同一交易日取抓取最晚的一份。"""
+    from undertow.dirledger_cli import session_index
+    et = timezone(timedelta(hours=-4))
+    caps = {date(2026, 7, 11): datetime(2026, 7, 11, 10, 0, tzinfo=et).timestamp(),    # 周六 → 周一 7/13
+            date(2026, 7, 12): datetime(2026, 7, 12, 20, 0, tzinfo=et).timestamp(),    # 周日晚 → 周一 7/13（更晚）
+            date(2026, 7, 14): datetime(2026, 7, 14, 11, 0, tzinfo=et).timestamp(),    # 盘中 → 剔除
+            date(2026, 7, 15): datetime(2026, 7, 15, 6, 0, tzinfo=et).timestamp()}     # 盘前 → 7/15
+
+    class Store:
+        def dates(self, kind, sym):
+            return sorted(caps)
+        def captured_at(self, kind, sym, d):
+            return caps[d]
+    idx = session_index(Store(), "GLD")
+    assert idx == {date(2026, 7, 13): date(2026, 7, 12), date(2026, 7, 15): date(2026, 7, 15)}
 
 
 def test_author_calls_are_private_and_prereg_exists():

@@ -39,27 +39,53 @@ def _now():
     return datetime.now(timezone.utc)
 
 
-def build_row(inst: str, sym: str, session: date, store, *, now: datetime, replay: bool) -> dict:
-    """某品种某 session 的读数行（纯组装；读快照由 store 提供）。"""
+SESSION_MAP = "captured_at→certify_session（NYSE 日历）"
+
+
+def session_index(store, sym: str) -> dict:
+    """{交易日: 快照文件日}：按【实际抓取时刻】认证每份快照可用于哪个交易日（盘前→当日；盘后/周末→下一交易日；
+    盘中→剔除）。早期快照文件日与数据日大量错位（记忆 snapshot-date-alignment-p0），不能用文件名日期。
+    同一交易日有多份时取抓取最晚的一份（报价最新）。"""
+    from undertow.core.clock import certify_session
+    tdays = mc.trading_days(date(2026, 1, 1), market_today()) or []
+    best: dict = {}
+    for d in store.dates("options", sym):
+        ca = store.captured_at("options", sym, d)
+        cert = certify_session(ca, tdays)
+        if cert["status"] != "certified" or cert["session"] is None:
+            continue
+        s = cert["session"]
+        if s not in best or ca > best[s][1]:
+            best[s] = (d, ca)
+    return {s: d for s, (d, _) in best.items()}
+
+
+def build_row(inst: str, sym: str, session: date, store, *, now: datetime, replay: bool, index=None) -> dict:
+    """某品种某 session 的读数行（纯组装；读快照由 store 提供）。
+
+    当日快照 = 认证到 session 的那份；前一份 = 认证到 session 前一交易日的那份。缺任一 → 数据不足（不顶替）。"""
     from undertow.collect.cboe_options import snapshot_from_payload
     row = {KEY: f"{inst}|{session.isoformat()}", "instrument": inst, "session": session.isoformat(),
            "rule_version": skr.RULE["version"], "recorded_at": now.isoformat(),
-           "mode": "replay" if replay else "prospective"}
+           "mode": "replay" if replay else "prospective", "session_map": SESSION_MAP}
+    idx = index if index is not None else session_index(store, sym)
     prev_td = mc.prev_trading_day(session)
-    quote_day = prev_td                       # 文件日 D 的报价 ≈ D 前一交易日收盘
-    prev_file_day = prev_td                   # 前一份快照应是文件日 = 前一交易日
-    cur_p, prev_p = store.load("options", sym, session), (store.load("options", sym, prev_file_day) if prev_file_day else None)
-    ca = store.captured_at("options", sym, session)
-    row.update({"curr_file": session.isoformat(), "prev_file": prev_file_day.isoformat() if prev_file_day else None,
+    quote_day = prev_td                       # 认证到 session 的快照，其报价 ≈ session 前一交易日收盘
+    cur_file, prev_file = idx.get(session), (idx.get(prev_td) if prev_td else None)
+    cur_p = store.load("options", sym, cur_file) if cur_file else None
+    prev_p = store.load("options", sym, prev_file) if prev_file else None
+    ca = store.captured_at("options", sym, cur_file) if cur_file else None
+    row.update({"curr_file": cur_file.isoformat() if cur_file else None,
+                "prev_file": prev_file.isoformat() if prev_file else None,
                 "quote_day": quote_day.isoformat() if quote_day else None,
                 "curr_captured_at": datetime.fromtimestamp(ca, timezone.utc).isoformat() if ca else None})
-    for name, d in (("curr", session), ("prev", prev_file_day)):
+    for name, d in (("curr", cur_file), ("prev", prev_file)):
         p = store.path_of("options", sym, d) if d else None
         row[f"{name}_sha"] = hashlib.sha256(p.read_bytes()).hexdigest()[:16] if (p and p.exists()) else None
     open_t = datetime(session.year, session.month, session.day, 9, 30, tzinfo=ET)
     row["before_open"] = now < open_t and (ca is None or datetime.fromtimestamp(ca, timezone.utc) < open_t)
     if cur_p is None or prev_p is None:
-        row.update({"reading": "数据不足", "reason": "当日或前一交易日快照缺失（不以更早快照顶替）"})
+        row.update({"reading": "数据不足", "reason": "认证到当日或前一交易日的快照缺失（不以更早快照顶替）"})
         return row
     cur = snapshot_from_payload(cur_p, inst, sym).contracts
     prv = snapshot_from_payload(prev_p, inst, sym).contracts

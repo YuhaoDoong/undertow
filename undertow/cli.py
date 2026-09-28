@@ -3879,6 +3879,9 @@ def build_parser() -> argparse.ArgumentParser:
     psl.add_argument("--json", action="store_true", help="输出结构化档案")
     psl.set_defaults(func=cmd_soul)
 
+    pcl = sub.add_parser("claims", help="主张权限清单：每条指标主张的角色、证据等级、允许用途（Codex 015）")
+    pcl.set_defaults(func=lambda a: (print(__import__("undertow.analyze.claims", fromlist=["x"]).render_md()), 0)[1])
+
     pjr = sub.add_parser("journal", help="交易日记：成交明细+复盘+盖棺定论+心情（--capture 自动抓当日成交）")
     pjr.add_argument("--capture", action="store_true", help="从券商抓当日成交与费用，落盘成一条日记")
     pjr.add_argument("--date", metavar="YYYY-MM-DD", help="只看某天")

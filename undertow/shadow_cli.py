@@ -826,7 +826,7 @@ def cmd_sample(args) -> int:
 
     v2（Codex 014 N14-01）：逐合约的取数错误算失败，不再被当成「本桶已完成」。每次运行只重取本桶内
     尚未成功观测的代码，新尝试追加为一条记录（旧尝试不覆盖）；研究时每个合约取本桶第一次成功观测。
-    状态：complete（全部成功）/ partial / failed（本次需要的全部失败）/ unchanged（本桶已齐）→ 前两者之外 rc=1。
+    状态：complete（全部成功）/ unchanged（本桶已齐）→ rc=0；partial / failed（本次需要的全部失败）→ rc=1。
     --check [DATE]：收尾核对当日各品种各桶的状态，有缺/败 → rc=1。只读，从不下单。"""
     if getattr(args, "check", None):
         return _sample_check(args)

@@ -1,6 +1,10 @@
 {
- "status": "draft（待 Codex 验收；验收后冻结，正式起点=冻结提交后的下一个交易日）",
- "git_head_at_build": "8add62064afe9aa9c8391653bc41c09631d7df32",
+ "status": "frozen（Codex 022 批准；积累期 T3，不参与决策；任一哈希变化 = 新版本，不沿用本起点）",
+ "git_head_at_build": "9c6d4b707926ec8fb6687d29eaac0eaf6c6d668c",
+ "effective_commit": "9c6d4b707926ec8fb6687d29eaac0eaf6c6d668c",
+ "frozen_at": "2026-09-28T13:54:05.788586+00:00",
+ "formal_start": "2026-09-29",
+ "approval": "GPTcom/20260928T200434+0800_codex-gpt-6_022_reply_review（仅方向前瞻；不授权任何受保护历史检验）",
  "files_sha256": {
   "docs/prereg/2026-09-28_skew_reading_v1.md": "e223c6e09c77433aa511b0ce8dfe87bfc944e2f226b0c7b2a8f7f97a5c28dc6d",
   "docs/prereg/2026-09-28_skew_reading_v1_addendum.md": "a457279f20279c2c8495413615af2c2532f9e31ee3a39ad28b9fdb6fcc9050ab",
@@ -11,11 +15,11 @@
   "docs/prereg/2026-09-28_conviction_v1.3.md": "8506712e1dc71e487f4fe6180017d601efe7a8321568b555bda90ba40dcc6094",
   "docs/prereg/2026-09-28_conviction_v1.4.md": "ea7ed02091f17df29d55837c84c1180b242add2d8ef44c6f7d4a4f965f9924b8",
   "undertow/analyze/skew_reading.py": "110905efe9a12b75474d39d23d1df410c83dac6dcf6fff9bcb26cdc7cb6ce388",
-  "undertow/analyze/conviction.py": "d24ac155ed69399050539c22dd3a905974f9a24b77d8bf846b8aff919957c50c",
-  "undertow/analyze/direction_stats.py": "5beac1a8412322ba3da8b88f365199bc2eca517c5874ca215d21cca9544052da",
+  "undertow/analyze/conviction.py": "5bb40ff76c6d51b359712a87567fb506c739e1e872093be8bd351f952d12aa7f",
+  "undertow/analyze/direction_stats.py": "0b05b1f7d25554133a4b8b3cd8020fa68106d0cae4fb246d9e4771797962ec2c",
   "undertow/analyze/structure_read.py": "3026064c90a2a95ae9e18e82237a38dd4e44390594e94e5a8d0633d85b0f3934",
   "undertow/analyze/flow.py": "e031c097b71772a79f04f88cc3bf937c8c37c5c04e46d198bfe8ffd547525c8b",
-  "undertow/dirledger_cli.py": "f3311a31fcb5a101f8414d09cd0d8d3f923baa0757ce2343dbf94f1918d59f08",
+  "undertow/dirledger_cli.py": "8607e1479aa47d0cddc24debb54ce4bfee05d09c1105a28b4369625e1aca7a79",
   "undertow/core/market_calendar.py": "060af248e083f523932a3c8c05d18b190eb74a331f274aecc2e363adf078d4a8",
   "undertow/core/clock.py": "0157457aab6032ecd15de8b006ab41e1d94029d752daec77de95ea5551c0acb3",
   "undertow/collect/store.py": "1d60415202dc50587f82685dd5c6c2a0c4157a946fe5e0b2bac55603bb2101ea",
@@ -55,12 +59,12 @@
    ]
   },
   "conviction.RULE": {
-   "version": "conviction-dev-20260928",
+   "version": "conviction-h1-v1-20260928",
    "s_skew_pp": 0.5,
    "near_pct": 0.05,
    "f_ratio": 2.0,
    "v_atm_pp": 0.3,
-   "status": "development（未冻结；记录不得称确认样本）"
+   "status": "frozen（方向台账族 D；积累期 T3，不参与决策）"
   },
   "conviction.H3_RULE": {
    "min_run": 10,
@@ -86,14 +90,15 @@
    "SEED": 20260928,
    "MIN_NONEVENT_DAYS": 5,
    "MAX_INVALID_FRAC": 0.05,
-   "SMA_DAYS": 200
+   "SMA_DAYS": 200,
+   "FAMILY_D_START": "2026-09-29"
   }
  },
  "rules_sha16": {
   "skew_reading.RULE": "ded2d269bd33e629",
-  "conviction.RULE": "b4729b98e386a472",
+  "conviction.RULE": "43efa8fc5f46e74f",
   "conviction.H3_RULE": "9fb99c8a914d8690",
-  "direction_stats": "0400d84c64d607da"
+  "direction_stats": "a62a8ef6cfad41cc"
  },
  "calendar_hash": "57b434b5f68f7843",
  "shadow_v5_config_hash": "9e60a71ac3cec0f3",

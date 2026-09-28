@@ -668,6 +668,7 @@ def test_no_paid_author_content_in_public_paths():
     root = Path(__file__).resolve().parents[1]
     banned = re.compile("|".join([
         "\u5251\u950b", "\u65e0\u5c18", "\u9f99\u5f00",     # 三个作者名
+        "\u7ffb\u8fc7\u9762\u7684\u54b8\u9c7c",                # 第四位作者的昵称（2026-09-28 加）
         "\u77e5\u8bc6\u661f\u7403",                            # 付费平台名
         "4400" + "-4450", "4450" + "-4500",        # 只有外部给过的点位（拼接避免自匹配）
         "\u5e72\u51c0\u7684\u4e3b\u52a8\u4e70",              # 原话片段

@@ -9,7 +9,8 @@ Codex 020：
 
 纯计算：只吃数值行，不读文件、不联网。行 = {inst, t(交易日序号), session, quarter, regime, eligible, s, r}：
   t —— 完整交易日轴上的序号（含空事件日），供时间块重抽；
-  eligible —— 该日正式记录身份与质量都合格（前瞻 v2 policy 的 eligible），且 r 已成熟（不为 None）；
+  eligible —— 【仅】决策时资格：该日正式预测在截止前身份与质量都合格（前瞻 v2 policy 的 eligible）。
+              与结果是否成熟无关 —— r 成熟与否单独由 r 是否为 None 表示（Codex 021-01/022）；
   s —— 方向 −1/0/+1（None = 未知，不算事件也不算对照）；r —— 按日历终点的 h 日收益。
 """
 from __future__ import annotations
@@ -28,6 +29,9 @@ SEED = 20260928
 MIN_NONEVENT_DAYS = 5                      # 分层共同支持：层内至少 5 个合格的非事件日（固定设计，未校准）
 MAX_INVALID_FRAC = 0.05
 SMA_DAYS = 200
+#: 方向台账族 D 正式前瞻起点（Codex 022 批准冻结；冻结提交在 2026-09-28 ET 盘前、当日盘前记录已完成 →
+#: 下一个有效交易日）。早于此日的 session（含 9/28 的 skew 与 conviction 开发期记录）一律不进确认样本。
+FAMILY_D_START = date(2026, 9, 29)
 
 
 def quantile(sorted_vals: list[float], p: float) -> float:

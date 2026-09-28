@@ -14,8 +14,10 @@ H1（主问题）= S = F ≠ 0 且 V ∈ {0, S}；任一层 None → None（未�
 """
 from __future__ import annotations
 
-RULE = {"version": "conviction-dev-20260928", "s_skew_pp": 0.50, "near_pct": 0.05, "f_ratio": 2.0,
-        "v_atm_pp": 0.30, "status": "development（未冻结；记录不得称确认样本）"}
+#: 冻结（Codex 022）：常量与 conviction-dev-20260928 完全相同，只改版本号与状态 → 新目录记录；
+#: 开发期目录 direction_ledger/conviction-dev-20260928/ 原样保留、不回填。正式样本起点见 direction_stats.FAMILY_D_START。
+RULE = {"version": "conviction-h1-v1-20260928", "s_skew_pp": 0.50, "near_pct": 0.05, "f_ratio": 2.0,
+        "v_atm_pp": 0.30, "status": "frozen（方向台账族 D；积累期 T3，不参与决策）"}
 
 
 def _sign(x: float) -> int:

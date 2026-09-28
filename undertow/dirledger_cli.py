@@ -578,6 +578,11 @@ def cmd_conviction_record(args) -> int:
     if mc.is_trading_day(session) is not True:
         print(f"{session} 非交易日（或日历未覆盖）：不记录。")
         return 0 if mc.is_trading_day(session) is False else 1
+    from undertow.analyze import direction_stats as dst
+    if session < dst.FAMILY_D_START:
+        print(f"{session} 早于方向台账族 D 正式起点 {dst.FAMILY_D_START}：冻结版本 {cv.RULE['version']} 不记录"
+              "（开发期目录保留原样，不回填）。")
+        return 0
     rc, now = 0, _now()
     for inst in CONVICTION_INSTRUMENTS:
         try:

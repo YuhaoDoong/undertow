@@ -318,7 +318,7 @@ fi
 set +e
 DL_OUT=$(python3 -m undertow dirledger record 2>&1); DL_RC=$?
 DS_OUT=$(python3 -m undertow dirledger score 2>&1); DS_RC=$?
-# 期权多层同向（开发期规则 conviction-dev；Codex 018：先收原始分量，冻结与复审前不称确认样本）
+# 期权多层同向（Codex 022 冻结：conviction-h1-v1-20260928，正式起点 2026-09-29；积累期 T3，不参与决策）
 CV_OUT=$(python3 -m undertow dirledger conviction-record 2>&1); CV_RC=$?
 set -e
 printf '%s\n' "$DL_OUT" | head -3

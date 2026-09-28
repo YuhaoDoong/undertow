@@ -40,6 +40,9 @@ OUT="data/account/live"; mkdir -p "$OUT"
 # ⚠️ 只记【决策】不记【持仓内容】：日志会入库，账户数据一律留在 data/account/。
 LOG_DIR="data/logs"; mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/session_$(TZ=America/New_York date +%Y-%m).log"
+clip() {  # $1=最多字符数；按【字符】截断（macOS cut -c 按字节截，会切坏汉字 → 日志变非法 UTF-8、grep 视为二进制）
+  "$PY" -c 'import sys; print(sys.stdin.read().replace("\n", " ").strip()[:int(sys.argv[1])])' "$1"
+}
 hb() {  # $1=一句话结果
   printf '%s ET %s | 周%s | %s\n' "$ET_DATE" \
     "$(TZ=America/New_York date +%H:%M:%S)" "$ET_DOW" "$1" >> "$LOG"
@@ -150,7 +153,7 @@ thesisq() {  # $1=pre|close
   local RES RC
   RES=$("$PY" -m undertow.cli journal --thesis-quotes 2>&1); RC=$?
   if (( RC == 0 )); then
-    : > "$OKF"; hb "⑨事前判断行情 ${1}：✅ $(printf '%s' "$RES" | tail -1 | cut -c1-60)"
+    : > "$OKF"; hb "⑨事前判断行情 ${1}：✅ $(printf '%s' "$RES" | tail -1 | clip 60)"
   else
     hb "⑨事前判断行情 ${1}：⏳ rc=$RC，下次唤醒重试"
   fi
@@ -167,12 +170,12 @@ intraday_capture() {
   RES=$("$PY" -m undertow.cli shadow intraday --status-file "$LOG_DIR/.status_intraday_${ET_DATE}.json" 2>&1); RC=$?
   rmdir "$LK" 2>/dev/null
   if (( RC == 0 )); then
-    : > "$OKF"; hb "⑩当天逐分钟：✅ $(printf '%s' "$RES" | grep '当天逐分钟' | tail -1 | cut -c1-80)"
+    : > "$OKF"; hb "⑩当天逐分钟：✅ $(printf '%s' "$RES" | grep '当天逐分钟' | tail -1 | clip 80)"
   else
     printf 'x' >> "$FAILF"
     hb "⑩当天逐分钟：⏳ rc=$RC，下次唤醒重试"
     if [[ $(wc -c < "$FAILF") -eq 3 ]]; then
-      notify "⚠️ 当天逐分钟采集连续失败" "$(printf '%s' "$RES" | tail -2 | tr '\n' ' ' | cut -c1-160)"
+      notify "⚠️ 当天逐分钟采集连续失败" "$(printf '%s' "$RES" | tail -2 | clip 160)"
     fi
   fi
 }

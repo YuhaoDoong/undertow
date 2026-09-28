@@ -1,0 +1,103 @@
+{
+ "status": "draft（待 Codex 验收；验收后冻结，正式起点=冻结提交后的下一个交易日）",
+ "git_head_at_build": "e4b8911324d50f82bc9b7179fe02d0886fc0deee",
+ "files_sha256": {
+  "docs/prereg/2026-09-28_skew_reading_v1.md": "e223c6e09c77433aa511b0ce8dfe87bfc944e2f226b0c7b2a8f7f97a5c28dc6d",
+  "docs/prereg/2026-09-28_skew_reading_v1_addendum.md": "a457279f20279c2c8495413615af2c2532f9e31ee3a39ad28b9fdb6fcc9050ab",
+  "docs/prereg/2026-09-28_skew_reading_v1_addendum2.md": "7022ec26a149a7e80abaaa62b2e61c317840c50f4b7aec6d2af42aa31ecce684",
+  "docs/prereg/2026-09-28_conviction_v1.1.md": "7621136ee48093f7c73f4fccfdb80e9aa8a0bfefe8e84c7f1e40e24de6a10dc4",
+  "docs/prereg/2026-09-28_conviction_v1.2.md": "7c69c678ebe360c559fa887d8a67ae9295d1bc65b927c8a1241a556197842025",
+  "docs/prereg/2026-09-28_conviction_v1.3.md": "8506712e1dc71e487f4fe6180017d601efe7a8321568b555bda90ba40dcc6094",
+  "undertow/analyze/skew_reading.py": "110905efe9a12b75474d39d23d1df410c83dac6dcf6fff9bcb26cdc7cb6ce388",
+  "undertow/analyze/conviction.py": "d24ac155ed69399050539c22dd3a905974f9a24b77d8bf846b8aff919957c50c",
+  "undertow/analyze/direction_stats.py": "9234f7805189a512d30118bf73423efbb2e87e42c509f0a1e1a532a5aba7d513",
+  "undertow/analyze/structure_read.py": "3026064c90a2a95ae9e18e82237a38dd4e44390594e94e5a8d0633d85b0f3934",
+  "undertow/analyze/flow.py": "e031c097b71772a79f04f88cc3bf937c8c37c5c04e46d198bfe8ffd547525c8b",
+  "undertow/dirledger_cli.py": "77834dec9f7a79e9fdb5355c5cb1595d2201f153271738a6b43179b00715de7f",
+  "undertow/core/market_calendar.py": "060af248e083f523932a3c8c05d18b190eb74a331f274aecc2e363adf078d4a8",
+  "undertow/core/clock.py": "0157457aab6032ecd15de8b006ab41e1d94029d752daec77de95ea5551c0acb3",
+  "undertow/collect/store.py": "1d60415202dc50587f82685dd5c6c2a0c4157a946fe5e0b2bac55603bb2101ea",
+  "undertow/collect/cas.py": "238decfdbd85e9ea5b398b37cba084fd919c16c1dc4ada9ecea999c7ac7b89da",
+  "undertow/collect/provenance.py": "16c86084e45d3114eece6ca06e4b43da308956051ec159551a82bc01fd4ca035",
+  "undertow/collect/longbridge_kline.py": "807a17aa4f3b19dfa23a9ded8d4f923ce791d1f2cc510336f1268cd9308001cc",
+  "undertow/collect/cboe_options.py": "7771366ec36c9ac4bdc093f6e4e7b3963682f2115f0df417b8a1ee9f2033d82d"
+ },
+ "rules": {
+  "skew_reading.RULE": {
+   "version": "skew-reading-v1-20260928",
+   "instruments": [
+    "gold",
+    "silver"
+   ],
+   "target_dte": 45,
+   "dte_range": [
+    25,
+    75
+   ],
+   "d_skew25_min_pp": 0.25,
+   "rung_min_pp": 0.1,
+   "rungs_needed": 4,
+   "ladder": [
+    0.4,
+    0.3,
+    0.25,
+    0.2,
+    0.15,
+    0.1
+   ],
+   "labels": [
+    "防守化",
+    "中性",
+    "进攻化",
+    "数据不足"
+   ]
+  },
+  "conviction.RULE": {
+   "version": "conviction-dev-20260928",
+   "s_skew_pp": 0.5,
+   "near_pct": 0.05,
+   "f_ratio": 2.0,
+   "v_atm_pp": 0.3,
+   "status": "development（未冻结；记录不得称确认样本）"
+  },
+  "conviction.H3_RULE": {
+   "min_run": 10,
+   "cooldown": 10,
+   "merge_window": 5,
+   "miss_reset": 2,
+   "note": "符号严格按正负（不设死区，避免看过 9/17 的 +0.05 后再定门槛）；未校准、开发期"
+  },
+  "direction_stats": {
+   "FAMILY_SIZE": 7,
+   "ALPHA": 0.0071428571428571435,
+   "QUANTILE_METHOD": "inverse_ecdf_type1: q_p = sorted[ceil(p*B)-1]",
+   "BLOCK_DAYS": {
+    "1": 10,
+    "5": 10,
+    "10": 20
+   },
+   "SENSITIVITY_BLOCKS": [
+    5,
+    20
+   ],
+   "ITERS": 10000,
+   "SEED": 20260928,
+   "MIN_NONEVENT_DAYS": 5,
+   "MAX_INVALID_FRAC": 0.05,
+   "SMA_DAYS": 200
+  }
+ },
+ "rules_sha16": {
+  "skew_reading.RULE": "ded2d269bd33e629",
+  "conviction.RULE": "b4729b98e386a472",
+  "conviction.H3_RULE": "9fb99c8a914d8690",
+  "direction_stats": "0400d84c64d607da"
+ },
+ "calendar_hash": "57b434b5f68f7843",
+ "shadow_v5_config_hash": "9e60a71ac3cec0f3",
+ "input_archive": {
+  "scheme": "cas 分块(recipes/objects) + 整份 blobs（被正式预测消费的快照）",
+  "root": "data/history/inputs/cas"
+ },
+ "freeze_step": "conviction.RULE.version 由 conviction-dev-20260928 改为 conviction-h1-v1-<冻结日>、status=frozen；新目录记录；开发期目录保留、不回填"
+}

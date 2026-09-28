@@ -41,3 +41,15 @@
 ## Boundary / 边界
 
 只做**合法公开**接口，**不绕过任何反爬/ToS**（CME 403 硬封锁 → 不抓，改用 ETF 代理 + 真实期货价换算）。imports `core`，被 `analyze`/`report` 使用，**不 import** 上面两层。
+
+### 输入可还原性（Codex 017 A01/A02，2026-09-28）
+
+- `cas.py` —— 按内容寻址的分块存储：`put(raw)` 存一版原文（在换行/逗号后切片、按内容定块界、块按 sha256 去重），
+  `get(sha)` 逐字节还原并核对整份哈希，`verify()` 逐个还原核对。存于 `data/history/inputs/cas/`（入库）。
+  改一行、追加一行只新增附近一两个块。已知边界：没有 manifest 覆盖的历史（2026-09-28 以前）只能用旧的尾部/月度文件，
+  月内早期行修订不可恢复。
+- `provenance.py` —— 取数边界留痕：`FileCache.get/set`、长桥 `kline`、`SnapshotStore.load` 在返回数据时登记；
+  `cli.main` 对白名单命令（`PROVENANCE_COMMANDS`）在结束时写 `data/history/inputs/manifests/<ET日>/*.json`
+  （来源、key、sha256、fresh_fetch/cache_hit/stale_cache、缓存年龄、git HEAD、返回码）。
+  只登记公开行情前缀；pytest 下不开启；库函数单独调用不写任何东西。`restore_inputs(manifest)` 按清单还原。
+- `input_archive.py` 的尾部/月度文件保留为浏览索引；已存在的月度文件每次都要能解开，否则隔离并报告。

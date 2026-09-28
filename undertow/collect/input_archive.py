@@ -10,6 +10,13 @@
 - 每月：data/history/inputs/monthly/<YYYY-MM>/<名>.json.gz —— 当月第一次运行时存完整原文（保证能完整重算）。
 - 不存 cboe_*（期权链，已在 data/snapshots/）。认不出的格式整份存进每日文件并标 kind=unknown_full，不静默跳过。
 原子写 + 回读校验；已有文件损坏 → 隔离保留，不覆盖。只读 data/cache，不联网。
+
+⚠️ Codex 017 A01/A02（2026-09-28）：尾部 + 月初全量**不能**还原月内对早期行的修订；事后扫描缓存也**不能**证明
+研报用了哪一版。所以现在：
+- 每个缓存文件的完整原文另存进 collect/cas（分块、按内容去重、可逐字节还原），daily 索引记 cas_sha256；
+  尾部只作便于浏览的索引，不再是唯一真值。
+- 研报「实际消费了哪一版」由 collect/provenance 在取数边界记录（manifests/），本扫描只是补充的「存档时刻缓存状态」。
+- 已存在的月度文件也要能解开，否则隔离并报告（以前只在不存在时写，坏了也当齐全）。
 """
 from __future__ import annotations
 
@@ -21,6 +28,8 @@ import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+
+from undertow.collect import cas
 
 CACHE_DIR = Path("data/cache")
 OUT_DIR = Path("data/history/inputs")
@@ -91,10 +100,12 @@ def _quarantine(path: Path) -> Path:
     return q
 
 
-def archive(et_day: str, *, cache_dir: Path = CACHE_DIR, out_dir: Path = OUT_DIR) -> dict:
+def archive(et_day: str, *, cache_dir: Path = CACHE_DIR, out_dir: Path = OUT_DIR, cas_root: Path | None = None) -> dict:
     """存一次。返回统计与问题清单（issues 非空 → 调用方告警）。"""
+    cas_root = cas_root or (out_dir / "cas")          # 默认 = data/history/inputs/cas（与 cas.ROOT 相同）
     now = datetime.now(timezone.utc).isoformat()
-    stats = {"files": 0, "new_versions": 0, "unchanged": 0, "monthly_new": 0, "unknown_full": 0, "skipped_options": 0}
+    stats = {"files": 0, "new_versions": 0, "unchanged": 0, "monthly_new": 0, "unknown_full": 0, "skipped_options": 0,
+             "cas_new_chunks": 0, "cas_new_recipes": 0}
     issues: list[str] = []
     daily_path = out_dir / "daily" / f"{et_day}.json.gz"
     try:
@@ -120,6 +131,11 @@ def archive(et_day: str, *, cache_dir: Path = CACHE_DIR, out_dir: Path = OUT_DIR
             issues.append(f"{p.name} 读取失败：{type(e).__name__}")
             continue
         sha = hashlib.sha256(raw).hexdigest()
+        try:
+            put = cas.put(raw, root=cas_root)
+            stats["cas_new_chunks"] += put["new_chunks"]; stats["cas_new_recipes"] += put["new_recipe"]
+        except Exception as e:
+            issues.append(f"{p.name} 完整原文存入 cas 失败：{type(e).__name__}: {e}")
         versions = daily["files"].setdefault(name, [])
         if versions and versions[-1]["sha256"] == sha:
             stats["unchanged"] += 1
@@ -127,9 +143,15 @@ def archive(et_day: str, *, cache_dir: Path = CACHE_DIR, out_dir: Path = OUT_DIR
             kind, n, tail = _tail(name, obj)
             stats["unknown_full"] += kind == "unknown_full"
             versions.append({"archived_at": now, "fetched_at": obj.get("fetched_at") if isinstance(obj, dict) else None,
-                             "sha256": sha, "kind": kind, "n_rows": n, "tail": tail})
+                             "sha256": sha, "cas_sha256": sha, "kind": kind, "n_rows": n, "tail": tail})
             stats["new_versions"] += 1
         mpath = out_dir / "monthly" / month / f"{name}.json.gz"
+        if mpath.exists():
+            try:
+                _read_gz(mpath)
+            except ArchiveCorrupt as e:
+                q = _quarantine(mpath)
+                issues.append(f"{e}；已隔离为 {q.name}（旧文件保留），本月全量用当前缓存重建 —— 不是原月初版本")
         if not mpath.exists():
             _write_gz(mpath, {"schema": SCHEMA, "month": month, "archived_at": now, "sha256": sha, "raw": obj})
             stats["monthly_new"] += 1

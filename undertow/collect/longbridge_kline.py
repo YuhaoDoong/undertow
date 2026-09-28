@@ -48,6 +48,9 @@ def _run(sym: str, period: str, count: int, timeout: float = 40.0) -> list[dict]
         raise KlineUnavailable(f"longbridge kline {sym} 超时") from e
     if p.returncode != 0:
         raise KlineUnavailable(f"longbridge kline {sym} 失败：{(p.stderr or p.stdout)[:200]}")
+    from undertow.collect import provenance
+    provenance.consume_bytes("longbridge_kline", f"{sym}|{period}|{count}", (p.stdout or "").encode("utf-8"),
+                             status="fresh_fetch", fetched_at=__import__("time").time())            # 017 A02
     txt = (p.stdout or "").lstrip()
     if not txt:
         raise KlineUnavailable(f"longbridge kline {sym} 返回空")

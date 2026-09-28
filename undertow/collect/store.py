@@ -141,6 +141,8 @@ class SnapshotStore:
         if not isinstance(rec, dict) or "payload" not in rec:
             print(f"[严重] 快照结构异常（缺 payload 字段）：{path.name}", file=sys.stderr)
             return None
+        from undertow.collect import provenance
+        provenance.reference_file("snapshot", f"{kind}/{symbol}/{on_date}", path)      # 017 A02：只记路径与 sha
         return rec.get("payload")
 
     def captured_at(self, kind: str, symbol: str, on_date: date) -> float | None:

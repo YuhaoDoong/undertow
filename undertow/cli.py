@@ -3053,10 +3053,16 @@ def cmd_archive_inputs(args) -> int:
     """研报输入存档（用户 2026-09-28：数据永远是最主要的）。见 collect/input_archive.py。"""
     from undertow.collect import input_archive as ia
     from undertow.collect.asof_history import atomic_write_json
+    from undertow.collect import cas
     res = ia.archive(market_today().isoformat())
     st = res["stats"]
+    v = cas.verify()                                     # 017 A01：每份完整原文都要能逐字节还原，坏了当天告警
+    st["cas_recipes"], st["cas_bad"] = v["recipes"], len(v["bad"])
+    for sha, why in v["bad"]:
+        res["issues"].append(f"cas 还原失败 {sha[:12]}：{why}")
     print(f"输入存档 {market_today()}：{st['files']} 个序列，新版本 {st['new_versions']}、未变 {st['unchanged']}、"
-          f"新月度全量 {st['monthly_new']}、未知格式整份 {st['unknown_full']}（跳过期权链 {st['skipped_options']}）")
+          f"新月度全量 {st['monthly_new']}、未知格式整份 {st['unknown_full']}（跳过期权链 {st['skipped_options']}）；"
+          f"完整原文 cas 新块 {st['cas_new_chunks']}、新版本 {st['cas_new_recipes']}，核对 {v['ok']}/{v['recipes']} 可还原")
     for i in res["issues"]:
         print(f"  ⚠️ {i}", file=sys.stderr)
     if getattr(args, "status_file", None):
@@ -4037,9 +4043,32 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+#: 这些命令结束时写「实际消费输入」清单（Codex 017 A02）。session 钩子每 5 分钟跑的 live 等不在内，避免清单泛滥。
+PROVENANCE_COMMANDS = frozenset({"report", "analyze", "gamma", "vol", "flow", "expiry", "fib", "tech",
+                                 "backtest", "signals", "dirledger", "shadow"})
+
+
 def main(argv: list[str] | None = None) -> int:
+    import os as _os
+    from undertow.collect import provenance
+    raw = list(sys.argv[1:] if argv is None else argv)
     args = build_parser().parse_args(argv)
-    return args.func(args)
+    cmd = raw[0] if raw else ""
+    on = cmd in PROVENANCE_COMMANDS and "PYTEST_CURRENT_TEST" not in _os.environ
+    if on:
+        provenance.begin(cmd, raw)
+    rc = None
+    try:
+        rc = args.func(args)
+        return rc
+    finally:
+        if on:
+            try:
+                p = provenance.finish(rc)
+                if p is not None:
+                    print(f"[留痕] 输入清单 {p}", file=sys.stderr)
+            except Exception as e:                       # 留痕失败必须可见，但不改变命令本身的返回码
+                print(f"[留痕] ⚠️ 写输入清单失败：{type(e).__name__}: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -31,9 +31,12 @@ class FileCache:
             return None
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-            return payload["data"]
+            data = payload["data"]
         except (json.JSONDecodeError, KeyError):
             return None
+        from undertow.collect import provenance
+        provenance.consume_cache_file(path.stem, path, status="cache_hit", ttl_s=ttl_seconds)   # 017 A02：消费即留痕
+        return data
 
     def set(self, key: str, data: Any) -> None:
         path = self._path(key)
@@ -41,3 +44,5 @@ class FileCache:
             json.dumps({"fetched_at": time.time(), "data": data}, ensure_ascii=False),
             encoding="utf-8",
         )
+        from undertow.collect import provenance
+        provenance.consume_cache_file(path.stem, path, status="fresh_fetch", ttl_s=None)       # 017 A02

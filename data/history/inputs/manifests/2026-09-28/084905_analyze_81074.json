@@ -1,0 +1,27 @@
+{
+ "schema": 1,
+ "command": "analyze",
+ "argv": [
+  "analyze",
+  "gold"
+ ],
+ "pid": 81074,
+ "started_at": "2026-09-28T08:49:05.037685+00:00",
+ "items": [
+  {
+   "kind": "cache",
+   "key": "cot_disaggregated_fut_088691_156",
+   "status": "cache_hit",
+   "size": 1122428,
+   "sha256": "ba29e5c48e1c612ce511b62efc791dc765a5904237ceb2d2baec6f849343cc14",
+   "fetched_at": "2026-09-28T08:00:29.323692+00:00",
+   "age_s": 2915.7,
+   "ttl_s": 21600,
+   "stored": true
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-09-28T08:49:05.049190+00:00",
+ "rc": 0,
+ "git_head": "c28970aad4a00aca29ca3a5f7a01d0e4c4f4075d"
+}

@@ -3994,6 +3994,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     from undertow.shadow_cli import register as _shadow_register
     _shadow_register(sub)
+    from undertow.dirledger_cli import register as _dir_register
+    _dir_register(sub)
 
     psig = sub.add_parser("signals",
                           help="强信号台账：重建/回填/统计（这层从未回测过，靠向前累积）")

@@ -313,6 +313,17 @@ if (( SH_RC != 0 || SH_RC2 != 0 )); then
           "capture rc=$SH_RC settle rc=$SH_RC2：$(printf '%s\n%s' "$SH_OUT" "$SH_OUT2" | grep '⚠️' | head -2 | tr '\n' ' ')"
 fi
 
+# 方向判断台账（用户 2026-09-28；预登记 skew-reading-v1）：快照已落盘 → 开盘前记录金银偏度读数（首份冻结），
+# 再回填已成熟的 1/5/10 日走势。只读；读数是未验证的 T3，不进研报结论。失败告警，不阻断提交。
+set +e
+DL_OUT=$(python3 -m undertow dirledger record 2>&1); DL_RC=$?
+DS_OUT=$(python3 -m undertow dirledger score 2>&1); DS_RC=$?
+set -e
+printf '%s\n' "$DL_OUT" | head -3
+if (( DL_RC != 0 || DS_RC != 0 )); then
+    alert "⚠️ 方向判断台账失败（ET $ET_NOW）" "record rc=$DL_RC score rc=$DS_RC：$(printf '%s\n%s' "$DL_OUT" "$DS_OUT" | grep '⚠️' | head -2 | tr '\n' ' ')"
+fi
+
 # 研报输入存档（用户 2026-09-28：「数据永远是最主要的」）：价格/波动率/FRED/COT 原始下载只在 data/cache
 # （gitignore、被覆盖、无版本）。研报刚跑完、缓存最新 → 存每日尾部 + 每月全量到 data/history/inputs/，随下方提交入库。
 set +e

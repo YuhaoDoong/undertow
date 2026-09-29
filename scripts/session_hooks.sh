@@ -202,6 +202,19 @@ close_backup() {
     fi
   fi
 }
+# ⑫ 模拟仓（用户 2026-09-29：「模拟仓开仓……自动定时进行」）：每次唤醒推进一步（入场窗口、盯市时点、到期结算），
+# 没到点什么都不写；只读报价、只写私有 data/soul/journal.json，从不下单。有动作留痕并通知；取数出错下次重试。
+paper_tick() {
+  local RES RC
+  RES=$("$PY" scripts/paper_trades.py tick 2>&1); RC=$?
+  if [[ "$RES" != *"无到点动作"* ]]; then
+    hb "⑫模拟仓：$(printf '%s' "$RES" | tail -1 | clip 160)"
+    if printf '%s' "$RES" | grep -qE ':(enter|skip|stop|settle)'; then
+      notify "📒 模拟仓" "$(printf '%s' "$RES" | tail -1 | clip 160)"
+    fi
+  fi
+  (( RC != 0 )) && hb "⑫模拟仓：⏳ rc=$RC，下次唤醒重试"
+}
 # 本脚本未开 set -e；分开捕获 rc（AGENTS.md 静默失败第 5 条：不用 `|| true`）
 SHW=$("$PY" -m undertow.cli shadow windows 2>&1); SHW_RC=$?
 if (( SHW_RC == 0 )); then
@@ -215,6 +228,7 @@ if (( SHW_RC == 0 )); then
   if [[ -n "$SHW" ]]; then                      # 交易日
     if (( ET_MIN >= 540 && ET_MIN < 570 )); then fieldcheck pre; thesisq pre; fi
     if (( ET_MIN >= 640 && ET_MIN < 980 )); then fieldcheck open; fi
+    paper_tick
     if (( ET_MIN >= 965 )); then intraday_capture; fi
     if (( ET_MIN >= 1000 )); then close_backup; fi
     if (( ET_MIN >= 980 )); then fieldcheck close; thesisq close; fi

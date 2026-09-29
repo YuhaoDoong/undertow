@@ -117,3 +117,37 @@ def test_session_hook_runs_paper_tick_each_trading_wake():
     src = (Path(__file__).resolve().parents[1] / "scripts/session_hooks.sh").read_text("utf-8")
     assert src.index("paper_tick() {") < src.index("    paper_tick\n")
     assert "scripts/paper_trades.py tick" in src
+
+
+def test_quote_with_explicit_error_rejected():
+    """Codex 026 probe：带 stale 错误、挂单量 0 的报价曾被接受。"""
+    assert not pt.quote_ok({"bid": 1, "ask": 1.1, "error": "stale", "bid_size": 0, "ask_size": 0})
+    assert pt.quote_ok({"bid": 1, "ask": 1.1, "error": "", "bid_size": 0, "ask_size": 0})
+
+
+def test_entry_quote_labels_size_and_gap():
+    p = _p()
+    dq = lambda syms: {"S": {"bid": 1.44, "ask": 1.6, "bid_size": 0, "ask_size": 5, "error": "",
+                             "fetched_at": "2026-09-29T14:06:00+00:00"},
+                       "B": {"bid": 0.95, "ask": 1.03, "bid_size": 3, "ask_size": 9, "error": "",
+                             "fetched_at": "2026-09-29T14:06:00.600000+00:00"}}
+    assert pt.step(p, at(29, 10, 6), depth=dq) == "enter"
+    lab = p["entry_quote_labels"]
+    assert lab["size_sufficient"] is False and lab["leg_fetch_gap_s"] == pytest.approx(0.6)
+    assert "source_ts_unknown" in lab["time_alignment"]
+
+
+def test_ledger_is_idempotent_projection_after_crash(tmp_path):
+    """journal 已记入场、台账尚未追加（崩溃窗口）→ 下次补齐；重复调用不重复写。"""
+    p = _entered()
+    j = {"theses": [{"id": "T1", "execution": "模拟", "paper": p}]}
+    led = tmp_path / "led.jsonl"
+    assert pt.sync_ledger(j, led) == 1
+    assert pt.sync_ledger(j, led) == 0
+    pt.step(p, at(30, 16, 21), session_close=lambda u, d: {"close": 376.0, "source": "t", "bar_date": d.isoformat()})
+    assert pt.sync_ledger(j, led) == 1
+    rows = [__import__("json").loads(x) for x in led.read_text().splitlines()]
+    assert [r["action"] for r in rows] == ["enter", "settle"] and len({r["event_id"] for r in rows}) == 2
+    led.write_text(led.read_text() + "{broken\n")
+    with pytest.raises(RuntimeError):
+        pt.sync_ledger(j, led)

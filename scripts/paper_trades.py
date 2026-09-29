@@ -80,7 +80,22 @@ def validate_spec(p: dict) -> str | None:
 
 
 def quote_ok(q: dict) -> bool:
-    return q is not None and _finite(q.get("bid"), q.get("ask")) and 0 < q["bid"] <= q["ask"]
+    """报价可用：无显式错误、bid/ask 有限、0 < bid ≤ ask（Codex 026：带 error 的报价一律拒绝）。"""
+    return q is not None and not q.get("error") and _finite(q.get("bid"), q.get("ask")) and 0 < q["bid"] <= q["ask"]
+
+
+def quote_labels(q: dict, sell: str, buy: str, qty: int) -> dict:
+    """研究模式按报价假设成交；另标挂单量是否够、两腿抓取时差、源时戳未知 —— 只标注，不据此称可执行。"""
+    s, b = q.get(sell) or {}, q.get(buy) or {}
+    sizes = (s.get("bid_size"), b.get("ask_size"))
+    size_ok = None if any(x is None for x in sizes) else all(x >= qty for x in sizes)
+    gap = None
+    try:
+        gap = abs((datetime.fromisoformat(b["fetched_at"]) - datetime.fromisoformat(s["fetched_at"])).total_seconds())
+    except (KeyError, TypeError, ValueError):
+        pass
+    return {"quote_valid": True, "size_sufficient": size_ok, "leg_fetch_gap_s": gap,
+            "time_alignment": "source_ts_unknown（长桥 depth 不给源时戳）"}
 
 
 def _depth(symbols):
@@ -149,9 +164,11 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close) 
             ev.append({"at": now.isoformat(), "action": "entry_quote", "quotes": q, "why": p["last_reject"]})
             return "retry"                                 # 窗口内继续取；第一份合格即入场
         econ = economics(p["side"], p["k_sell"], p["k_buy"], credit, p["qty"], p["fee_round_trip"])
+        lab = quote_labels(q, p["sell"], p["buy"], p["qty"])
         p.update(state="entered", entered_at=now.isoformat(), entry_credit=credit, economics=econ,
-                 stop_value=round(p["stop_mult"] * credit, 4))
-        ev.append({"at": now.isoformat(), "action": "enter", "quotes": q, "credit": credit, "economics": econ})
+                 stop_value=round(p["stop_mult"] * credit, 4), entry_quote_labels=lab)
+        ev.append({"at": now.isoformat(), "action": "enter", "quotes": q, "credit": credit, "economics": econ,
+                   "quote_labels": lab})
         return "enter"
     # —— entered ——
     exp = date.fromisoformat(p["expiry"])
@@ -208,18 +225,48 @@ def _outcome(t: dict) -> None:
         t["review"] = (t.get("review") or "") + f"【模拟仓未入场】{p.get('skip_reason') or p.get('invalid_reason')}"
 
 
-def _ledger(t: dict, action: str, now: datetime) -> None:
-    """paper-discretionary 研究台账（Codex 025：与 journal 原判断关联，不混入 v5 或方向族 D）。只追加。"""
-    p = t["paper"]
-    row = {"thesis_id": t["id"], "rule_version": p.get("rule_version", RULE_VERSION), "action": action,
-           "at": now.isoformat(), "state": p["state"],
-           "spec": {k: p.get(k) for k in ("underlying", "expiry", "side", "sell", "buy", "k_sell", "k_buy", "qty",
-                                          "entry_window_et", "min_credit_ratio", "stop_mult", "fee_round_trip", "mark_slots_et")},
-           "evidence": (p.get("events") or [])[-1:], "result": {k: p.get(k) for k in
-                                                                 ("entry_credit", "economics", "pnl_usd", "settle", "skip_reason")}}
-    with open(LEDGER, "a", encoding="utf-8") as f:
-        f.write(json.dumps(row, ensure_ascii=False) + "\n")
-        f.flush(); os.fsync(f.fileno())
+LEDGER_ACTIONS = ("enter", "skipped", "missed", "invalid_spec", "stop", "settle")
+
+
+def event_id(thesis_id: str, e: dict) -> str:
+    return f"{thesis_id}|{e['action']}|{e['at']}"
+
+
+def sync_ledger(j: dict, ledger: Path | None = None) -> int:
+    """paper-discretionary 研究台账 = journal 关键事件的只追加投影（Codex 025/026）。
+    在 journal 原子替换【之后】调用；按稳定 event_id 去重 —— 中途崩溃后下次唤醒补齐，重复运行不重复写。
+    台账某行解析失败 → 抛错（不静默跳过、不覆盖）。返回本次追加条数。"""
+    ledger = ledger or LEDGER
+    seen = set()
+    if ledger.exists():
+        for i, line in enumerate(ledger.read_text("utf-8").splitlines(), 1):
+            if line.strip():
+                try:
+                    seen.add(json.loads(line)["event_id"])
+                except (ValueError, KeyError) as e:
+                    raise RuntimeError(f"{ledger.name} 第 {i} 行损坏：{e}")
+    new = []
+    for t in j.get("theses", []):
+        p = t.get("paper")
+        if t.get("execution") != "模拟" or not p:
+            continue
+        for e in p.get("events") or []:
+            if e.get("action") not in LEDGER_ACTIONS or event_id(t["id"], e) in seen:
+                continue
+            new.append({"event_id": event_id(t["id"], e), "thesis_id": t["id"],
+                        "rule_version": p.get("rule_version", RULE_VERSION), "action": e["action"], "at": e["at"],
+                        "state_now": p["state"],
+                        "spec": {k: p.get(k) for k in ("underlying", "expiry", "side", "sell", "buy", "k_sell", "k_buy",
+                                                       "qty", "entry_window_et", "min_credit_ratio", "stop_mult",
+                                                       "fee_round_trip", "mark_slots_et")},
+                        "evidence": e,
+                        "result": {k: p.get(k) for k in ("entry_credit", "economics", "pnl_usd", "settle", "skip_reason")}})
+    if new:
+        with open(ledger, "a", encoding="utf-8") as f:
+            for r in new:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            f.flush(); os.fsync(f.fileno())
+    return len(new)
 
 
 def tick(now: datetime | None = None) -> list[str]:
@@ -241,9 +288,8 @@ def tick(now: datetime | None = None) -> list[str]:
                 a = "error"
             if a:
                 changed = True
-                if a in ("enter", "skipped", "missed", "invalid_spec", "stop", "settle"):
+                if a in LEDGER_ACTIONS:
                     _outcome(t)
-                    _ledger(t, a, now)
                 out.append(f"{t['id']}:{a}")
         if changed:
             body = json.dumps(j, ensure_ascii=False, indent=2)
@@ -253,6 +299,7 @@ def tick(now: datetime | None = None) -> list[str]:
             if json.loads(Path(name).read_text("utf-8")) != j:
                 raise RuntimeError("journal 回读校验失败，未替换")
             os.replace(name, JOURNAL)
+        sync_ledger(j)                                   # journal 落盘之后再投影；每次都核对补齐
         fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
     return out
 

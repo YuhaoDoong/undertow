@@ -17,6 +17,7 @@ v2（Codex 025-1/2 修订，入场前生效）：
 - 结算：**理论到期记账**（按到期日常规收盘价的内在价值现金化；不模拟提前行权、指派、到期处置与实物交割）。
   收盘价取长桥日线中【日期 = 到期日】的那根，且只在到期日 16:20 ET 之后；取不到 → settlement_pending，之后每次唤醒重试；
   到期后才恢复运行也能补结（用到期日那根，不用恢复当天的价）。
+- 风险单位：每笔固定 1 组（qty=1），收益与风险按每组比较；两笔金银同日不是两份独立证据。
 - 手续费：fee_round_trip 为【每组】往返费用，整单 = 每组 × qty；最大亏损、最大收益、盈亏平衡都由 economics() 同一函数算。
 """
 from __future__ import annotations
@@ -83,10 +84,16 @@ def quote_ok(q: dict) -> bool:
 
 
 def _depth(symbols):
+    """逐腿取盘口。长桥 depth 接口不给源时戳，只能记逐腿抓取时刻（两腿时差由此可算）与一档挂单量。"""
     from undertow.collect.longbridge_quote import fetch_depth
-    d = fetch_depth(symbols)
-    return {s: {"bid": getattr(d.get(s), "bid", None), "ask": getattr(d.get(s), "ask", None),
-                "error": getattr(d.get(s), "error", None)} for s in symbols}
+    out = {}
+    for s in symbols:
+        d = fetch_depth([s]).get(s)
+        out[s] = {"bid": getattr(d, "bid", None), "ask": getattr(d, "ask", None),
+                  "bid_size": getattr(d, "bid_size", None), "ask_size": getattr(d, "ask_size", None),
+                  "error": getattr(d, "error", None), "fetched_at": datetime.now(timezone.utc).isoformat(),
+                  "source_ts": None}
+    return out
 
 
 def _session_close(underlying: str, day: date):

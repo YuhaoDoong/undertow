@@ -1210,3 +1210,5 @@ def test_sample_inline_retry_recovers_transient_error(tmp_path, monkeypatch):
     sc.cmd_sample(A())
     rec = [json.loads(l) for l in out.read_text().splitlines()][-1]
     assert len(calls) == 2 and all(q["error"] is None and q.get("retried") for q in rec["quotes"].values())
+    q = next(iter(rec["quotes"].values()))
+    assert [a["error"] for a in q["attempts"]] == ["connect timeout", None] and all(a["at"] for a in q["attempts"])

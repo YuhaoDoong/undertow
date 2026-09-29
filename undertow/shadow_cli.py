@@ -302,7 +302,8 @@ def cmd_quote(args) -> int:
     if missing_rows:
         print(f"  ⚠️ 应有当日机会行却没有（盘前 capture 未跑或失败）：{', '.join(missing_rows)}", file=sys.stderr)
     counts["missing_rows"] = len(missing_rows)
-    print(f"  {wkey}：应有 {counts['expected_legs']} 条腿，有效 {counts['valid_legs']} → {overall}")
+    # 口径（Codex 024-6）：v5 的一条「腿」(leg_id 如 P-A) = 一个候选价差（卖腿 + 买腿两个合约）；状态字段名沿用 expected_legs
+    print(f"  {wkey}：应有 {counts['expected_legs']} 个候选价差（每个含卖、买两个合约），有效 {counts['valid_legs']} → {overall}")
     _status(args, f"quote-{window}", done, issues, overall=overall, counts=counts)
     return 0 if overall in ("complete", "unchanged") else 1
 
@@ -888,15 +889,20 @@ def cmd_sample(args) -> int:
                 if retry:
                     import time as _t
                     _t.sleep(SAMPLE_RETRY_SLEEP_S)
+                    t1 = _now_iso()
                     try:
-                        dep2 = fetch_depth(retry)
-                    except Exception:
-                        dep2 = {}
+                        dep2, err2 = fetch_depth(retry), "not_returned"
+                    except Exception as e:
+                        dep2, err2 = {}, f"{type(e).__name__}: {e}"[:200]
                     for s in retry:
+                        first = {"at": t0, "error": quotes[s]["error"]}            # 每次尝试的实际时刻与错误（024-6）
                         d = dep2.get(s)
                         if d is not None and not d.error:
                             quotes[s] = {"bid": d.bid, "ask": d.ask, "bid_size": d.bid_size, "ask_size": d.ask_size,
-                                         "error": None, "retried": True}
+                                         "error": None, "retried": True,
+                                         "attempts": [first, {"at": t1, "error": None}]}
+                        else:
+                            quotes[s]["attempts"] = [first, {"at": t1, "error": (d.error if d is not None else err2)}]
             under = None
             if need_under:
                 try:
@@ -1172,7 +1178,7 @@ def cmd_bars(args) -> int:
             q = lbb.quarantine(path)
             print(f"  ⚠️ {e}；已隔离为 {q.name}，重新抓取（旧文件保留）", file=sys.stderr)
             cur = lbb.new_day(root, day)
-        covered = lbb.intraday_covered(root, day)          # 当天逐分钟已存 → 不占按月计的历史 K 线配额
+        covered = lbb.intraday_covered(root, day, need=args.need)   # need=close：全时段逐分钟收盘已存 → 省配额；ohlc：不跳过
         missing = sorted(s for s in syms if s not in covered and (s not in cur["contracts"]
                          or (args.retry_missing and cur["contracts"][s].get("status") in ("not_found", "invalid_symbol"))))
         if not missing:
@@ -1212,31 +1218,81 @@ SAMPLE_RETRY_SLEEP_S = 2.0
 INTRADAY_PACE_S = 0.55          # 长桥行情接口约 60 次 / 30 秒（官方文档写于 history candlestick 页）；留余量
 
 
-def cmd_intraday(args) -> int:
-    """收盘后存【当天】候选合约与标的的逐分钟成交价量（longbridge intraday；不占按月计的历史 K 线配额）。
+INTRADAY_LOCK = Path("data/logs/.intraday.flock")
 
-    用户 2026-09-28：「记住数据最重要」。长桥历史 K 线 400 代码/自然月，主池两周就用掉 349 个，
-    缺口只能等下月初；而已到期合约约一周后查不到 → 当天就存下来最稳。覆盖全部品种与规则（不占配额）。
-    只在交易日 ET 16:05 之后运行（当天盘中数据完整）；已存 ok 的不重抓，其余（未抓/空/查不到）重试。
+
+def intraday_plan_state(plan: dict, base) -> dict:
+    """按【落盘后的整个计划】判状态（Codex 024-1）：逐代码回读文件 → complete / empty_confirmed /
+    gone_confirmed / pending；坏文件整组记 corrupt。"""
+    from undertow.collect import longbridge_bars as lbb
+    counts = {"complete": 0, "empty_confirmed": 0, "gone_confirmed": 0, "pending": 0, "corrupt": 0}
+    pend = []
+    for (root, day), syms in plan.items():
+        try:
+            cur = lbb.load_day(lbb.path_of(root, day, base)) or {"contracts": {}}
+        except lbb.BarsFileCorrupt:
+            counts["corrupt"] += len(syms)
+            continue
+        for sym in syms:
+            st = lbb.symbol_state(cur["contracts"].get(sym))
+            counts[st] += 1
+            if st == "pending":
+                pend.append(sym)
+    return {"counts": counts, "pending": sorted(pend)[:20]}
+
+
+def cmd_intraday(args) -> int:
+    """收盘后存【当天】候选合约与标的的逐分钟（longbridge intraday；不占按月计的历史 K 线配额）。
+
+    用户 2026-09-28：「记住数据最重要」。Codex 024 修订：
+    - 状态由【落盘后的整个计划】计算，区分「请求成功 / 数据可用 / 计划已覆盖」；只有全部代码进入终态
+      （full_session 完成 / empty 连续 3 次 / 查不到连续 2 次）才 overall=complete、rc=0；否则 partial、rc=1，下次唤醒续补。
+    - 质量标签 full_session / partial_session / empty / invalid；更差的一次不覆盖已有的 full_session；每次尝试都留痕。
+    - 零计划区分：今天候选账尚未生成 → plan_unavailable（rc=1，重试）；账已生成但无候选腿 → no_candidates（终态）。
+    - 进程级文件锁（fcntl.flock）：进程被杀由内核释放，不会留下失效锁；锁被占 → rc=4（上一轮仍在跑）。
     只读、从不下单。"""
+    import fcntl
     import time as _time
     from undertow.collect import longbridge_bars as lbb
     today = market_today()
     now_et = datetime.now(ET)
     if mc.is_trading_day(today) is not True:
         print(f"{today} 非交易日：不抓当天逐分钟。")
-        _status(args, "intraday", [], [], overall="unchanged", counts={"new": 0, "ok": 0})
+        _status(args, "intraday", [], [], overall="unchanged", counts={"planned": 0})
         return 0
     if (now_et.hour, now_et.minute) < (16, 5) and not args.force:
         print(f"ET {now_et:%H:%M} 未到 16:05：当天逐分钟未完整，不抓（--force 可强制）。")
-        _status(args, "intraday", [], [], overall="unchanged", counts={"new": 0, "ok": 0})
+        _status(args, "intraday", [], [], overall="unchanged", counts={"planned": 0})
         return 0
+    INTRADAY_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    lk = open(INTRADAY_LOCK, "a+")
+    try:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("当天逐分钟：上一轮仍在运行（文件锁被占），本次跳过。")
+        _status(args, "intraday", [], [], overall="busy", counts={"planned": None})
+        lk.close()
+        return 4
+    try:
+        return _intraday_locked(args, today, lbb, _time)
+    finally:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
+        lk.close()
+
+
+def _intraday_locked(args, today, lbb, _time) -> int:
     rows = []
     for d in (_vdir(False), _vdir(True)):
         for p in sorted(d.glob("*.jsonl")):
             rows += jl.load(p, KEY)
+    today_rows = [r for r in rows if r.get("session") == today.isoformat()]
     plan = {k: v for k, v in bars_plan(rows, last_day=today).items() if k[1] == today}
-    n_new = n_ok = 0
+    if not plan:
+        overall = "no_candidates" if today_rows else "plan_unavailable"
+        print(f"当天逐分钟 {today}：计划为空（{overall}：今日候选账{'已生成但无在场候选腿' if today_rows else '尚未生成'}）")
+        _status(args, "intraday", [], [], overall=overall, counts={"planned": 0, "ledger_rows_today": len(today_rows)})
+        return 0 if overall == "no_candidates" else 1
+    n_req = n_ok = 0
     issues, done = [], []
     for (root, day), syms in sorted(plan.items()):
         path = lbb.path_of(root, day, lbb.INTRADAY_DIR)
@@ -1246,33 +1302,36 @@ def cmd_intraday(args) -> int:
             q = lbb.quarantine(path)
             print(f"  ⚠️ {e}；已隔离为 {q.name}，重新抓取（旧文件保留）", file=sys.stderr)
             cur = lbb.new_intraday_day(root, day)
-        def _complete(v):                  # 只有收盘后（ET 16:05 起）抓到的 ok 才算当天完整；盘中 --force 的要重抓
-            if (v or {}).get("status") != "ok" or not v.get("fetched_at"):
-                return False
-            t = datetime.fromisoformat(v["fetched_at"]).astimezone(ET)
-            return t.date() == day and (t.hour, t.minute) >= (16, 5)
-        todo = sorted(s for s in syms if not _complete(cur["contracts"].get(s)))
+        todo = sorted(s for s in syms if lbb.symbol_state(cur["contracts"].get(s)) == "pending")
         if not todo:
             continue
         try:
             for s in todo:
                 res = lbb.fetch_intraday_today(s, day)
-                cur["contracts"][s] = res
-                n_new += 1
-                n_ok += res["status"] == "ok"
+                cur["contracts"][s] = lbb.merge_attempt(cur["contracts"].get(s), res)
+                n_req += 1
+                n_ok += (res.get("quality") or {}).get("label") == "full_session"
                 _time.sleep(INTRADAY_PACE_S)
         except (lbb.BarsUnavailable, lbb.BarsQuotaExhausted) as e:
             issues.append({"instrument": f"{root} {day}", "error": str(e)[:200]})
-        if todo and any(s in cur["contracts"] for s in todo):
+        if any(s in cur["contracts"] for s in todo):
             lbb.save_day(path, cur)
             done.append(f"{root} {day}")
         if len(issues) >= 3:
             print("  ⚠️ 连续故障，停止本次（下次从断点继续）", file=sys.stderr)
             break
+    st = intraday_plan_state(plan, lbb.INTRADAY_DIR)             # 回读落盘文件，按整个计划判
+    c = st["counts"]
     total = sum(len(v) for v in plan.values())
-    print(f"当天逐分钟 {today}：计划 {len(plan)} 个（标的, 日）、{total} 个代码；本次抓 {n_new}（有成交数据 {n_ok}）")
-    _status(args, "intraday", done, issues, counts={"new": n_new, "ok": n_ok, "planned": total})
-    return 1 if issues else 0
+    terminal = c["complete"] + c["empty_confirmed"] + c["gone_confirmed"]
+    overall = "complete" if terminal == total and not issues else ("failed" if terminal == 0 else "partial")
+    print(f"当天逐分钟 {today}：计划 {len(plan)} 个（标的, 日）、{total} 个代码；本次请求 {n_req}（全时段 {n_ok}）；"
+          f"整计划：完成 {c['complete']}、确认空 {c['empty_confirmed']}、确认查不到 {c['gone_confirmed']}、"
+          f"待续 {c['pending']}、坏文件 {c['corrupt']} → {overall}")
+    _status(args, "intraday", done, issues, overall=overall,
+            counts={"planned": total, "requested_now": n_req, "full_session_now": n_ok, **c,
+                    "pending_sample": st["pending"]})
+    return 0 if overall == "complete" else 1
 
 
 EXEC_DIR = Path("data/account/shadow_exec")      # 私有：gitignore；研究账在 data/history/shadow/（公开）
@@ -1374,6 +1433,8 @@ def register(sub):
     sp.set_defaults(func=cmd_sample)
     b = ss.add_parser("bars", help="补候选价差的历史盘中成交价（长桥 1 分钟 K 线；到期约一周后查不到，尽早补）")
     b.add_argument("--since", help="只补 session ≥ 该日的机会行"); b.add_argument("--status-file")
+    b.add_argument("--need", choices=("close", "ohlc"), default="close",
+                   help="所需字段：close（默认；全时段逐分钟收盘已存的代码跳过，省配额）/ ohlc（分钟 OHLC，不跳过）")
     b.add_argument("--all", action="store_true", help="全部品种与规则（默认只补主池的 A、B1：长桥按不同代码数限额）")
     b.add_argument("--retry-missing", action="store_true",
                    help="重查此前记为 not_found / invalid_symbol 的合约日（默认不重查；「本次未取得」不等于永久不可得）")

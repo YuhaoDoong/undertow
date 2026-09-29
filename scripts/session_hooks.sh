@@ -87,7 +87,7 @@ shadow_window() {  # $1=open|close $2=窗口起(分) $3=窗口止(分) $4=标签
     RES=$("$PY" -m undertow.cli shadow quote --window "$W" --status-file "$ST" 2>&1); RC=$?
   fi
   rmdir "$LK" 2>/dev/null
-  local SUM; SUM=$(printf '%s' "$RES" | grep -E '应有 .* 条腿|开盘后全链：' | tail -1)
+  local SUM; SUM=$(printf '%s' "$RES" | grep -E '应有 .* 个候选价差|应有 .* 条腿|开盘后全链：' | tail -1)
   if (( RC == 0 )); then
     : > "$OKF"; hb "${TAG}：✅ ${SUM}"
   else
@@ -161,21 +161,23 @@ thesisq() {  # $1=pre|close
 # ⑩ 收盘后存当天逐分钟（用户 2026-09-28「记住数据最重要」）：longbridge intraday 只能取【当天】、不占按自然月计的
 # 历史 K 线配额（400 代码/月，主池两周即用掉 349）。ET 16:05 起每次唤醒尝试，成功写哨兵；rc≠0 连续 3 次后通知一次。
 intraday_capture() {
+  # Codex 024：成功哨兵只看结构化状态（overall=complete/no_candidates），不看退出码；
+  # 锁由命令内 fcntl.flock 负责（进程被杀由内核释放，不会留下失效锁）；rc=4 = 上一轮仍在跑。
   local OKF="$LOG_DIR/.intraday_${ET_DATE}.ok" FAILF="$LOG_DIR/.intraday_fail_${ET_DATE}"
+  local STF="$LOG_DIR/.status_intraday_${ET_DATE}.json"
   [[ -f "$OKF" ]] && return
   IN_SHADOW=1
-  local LK="$LOG_DIR/.lock_intraday_${ET_DATE}"           # 约 10 分钟 > 唤醒间隔：防两次同时读改写同一文件
-  if ! mkdir "$LK" 2>/dev/null; then hb "⑩当天逐分钟：上一轮仍在跑，跳过"; return; fi
-  local RES RC
-  RES=$("$PY" -m undertow.cli shadow intraday --status-file "$LOG_DIR/.status_intraday_${ET_DATE}.json" 2>&1); RC=$?
-  rmdir "$LK" 2>/dev/null
-  if (( RC == 0 )); then
-    : > "$OKF"; hb "⑩当天逐分钟：✅ $(printf '%s' "$RES" | grep '当天逐分钟' | tail -1 | clip 80)"
+  local RES RC OV
+  RES=$("$PY" -m undertow.cli shadow intraday --status-file "$STF" 2>&1); RC=$?
+  if (( RC == 4 )); then hb "⑩当天逐分钟：上一轮仍在跑（文件锁），跳过"; return; fi
+  OV=$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1])).get("overall",""))' "$STF" 2>/dev/null)
+  if [[ "$OV" == "complete" || "$OV" == "no_candidates" ]]; then
+    : > "$OKF"; hb "⑩当天逐分钟：✅ ${OV} $(printf '%s' "$RES" | grep '当天逐分钟' | tail -1 | clip 120)"
   else
     printf 'x' >> "$FAILF"
-    hb "⑩当天逐分钟：⏳ rc=$RC，下次唤醒重试"
+    hb "⑩当天逐分钟：⏳ rc=$RC overall=${OV:-状态文件缺失} $(printf '%s' "$RES" | grep '当天逐分钟' | tail -1 | clip 100)"
     if [[ $(wc -c < "$FAILF") -eq 3 ]]; then
-      notify "⚠️ 当天逐分钟采集连续失败" "$(printf '%s' "$RES" | tail -2 | clip 160)"
+      notify "⚠️ 当天逐分钟采集连续未完成" "$(printf '%s' "$RES" | tail -2 | clip 160)"
     fi
   fi
 }

@@ -153,8 +153,19 @@ def new_day(root: str, day: date) -> dict:
 # 口径：每分钟一个成交价 + 成交量/成交额（无 OHLC、无买卖价），与 kline 分开存。
 INTRADAY_DIR = Path("data/history/option_intraday")
 INTRADAY_FIELDS = ("time", "price", "volume", "turnover", "avg_price")
-BASIS_INTRADAY = ("longbridge intraday（当天）：每分钟成交价、成交量、成交额（UTC）；无 OHLC、无买卖价。"
-                  "收盘后抓取，补充而非替代 v5 保守入场价。")
+# 口径（官方 intraday 文档 + 2026-09-28 实测）：time = 分钟【起点】（UTC）；price = 该分钟【收盘价】，无成交的分钟
+# 沿用上一价、volume=0；turnover 为美元成交额 —— 期权含合约乘数（IWM 期权：286.00 / 126 张 ≈ 2.27 = 0.0227×100），
+# 正股不含（GLD.US：27107700.944 / 71726 ≈ 377.9）；期权的 avg_price 返回 "0"，含义未核实，不得当作 VWAP。
+# 分钟 VWAP 代理 = turnover / (volume × 乘数)，乘数须逐合约核实，不默认固定。
+BASIS_INTRADAY = ("longbridge intraday（当天）：每分钟收盘价（time=分钟起点，UTC）、成交量、成交额；无 OHLC、无买卖价。"
+                  "volume=0 的分钟为沿用上一价，不是成交证据。收盘后抓取，补充而非替代 v5 保守入场价。")
+#: 终态规则（Codex 024-1，事前写死）：收盘后（ET 16:05 起）同一代码
+#:   full_session → 完成；partial_session / 解析异常 → 继续重试；
+#:   empty 连续 EMPTY_TERMINAL 次（间隔 ≥ 一次唤醒）→ empty_confirmed（终态，原始响应保留）；
+#:   not_found / invalid_symbol 连续 GONE_TERMINAL 次 → 终态。
+EMPTY_TERMINAL = 3
+GONE_TERMINAL = 2
+FULL_SESSION_MIN_FRAC = 0.95       # 分钟行覆盖 ≥ 95% 的应有交易分钟，且首末分钟在时段两端（设计值，未校准）
 
 
 def parse_intraday(raw, day: date) -> list[list[str]]:
@@ -171,6 +182,48 @@ def parse_intraday(raw, day: date) -> list[list[str]]:
     return out
 
 
+def session_minutes(day: date) -> tuple[datetime, datetime, int] | None:
+    """该交易日常规时段的首、末分钟起点（UTC）与应有分钟数（半日市按日历收市时刻）。"""
+    from zoneinfo import ZoneInfo
+    from undertow.core import market_calendar as mc
+    ct = mc.close_time(day)
+    if ct is None:
+        return None
+    et = ZoneInfo("America/New_York")
+    hh, mm = map(int, ct.split(":"))
+    first = datetime(day.year, day.month, day.day, 9, 30, tzinfo=et).astimezone(timezone.utc)
+    close = datetime(day.year, day.month, day.day, hh, mm, tzinfo=et).astimezone(timezone.utc)
+    n = int((close - first).total_seconds() // 60)
+    return first, close, n
+
+
+def intraday_quality(rows: list, day: date) -> dict:
+    """质量标签（Codex 024-2）：不要求每分钟有成交，但要求时段覆盖、排序、无重复、数值有效。"""
+    if not rows:
+        return {"label": "empty", "n": 0}
+    try:
+        ts = [datetime.fromisoformat(r[0].replace("Z", "+00:00")) for r in rows]
+        px = [float(r[1]) for r in rows]
+        vol = [float(r[2]) for r in rows]
+    except (ValueError, IndexError) as e:
+        return {"label": "invalid", "why": f"{type(e).__name__}: {e}"[:120], "n": len(rows)}
+    if ts != sorted(ts) or len(set(ts)) != len(ts):
+        return {"label": "invalid", "why": "时间未排序或有重复", "n": len(rows)}
+    if any(p < 0 for p in px) or any(v < 0 for v in vol):
+        return {"label": "invalid", "why": "价格或成交量为负", "n": len(rows)}
+    sm = session_minutes(day)
+    if sm is None:
+        return {"label": "invalid", "why": "非交易日", "n": len(rows)}
+    first, close, n_exp = sm
+    in_sess = [t for t in ts if first <= t < close]
+    frac = len(in_sess) / n_exp if n_exp else 0.0
+    from datetime import timedelta
+    ok = frac >= FULL_SESSION_MIN_FRAC and ts[0] <= first + timedelta(minutes=2) and \
+        ts[-1] >= close - timedelta(minutes=3)
+    return {"label": "full_session" if ok else "partial_session", "n": len(rows), "coverage": round(frac, 4),
+            "first": ts[0].isoformat(), "last": ts[-1].isoformat(), "traded_minutes": sum(v > 0 for v in vol)}
+
+
 def fetch_intraday_today(symbol: str, day: date, *, runner=_run) -> dict:
     """当天逐分钟。day 必须是今天（ET）—— 调用方保证；返回行的日期不符即报错，不静默存错日。"""
     st, data = runner(["intraday", symbol])
@@ -178,7 +231,46 @@ def fetch_intraday_today(symbol: str, day: date, *, runner=_run) -> dict:
     if st != "ok":
         return {"status": st, "error": data, "fetched_at": at}
     rows = parse_intraday(data, day)
-    return {"status": "ok" if rows else "empty", "rows": rows, "fetched_at": at}
+    return {"status": "ok" if rows else "empty", "rows": rows, "fetched_at": at,
+            "quality": intraday_quality(rows, day)}
+
+
+def merge_attempt(prev: dict | None, res: dict) -> dict:
+    """保留每次尝试（时刻、状态、行数、质量标签）；已有 full_session 的数据不会被更差的一次覆盖。"""
+    hist = list((prev or {}).get("attempts") or [])
+    hist.append({"at": res.get("fetched_at"), "status": res["status"],
+                 "n": len(res.get("rows") or []), "label": (res.get("quality") or {}).get("label"),
+                 "error": (str(res.get("error"))[:160] if res.get("error") else None)})
+    keep_old = (prev or {}).get("quality", {}).get("label") == "full_session" and \
+        (res.get("quality") or {}).get("label") != "full_session"
+    base = dict(prev) if keep_old else dict(res)
+    base["attempts"] = hist
+    base["state"] = symbol_state(base)
+    return base
+
+
+def symbol_state(v: dict | None) -> str:
+    """单个代码的终态判定：complete / empty_confirmed / gone_confirmed / pending。"""
+    if not v:
+        return "pending"
+    if (v.get("quality") or {}).get("label") == "full_session":
+        return "complete"
+    att = v.get("attempts") or []
+    tail = [a["status"] for a in att]
+
+    def run_of(stats):
+        n = 0
+        for x in reversed(tail):
+            if x in stats:
+                n += 1
+            else:
+                break
+        return n
+    if run_of(("empty",)) >= EMPTY_TERMINAL:
+        return "empty_confirmed"
+    if run_of(("not_found", "invalid_symbol")) >= GONE_TERMINAL:
+        return "gone_confirmed"
+    return "pending"
 
 
 def new_intraday_day(root: str, day: date) -> dict:
@@ -186,10 +278,15 @@ def new_intraday_day(root: str, day: date) -> dict:
             "fields": list(INTRADAY_FIELDS), "contracts": {}}
 
 
-def intraday_covered(root: str, day: date, base: Path = INTRADAY_DIR) -> set:
-    """该 (标的, 日) 当天逐分钟已存且非空的代码集合（坏文件 → 空集合，由抓取命令负责隔离）。"""
+def intraday_covered(root: str, day: date, base: Path = INTRADAY_DIR, *, need: str = "close") -> set:
+    """按研究所需字段判覆盖（Codex 024-2）：need="close" → 质量为 full_session 的代码；
+    need="ohlc" → 永远为空集（逐分钟只有分钟收盘，不能替代 OHLC 的路径/止损/极值研究）。
+    坏文件 → 空集合（由抓取命令负责隔离）。"""
+    if need != "close":
+        return set()
     try:
         cur = load_day(path_of(root, day, base))
     except BarsFileCorrupt:
         return set()
-    return {s for s, v in ((cur or {}).get("contracts") or {}).items() if v.get("status") == "ok"}
+    return {s for s, v in ((cur or {}).get("contracts") or {}).items()
+            if (v.get("quality") or {}).get("label") == "full_session"}

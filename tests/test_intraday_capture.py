@@ -233,3 +233,21 @@ def test_gap_ledger_fields_and_priority(tmp_path, monkeypatch):
     g0 = gaps[0]
     assert g0["expiry"] == "2026-09-29" and g0["fields_missing"] == "ohlc+close" and g0["priority"] == 1
     assert gaps[2]["fields_missing"] == "ohlc" and gaps[3]["last_status"] == "not_found"
+
+
+# —— Codex 024-5：成交价代理对照的配对规则 ——
+def test_trade_proxy_window_volume_weighting_and_pairing():
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from scripts import trade_vs_quote as tq
+    rows = [["2026-09-28T13:59:00Z", "9.0", "100", "0", "0"],       # 09:59 窗口外
+            ["2026-09-28T14:00:00Z", "1.0", "2", "0", "0"],         # 10:00 窗口内
+            ["2026-09-28T14:05:00Z", "2.0", "0", "0", "0"],         # 无成交分钟不计
+            ["2026-09-28T14:10:00Z", "4.0", "6", "0", "0"],
+            ["2026-09-28T14:20:00Z", "8.0", "5", "0", "0"]]         # 10:20 起点不含
+    px, mins = tq.leg_proxy(rows, D)
+    assert px == pytest.approx((1 * 2 + 4 * 6) / 8) and len(mins) == 2
+    a = {datetime(2026, 9, 28, 14, 0, tzinfo=timezone.utc)}
+    b = {datetime(2026, 9, 28, 14, 1, tzinfo=timezone.utc)}
+    assert tq.classify(a, a) == "both_same_minute" and tq.classify(a, b) == "both_async"
+    assert tq.classify(a, set()) == "one_leg" and tq.classify(set(), set()) == "none"

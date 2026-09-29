@@ -181,6 +181,27 @@ intraday_capture() {
     fi
   fi
 }
+# ⑪ 收盘后备份（用户 2026-09-28「数据最重要」；Codex 024-6）：ET 16:40 起把当天自动任务写下的数据提交并推送，
+# 不等次日凌晨。只发布 allowlist 目录（data/history、data/snapshots），只提交【自动任务自己的产物】
+# （publish_dirs 用共享待发布记录判定，他人改动不带入；data/soul、data/account 本就 gitignore）；全局发布锁见 lib_publish。
+# 先备份已到手的，缺口（仍未提交的路径）显式列出；之后的增量由次日 daily 或本函数下次成功前的重试补上。
+close_backup() {
+  local OKF="$LOG_DIR/.backup_close_${ET_DATE}.ok" MAN="$LOG_DIR/.backup_close_${ET_DATE}.manifest"
+  [[ -f "$OKF" ]] && return
+  local PUB RC LEFT
+  PUB=$(PUBLISH_MANIFEST="$MAN" publish_dirs "收盘后备份 ${ET_DATE}：影子账/采样/当天逐分钟/台账/快照（session ⑪）" \
+        data/history data/snapshots 2>&1); RC=$?
+  LEFT=$(git ls-files --modified --others --exclude-standard -- data/history data/snapshots 2>/dev/null | wc -l | tr -d ' ')
+  if (( RC == 0 )); then
+    : > "$OKF"
+    hb "⑪收盘备份：✅ 提交 $( [[ -f "$MAN" ]] && wc -l < "$MAN" | tr -d ' ' || echo 0 ) 个文件；仍未提交 ${LEFT} 个路径（他人改动或待增量）"
+  else
+    hb "⑪收盘备份：⏳ rc=$RC $(printf '%s' "$PUB" | tail -1 | clip 120)；仍未提交 ${LEFT} 个路径，下次唤醒重试"
+    if (( RC == 5 || RC == 3 )); then
+      notify "⚠️ 收盘备份未发布（rc=$RC）" "$(printf '%s' "$PUB" | tail -1 | clip 160)"
+    fi
+  fi
+}
 # 本脚本未开 set -e；分开捕获 rc（AGENTS.md 静默失败第 5 条：不用 `|| true`）
 SHW=$("$PY" -m undertow.cli shadow windows 2>&1); SHW_RC=$?
 if (( SHW_RC == 0 )); then
@@ -195,6 +216,7 @@ if (( SHW_RC == 0 )); then
     if (( ET_MIN >= 540 && ET_MIN < 570 )); then fieldcheck pre; thesisq pre; fi
     if (( ET_MIN >= 640 && ET_MIN < 980 )); then fieldcheck open; fi
     if (( ET_MIN >= 965 )); then intraday_capture; fi
+    if (( ET_MIN >= 1000 )); then close_backup; fi
     if (( ET_MIN >= 980 )); then fieldcheck close; thesisq close; fi
   fi
 else

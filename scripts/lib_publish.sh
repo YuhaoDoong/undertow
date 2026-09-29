@@ -14,7 +14,7 @@
 #                               下次运行还认得是自己的 —— 没有这一步，没走到发布就退出的产物会被当成他人改动。
 #   publish_dirs <提交信息> <目录>...
 #     返回 0 成功/无事；2 git 失败；3 索引里有他人已暂存文件；4 已提交但推送失败；5 与他人改动冲突；
-#     6 未调用 publish_begin（分不清本次产物，拒绝发布）。3/5/6 时产物原样保留。
+#     6 未调用 publish_begin（分不清本次产物，拒绝发布）；7 全局发布锁 60 秒拿不到。3/5/6/7 时产物原样保留。
 #   不 stash、不 reset、不改动任何他人内容。
 
 _publish_dirty() {   # 目录下相对索引有改动或未跟踪的路径（每行一个）
@@ -90,17 +90,25 @@ publish_dirs() {     # publish_dirs <提交信息> <目录>...
     return 5
   fi
   (( ${#OURS[@]} == 0 )) && return 0
+  # 全局发布锁（Codex 024-6）：daily / session / 收盘备份可能同时发布。shlock 在锁文件里记 PID，
+  # 持锁进程已死 → 视为失效锁自动接管（不按耗时强删活锁）。等不到 → rc=7，产物保留、下次再发。
+  local LOCKF="${PUBLISH_LOCK:-$(git rev-parse --git-dir 2>/dev/null)/undertow_publish.lock}" TRY=0
+  until shlock -f "$LOCKF" -p $$ 2>/dev/null; do
+    (( ++TRY > ${PUBLISH_LOCK_WAIT:-60} )) && { echo "PUBLISH_BUSY 发布锁被 $(cat "$LOCKF" 2>/dev/null) 占用超过 ${PUBLISH_LOCK_WAIT:-60} 秒，本次不发布（产物保留）"; return 7; }
+    sleep 1
+  done
   [[ -n "${PUBLISH_MANIFEST:-}" ]] && printf '%s\n' "${OURS[@]}" > "$PUBLISH_MANIFEST"
-  git add -- "${OURS[@]}" || return 2
+  git add -- "${OURS[@]}" || { rm -f "$LOCKF"; return 2; }
   git commit -q -m "$MSG" --only -- "${OURS[@]}"; RC=$?
-  (( RC != 0 )) && return 2
+  if (( RC != 0 )); then rm -f "$LOCKF"; return 2; fi
   if [[ -n "${PUBLISH_PENDING:-}" && -f "$PUBLISH_PENDING" ]]; then   # 已发布的从待发布记录里删掉
     local tmp; tmp=$(mktemp "${TMPDIR:-/tmp}/publish_pend.XXXXXX")
     awk -F'\t' 'NR==FNR {done[$0]=1; next} !($1 in done)' <(printf '%s\n' "${OURS[@]}") "$PUBLISH_PENDING" > "$tmp" \
       && mv "$tmp" "$PUBLISH_PENDING"
   fi
-  if [[ -n "${PUBLISH_NO_PUSH:-}" ]]; then return 0; fi
-  git push -q origin main >/dev/null 2>&1 || return 4
+  if [[ -n "${PUBLISH_NO_PUSH:-}" ]]; then rm -f "$LOCKF"; return 0; fi
+  git push -q origin main >/dev/null 2>&1 || { rm -f "$LOCKF"; return 4; }
+  rm -f "$LOCKF"
   return 0
 }
 

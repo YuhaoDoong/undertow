@@ -334,7 +334,70 @@ def sync_ledger(j: dict, ledger: Path | None = None) -> int:
     return len(new)
 
 
-def tick(now: datetime | None = None) -> list[str]:
+def chain_key(j: dict, t: dict) -> tuple:
+    """判断 × 批次：沿 continuation_of 追到根记录（同一事前判断），批次缺省为 legacy。"""
+    by = {x["id"]: x for x in j.get("theses", [])}
+    root, seen = t, set()
+    while (root.get("paper") or {}).get("continuation_of") in by and root["id"] not in seen:
+        seen.add(root["id"])
+        root = by[root["paper"]["continuation_of"]]
+    return root["id"], (t.get("paper") or {}).get("batch", "legacy")
+
+
+def entered_in_chain(j: dict, key: tuple, exclude: str | None = None) -> str | None:
+    """同一判断 × 批次里已有模拟成交的记录 id（有 entered_at 即算，含已结算/已止损）。"""
+    for x in j.get("theses", []):
+        if x["id"] != exclude and x.get("execution") == "模拟" and (x.get("paper") or {}).get("entered_at") \
+                and chain_key(j, x) == key:
+            return x["id"]
+    return None
+
+
+def _supersede(p: dict, now: datetime, why: str) -> None:
+    p.update(state="skipped", skip_reason=why)
+    p.setdefault("events", []).append({"at": now.isoformat(), "action": "skipped", "why": why})
+
+
+def _write_journal(j: dict) -> None:
+    body = json.dumps(j, ensure_ascii=False, indent=2)
+    fd, name = tempfile.mkstemp(dir=JOURNAL.parent, prefix=".journal.", suffix=".tmp")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(body); f.flush(); os.fsync(f.fileno())
+    if json.loads(Path(name).read_text("utf-8")) != j:
+        raise RuntimeError("journal 回读校验失败，未替换")
+    os.replace(name, JOURNAL)
+
+
+def register_revision(new: dict, now: datetime | None = None) -> dict:
+    """登记新版本（用户 2026-09-29：墙/价格更新后重新判断算延续；「盘中已成交，那么就不应该乱动了，换挡应该是开没开仓的时候」）。
+    与 tick 共用同一把锁：同一判断 × 批次已有模拟成交 → 拒绝（入场后行权价/到期/数量固定，不自动平旧开新）；
+    否则把同链上仍 planned 的旧版本记 superseded（原因留痕），再追加新版本。返回 {"ok", "why", "superseded"}。"""
+    now = now or datetime.now(timezone.utc)
+    LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with open(LOCK, "a+") as lk:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+        j = json.loads(JOURNAL.read_text("utf-8"))
+        if any(x["id"] == new["id"] for x in j.get("theses", [])):
+            return {"ok": False, "why": f"id 已存在：{new['id']}", "superseded": []}
+        j.setdefault("theses", []).append(new)
+        key = chain_key(j, new)
+        hit = entered_in_chain(j, key, exclude=new["id"])
+        if hit:
+            j["theses"].pop()
+            return {"ok": False, "why": f"同一判断×批次已有模拟成交（{hit}）：入场后不换档", "superseded": []}
+        sup = []
+        for x in j["theses"][:-1]:
+            if x.get("execution") == "模拟" and (x.get("paper") or {}).get("state") == "planned" and chain_key(j, x) == key:
+                _supersede(x["paper"], now, f"superseded_by_revision：由 {new['id']} 替代（入场前重新选档）")
+                x["paper"]["continued_by"] = new["id"]
+                sup.append(x["id"])
+        _write_journal(j)
+        sync_ledger(j)
+        fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
+    return {"ok": True, "why": "", "superseded": sup}
+
+
+def tick(now: datetime | None = None, *, depth=None) -> list[str]:
     now = now or datetime.now(timezone.utc)
     out = []
     LOCK.parent.mkdir(parents=True, exist_ok=True)
@@ -346,24 +409,29 @@ def tick(now: datetime | None = None) -> list[str]:
             p = t.get("paper")
             if t.get("execution") != "模拟" or not p:
                 continue
+            n_ev = len(p.get("events") or [])
+            if p.get("state") == "planned":                     # 同一判断×批次已成交 → 其余候选不再入场（入场后不换档）
+                hit = entered_in_chain(j, chain_key(j, t), exclude=t["id"])
+                if hit:
+                    _supersede(p, now, f"superseded_by_entry：同一判断×批次已有模拟成交（{hit}），入场后不换档")
+                    _outcome(t)
+                    changed = True
+                    out.append(f"{t['id']}:skipped")
+                    continue
             try:
-                a = step(p, now) or audit_settlement(p, now)
+                a = step(p, now, **({"depth": depth} if depth else {})) or audit_settlement(p, now)
             except Exception as e:                      # 取数失败：留痕并在下次唤醒重试
                 p.setdefault("events", []).append({"at": now.isoformat(), "action": "error", "error": f"{type(e).__name__}: {e}"[:200]})
                 a = "error"
+            for e in (p.get("events") or [])[n_ev:]:          # 调度版本随事件落盘（旧/新调度分层统计）
+                e.setdefault("sched", os.environ.get("PAPER_SCHED", "manual_or_unknown"))
             if a:
                 changed = True
                 if a in OUTCOME_ACTIONS:
                     _outcome(t)
                 out.append(f"{t['id']}:{a}")
         if changed:
-            body = json.dumps(j, ensure_ascii=False, indent=2)
-            fd, name = tempfile.mkstemp(dir=JOURNAL.parent, prefix=".journal.", suffix=".tmp")
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(body); f.flush(); os.fsync(f.fileno())
-            if json.loads(Path(name).read_text("utf-8")) != j:
-                raise RuntimeError("journal 回读校验失败，未替换")
-            os.replace(name, JOURNAL)
+            _write_journal(j)
         sync_ledger(j)                                   # journal 落盘之后再投影；每次都核对补齐
         fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
     return out

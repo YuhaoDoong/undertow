@@ -115,7 +115,8 @@ def test_never_places_orders():
 
 def test_session_hook_runs_paper_tick_each_trading_wake():
     src = (Path(__file__).resolve().parents[1] / "scripts/session_hooks.sh").read_text("utf-8")
-    assert src.index("paper_tick() {") < src.index("    paper_tick\n")
+    assert src.index("paper_tick() {") < src.index('[[ -n "$SHW" ]] && paper_tick')
+    assert src.index('[[ -n "$SHW" ]] && paper_tick') < src.index("while read -r _W _LO _HI")    # ⑫ 先于影子窗口与采样
     assert "scripts/paper_trades.py tick" in src
 
 
@@ -188,3 +189,79 @@ def test_size_report_three_classes_unknown_kept_separate():
     assert r["all"]["n"] == 4 and r["all"]["entered"] == 3 and sum(r["all"]["pnl"]) == 5.0
     assert r["sufficient"]["n"] == 1 and r["insufficient"]["n"] == 1
     assert r["unknown"]["n"] == 2 and r["unknown"]["not_entered"] == {"credit_low": 1}      # 未入场/无标签 → unknown
+
+
+# —— 版本链与入场锁定（Codex 028/029；用户：「盘中已成交，那么就不应该乱动了，换挡应该是开没开仓的时候」）——
+def _th(tid, batch, cont=None, **kw):
+    p = _p(**kw); p["batch"] = batch
+    if cont:
+        p["continuation_of"] = cont
+    return {"id": tid, "execution": "模拟", "paper": p}
+
+
+def _env(tmp_path, monkeypatch, theses):
+    import json as _j
+    monkeypatch.setattr(pt, "JOURNAL", tmp_path / "journal.json")
+    monkeypatch.setattr(pt, "LOCK", tmp_path / "journal.lock")
+    monkeypatch.setattr(pt, "LEDGER", tmp_path / "ledger.jsonl")
+    (tmp_path / "journal.json").write_text(_j.dumps({"theses": theses}, ensure_ascii=False))
+    return lambda: {t["id"]: t for t in _j.loads((tmp_path / "journal.json").read_text())["theses"]}
+
+
+def test_second_candidate_in_chain_never_enters_after_first(tmp_path, monkeypatch):
+    root = _th("R", "legacy"); root["paper"]["state"] = "skipped"
+    load = _env(tmp_path, monkeypatch, [root, _th("A", "claude", "R"), _th("B", "claude", "A")])
+    acts = pt.tick(at(29, 10, 6), depth=q(1.44, 1.6, 0.95, 1.03))
+    st = load()
+    assert st["A"]["paper"]["state"] == "entered" and st["B"]["paper"]["state"] == "skipped"
+    assert "superseded_by_entry" in st["B"]["paper"]["skip_reason"] and "B:skipped" in acts
+
+
+def test_other_batch_is_independent(tmp_path, monkeypatch):
+    root = _th("R", "legacy"); root["paper"]["state"] = "skipped"
+    load = _env(tmp_path, monkeypatch, [root, _th("A", "claude", "R"), _th("U", "user", "R")])
+    pt.tick(at(29, 10, 6), depth=q(1.44, 1.6, 0.95, 1.03))
+    st = load()
+    assert st["A"]["paper"]["state"] == "entered" and st["U"]["paper"]["state"] == "entered"
+
+
+def test_register_revision_supersedes_planned_and_refuses_after_entry(tmp_path, monkeypatch):
+    root = _th("R", "legacy"); root["paper"]["state"] = "skipped"
+    load = _env(tmp_path, monkeypatch, [root, _th("A", "claude", "R")])
+    r = pt.register_revision(_th("A2", "claude", "A", k_sell=376.0, k_buy=374.0), at(29, 9, 50))
+    st = load()
+    assert r["ok"] and r["superseded"] == ["A"] and st["A"]["paper"]["state"] == "skipped"
+    assert "superseded_by_revision" in st["A"]["paper"]["skip_reason"] and st["A"]["paper"]["continued_by"] == "A2"
+    pt.tick(at(29, 10, 6), depth=q(1.44, 1.6, 0.95, 1.03))
+    assert load()["A2"]["paper"]["state"] == "entered"
+    r2 = pt.register_revision(_th("A3", "claude", "A2"), at(29, 10, 30))
+    assert not r2["ok"] and "入场后不换档" in r2["why"] and "A3" not in load()
+
+
+def test_revision_waits_for_running_tick_then_sees_entry(tmp_path, monkeypatch):
+    """旧任务已在取价（持锁）时用户登记新版本：新版本等锁，拿到锁后看到已成交 → 拒绝，不覆盖。"""
+    import threading
+    import time as _t
+    root = _th("R", "legacy"); root["paper"]["state"] = "skipped"
+    load = _env(tmp_path, monkeypatch, [root, _th("A", "claude", "R")])
+    started, release = threading.Event(), threading.Event()
+
+    def slow_depth(syms):
+        started.set(); release.wait(5)
+        return q(1.44, 1.6, 0.95, 1.03)(syms)
+    th = threading.Thread(target=lambda: pt.tick(at(29, 10, 6), depth=slow_depth)); th.start()
+    assert started.wait(5)
+    res = {}
+    rv = threading.Thread(target=lambda: res.update(pt.register_revision(_th("A2", "claude", "A"), at(29, 10, 7))))
+    rv.start(); _t.sleep(0.2)
+    assert rv.is_alive()                                            # 被锁挡住，没有插进旧任务的取价与写入之间
+    release.set(); th.join(5); rv.join(5)
+    assert load()["A"]["paper"]["state"] == "entered" and not res["ok"] and "A2" not in load()
+
+
+def test_events_carry_scheduler_version(tmp_path, monkeypatch):
+    root = _th("R", "legacy"); root["paper"]["state"] = "skipped"
+    load = _env(tmp_path, monkeypatch, [root, _th("A", "claude", "R")])
+    monkeypatch.setenv("PAPER_SCHED", "session-hook-v2")
+    pt.tick(at(29, 10, 6), depth=q(1.44, 1.6, 0.95, 1.03))
+    assert load()["A"]["paper"]["events"][-1]["sched"] == "session-hook-v2"

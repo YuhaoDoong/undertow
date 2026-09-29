@@ -230,11 +230,16 @@ close_backup() {
 }
 # ⑫ 模拟仓（用户 2026-09-29：「模拟仓开仓……自动定时进行」）：每次唤醒推进一步（入场窗口、盯市时点、到期结算），
 # 没到点什么都不写；只读报价、只写私有 data/soul/journal.json，从不下单。有动作留痕并通知；取数出错下次重试。
+# 调度（Codex 028，2026-09-29 起）：⑫ 先于 ④⑤⑥⑦ 运行 —— 原先排在 ⑦ 盘中采样（约 4 分钟）之后，9/29 10:00–10:20 入场窗口
+# 只取到一次价（10:16 那次唤醒轮到 ⑫ 时已 10:20:25）。⑫ 只取几个合约的盘口，耗时数秒，不会饿死后面的采样。
+# 调度版本写进每个模拟仓事件（PAPER_SCHED），旧窗口（一次取价）与新窗口分层统计，不补造取价。
+PAPER_SCHED="session-hook-v2（⑫ 先于 ④⑤⑥⑦；2026-09-29 起）"; export PAPER_SCHED
 paper_tick() {
-  local RES RC
+  local RES RC T0
+  T0=$(TZ=America/New_York date +%H:%M:%S)
   RES=$("$PY" scripts/paper_trades.py tick 2>&1); RC=$?
   if [[ "$RES" != *"无到点动作"* ]]; then
-    hb "⑫模拟仓：$(printf '%s' "$RES" | tail -1 | clip 160)"
+    hb "⑫模拟仓（${T0}→$(TZ=America/New_York date +%H:%M:%S)）：$(printf '%s' "$RES" | tail -1 | clip 160)"
     if printf '%s' "$RES" | grep -qE ':(enter|skipped|missed|invalid_spec|stop|settle|settlement_pending|error)'; then
       notify "📒 模拟仓" "$(printf '%s' "$RES" | tail -1 | clip 160)"
     fi
@@ -244,6 +249,7 @@ paper_tick() {
 # 本脚本未开 set -e；分开捕获 rc（AGENTS.md 静默失败第 5 条：不用 `|| true`）
 SHW=$("$PY" -m undertow.cli shadow windows 2>&1); SHW_RC=$?
 if (( SHW_RC == 0 )); then
+  [[ -n "$SHW" ]] && paper_tick                 # 交易日：短窗口入场先于长耗时的影子窗口与采样
   while read -r _W _LO _HI; do
     [[ -z "$_W" ]] && continue
     if [[ "$_W" == "open" ]]; then shadow_window open "$_LO" "$_HI" "④影子开盘窗"; fi
@@ -254,7 +260,6 @@ if (( SHW_RC == 0 )); then
   if [[ -n "$SHW" ]]; then                      # 交易日
     if (( ET_MIN >= 540 && ET_MIN < 570 )); then fieldcheck pre; thesisq pre; fi
     if (( ET_MIN >= 640 && ET_MIN < 980 )); then fieldcheck open; fi
-    paper_tick
     if (( ET_MIN >= 965 )); then intraday_capture; fi
     if (( ET_MIN >= 1000 )); then close_backup; fi
     if (( ET_MIN >= 980 )); then fieldcheck close; thesisq close; fi

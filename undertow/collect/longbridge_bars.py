@@ -161,10 +161,11 @@ BASIS_INTRADAY = ("longbridge intraday（当天）：每分钟收盘价（time=�
                   "volume=0 的分钟为沿用上一价，不是成交证据。收盘后抓取，补充而非替代 v5 保守入场价。")
 #: 终态规则（Codex 024-1，事前写死）：收盘后（ET 16:05 起）同一代码
 #:   full_session → 完成；partial_session / 解析异常 → 继续重试；
-#:   empty 连续 EMPTY_TERMINAL 次（间隔 ≥ 一次唤醒）→ empty_confirmed（终态，原始响应保留）；
+#:   empty 连续 EMPTY_TERMINAL 次（相邻计入的两次间隔 ≥ RETRY_MIN_SPACING_S，代码强制）→ empty_confirmed（终态，原始响应保留）；
 #:   not_found / invalid_symbol 连续 GONE_TERMINAL 次 → 终态。
 EMPTY_TERMINAL = 3
 GONE_TERMINAL = 2
+RETRY_MIN_SPACING_S = 240         # 终态计数的最小间隔（约一次 5 分钟唤醒；设计值）
 FULL_SESSION_MIN_FRAC = 0.95       # 分钟行覆盖 ≥ 95% 的应有交易分钟，且首末分钟在时段两端（设计值，未校准）
 
 
@@ -198,29 +199,43 @@ def session_minutes(day: date) -> tuple[datetime, datetime, int] | None:
 
 
 def intraday_quality(rows: list, day: date) -> dict:
-    """质量标签（Codex 024-2）：不要求每分钟有成交，但要求时段覆盖、排序、无重复、数值有效。"""
+    """质量标签（Codex 024-2 / 025-4）：不要求每分钟有成交，但要求字段齐、数值有限、时区为 UTC、落在整分钟栅格、
+    排序无重复、时段覆盖。full_session 是【数据工程容忍规则】（覆盖 ≥ 95%、首尾在时段两端），不等于每分钟齐全 ——
+    缺失分钟数 missing_minutes 与时段外行数 outside_session 一并记下。时段按标的常规时段（含半日市）。"""
+    import math
+    from datetime import timedelta
     if not rows:
         return {"label": "empty", "n": 0}
+    if any(len(r) != len(INTRADAY_FIELDS) for r in rows):
+        return {"label": "invalid", "why": "字段数不符", "n": len(rows)}
     try:
         ts = [datetime.fromisoformat(r[0].replace("Z", "+00:00")) for r in rows]
         px = [float(r[1]) for r in rows]
         vol = [float(r[2]) for r in rows]
+        tov = [float(r[3]) for r in rows]
     except (ValueError, IndexError) as e:
         return {"label": "invalid", "why": f"{type(e).__name__}: {e}"[:120], "n": len(rows)}
+    if not all(math.isfinite(x) for x in px + vol + tov):
+        return {"label": "invalid", "why": "价格/成交量/成交额含 NaN 或无穷", "n": len(rows)}
+    if any(t.tzinfo is None or t.utcoffset() != timedelta(0) for t in ts):
+        return {"label": "invalid", "why": "时间戳缺时区或非 UTC", "n": len(rows)}
+    if any(t.second or t.microsecond for t in ts):
+        return {"label": "invalid", "why": "时间戳不在整分钟栅格", "n": len(rows)}
     if ts != sorted(ts) or len(set(ts)) != len(ts):
         return {"label": "invalid", "why": "时间未排序或有重复", "n": len(rows)}
-    if any(p < 0 for p in px) or any(v < 0 for v in vol):
-        return {"label": "invalid", "why": "价格或成交量为负", "n": len(rows)}
+    if any(p <= 0 for p in px) or any(v < 0 for v in vol) or any(x < 0 for x in tov):
+        return {"label": "invalid", "why": "价格非正或成交量/成交额为负", "n": len(rows)}
     sm = session_minutes(day)
     if sm is None:
         return {"label": "invalid", "why": "非交易日", "n": len(rows)}
     first, close, n_exp = sm
     in_sess = [t for t in ts if first <= t < close]
     frac = len(in_sess) / n_exp if n_exp else 0.0
-    from datetime import timedelta
     ok = frac >= FULL_SESSION_MIN_FRAC and ts[0] <= first + timedelta(minutes=2) and \
         ts[-1] >= close - timedelta(minutes=3)
     return {"label": "full_session" if ok else "partial_session", "n": len(rows), "coverage": round(frac, 4),
+            "expected_minutes": n_exp, "missing_minutes": n_exp - len(in_sess),
+            "outside_session": len(ts) - len(in_sess),
             "first": ts[0].isoformat(), "last": ts[-1].isoformat(), "traded_minutes": sum(v > 0 for v in vol)}
 
 
@@ -256,15 +271,20 @@ def symbol_state(v: dict | None) -> str:
     if (v.get("quality") or {}).get("label") == "full_session":
         return "complete"
     att = v.get("attempts") or []
-    tail = [a["status"] for a in att]
 
     def run_of(stats):
-        n = 0
-        for x in reversed(tail):
-            if x in stats:
-                n += 1
-            else:
+        """末尾连续同类尝试数；与上一次计入的尝试相隔不足 RETRY_MIN_SPACING_S 的不计（人工连按不能立刻终态）。"""
+        n, last = 0, None
+        for a in reversed(att):
+            if a["status"] not in stats:
                 break
+            try:
+                t = datetime.fromisoformat(str(a.get("at")))
+            except ValueError:
+                continue
+            if last is None or (last - t).total_seconds() >= RETRY_MIN_SPACING_S:
+                n += 1
+                last = t
         return n
     if run_of(("empty",)) >= EMPTY_TERMINAL:
         return "empty_confirmed"

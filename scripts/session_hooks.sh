@@ -161,17 +161,25 @@ thesisq() {  # $1=pre|close
 # ⑩ 收盘后存当天逐分钟（用户 2026-09-28「记住数据最重要」）：longbridge intraday 只能取【当天】、不占按自然月计的
 # 历史 K 线配额（400 代码/月，主池两周即用掉 349）。ET 16:05 起每次唤醒尝试，成功写哨兵；rc≠0 连续 3 次后通知一次。
 intraday_capture() {
-  # Codex 024：成功哨兵只看结构化状态（overall=complete/no_candidates），不看退出码；
+  # Codex 024/025：成功哨兵 = 本次运行的结构化状态（overall=complete/no_candidates）且 rc=0；
   # 锁由命令内 fcntl.flock 负责（进程被杀由内核释放，不会留下失效锁）；rc=4 = 上一轮仍在跑。
   local OKF="$LOG_DIR/.intraday_${ET_DATE}.ok" FAILF="$LOG_DIR/.intraday_fail_${ET_DATE}"
   local STF="$LOG_DIR/.status_intraday_${ET_DATE}.json"
   [[ -f "$OKF" ]] && return
   IN_SHADOW=1
-  local RES RC OV
-  RES=$("$PY" -m undertow.cli shadow intraday --status-file "$STF" 2>&1); RC=$?
+  local RES RC OV RID="$$-$RANDOM-$(date +%s)"
+  # Codex 025-4：状态必须属于【本次】运行 —— 运行前删旧状态，本次 run_id / session / schema / 命令名逐项核对，
+  # 且成功哨兵同时要求 rc=0（旧 complete + 新进程崩溃 → 不写哨兵）
+  rm -f "$STF"
+  RES=$("$PY" -m undertow.cli shadow intraday --status-file "$STF" --run-id "$RID" 2>&1); RC=$?
   if (( RC == 4 )); then hb "⑩当天逐分钟：上一轮仍在跑（文件锁），跳过"; return; fi
-  OV=$("$PY" -c 'import json,sys; print(json.load(open(sys.argv[1])).get("overall",""))' "$STF" 2>/dev/null)
-  if [[ "$OV" == "complete" || "$OV" == "no_candidates" ]]; then
+  OV=$("$PY" -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+ok = d.get("schema") == 2 and d.get("run_id") == sys.argv[2] and d.get("session") == sys.argv[3] \
+     and d.get("command") == "shadow intraday"
+print(d.get("overall", "") if ok else "status_mismatch")' "$STF" "$RID" "$ET_DATE" 2>/dev/null)
+  if (( RC == 0 )) && [[ "$OV" == "complete" || "$OV" == "no_candidates" ]]; then
     : > "$OKF"; hb "⑩当天逐分钟：✅ ${OV} $(printf '%s' "$RES" | grep '当天逐分钟' | tail -1 | clip 120)"
   else
     printf 'x' >> "$FAILF"

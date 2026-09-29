@@ -32,6 +32,21 @@ def test_quality_labels():
     assert lbb.intraday_quality(dup, D)["label"] == "invalid"
     bad = _rows(390); bad[3][1] = "x"
     assert lbb.intraday_quality(bad, D)["label"] == "invalid"
+    q = lbb.intraday_quality(_rows(380), D)
+    assert q["missing_minutes"] == 10 and q["expected_minutes"] == 390 and q["outside_session"] == 0
+
+
+@pytest.mark.parametrize("mutate", [
+    lambda rs: [[r[0], "NaN", *r[2:]] for r in rs],                                  # Codex 025 probe：全 NaN 曾判 full_session
+    lambda rs: [[r[0], r[1], "inf", *r[3:]] for r in rs[:1]] + rs[1:],
+    lambda rs: [[r[0].replace("Z", ""), *r[1:]] for r in rs],                          # 无时区
+    lambda rs: [[r[0].replace("Z", "-04:00"), *r[1:]] for r in rs],                    # 非 UTC
+    lambda rs: [[r[0].replace(":00Z", ":30Z"), *r[1:]] for r in rs],                   # 不在整分钟
+    lambda rs: [r[:4] for r in rs],                                                    # 字段数不符
+    lambda rs: [[r[0], "0", *r[2:]] for r in rs],                                      # 价格非正
+])
+def test_quality_rejects_nonfinite_tz_grid_and_shape(mutate):
+    assert lbb.intraday_quality(mutate(_rows()), D)["label"] == "invalid"
 
 
 def test_fetch_parses_checks_date_and_labels():
@@ -52,15 +67,29 @@ def _res(status, rows=None, at="2026-09-28T20:10:00+00:00"):
     return r
 
 
+def _at(k):
+    return (datetime(2026, 9, 28, 20, 10, tzinfo=timezone.utc) + timedelta(minutes=5 * k)).isoformat()
+
+
 def test_terminal_rules_and_no_downgrade():
     v = None
-    for _ in range(lbb.EMPTY_TERMINAL - 1):
-        v = lbb.merge_attempt(v, _res("empty"))
+    for k in range(lbb.EMPTY_TERMINAL - 1):
+        v = lbb.merge_attempt(v, _res("empty", at=_at(k)))
         assert v["state"] == "pending"
-    v = lbb.merge_attempt(v, _res("empty"))
+    v = lbb.merge_attempt(v, _res("empty", at=_at(lbb.EMPTY_TERMINAL)))
     assert v["state"] == "empty_confirmed" and len(v["attempts"]) == lbb.EMPTY_TERMINAL
-    g = lbb.merge_attempt(lbb.merge_attempt(None, _res("not_found")), _res("not_found"))
+    g = lbb.merge_attempt(lbb.merge_attempt(None, _res("not_found", at=_at(0))), _res("not_found", at=_at(1)))
     assert g["state"] == "gone_confirmed"
+
+
+def test_rapid_retries_do_not_reach_terminal():
+    """Codex 025-4：注释说间隔至少一次唤醒，旧代码只数次数 → 人工连按三次立刻 empty_confirmed。"""
+    v = None
+    for _ in range(5):
+        v = lbb.merge_attempt(v, _res("empty"))                                       # 同一时刻 ×5
+    assert v["state"] == "pending" and len(v["attempts"]) == 5
+    g = lbb.merge_attempt(lbb.merge_attempt(None, _res("not_found")), _res("not_found"))
+    assert g["state"] == "pending"
     full = lbb.merge_attempt(None, _res("ok", _rows()))
     worse = lbb.merge_attempt(full, _res("ok", _rows(10)))
     assert worse["state"] == "complete" and len(worse["rows"]) == 390 and len(worse["attempts"]) == 2
@@ -96,8 +125,13 @@ def _env(tmp_path, monkeypatch, hm, fetch, plan=None, today_rows=True):
     monkeypatch.setattr(sc, "bars_plan", lambda rows, last_day: plan if plan is not None
                         else {("GLD", D): {"GLD.US", "OPT.US"}})
     monkeypatch.setattr(sc, "INTRADAY_PACE_S", 0)
-    calls = []
-    monkeypatch.setattr(lbb, "fetch_intraday_today", lambda s, d, runner=None: calls.append(s) or fetch(s))
+    calls, tick = [], [0]
+
+    def spaced(s, d, runner=None):                   # 模拟每次唤醒相隔 5 分钟（终态计数要求间隔，见 025-4）
+        calls.append(s)
+        tick[0] += 1
+        return {**fetch(s), "fetched_at": _at(tick[0])}
+    monkeypatch.setattr(lbb, "fetch_intraday_today", spaced)
 
     class A:
         force = False
@@ -166,17 +200,28 @@ def _hook_funcs():
     return "\n".join(out)
 
 
-@pytest.mark.parametrize("overall,rc,ok_expected", [("complete", 0, True), ("no_candidates", 0, True),
-                                                   ("partial", 1, False), ("complete", 1, True),
-                                                   ("partial", 0, False), (None, 1, False)])
-def test_hook_writes_sentinel_only_on_structured_terminal_status(tmp_path, overall, rc, ok_expected):
+@pytest.mark.parametrize("overall,rc,ok_expected,rid_mode", [
+    ("complete", 0, True, "same"), ("no_candidates", 0, True, "same"),
+    ("partial", 1, False, "same"), ("complete", 1, False, "same"),                    # 025：complete 但 rc≠0 → 不写哨兵
+    ("partial", 0, False, "same"), (None, 1, False, "same"),
+    ("complete", 0, False, "other"),                                                 # 状态不属于本次运行
+    ("complete", 0, False, "session"),                                               # 状态是别的交易日
+])
+def test_hook_writes_sentinel_only_on_structured_terminal_status(tmp_path, overall, rc, ok_expected, rid_mode):
     fake = tmp_path / "fakepy"
+    rid = {"same": "rid", "other": "'stale'", "session": "rid"}[rid_mode]
+    sess = "2026-09-27" if rid_mode == "session" else "2026-09-28"
     status_line = ("" if overall is None else
-                   f"json.dump({{'overall': '{overall}'}}, open(p, 'w'))")
+                   f"json.dump({{'schema': 2, 'command': 'shadow intraday', 'run_id': {rid}, 'session': '{sess}', "
+                   f"'overall': '{overall}'}}, open(p, 'w'))")
     fake.write_text(f"""#!/bin/zsh
 if [[ "$1" == "-m" ]]; then
-  for i in "$@"; do if [[ "$prev" == "--status-file" ]]; then p="$i"; fi; prev="$i"; done
-  python3 -c "import json,sys; p=sys.argv[1]; {status_line}" "$p"
+  for i in "$@"; do
+    if [[ "$prev" == "--status-file" ]]; then p="$i"; fi
+    if [[ "$prev" == "--run-id" ]]; then r="$i"; fi
+    prev="$i"
+  done
+  python3 -c "import json,sys; p=sys.argv[1]; rid=sys.argv[2]; {status_line}" "$p" "$r"
   echo "当天逐分钟 2026-09-28：测试"
   exit {rc}
 fi
@@ -191,6 +236,27 @@ intraday_capture
 """
     subprocess.run(["zsh", "-c", script], check=True)
     assert (tmp_path / ".intraday_2026-09-28.ok").exists() is ok_expected
+
+
+def test_hook_stale_complete_then_crash_writes_no_sentinel(tmp_path):
+    """Codex 025-4：旧的 complete 状态文件还在，新进程写状态前崩溃 → 不能写成功哨兵。"""
+    (tmp_path / ".status_intraday_2026-09-28.json").write_text(json.dumps(
+        {"schema": 2, "command": "shadow intraday", "run_id": None, "session": "2026-09-28", "overall": "complete"}))
+    fake = tmp_path / "fakepy"
+    fake.write_text("""#!/bin/zsh
+if [[ "$1" == "-m" ]]; then echo "Traceback: boom" >&2; exit 1; fi
+exec python3 "$@"
+""")
+    fake.chmod(0o755)
+    script = _hook_funcs() + f"""
+hb() {{ print -r -- "$1" >> "{tmp_path}/hb.log"; }}
+notify() {{ :; }}
+LOG_DIR="{tmp_path}"; ET_DATE=2026-09-28; PY="{fake}"
+intraday_capture
+"""
+    subprocess.run(["zsh", "-c", script], check=True)
+    assert not (tmp_path / ".intraday_2026-09-28.ok").exists()
+    assert "状态文件缺失" in (tmp_path / "hb.log").read_text("utf-8")
 
 
 def test_session_hook_runs_intraday_after_close():

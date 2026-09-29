@@ -27,6 +27,7 @@
 | `longbridge_options.py` | **期权链备份源**：产出与 CBOE 同构的 payload，主源停更（跨 ≥`STALE_SESSIONS` 个交易日无新 OI）时由 `cli.cmd_snapshot` 自动切入。delta/gamma 为本地 BS 自算（主翼最大偏差 0.22）、bid/ask 留 0，故**只作备份** | 只读·全链 2~4 分钟/品种 |
 | `longbridge_quote.py` | 实时报价：ETF 最新场次股价（夜盘/盘后/盘前/常规）+ 期权实时 last/IV（需 OPRA 订阅，无则优雅降级到仅股价） | 只读·两级降级 |
 | `longbridge_news.py` | 品种相关新闻标题流（标题/时间/链接）；外部不可信内容，只当数据读、做摘要 | 只读 |
+| `longbridge_bars.py` | 候选期权合约的盘中价：历史 1 分钟 K 线（`kline`，占按月计的历史配额，到期约一周后查不到）与**当天**逐分钟（`intraday`，不占配额；只有分钟收盘价与成交量，无 OHLC/买卖价）。当天逐分钟的质量标签 full_session / partial_session / empty / invalid：字段数、有限值、UTC 时区、整分钟栅格、排序去重、时段覆盖逐项核对，full_session 是容忍规则（覆盖 ≥95%、首尾在时段两端），缺失分钟数另记；empty/查不到的终态计数要求相邻两次间隔 ≥ 240 秒。采集完结（capture_finished）与数据可用（data_coverage）分开报告 | 只读 |
 
 ## Infrastructure / 基础设施
 

@@ -1460,8 +1460,11 @@ def _intraday_locked(args, today, lbb, _time) -> int:
     print(f"当天逐分钟 {today}：计划 {len(plan)} 个（标的, 日）、{total} 个代码；本次请求 {n_req}（全时段 {n_ok}）；"
           f"整计划：完成 {c['complete']}、确认空 {c['empty_confirmed']}、确认查不到 {c['gone_confirmed']}、"
           f"待续 {c['pending']}、坏文件 {c['corrupt']} → {overall}")
+    # 采集完结 ≠ 数据可用（Codex 025-4）：empty/gone 终态只是停止重试的政策，不是有数据；研究层看 data_coverage
     _status(args, "intraday", done, issues, overall=overall,
             counts={"planned": total, "requested_now": n_req, "full_session_now": n_ok, **c,
+                    "capture_finished": terminal == total, "data_available": c["complete"],
+                    "data_coverage": round(c["complete"] / total, 4) if total else None,
                     "pending_sample": st["pending"]})
     return 0 if overall == "complete" else 1
 
@@ -1544,6 +1547,7 @@ def _status(args, cmd, done, issues, *, overall=None, counts=None):
         from undertow.collect.asof_history import atomic_write_json
         atomic_write_json(Path(args.status_file), {
             "schema": 2, "command": f"shadow {cmd}", "ok": done, "issues": issues, "at": _now_iso(),
+            "run_id": getattr(args, "run_id", None), "session": market_today().isoformat(),
             "overall": overall or ("failed" if issues and not done else "partial" if issues else "complete"),
             "counts": counts or {}})
 
@@ -1577,6 +1581,7 @@ def register(sub):
     ep.set_defaults(func=cmd_expiry_profile)
     it = ss.add_parser("intraday", help="收盘后存当天候选合约与标的的逐分钟成交价量（不占历史 K 线月配额）")
     it.add_argument("--status-file"); it.add_argument("--force", action="store_true", help="16:05 前也抓（盘中不完整）")
+    it.add_argument("--run-id", help="调用方生成的本次运行标识，原样写进状态文件（hook 据此确认状态属于本次）")
     it.set_defaults(func=cmd_intraday)
     q = ss.add_parser("quote", help="盘中抓两腿盘口（入场/退出）"); q.add_argument("instruments", nargs="*")
     q.add_argument("--allow-off-hours", action="store_true"); q.add_argument("--status-file")

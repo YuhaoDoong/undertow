@@ -1607,3 +1607,8 @@ def register(sub):
     r.add_argument("--replay", action="store_true"); r.add_argument("--basis", nargs="*")
     r.add_argument("--output"); r.add_argument("--detail", action="store_true", help="同时输出 put/call/顺增仓方向 子集")
     r.set_defaults(func=cmd_report)
+    # 所有写状态文件的子命令都接受 --run-id（Codex 026：调度层核对状态属于本次运行）
+    for sp_ in ss.choices.values():
+        dests = {a.dest for a in sp_._actions}
+        if "status_file" in dests and "run_id" not in dests:
+            sp_.add_argument("--run-id", help="调用方生成的本次运行标识，原样写进状态文件")

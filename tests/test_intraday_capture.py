@@ -193,7 +193,7 @@ def test_flock_busy_then_released_after_holder_dies(tmp_path, monkeypatch):
 def _hook_funcs():
     src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
     out = []
-    for name in ("clip", "intraday_capture"):
+    for name in ("clip", "bound_overall", "run_bound", "ov_text", "intraday_capture", "shadow_window", "shadow_sample"):
         m = re.search(rf"^{name}\(\) {{.*?^}}\n", src, re.S | re.M)
         assert m, name
         out.append(m.group(0))
@@ -334,3 +334,73 @@ def test_trade_proxy_sync_uses_only_common_minutes():
     sp, n = tq.sync_proxy(s, b, D)
     assert n == 1 and sp == pytest.approx(1.0)                                       # 同步代理：只有 10:01
     assert tq.sync_proxy(s, [["2026-09-28T14:19:00Z", "0.5", "100", "0", "0"]], D) == (None, 0)
+
+
+# —— Codex 026：影子窗口 / 全链 / 采样同样只认本次运行的状态 ——
+def _fake_py(tmp_path, status_py, rc):
+    fake = tmp_path / "fakepy"
+    fake.write_text(f"""#!/bin/zsh
+if [[ "$1" == "-m" ]]; then
+  for i in "$@"; do
+    if [[ "$prev" == "--status-file" ]]; then p="$i"; fi
+    if [[ "$prev" == "--run-id" ]]; then r="$i"; fi
+    prev="$i"
+  done
+  python3 -c "import json,sys; p=sys.argv[1]; rid=sys.argv[2]; {status_py}" "$p" "$r"
+  echo "  2026-09-28|open：应有 4 个候选价差（每个含卖、买两个合约），有效 4 → x"
+  exit {rc}
+fi
+exec python3 "$@"
+""")
+    fake.chmod(0o755)
+    return fake
+
+
+def _run_hook(tmp_path, fake, call):
+    script = _hook_funcs() + f"""
+hb() {{ print -r -- "$1" >> "{tmp_path}/hb.log"; }}
+notify() {{ :; }}
+LOG_DIR="{tmp_path}"; ET_DATE=2026-09-28; PY="{fake}"; ET_MIN=605
+{call}
+"""
+    subprocess.run(["zsh", "-c", script], check=True)
+    return (tmp_path / "hb.log").read_text("utf-8") if (tmp_path / "hb.log").exists() else ""
+
+
+def _st(cmd, overall, rid="rid"):
+    return (f"json.dump({{'schema': 2, 'command': '{cmd}', 'run_id': {rid}, 'session': '2026-09-28', "
+            f"'overall': '{overall}'}}, open(p, 'w'))")
+
+
+@pytest.mark.parametrize("window,cmd", [("open", "shadow quote-open"), ("chain", "shadow chain")])
+@pytest.mark.parametrize("status,rc,ok", [("complete", 0, True), ("unchanged", 0, True), ("partial", 1, False),
+                                          ("complete", 1, False), ("stale_rid", 0, False), ("crash", 1, False)])
+def test_shadow_window_sentinel_bound_to_this_run(tmp_path, window, cmd, status, rc, ok):
+    (tmp_path / f".status_shadow_{window}_2026-09-28.json").write_text(json.dumps(       # 上一轮留下的 complete
+        {"schema": 2, "command": cmd, "run_id": "old", "session": "2026-09-28", "overall": "complete"}))
+    py = {"stale_rid": _st(cmd, "complete", "'old'"), "crash": ""}.get(status, _st(cmd, status))
+    log = _run_hook(tmp_path, _fake_py(tmp_path, py, rc), f'shadow_window {window} 600 620 "测试窗"')
+    assert (tmp_path / f".shadow_{window}_2026-09-28.ok").exists() is ok
+    if status == "crash":
+        assert "状态文件缺失" in log
+    assert not list(tmp_path.glob("*.run-*.json"))                                  # 本次状态已原子发布为固定路径
+
+
+def test_shadow_window_lock_busy_then_released_lock_recovers(tmp_path):
+    import fcntl
+    lk = tmp_path / ".lockf_shadow_open"
+    fake = _fake_py(tmp_path, _st("shadow quote-open", "complete"), 0)
+    with open(lk, "a+") as f:                                                        # 另一轮正持锁 → 撞锁、不写哨兵
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        assert "撞锁" in _run_hook(tmp_path, fake, 'shadow_window open 600 620 "测试窗"')
+        assert not (tmp_path / ".shadow_open_2026-09-28.ok").exists()
+    # 持锁者释放（进程死亡时内核同样释放）后锁文件仍在，下一轮照常取得 —— 旧 mkdir 锁此时会永久残留
+    _run_hook(tmp_path, fake, 'shadow_window open 600 620 "测试窗"')
+    assert (tmp_path / ".shadow_open_2026-09-28.ok").exists() and lk.exists()
+
+
+@pytest.mark.parametrize("status,rc,good", [("complete", 0, True), ("stale_rid", 0, False), ("crash", 1, False)])
+def test_shadow_sample_reports_only_this_run(tmp_path, status, rc, good):
+    py = {"stale_rid": _st("shadow sample", "complete", "'old'"), "crash": ""}.get(status, _st("shadow sample", status))
+    log = _run_hook(tmp_path, _fake_py(tmp_path, py, rc), "shadow_sample 585 779")
+    assert ("✅" in log) is good and ("⏳" in log) is (not good)

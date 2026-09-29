@@ -63,6 +63,36 @@ PUBLISH_PENDING="data/logs/.publish_pending_auto"; export PUBLISH_PENDING
 publish_begin data/history data/snapshots
 trap 'publish_record data/history data/snapshots' EXIT
 
+# ── 本次运行绑定（Codex 025/026）──────────────────────────────────────────
+# 每次运行独立 run_id 与独立状态路径（并发轮次不会互删对方的状态）；lockf(1) 内核文件锁互斥（持锁进程一死内核即释放，
+# 不看 PID、无复用误判 —— 旧的 mkdir 锁在进程被杀后会永久残留，把当天窗口堵死）；状态文件逐项核对 schema/run_id/session/command；
+# 最新状态原子发布为固定路径（mv 同目录改名，只供人查看，判定不读它）。调用方同时看返回码。
+# 用法：run_bound <状态名> <命令名> 子命令参数…   → 设置 RB_RES（输出）RB_RC（返回码；75=撞锁）RB_OV（overall）
+bound_overall() {  # $1=状态文件 $2=run_id $3=命令名 → overall / status_missing / status_mismatch / status_corrupt
+  [[ -f "$1" ]] || { echo status_missing; return; }
+  "$PY" -c '
+import json, sys
+p, rid, sess, cmd = sys.argv[1:5]
+try:
+    d = json.load(open(p))
+except Exception:
+    print("status_corrupt"); sys.exit(0)
+ok = d.get("schema") == 2 and d.get("run_id") == rid and d.get("session") == sess and d.get("command") == cmd
+print(d.get("overall", "") if ok else "status_mismatch")' "$1" "$2" "$ET_DATE" "$3" 2>/dev/null || echo status_corrupt
+}
+run_bound() {
+  local NAME="$1" CMDN="$2"; shift 2
+  local RID="$$-$RANDOM-$(date +%s)"
+  local ST="$LOG_DIR/.status_${NAME}_${ET_DATE}.run-${RID}.json" LK="$LOG_DIR/.lockf_${NAME}"
+  RB_RES=""; RB_RC=0; RB_OV=""
+  # lockf -t 0：锁被占立即退出 75（EX_TEMPFAIL）；-k 保留锁文件（避免删文件与加锁的竞争）；命令返回码原样透传
+  RB_RES=$(lockf -k -t 0 "$LK" "$PY" -m undertow.cli "$@" --status-file "$ST" --run-id "$RID" 2>&1); RB_RC=$?
+  if (( RB_RC == 75 )) && [[ ! -f "$ST" ]]; then RB_OV="busy"; return; fi
+  RB_OV=$(bound_overall "$ST" "$RID" "$CMDN")
+  [[ -f "$ST" ]] && mv -f "$ST" "$LOG_DIR/.status_${NAME}_${ET_DATE}.json"
+}
+ov_text() { [[ "$1" == "status_missing" ]] && echo "状态文件缺失" || echo "$1"; }
+
 # ── ④⑤ 影子账盘口窗口（v3，Codex 005 R02）──────────────────────────
 # ⚠️ 放在①②③之前：那几个窗口里有 exit 0（撞锁等），排在后面会被跳过。
 # ④ ET 10:00–10:20：当日入场 + 持仓标记；⑤ 核心收市前 30~15 分钟：持仓标记与到期前平仓（主终点）。
@@ -76,22 +106,21 @@ shadow_window() {  # $1=open|close $2=窗口起(分) $3=窗口止(分) $4=标签
   local W="$1" LO="$2" HI="$3" TAG="$4"
   if (( ET_MIN < LO || ET_MIN > HI )); then return; fi
   IN_SHADOW=1
-  local OKF="$LOG_DIR/.shadow_${W}_${ET_DATE}.ok" ST="$LOG_DIR/.status_shadow_${W}_${ET_DATE}.json"
+  local OKF="$LOG_DIR/.shadow_${W}_${ET_DATE}.ok"
   if [[ -f "$OKF" ]]; then hb "${TAG}：今日已完成，跳过"; return; fi
-  local LK="$LOG_DIR/.lock_shadow_${W}_${ET_DATE}"
-  if ! mkdir "$LK" 2>/dev/null; then hb "${TAG}：撞锁，跳过"; return; fi
-  local RES RC
   if [[ "$W" == "chain" ]]; then          # 开盘后近价全链快照（同一套哨兵/重试/告警规则）
-    RES=$("$PY" -m undertow.cli shadow chain --status-file "$ST" 2>&1); RC=$?
+    run_bound "shadow_${W}" "shadow chain" shadow chain
   else
-    RES=$("$PY" -m undertow.cli shadow quote --window "$W" --status-file "$ST" 2>&1); RC=$?
+    run_bound "shadow_${W}" "shadow quote-${W}" shadow quote --window "$W"
   fi
-  rmdir "$LK" 2>/dev/null
+  if (( RB_RC == 75 )); then hb "${TAG}：撞锁（上一轮仍在跑），跳过"; return; fi
+  local RES="$RB_RES" RC=$RB_RC
   local SUM; SUM=$(printf '%s' "$RES" | grep -E '应有 .* 个候选价差|应有 .* 条腿|开盘后全链：' | tail -1)
-  if (( RC == 0 )); then
+  # 成功哨兵 = rc=0 且【本次】状态为 complete/unchanged（Codex 026：旧状态 + 新崩溃不得写哨兵）
+  if (( RC == 0 )) && [[ "$RB_OV" == "complete" || "$RB_OV" == "unchanged" ]]; then
     : > "$OKF"; hb "${TAG}：✅ ${SUM}"
   else
-    hb "${TAG}：⏳ 未完成（rc=$RC）${SUM}，下次唤醒重试"
+    hb "${TAG}：⏳ 未完成（rc=$RC overall=$(ov_text "$RB_OV")）${SUM}，下次唤醒重试"
     if (( ET_MIN >= HI - 6 )); then
       notify "⚠️ 影子账${TAG}未完成" "${SUM:-$(printf '%s' "$RES" | tail -1)}"
     fi
@@ -106,17 +135,16 @@ shadow_sample() {  # $1=起(分) $2=止(分，闭区间末分钟)
   local LO="$1" HI="$2"
   if (( ET_MIN < LO || ET_MIN > HI )); then return; fi
   IN_SHADOW=1
-  local LK="$LOG_DIR/.lock_shadow_sample_${ET_DATE}"
-  if ! mkdir "$LK" 2>/dev/null; then hb "⑦盘中采样：撞锁，跳过"; return; fi
-  local RES RC
-  RES=$("$PY" -m undertow.cli shadow sample --status-file "$LOG_DIR/.status_shadow_sample_${ET_DATE}.json" 2>&1); RC=$?
-  rmdir "$LK" 2>/dev/null
+  run_bound "shadow_sample" "shadow sample" shadow sample
+  if (( RB_RC == 75 )); then hb "⑦盘中采样：撞锁（上一轮仍在跑），跳过"; return; fi
+  local RES="$RB_RES" RC=$RB_RC
   local SUM; SUM=$(printf '%s' "$RES" | grep -E '盘中采样' | tail -1)
   local BEND=$(( LO + ( (ET_MIN - LO) / 15 + 1 ) * 15 ))          # 当前桶的结束分钟（右开）
-  if (( RC == 0 )); then
+  if (( RC == 0 )) && [[ "$RB_OV" == "complete" || "$RB_OV" == "unchanged" ]]; then
     hb "⑦盘中采样：✅ ${SUM}"
   else
-    hb "⑦盘中采样：⏳ rc=$RC ${SUM}"
+    (( RC == 0 )) && RC=1                                           # rc=0 但本次状态不符 → 按未完成处理
+    hb "⑦盘中采样：⏳ rc=$RC overall=$(ov_text "$RB_OV") ${SUM}"
     local MK="$LOG_DIR/.sample_alerted_${ET_DATE}_${BEND}"
     if (( RC == 1 && ET_MIN >= BEND - 6 )) && [[ ! -e "$MK" ]]; then
       : > "$MK"
@@ -161,29 +189,19 @@ thesisq() {  # $1=pre|close
 # ⑩ 收盘后存当天逐分钟（用户 2026-09-28「记住数据最重要」）：longbridge intraday 只能取【当天】、不占按自然月计的
 # 历史 K 线配额（400 代码/月，主池两周即用掉 349）。ET 16:05 起每次唤醒尝试，成功写哨兵；rc≠0 连续 3 次后通知一次。
 intraday_capture() {
-  # Codex 024/025：成功哨兵 = 本次运行的结构化状态（overall=complete/no_candidates）且 rc=0；
-  # 锁由命令内 fcntl.flock 负责（进程被杀由内核释放，不会留下失效锁）；rc=4 = 上一轮仍在跑。
+  # Codex 024/025/026：成功哨兵 = 本次运行的结构化状态（overall=complete/no_candidates）且 rc=0（run_bound 核对身份）；
+  # 命令内另有 fcntl.flock（rc=4），hook 层 lockf 撞锁为 75 —— 两者都表示上一轮仍在跑。
   local OKF="$LOG_DIR/.intraday_${ET_DATE}.ok" FAILF="$LOG_DIR/.intraday_fail_${ET_DATE}"
-  local STF="$LOG_DIR/.status_intraday_${ET_DATE}.json"
   [[ -f "$OKF" ]] && return
   IN_SHADOW=1
-  local RES RC OV RID="$$-$RANDOM-$(date +%s)"
-  # Codex 025-4：状态必须属于【本次】运行 —— 运行前删旧状态，本次 run_id / session / schema / 命令名逐项核对，
-  # 且成功哨兵同时要求 rc=0（旧 complete + 新进程崩溃 → 不写哨兵）
-  rm -f "$STF"
-  RES=$("$PY" -m undertow.cli shadow intraday --status-file "$STF" --run-id "$RID" 2>&1); RC=$?
-  if (( RC == 4 )); then hb "⑩当天逐分钟：上一轮仍在跑（文件锁），跳过"; return; fi
-  OV=$("$PY" -c '
-import json, sys
-d = json.load(open(sys.argv[1]))
-ok = d.get("schema") == 2 and d.get("run_id") == sys.argv[2] and d.get("session") == sys.argv[3] \
-     and d.get("command") == "shadow intraday"
-print(d.get("overall", "") if ok else "status_mismatch")' "$STF" "$RID" "$ET_DATE" 2>/dev/null)
+  run_bound "intraday" "shadow intraday" shadow intraday
+  local RES="$RB_RES" RC=$RB_RC OV="$RB_OV"
+  if (( RC == 4 || RC == 75 )); then hb "⑩当天逐分钟：上一轮仍在跑（锁），跳过"; return; fi
   if (( RC == 0 )) && [[ "$OV" == "complete" || "$OV" == "no_candidates" ]]; then
     : > "$OKF"; hb "⑩当天逐分钟：✅ ${OV} $(printf '%s' "$RES" | grep '当天逐分钟' | tail -1 | clip 120)"
   else
     printf 'x' >> "$FAILF"
-    hb "⑩当天逐分钟：⏳ rc=$RC overall=${OV:-状态文件缺失} $(printf '%s' "$RES" | grep '当天逐分钟' | tail -1 | clip 100)"
+    hb "⑩当天逐分钟：⏳ rc=$RC overall=$(ov_text "$OV") $(printf '%s' "$RES" | grep '当天逐分钟' | tail -1 | clip 100)"
     if [[ $(wc -c < "$FAILF") -eq 3 ]]; then
       notify "⚠️ 当天逐分钟采集连续未完成" "$(printf '%s' "$RES" | tail -2 | clip 160)"
     fi

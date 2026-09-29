@@ -1133,6 +1133,10 @@ def cmd_fib(args) -> int:
     return 0
 
 
+class _SkipLedger(Exception):
+    """前瞻台账的「设计内不写」：快照对应交易日已过去（今日快照未到），不是失败、不告警。"""
+
+
 def _data_source_day(curr_date_s: str, prev_date: str | None,
                      px_dates, inst_key: str) -> str:
     """研报的身份日 = **数据来源日** = 快照日之前最后一个【真实交易日】。
@@ -1162,6 +1166,14 @@ def _data_source_day(curr_date_s: str, prev_date: str | None,
             cd = date.fromisoformat(curr_date_s)
             earlier = [d for d in px_dates if d < cd]
             if earlier:
+                # 2026-09-28：日线源端滞后（CBOE 周一早上仍无周五 bar）→ 名字退成更早一天。日线落后于
+                # 「快照日的上一个交易日」时，改用交易日历并出声；日线正常时口径不变（与 signal_ledger 一致）。
+                from undertow.core import market_calendar as _mc
+                cal = _mc.prev_trading_day(cd)
+                if cal is not None and max(earlier) < cal:
+                    print(f"⚠️ {inst_key} 日线最新只到 {max(earlier)}，落后于快照日前一交易日 {cal}："
+                          f"研报日期改按交易日历取 {cal}（价格分析仍缺这几天）", file=sys.stderr)
+                    return cal.isoformat()
                 return max(earlier).isoformat()
         except (ValueError, TypeError):
             pass
@@ -2352,10 +2364,21 @@ def cmd_report(args) -> int:
                     if _sess_meta.get("status") == "unmappable":
                         raise ValueError(f"快照 session 无法认证（{_sess_meta.get('source')}），"
                                          "不计入前瞻台账")
+                    # 2026-09-28：ET 04:00 当日快照未到，研报用上一份（9/25）快照 → 对【已过去】的交易日再算一次，
+                    # 价格背景已更新 → 与首份冻结记录冲突，每小时告警一次。前瞻记录只在该交易日开盘前做，
+                    # 事后重算不是新决策 → 交易日早于今天就跳过（首份冻结记录不动），只提示、不告警。
+                    _ws_sess = _sess_meta["session"]
+                    _ws_sess_s = _ws_sess.isoformat() if hasattr(_ws_sess, "isoformat") else str(_ws_sess)
+                    if not replay and _ws_sess_s < market_today().isoformat():
+                        print(f"[提示] {inst.key} 最新快照对应交易日 {_ws_sess_s} 已过去（今日快照未到）："
+                              "不重写墙位价差前瞻台账", file=sys.stderr)
+                        raise _SkipLedger()
                     _sl.record(inst.key, inst.options.symbol, _sess_meta["session"],
                                _ws_spot, _ws_v, context=_ctx,
                                session_meta=_sess_meta_row(_sess_meta, curr_date_s),
                                root=_sl.REPLAY_DIR if replay else None)
+                except _SkipLedger:
+                    pass                          # 交易日已过、不重写：设计内行为，不算台账失败
                 except Exception as e:
                     # 失败必须进报告卡片与任务状态文件 —— 只写 stderr 在无人值守时等于没人知道
                     _msg = f"{type(e).__name__}: {e}"[:200]

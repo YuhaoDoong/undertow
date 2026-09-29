@@ -6,7 +6,7 @@ USO 因展期损耗对 WTI 有偏差，已在 config/报告中标注）。
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from undertow.core.config import Instrument
 from undertow.collect.cache import FileCache
@@ -14,6 +14,28 @@ from undertow.core.models import PriceSeries
 from undertow.collect.base import DataSourceError, http_get_json
 
 CBOE_HIST_URL = "https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/{symbol}.json"
+
+
+_STALE_REFETCHED: set = set()
+_STALE_WARNED: set = set()
+
+
+def _last_bar(payload) -> date | None:
+    try:
+        rows = payload.get("data") or []
+        return max(datetime.strptime(r["date"], "%Y-%m-%d").date() for r in rows if r.get("date"))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def _expected_last_bar() -> date | None:
+    """此刻应当已有的最后一根日线 = ET 今天之前的最后一个交易日（今天的 bar 收盘后源端也常未更新，不苛求）。"""
+    try:
+        from undertow.core import market_calendar as mc
+        from undertow.core.clock import market_today
+        return mc.prev_trading_day(market_today())
+    except Exception:
+        return None
 
 
 class CboeHistorySource:
@@ -30,9 +52,24 @@ class CboeHistorySource:
         cache_key = f"cboehist_{sym}"
 
         payload = self.cache.get(cache_key, self.CACHE_TTL if use_cache else 0) if use_cache else None
+        # 2026-09-28：周日晚缓存的日线最后一根停在 9/24，周一 06:45 研报仍在 12 小时有效期内沿用 →
+        # SPY/TLT/IWM 研报名字与价格分析都少了周五一天。缓存命中但落后于「上一个交易日」→ 不用缓存，重抓。
+        expect = _expected_last_bar()
+        lb0 = _last_bar(payload) if payload is not None else None
+        # 只处理「近期轻微落后」（≤7 天：12 小时有效期内沿用了前一晚的缓存）；更旧的数据交给 TTL 机制
+        if lb0 is not None and expect is not None and lb0 < expect and (expect - lb0).days <= 7 \
+                and sym not in _STALE_REFETCHED:
+            payload = None                        # 同一进程内每个代码只为「落后」重抓一次（源端本就滞后时不反复请求）
+            _STALE_REFETCHED.add(sym)
         if payload is None:
             payload = http_get_json(CBOE_HIST_URL.format(symbol=sym))
             self.cache.set(cache_key, payload)
+        lb = _last_bar(payload)
+        if expect is not None and lb is not None and lb < expect and sym not in _STALE_WARNED:
+            _STALE_WARNED.add(sym)
+            import sys as _sys
+            print(f"⚠️ {sym} CBOE 日线最新只到 {lb}，落后于上一交易日 {expect}（源端未更新）："
+                  "依赖日线的日期命名与价格分析会少这几天", file=_sys.stderr)
 
         rows = payload.get("data")
         if not isinstance(rows, list) or not rows:

@@ -54,11 +54,12 @@ def test_gap_uses_price_series_not_prev_snapshot():
 def test_holiday_is_not_guessed_as_trading_day():
     """不能用"上一个工作日"近似 —— 它不认识休市日。
 
-    构造：9/23(周三)休市（不在日线序列里），则 9/24 的数据日应是 9/22，
-    而"上一个工作日"会给出 9/23 这个根本没有交易的日子。
+    构造（2026-09-28 改用真实休市日）：9/7(周一)劳动节休市，9/8 快照的数据日应是 9/4（周五），
+    「上一个工作日」会给出 9/7 这个没有交易的日子。旧版用「日线里删掉 9/23」模拟休市 ——
+    但 9/23 在交易日历里是交易日；日线缺交易日现在按日历兜底（见 test_report_staleness），两者不再冲突。
     """
-    px_holiday = [d for d in PX if d != date(2026, 9, 23)]
-    assert dsd("2026-09-24", "2026-09-22", px_holiday, "gold") == "2026-09-22"
+    px = [date(2026, 9, 2), date(2026, 9, 3), date(2026, 9, 4), date(2026, 9, 8)]
+    assert dsd("2026-09-08", "2026-09-04", px, "gold") == "2026-09-04"
     print("PASS test_holiday_is_not_guessed_as_trading_day")
 
 

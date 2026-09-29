@@ -320,6 +320,11 @@ DL_OUT=$(python3 -m undertow dirledger record 2>&1); DL_RC=$?
 DS_OUT=$(python3 -m undertow dirledger score 2>&1); DS_RC=$?
 # 期权多层同向（Codex 022 冻结：conviction-h1-v1-20260928，正式起点 2026-09-29；积累期 T3，不参与决策）
 CV_OUT=$(python3 -m undertow dirledger conviction-record 2>&1); CV_RC=$?
+# 外部作者价位类判断计分（私有：只读写 data/soul/；用户 2026-09-29「多记录多测试」）；失败不阻断
+if [[ -f data/soul/author_levels.jsonl ]]; then
+  AL_OUT=$(python3 scripts/author_levels_score.py 2>&1); AL_RC=$?
+  (( AL_RC != 0 )) && alert "⚠️ 作者价位计分失败（ET $ET_NOW）" "$(printf '%s' "$AL_OUT" | tail -1 | cut -c1-120)"
+fi
 # 逐到期持仓画像（用户 2026-09-29：到期日类型 Q/M/W 与磁吸研究）：开盘前首份冻结，只记录不产生信号
 EP_OUT=$(python3 -m undertow shadow expiry-profile 2>&1); EP_RC=$?
 set -e

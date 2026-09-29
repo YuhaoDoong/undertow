@@ -151,3 +151,69 @@ def block_bootstrap(rows: list, key, date_of, *, block: int, B: int = 2000, seed
     means.sort()
     out.update(lo=means[int(0.025 * B)], hi=means[int(0.975 * B) - 1], interval="moving_block")
     return out
+
+
+# ═══ v3 同品种事前匹配（docs/prereg/2026-09-29_expiry_pin_v3_match_protocol.md；探索，已看过 v1/v2）═══
+MATCH_WINDOW = 20          # 前后交易日
+VOL_LOOKBACK = 60          # 波动档参照：截至 D−1（含）的 60 个交易日的 ATR14/收盘
+
+
+def _atr14(h, lo, c):
+    from undertow.analyze.technicals import _atr
+    return _atr(h, lo, c, 14)
+
+
+def match_features(dates: list, ohlc: dict, d, k: float, event: str = "unknown") -> dict | None:
+    """D−1 收盘时已知的匹配字段；历史不足 → None。dates = 该品种全部日线日期（升序），ohlc[日] = (开,高,低,收)。"""
+    import bisect
+    i = bisect.bisect_left(dates, d)                         # dates[:i] 严格早于 D
+    need = VOL_LOOKBACK + 15
+    if i < max(need, 21):
+        return None
+    H = [ohlc[x][1] for x in dates[:i]]; L = [ohlc[x][2] for x in dates[:i]]; C = [ohlc[x][3] for x in dates[:i]]
+    ratios = []
+    for j in range(i - VOL_LOOKBACK, i):                     # 截至 D−1（含）的 60 个交易日
+        a = _atr14(H[:j + 1], L[:j + 1], C[:j + 1])
+        if a is None:
+            return None
+        ratios.append(a / C[j])
+    atr = _atr14(H, L, C)
+    v = atr / C[-1]
+    q1, q2 = statistics.quantiles(ratios, n=3, method="exclusive")
+    c_prev = C[-1]
+    return {"c_prev": c_prev, "atr": atr, "vol_ratio": v, "vol_tercile": 0 if v < q1 else (1 if v < q2 else 2),
+            "direction": "above" if k > c_prev else ("below" if k < c_prev else "equal"),
+            "dist_prev_atr": abs(c_prev - k) / atr, "dist_bin": dist_bin(abs(c_prev - k) / atr),
+            "trend20": (C[-1] > C[-21]) - (C[-1] < C[-21]), "event": event, "day_index": i}
+
+
+def match_key(f: dict) -> tuple:
+    return (f["direction"], f["dist_bin"], f["vol_tercile"], f["trend20"], f["event"])
+
+
+def match_pairs(rows: list, window: int = MATCH_WINDOW) -> dict:
+    """rows：{sym, d, is_expiry, feat(None=历史不足), …}。每个到期日在同品种、前后 window 个交易日内取字段全同的最近非到期日；
+    距离相同取日期早者；对照可复用并计次；无对照记 unmatched（原因分三类），不放宽。"""
+    pairs, unmatched, reuse = [], [], {}
+    ctrl = [r for r in rows if not r["is_expiry"] and r["feat"] is not None]
+    for e in sorted((r for r in rows if r["is_expiry"]), key=lambda r: (r["sym"], r["d"])):
+        if e["feat"] is None:
+            unmatched.append({**e, "why": "history_lt_60"}); continue
+        same = [c for c in ctrl if c["sym"] == e["sym"] and match_key(c["feat"]) == match_key(e["feat"])]
+        near = [c for c in same if abs(c["feat"]["day_index"] - e["feat"]["day_index"]) <= window]
+        if not near:
+            unmatched.append({**e, "why": "no_control_in_window" if same else "no_control_same_cell"}); continue
+        c = min(near, key=lambda c: (abs(c["feat"]["day_index"] - e["feat"]["day_index"]), c["d"]))
+        key = (c["sym"], c["d"])
+        reuse[key] = reuse.get(key, 0) + 1
+        pairs.append({"expiry": e, "control": c, "gap_days": c["feat"]["day_index"] - e["feat"]["day_index"]})
+    for p in pairs:
+        p["control_reuse"] = reuse[(p["control"]["sym"], p["control"]["d"])]
+    cells = {}
+    for r in rows:
+        if r["feat"] is None:
+            continue
+        k = (r["sym"], *match_key(r["feat"]))
+        c = cells.setdefault(k, {"expiry": 0, "nonexpiry": 0})
+        c["expiry" if r["is_expiry"] else "nonexpiry"] += 1
+    return {"pairs": pairs, "unmatched": unmatched, "cells": cells, "reuse": reuse}

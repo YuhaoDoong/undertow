@@ -1,0 +1,76 @@
+# 到期日磁吸 v3 同品种事前匹配（expiry-pin-match-v3-20260929；2026-06-25–2026-09-25，asof 2026-09-29；探索性描述，非检验）
+协议：docs/prereg/2026-09-29_expiry_pin_v3_match_protocol.md。匹配字段 = 方向 × 墙距箱 × 波动档 × 20 日趋势 × 事件（历史全 unknown）。
+配对差 = pull(到期日) − pull(对照日)，pull = (|开−K|−|收−K|)/ATR14。不给 p 值与区间（对照复用、跨日依赖未处理）。
+
+## 品种覆盖
+  GLD   到期日  47 非到期日  11 配对  12 
+  IWM   到期日  19 非到期日   0 配对   0 （仅本对照剔除：缺非到期日）
+  QQQ   到期日  38 非到期日   0 配对   0 （仅本对照剔除：缺非到期日）
+  SLV   到期日  37 非到期日  21 配对  16 
+  SPY   到期日  19 非到期日   0 配对   0 （仅本对照剔除：缺非到期日）
+  TLT   到期日  11 非到期日   8 配对   3 
+  TQQQ  到期日  12 非到期日   8 配对   6 
+  USO   到期日  24 非到期日  34 配对  11 
+
+## 未匹配（原因）
+  GLD   no_control_in_window: 1
+  GLD   no_control_same_cell: 34
+  IWM   no_control_same_cell: 19
+  QQQ   no_control_same_cell: 38
+  SLV   no_control_in_window: 4
+  SLV   no_control_same_cell: 17
+  SPY   no_control_same_cell: 19
+  TLT   no_control_same_cell: 8
+  TQQQ  no_control_same_cell: 6
+  USO   no_control_in_window: 2
+  USO   no_control_same_cell: 11
+
+## 共同支持（只列同时有到期日与非到期日的格子）
+  ('GLD', 'above', 0, 1, -1, 'unknown'): 到期日 1 非到期日 1
+  ('GLD', 'above', 0, 1, 1, 'unknown'): 到期日 4 非到期日 1
+  ('GLD', 'above', 2, 0, 1, 'unknown'): 到期日 2 非到期日 1
+  ('GLD', 'above', 3, 0, 1, 'unknown'): 到期日 2 非到期日 1
+  ('GLD', 'above', 3, 2, -1, 'unknown'): 到期日 2 非到期日 1
+  ('GLD', 'below', 2, 0, 1, 'unknown'): 到期日 1 非到期日 1
+  ('GLD', 'below', 3, 0, 1, 'unknown'): 到期日 1 非到期日 1
+  ('SLV', 'above', 0, 1, -1, 'unknown'): 到期日 1 非到期日 1
+  ('SLV', 'above', 1, 1, -1, 'unknown'): 到期日 3 非到期日 1
+  ('SLV', 'above', 1, 2, -1, 'unknown'): 到期日 2 非到期日 1
+  ('SLV', 'above', 2, 0, -1, 'unknown'): 到期日 2 非到期日 1
+  ('SLV', 'above', 2, 0, 1, 'unknown'): 到期日 3 非到期日 3
+  ('SLV', 'above', 2, 1, -1, 'unknown'): 到期日 2 非到期日 1
+  ('SLV', 'above', 3, 0, 1, 'unknown'): 到期日 2 非到期日 1
+  ('SLV', 'below', 0, 0, 1, 'unknown'): 到期日 2 非到期日 4
+  ('SLV', 'below', 2, 0, -1, 'unknown'): 到期日 1 非到期日 2
+  ('SLV', 'below', 2, 0, 1, 'unknown'): 到期日 2 非到期日 1
+  ('TLT', 'above', 0, 2, -1, 'unknown'): 到期日 1 非到期日 2
+  ('TLT', 'above', 2, 2, -1, 'unknown'): 到期日 1 非到期日 3
+  ('TLT', 'below', 1, 2, 1, 'unknown'): 到期日 1 非到期日 1
+  ('TQQQ', 'above', 0, 0, -1, 'unknown'): 到期日 1 非到期日 1
+  ('TQQQ', 'below', 0, 0, 1, 'unknown'): 到期日 1 非到期日 1
+  ('TQQQ', 'below', 1, 0, -1, 'unknown'): 到期日 2 非到期日 2
+  ('TQQQ', 'below', 2, 0, -1, 'unknown'): 到期日 2 非到期日 1
+  ('USO', 'above', 0, 0, -1, 'unknown'): 到期日 1 非到期日 1
+  ('USO', 'above', 0, 2, 1, 'unknown'): 到期日 1 非到期日 1
+  ('USO', 'above', 1, 0, -1, 'unknown'): 到期日 1 非到期日 1
+  ('USO', 'above', 1, 1, 1, 'unknown'): 到期日 1 非到期日 1
+  ('USO', 'above', 2, 0, 1, 'unknown'): 到期日 1 非到期日 4
+  ('USO', 'above', 3, 0, 1, 'unknown'): 到期日 4 非到期日 2
+  ('USO', 'below', 0, 0, -1, 'unknown'): 到期日 1 非到期日 1
+  ('USO', 'below', 2, 0, 1, 'unknown'): 到期日 2 非到期日 1
+  ('USO', 'below', 2, 1, 1, 'unknown'): 到期日 1 非到期日 2
+  有共同支持的格子 33 / 全部格子 146
+
+## 配对描述（每品种与合并；不作推断）
+  GLD    配对  12（不同对照日 7）差均值 +0.337 中位 +0.388 为正 10/12 | 间隔中位 10.5 日 | 残余墙距差（前收）中位 0.29 ATR、（开盘）中位 0.41 ATR
+  IWM    配对 0 —— 本数据不能识别
+  QQQ    配对 0 —— 本数据不能识别
+  SLV    配对  16（不同对照日 11）差均值 +0.024 中位 -0.074 为正 5/16 | 间隔中位 4 日 | 残余墙距差（前收）中位 0.18 ATR、（开盘）中位 0.31 ATR
+  SPY    配对 0 —— 本数据不能识别
+  TLT    配对   3（不同对照日 3）差均值 +0.039 中位 +0.272 为正 2/3 | 间隔中位 2 日 | 残余墙距差（前收）中位 0.19 ATR、（开盘）中位 0.20 ATR
+  TQQQ   配对   6（不同对照日 4）差均值 -0.706 中位 -0.680 为正 0/6 | 间隔中位 6 日 | 残余墙距差（前收）中位 0.13 ATR、（开盘）中位 0.42 ATR
+  USO    配对  11（不同对照日 9）差均值 +0.408 中位 +0.458 为正 9/11 | 间隔中位 2 日 | 残余墙距差（前收）中位 0.16 ATR、（开盘）中位 0.58 ATR
+  合并     配对  48（不同对照日 34）差均值 +0.100 中位 +0.133 为正 26/48 | 间隔中位 4 日 | 残余墙距差（前收）中位 0.19 ATR、（开盘）中位 0.49 ATR
+
+局限：同品种内到期日与对照日仍在 DTE、到期类型上不同；对照复用与跨日相关未处理；事件态全 unknown；
+匹配字段与分箱是锁定的探索设计，不是校准结果；本批快照此前看过。

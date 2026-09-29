@@ -66,3 +66,44 @@ def test_block_bootstrap_keeps_date_blocks_and_min_clusters():
     assert (s5["hi"] - s5["lo"]) >= (s1["hi"] - s1["lo"])                             # 块长大 → 区间更宽（序列相关）
     few = ep.block_bootstrap(rows[:3], key=lambda r: r["v"], date_of=lambda r: r["d"], block=2)
     assert few["lo"] is None and "not_estimable" in few["interval"]
+
+
+# —— v3 同品种事前匹配 ——
+def _bars(n=120, start=date(2026, 1, 1)):
+    from datetime import timedelta
+    ds, o = [], {}
+    d = start
+    while len(ds) < n:
+        if d.weekday() < 5:
+            ds.append(d)
+            c = 100 + 0.1 * len(ds)                          # 平稳上行、日振幅 2
+            o[d] = (c, c + 1, c - 1, c)
+        d += timedelta(days=1)
+    return ds, o
+
+
+def test_match_features_use_only_prior_days():
+    ds, o = _bars()
+    f = ep.match_features(ds, o, ds[100], k=115.0)
+    assert f["c_prev"] == o[ds[99]][3] and f["direction"] == "above" and f["trend20"] == 1
+    o2 = dict(o); o2[ds[100]] = (999, 999, 1, 500)                                  # D 当天数据不影响特征
+    assert ep.match_features(ds, o2, ds[100], k=115.0) == f
+    assert ep.match_features(ds, o, ds[50], k=115.0) is None                        # 历史不足 60+15 日
+
+
+def test_match_pairs_nearest_same_cell_within_window_and_reuse():
+    F = lambda i, key=("above", 1, 1, 1, "unknown"): {"direction": key[0], "dist_bin": key[1], "vol_tercile": key[2],
+                                                       "trend20": key[3], "event": key[4], "day_index": i}
+    rows = [{"sym": "X", "d": "e1", "is_expiry": True, "feat": F(100)},
+            {"sym": "X", "d": "e2", "is_expiry": True, "feat": F(103)},
+            {"sym": "X", "d": "e3", "is_expiry": True, "feat": F(200)},                  # 窗口内无对照
+            {"sym": "X", "d": "e4", "is_expiry": True, "feat": F(100, ("below", 1, 1, 1, "unknown"))},
+            {"sym": "X", "d": "e5", "is_expiry": True, "feat": None},
+            {"sym": "X", "d": "n1", "is_expiry": False, "feat": F(98)},
+            {"sym": "X", "d": "n2", "is_expiry": False, "feat": F(102)},
+            {"sym": "Y", "d": "n3", "is_expiry": False, "feat": F(100, ("below", 1, 1, 1, "unknown"))}]  # 跨品种不配
+    m = ep.match_pairs(rows)
+    got = {p["expiry"]["d"]: (p["control"]["d"], p["control_reuse"]) for p in m["pairs"]}
+    assert got == {"e1": ("n1", 1), "e2": ("n2", 1)}                                # e1 等距（2 天）取日期早者 n1
+    why = {u["d"]: u["why"] for u in m["unmatched"]}
+    assert why == {"e3": "no_control_in_window", "e4": "no_control_same_cell", "e5": "history_lt_60"}

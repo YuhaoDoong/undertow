@@ -101,3 +101,4 @@ D=其余日期），不是交易所或券商核实的原生标签。
 `expiry_pin`：到期日磁吸的纯计算 —— pull=(|开−K|−|收−K|)/ATR14；同日同侧同距离分箱安慰剂行权价；墙定义 W0/W1/W3(C/P/合并)；
 日期簇 bootstrap；跨日重叠用 `block_bootstrap`（跨品种同步的移动块）；簇 < 5 不给区间。`scripts/expiry_pin_explore.py --start --end --asof` 跑历史描述（非检验，产物带输入哈希与运行清单、不覆盖）。已知边界：diff = d0 − d1，只在收盘越过墙或安慰剂时非 0（几何退化，未显示增量 ≠ 磁吸无效）；
 原始 pull 受墙距机械约束；W3 是 gamma-OI 强度代理，不是做市商净头寸；距离分箱界为未校准设计值。
+v3 同品种事前匹配（`match_features` / `match_pairs`，协议 `docs/prereg/2026-09-29_expiry_pin_v3_match_protocol.md`，脚本 `scripts/expiry_pin_match.py`）：只用 D−1 已知的方向、墙距箱、波动档、20 日趋势、事件三态，同品种前后 20 个交易日内取最近对照，可复用并计次，无对照不放宽；第一版只给共同支持、配对表与描述，不给 p 值。

@@ -25,7 +25,8 @@ def test_wall_with_buffer_is_sold_directly():
     q = {380: {"bid": 0.84, "ask": 0.98, "error": ""}, 379: {"bid": 0.58, "ask": 0.72, "error": ""},
          378: {"bid": 0.44, "ask": 0.53, "error": ""}}
     r = sr.select_put_spread(382.24, OI, LISTED, q)                    # 380 离价 0.59% ≥ 0.5%
-    assert r["ok"] and r["sell"] == 380 and r["buy"] == 378 and r["tried"][0][2] < 0.15   # 380/379 只有 12%
+    assert r["ok"] and r["sell"] == 380 and r["buy"] == 378
+    assert r["tried"][0]["reject"] == "credit_ratio_low" and r["tried"][0]["ratio"] < 0.15   # 380/379 只有 12%
 
 
 def test_buy_leg_needs_only_ask_and_no_qualifying_means_no_trade():
@@ -52,3 +53,31 @@ def test_width_cap_stops_super_wide_protection():
     q = {54.5: {"bid": 0.2, "ask": 0.22, "error": ""}, 52: {"bid": 0.01, "ask": 0.02, "error": ""}}
     r = sr.select_put_spread(55.2, {54.5: 5000}, listed, q)
     assert not r["ok"] and r["tried"] == []
+
+
+def test_crossed_quotes_rejected_even_if_other_side_present():
+    """Codex 028 probe：交叉报价曾被接受。"""
+    q = {379: {"bid": 1.2, "ask": 1.0, "error": ""}, 378: {"bid": 0.6, "ask": 0.7, "error": ""}}
+    r = sr.select_put_spread(381.0, OI, LISTED, q)
+    assert not r["ok"] and r["reason"].startswith("sell_crossed")
+    q = {379: {"bid": 0.92, "ask": 1.0, "error": ""}, 378: {"bid": 0.8, "ask": 0.7, "error": ""},
+         377: {"bid": 0.4, "ask": 0.5, "error": ""}}
+    r = sr.select_put_spread(381.0, OI, LISTED, q)
+    assert r["tried"][0]["reject"] == "buy_crossed" and r["buy"] == 377
+
+
+def test_fee_constraint_blocks_tiny_width():
+    """Codex 028 probe：宽 0.05、权利金 0.01（20%）曾被选中，毛收入 $1 < 手续费 $3.20。"""
+    listed = [99.9, 99.95]
+    q = {99.95: {"bid": 0.03, "ask": 0.04, "error": ""}, 99.9: {"bid": 0.01, "ask": 0.02, "error": ""}}
+    r = sr.select_put_spread(100.5, {99.95: 1000}, listed, q)
+    assert not r["ok"] and r["tried"][0]["reject"].startswith("fee_exceeds_credit")
+
+
+def test_shadow_without_ratio_computed_on_same_candidates():
+    q = {379: {"bid": 0.92, "ask": 1.0, "error": ""}, 378: {"bid": 0.8, "ask": 0.85, "error": ""},
+         377: {"bid": 0.55, "ask": 0.6, "error": ""}}
+    r = sr.select_with_shadow(381.0, OI, LISTED, q)
+    assert r["main"]["buy"] == 377 and r["shadow_no_ratio"]["buy"] == 378          # 378: 0.07/1=7%（含费仍为正）只在影子里过
+    assert r["main"]["params_hash"] != r["shadow_no_ratio"]["params_hash"]
+    assert not sr.select_put_spread(float("nan"), OI, LISTED, q)["ok"]

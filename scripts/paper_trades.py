@@ -18,6 +18,7 @@ v2（Codex 025-1/2 修订，入场前生效）：
   收盘价取长桥日线中【日期 = 到期日】的那根，且只在到期日 16:20 ET 之后；取不到 → settlement_pending，之后每次唤醒重试；
   到期后才恢复运行也能补结（用到期日那根，不用恢复当天的价）。
 - 风险单位：每笔固定 1 组（qty=1），收益与风险按每组比较；两笔金银同日不是两份独立证据。
+- 结算口径 provisional（长桥日线）；CBOE 日线到后异步核对（audit_settlement），两源原值都留、不择优不平均。
 - 手续费：fee_round_trip 为【每组】往返费用，整单 = 每组 × qty；最大亏损、最大收益、盈亏平衡都由 economics() 同一函数算。
 """
 from __future__ import annotations
@@ -112,12 +113,76 @@ def _depth(symbols):
 
 
 def _session_close(underlying: str, day: date):
-    """到期日常规收盘：长桥日线里日期 = day 的那根；没有 → None（settlement_pending）。"""
+    """到期日常规收盘：长桥日线里日期 = day 的那根；没有 → None（settlement_pending）。
+    取数根数按目标日期推算（长时间停机后恢复也能取到旧到期日，Codex 026）。结果是 provisional，CBOE 到后另行核对。"""
     from undertow.collect.longbridge_kline import fetch_bars
-    for b in fetch_bars(underlying, period="day", count=10):
+    count = min(1000, max(10, (datetime.now(ET).date() - day).days + 5))
+    for b in fetch_bars(underlying, period="day", count=count):
         if b["ts"].astimezone(ET).date() == day and _finite(b["close"]):
-            return {"close": b["close"], "source": "longbridge kline day", "bar_date": day.isoformat()}
+            return {"close": b["close"], "source": "longbridge kline day", "bar_date": day.isoformat(),
+                    "status": "provisional", "bar": {k: (v.isoformat() if k == "ts" else v) for k, v in b.items()},
+                    "fetched_at": datetime.now(timezone.utc).isoformat()}
     return None
+
+
+def _cboe_close(underlying: str, day: date):
+    """CBOE 公开日线里日期 = day 的收盘（通常滞后 1–3 天）；没有 → None。第二来源不一定独立，也不是交易所官方真值。"""
+    from undertow.collect.base import http_get_json
+    from undertow.collect.cboe_history import CBOE_HIST_URL
+    d = http_get_json(CBOE_HIST_URL.format(symbol=underlying.split(".")[0]))
+    for r in d.get("data") or []:
+        if r.get("date") == day.isoformat():
+            try:
+                c = float(r["close"])
+            except (KeyError, TypeError, ValueError):
+                return None
+            return {"close": c, "source": "cboe daily", "row": r} if _finite(c) else None
+    return None
+
+
+def _spread_value(p: dict, s: float) -> float:
+    return (max(0.0, p["k_sell"] - s) - max(0.0, p["k_buy"] - s)) if p["side"] == "P" else \
+           (max(0.0, s - p["k_sell"]) - max(0.0, s - p["k_buy"]))
+
+
+AUDIT_TOL = 0.01          # 两源收盘差 ≤ 1 美分算一致（ETF 报价精度 0.01）
+AUDIT_RETRY_S = 3600      # 第二来源未到时最多每小时查一次
+
+
+def audit_settlement(p: dict, now: datetime, *, cboe_close=_cboe_close) -> str | None:
+    """已结算仓位的异步交叉核对（Codex 026-4）：追加 source_match / source_mismatch / source_unavailable，
+    两源原值都保留；不改原记账、不择优、不平均。不一致且改变价内外或盈亏符号 → result_under_review。"""
+    if p.get("state") != "settled":
+        return None
+    a = p.get("settle_audit") or {}
+    if a.get("status") in ("source_match", "source_mismatch"):
+        return None
+    if a.get("last_try") and (now - datetime.fromisoformat(a["last_try"])).total_seconds() < AUDIT_RETRY_S:
+        return None
+    exp = date.fromisoformat(p["expiry"])
+    c = cboe_close(p["underlying"], exp)
+    a = {"last_try": now.isoformat(), "primary": p["settle"]}
+    if c is None:
+        a["status"] = "source_unavailable"
+        first = (p.get("settle_audit") or {}).get("status") != "source_unavailable"
+        p["settle_audit"] = a
+        if first:
+            p["events"].append({"at": now.isoformat(), "action": "settle_audit", "status": "source_unavailable"})
+            return "source_unavailable"
+        return None
+    v2 = _spread_value(p, c["close"])
+    pnl2 = round(((p["entry_credit"] - v2) * 100 - p["fee_round_trip"]) * p["qty"], 2)
+    same = abs(c["close"] - p["settle"]["close"]) <= AUDIT_TOL
+    flip = (v2 > 0) != (p["settle_value"] > 0) or (pnl2 >= 0) != (p["pnl_usd"] >= 0)
+    a.update(status="source_match" if same else "source_mismatch", secondary=c, secondary_value=round(v2, 4),
+             secondary_pnl_usd=pnl2, result_under_review=bool(not same and flip))
+    p["settle_audit"] = a
+    if a["result_under_review"]:
+        p["result_under_review"] = True
+    p["events"].append({"at": now.isoformat(), "action": "settle_audit", "status": a["status"],
+                        "primary_close": p["settle"]["close"], "secondary_close": c["close"],
+                        "result_under_review": a["result_under_review"]})
+    return a["status"]
 
 
 def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close) -> str | None:
@@ -181,8 +246,7 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close) 
                 return "settlement_pending"
             return None
         s = c["close"]
-        val = (max(0.0, p["k_sell"] - s) - max(0.0, p["k_buy"] - s)) if p["side"] == "P" else \
-              (max(0.0, s - p["k_sell"]) - max(0.0, s - p["k_buy"]))
+        val = _spread_value(p, s)
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
         p.update(state="settled", settled_at=now.isoformat(), settlement_status="done", settle=c,
                  settle_value=round(val, 4), pnl_usd=pnl,
@@ -225,7 +289,8 @@ def _outcome(t: dict) -> None:
         t["review"] = (t.get("review") or "") + f"【模拟仓未入场】{p.get('skip_reason') or p.get('invalid_reason')}"
 
 
-LEDGER_ACTIONS = ("enter", "skipped", "missed", "invalid_spec", "stop", "settle")
+OUTCOME_ACTIONS = ("enter", "skipped", "missed", "invalid_spec", "stop", "settle")
+LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit",)
 
 
 def event_id(thesis_id: str, e: dict) -> str:
@@ -282,13 +347,13 @@ def tick(now: datetime | None = None) -> list[str]:
             if t.get("execution") != "模拟" or not p:
                 continue
             try:
-                a = step(p, now)
+                a = step(p, now) or audit_settlement(p, now)
             except Exception as e:                      # 取数失败：留痕并在下次唤醒重试
                 p.setdefault("events", []).append({"at": now.isoformat(), "action": "error", "error": f"{type(e).__name__}: {e}"[:200]})
                 a = "error"
             if a:
                 changed = True
-                if a in LEDGER_ACTIONS:
+                if a in OUTCOME_ACTIONS:
                     _outcome(t)
                 out.append(f"{t['id']}:{a}")
         if changed:

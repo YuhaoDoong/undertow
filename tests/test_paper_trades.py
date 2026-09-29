@@ -151,3 +151,28 @@ def test_ledger_is_idempotent_projection_after_crash(tmp_path):
     led.write_text(led.read_text() + "{broken\n")
     with pytest.raises(RuntimeError):
         pt.sync_ledger(j, led)
+
+
+def _settled(close=376.0):
+    p = _entered()
+    pt.step(p, at(30, 16, 21), session_close=lambda u, d: {"close": close, "source": "t", "bar_date": d.isoformat()})
+    return p
+
+
+def test_settlement_audit_match_mismatch_unavailable():
+    p = _settled(376.0)
+    assert pt.audit_settlement(p, at(30, 16, 30), cboe_close=lambda u, d: None) == "source_unavailable"
+    assert pt.audit_settlement(p, at(30, 16, 40), cboe_close=lambda u, d: None) is None       # 一小时内不重查
+    assert pt.audit_settlement(p, at(30, 18, 0), cboe_close=lambda u, d: None) is None        # 仍缺：不重复记事件
+    assert pt.audit_settlement(p, at(30, 19, 30), cboe_close=lambda u, d: {"close": 376.005, "source": "c"}) == "source_match"
+    assert p["settle_audit"]["result_under_review"] is False and p["pnl_usd"] == round(41 - 3.2, 2)
+    assert pt.audit_settlement(p, at(30, 23, 0), cboe_close=lambda u, d: {"close": 1.0, "source": "c"}) is None  # 终态
+
+
+def test_settlement_audit_flip_marks_under_review_without_overwrite():
+    p = _settled(375.02)                                      # 长桥：价外，全额收权利金
+    pt.audit_settlement(p, at(30, 20, 0), cboe_close=lambda u, d: {"close": 374.90, "source": "c"})
+    a = p["settle_audit"]
+    assert a["status"] == "source_mismatch" and a["result_under_review"] and p["result_under_review"]
+    assert p["settle_value"] == 0 and p["pnl_usd"] == round(41 - 3.2, 2)                    # 原记账不覆盖
+    assert a["secondary_value"] == pytest.approx(0.1)

@@ -94,3 +94,10 @@ imports `core`（+ 少量分析层内部互引，如 `outlook` 吃 gamma/flow �
 V（ΔATM ≥ +0.3pp 时取数据日价格方向）。H1 = S=F≠0 且 V∈{0,S}；任一层未知 → None（不当 0）。
 规则 `conviction-dev-20260928` 未冻结：`dirledger conviction-record` 每日盘前只记录分量，不计分、不进研报。
 已知边界：三层来自同一 IV 曲面，不是独立证据；F 是 OI/IV 推断的买卖方，不是已确认的主动方；阈值未校准。
+
+### `expiry_type.py` / `expiry_pin.py`（探索，2026-09-29）
+`expiry_type`：到期类型 Q/M/W/D 是**本项目按日历推断的分类**（Q=季度末最后交易日，M=第三个周五/休市前移，W=其余周五，
+D=其余日期），不是交易所或券商核实的原生标签。
+`expiry_pin`：到期日磁吸的纯计算 —— pull=(|开−K|−|收−K|)/ATR14；同日同侧同距离分箱安慰剂行权价；墙定义 W0/W1/W3(C/P/合并)；
+日期簇 bootstrap。`scripts/expiry_pin_explore.py` 跑历史描述（非检验）。已知边界：diff 只在收盘越过墙或安慰剂时非 0；
+原始 pull 受墙距机械约束；W3 是 gamma-OI 强度代理，不是做市商净头寸；距离分箱界为未校准设计值。

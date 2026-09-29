@@ -200,3 +200,84 @@ def test_v3_trade_not_triggered_needs_coverage():
     assert au.score_v3(r, [], part, BZ, asof)["result"] == "incomplete_window"
     full = full_hours(at("2026-09-14", 9), at("2026-09-15", 17), 101, 102)
     assert au.score_v3(r, [], full, BZ, asof)["result"] == "not_triggered"
+
+
+# ═══ v4（Codex 027）：存在性 / 全程否定 / 先后顺序分开；触及后的结算；伦敦结算时刻；节假日 ═══
+BZ4 = au.SPECS_V4["BZZ26"]
+
+
+def _t(s):
+    return datetime.fromisoformat(s).astimezone(timezone.utc)
+
+
+def test_v4_negative_needs_every_hour_not_90_percent():
+    """Codex 027 probe①：应有 10 小时、缺 1 小时 → v3 判 miss；v4 为 incomplete_window（另注已观测时段未发生）。"""
+    post, end = _t("2026-09-29T09:00:00-04:00"), _t("2026-09-29T20:00:00-04:00")
+    slots = au.expected_slots(post, end)
+    x = {"posted_at": post.isoformat(), "claim": "break_below", "params": {"level": 100, "deadline": end.isoformat()}}
+    gap = [(s, 102, 103, 101, 102) for s in slots[1:]]
+    assert au.score_v3(x, [], gap, BZ, end + timedelta(hours=1))["result"] == "miss"            # v3 原样（对照）
+    s = au.score_v4(x, [], gap, BZ4, end + timedelta(hours=1))
+    assert s["result"] == "incomplete_window" and s["observed_no_event"] and s["n_missing"] == 1
+    full = [(s_, 102, 103, 101, 102) for s_ in slots]
+    assert au.score_v4(x, [], full, BZ4, end + timedelta(hours=1))["result"] == "miss"
+    hit = gap[:3] + [(slots[4], 101, 101, 99, 100)]                                            # 存在性：看见穿越即命中
+    assert au.score_v4(x, [], hit, BZ4, end + timedelta(hours=1))["result"] == "hit"
+
+
+def test_v4_first_passage_needs_no_gap_before_decisive_bar():
+    """Codex 027 probe②：09:00 正常、10:00 缺失、11:00 到目标 → v3 target_first；v4 ambiguous_order。"""
+    x = {"posted_at": "2026-09-29T09:00:00-04:00", "claim": "trade_long",
+         "params": {"entry": 100, "stop": 99, "target": 103, "days": 1, "entry_status": "declared_filled"}}
+    h = [(_t("2026-09-29T09:00:00-04:00"), 100, 101, 99.5, 100), (_t("2026-09-29T11:00:00-04:00"), 100, 104, 100, 103)]
+    asof = _t("2026-09-29T12:00:00-04:00")
+    assert au.score_v3(x, [], h, BZ, asof)["result"] == "target_first"
+    assert au.score_v4(x, [], h, BZ4, asof)["result"] == "ambiguous_order"
+    h2 = h[:1] + [(_t("2026-09-29T10:00:00-04:00"), 100, 101, 99.5, 100)] + h[1:]
+    assert au.score_v4(x, [], h2, BZ4, asof)["result"] == "target_first"
+
+
+def test_v4_follow_settlements_strictly_after_touch():
+    """Codex 027 probe③：15:00 发帖并触墙，当日结算（伦敦 19:30 = ET 14:30）在触墙之前 → 不能用来判 broken。"""
+    x = {"posted_at": "2026-09-29T15:00:00-04:00", "claim": "support", "params": {"level": 100}}
+    h = [(_t("2026-09-29T15:00:00-04:00"), 101, 101, 100, 100)]
+    d = [(date(2026, 9, 29), 100, 102, 98, 99)]
+    assert au.score_v3(x, d, h, BZ, _t("2026-09-29T17:00:00-04:00"))["result"] == "broken"
+    s = au.score_v4(x, d, h, BZ4, _t("2026-09-29T17:00:00-04:00"))
+    assert s["result"] == "pending" and s["follow_settles"][0] == "2026-09-30" and len(s["follow_settles"]) == 6
+    # 正向：触及在当日结算之前 → 当日结算计入
+    x2 = {"posted_at": "2026-09-29T09:00:00-04:00", "claim": "support", "params": {"level": 100}}
+    h2 = [(_t("2026-09-29T09:00:00-04:00"), 101, 101, 100, 100)]
+    s2 = au.score_v4(x2, d, h2, BZ4, _t("2026-09-29T17:00:00-04:00"))
+    assert s2["result"] == "broken" and s2["session"] == "2026-09-29"
+
+
+def test_v4_london_settlement_follows_uk_dst():
+    """英国 10/25 已回冬令时、美国 11/1 才回：这一周伦敦 19:30 = ET 15:30，不是 14:30。"""
+    assert au._settle_at_v4(date(2026, 9, 29), BZ4).astimezone(ET).strftime("%H:%M") == "14:30"
+    assert au._settle_at_v4(date(2026, 10, 27), BZ4).astimezone(ET).strftime("%H:%M") == "15:30"
+    assert au._settle_at_v4(date(2026, 9, 29), au.SPECS_V4["gold_proxy"]).astimezone(ET).strftime("%H:%M") == "13:30"
+
+
+def test_v4_straddle_bar_at_post_and_holiday_guard():
+    post = _t("2026-09-29T09:30:00-04:00")
+    end = _t("2026-09-29T12:00:00-04:00")
+    x = {"posted_at": post.isoformat(), "claim": "break_below", "params": {"level": 100, "deadline": end.isoformat()}}
+    rest = [(s, 102, 103, 101, 102) for s in au.expected_slots(post, end)]
+    head_cross = [(_t("2026-09-29T09:00:00-04:00"), 101, 101, 99, 100)] + rest               # 发帖跨过的那根穿越：先后不明
+    assert au.score_v4(x, [], head_cross, BZ4, end)["result"] == "ambiguous"
+    head_ok = [(_t("2026-09-29T09:00:00-04:00"), 102, 103, 101, 102)] + rest
+    assert au.score_v4(x, [], head_ok, BZ4, end)["result"] == "miss"
+    assert au.score_v4(x, [], rest, BZ4, end)["result"] == "incomplete_window"                 # 跨过的那根缺失
+    # 窗口跨感恩节（11/26，NYSE 休市）：全程否定 → calendar_unverified
+    p2, e2 = _t("2026-11-25T09:00:00-05:00"), _t("2026-11-27T12:00:00-05:00")
+    x2 = {"posted_at": p2.isoformat(), "claim": "break_below", "params": {"level": 100, "deadline": e2.isoformat()}}
+    full = [(s, 102, 103, 101, 102) for s in au.expected_slots(p2, e2)]
+    s = au.score_v4(x2, [], full, BZ4, e2 + timedelta(hours=1))
+    assert s["result"] == "calendar_unverified" and s["observed_result"] == "miss" and s["holidays"] == ["2026-11-26"]
+
+
+def test_v4_tri_class():
+    assert au.tri_class("support", "held") == "right" and au.tri_class("support", "broken") == "wrong"
+    assert au.tri_class("trade_long", "not_triggered") == "undecided"
+    assert au.tri_class("break_below", "incomplete_window") == "undecided"

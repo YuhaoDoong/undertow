@@ -3,7 +3,11 @@
 读私有 data/soul/author_levels.jsonl，写私有 data/soul/author_levels_scored.json；本脚本只含规则，不含任何作者内容。
   python3 scripts/author_levels_score.py [--asof ISO时刻]
 
-当前主结果 = v3（VERSION_V3，Codex 026；见文件中部 v3 段落）：按交易所日历计会话窗口、会话内小时线覆盖 ≥ 90% 才可判
+当前主结果 = v4（VERSION_V4，Codex 027；见文件后部 v4 段落）：存在性 / 全程否定 / 先后顺序分开定义所需数据——全程否定要求窗口内
+每个应有小时（含发帖与截止跨过的那两根）都有数据，先后顺序要求决定性那根之前无缺口；支撑/阻力跟踪期 = 触及之后的 6 次结算；
+布伦特结算按伦敦 19:30 换算；窗口含 NYSE 休市工作日 → calendar_unverified。v3 与 v2 结果并存供对照。
+
+v3 说明（VERSION_V3，Codex 026；见文件中部 v3 段落）：按交易所日历计会话窗口、会话内小时线覆盖 ≥ 90% 才可判
 「未发生」（否则 incomplete_window）、日线收盘按结算时刻（GC 13:30 / 布伦特 14:30 ET）判断是否晚于发布、破位严格 < 与触及 ≤
 分开、直接合约按最小报价单位规范且 tol=0。v3 是看过 v2 结果后的口径修正，不是新证据；v2 结果并存（score_v2）供对照。
 
@@ -479,6 +483,250 @@ def score_v3(r: dict, daily, hourly, spec: dict, asof: datetime) -> dict:
     return res("unsupported_claim")
 
 
+# ═══ v4（Codex 027，2026-09-29；看过 v3 结果后的口径修正，不是新证据）═══════════════════════════════════
+# v3 的三个反例：① 覆盖 90% 就判 miss —— 缺的那一小时可能正好发生了事件；② 先到目标只看见目标就判 target_first ——
+# 此前缺失的小时可能先止损；③ 触墙后的跟踪期从触墙会话起算，15:00 发帖并触墙会用当天 14:30 的结算判 broken。
+# v4 把三类命题分开：存在性（看见可信穿越即命中）/ 全程否定（窗口内每个应有小时都要有数据，含发帖与截止跨过的那两根）/
+# 先后顺序（发帖到决定性那根之间不能有缺口）。覆盖比例只作质量标签，不再作终判门槛。
+VERSION_V4 = "author-levels-v4-20260929"
+FOLLOW_SETTLES = FOLLOW_DAYS + 1   # 支撑/阻力：触及时刻【之后】的 6 次结算（v3 为「触及会话 + 5 个会话」）
+SPECS_V4 = {
+    "gold_proxy": {**SPECS["gold_proxy"], "settle_tz": "America/New_York",
+                   "settle_src": "CME 黄金活跃月结算窗口 13:29–13:30 ET（Codex 027 查 CME 页面）；Yahoo close=结算价 为数值比对推断"},
+    "BZZ26": {**SPECS["BZZ26"], "settle_tz": "Europe/London", "settle": (19, 30),
+              "settle_src": "ICE Brent 结算窗口伦敦 19:28–19:30（Codex 027 查 ICE 页面）；BZZ26.NYM 是否跟随、Yahoo close 映射未核实（推断）"},
+}
+CALENDAR_NOTE = "calendar_approx（NYSE 交易日近似 CME/NYMEX 会话；节假日半日盘未建模）"
+NEGATIVE = ("miss", "untouched", "not_triggered", "neither")
+POSITIVE_RIGHT = {"support": ("held",), "resistance": ("held",), "no_support": ("hit",), "break_below": ("hit",),
+                  "range": ("held",), "trade_long": ("target_first",)}
+POSITIVE_WRONG = {"support": ("broken",), "resistance": ("broken",), "no_support": ("miss",), "break_below": ("miss",),
+                  "range": ("broken",), "trade_long": ("stop_first",)}
+
+
+def _settle_at_v4(d: date, spec) -> datetime:
+    """价格形成时刻（结算窗口结束）。可得时刻另按会话结束 17:00 ET 保守处理（_session_end）。"""
+    return datetime(d.year, d.month, d.day, *spec["settle"], tzinfo=ZoneInfo(spec["settle_tz"]))
+
+
+def holidays_between(a: datetime, b: datetime) -> list:
+    """[a, b] 内 NYSE 休市的工作日（CME 可能有半日盘/不结算 → 该窗口不给确定胜负）。"""
+    from undertow.core import market_calendar as mc
+    out, d = [], a.astimezone(ET).date()
+    while d <= b.astimezone(ET).date():
+        if d.weekday() < 5 and mc.is_trading_day(d) is False:
+            out.append(d)
+        d += timedelta(days=1)
+    return out
+
+
+def _bar_at(hourly, t: datetime):
+    return next((h for h in hourly if h[0] == t), None)
+
+
+def proof_no_event(hourly, start: datetime, end: datetime, crosses, asof: datetime) -> dict:
+    """全程否定的证据：[start, end) 内每个应有小时都有完整数据且都没穿越；发帖所在、截止所在的跨时刻那两根也要有且没穿越
+    （跨时刻那根若穿越，先后不明）。返回 {"ok", "missing", "straddle"}。"""
+    from undertow.core import market_calendar as mc
+    out = {"ok": False, "missing": [], "straddle": []}
+    edges = []
+    s0 = start.astimezone(ET).replace(minute=0, second=0, microsecond=0)
+    if s0 < start:
+        edges.append(s0.astimezone(timezone.utc))
+    e0 = end.astimezone(ET).replace(minute=0, second=0, microsecond=0)
+    if e0 < end and e0.astimezone(timezone.utc) not in edges:
+        edges.append(e0.astimezone(timezone.utc))
+    for t in edges:
+        if t.astimezone(ET).hour == SESSION_END_H or not mc.is_trading_day(_raw_session(t)):
+            continue
+        b = _bar_at(hourly, t)
+        if b is None or t + H1 > asof:
+            out["missing"].append(t.isoformat())
+        elif crosses(b) != "no":
+            out["straddle"].append(t.isoformat())
+    for t in expected_slots(start, end):
+        b = _bar_at(hourly, t)
+        if b is None or t + H1 > asof:
+            out["missing"].append(t.isoformat())
+    out["ok"] = not out["missing"] and not out["straddle"]
+    return out
+
+
+def score_v4(r: dict, daily, hourly, spec: dict, asof: datetime) -> dict:
+    posted = datetime.fromisoformat(r["posted_at"]).astimezone(timezone.utc)
+    asof = asof.astimezone(timezone.utc)
+    tol, tick = spec["tol"], spec["tick"]
+    p, c = r["params"], r["claim"]
+    Dmap = {d[0]: d for d in daily}
+    H = [h for h in hourly if h[0] >= posted and h[0] + H1 <= asof]
+    before = [h for h in hourly if h[0] + H1 <= posted]
+    base = {"asof": asof.isoformat(), "version": VERSION_V4, "calendar": CALENDAR_NOTE, "settle_src": spec["settle_src"]}
+
+    def res(result, **kw):
+        return {**base, "result": result, **kw}
+
+    def cal_guard(out: dict, end: datetime, decisive: datetime | None = None) -> dict:
+        """窗口含 NYSE 休市工作日 → 终判改 calendar_unverified（节假日之前已确定的命中保留）。"""
+        hol = holidays_between(posted, end)
+        if not hol or out["result"] in ("pending", "ambiguous", "ambiguous_order", "incomplete_window"):
+            return out
+        if decisive is not None and decisive.astimezone(ET).date() < hol[0]:
+            return out
+        return {**out, "result": "calendar_unverified", "observed_result": out["result"],
+                "holidays": [d.isoformat() for d in hol]}
+
+    def negative(result, start, end, crosses, **kw):
+        if asof < end:
+            return res("pending", why="窗口未结束", **kw)
+        pf = proof_no_event(hourly, start, end, crosses, asof)
+        cov = coverage(hourly, start, end)
+        if pf["straddle"]:
+            return res("ambiguous", why="发帖/截止跨过的那根穿越，先后不明", straddle=pf["straddle"], coverage=cov, **kw)
+        if not pf["ok"]:
+            return res("incomplete_window", observed_no_event=True, missing=pf["missing"][:10],
+                       n_missing=len(pf["missing"]), coverage=cov, **kw)
+        return cal_guard(res(result, coverage=cov, **kw), end)
+
+    def settles_after(t: datetime, n: int) -> list:
+        """时刻 t【之后】形成的前 n 次结算（按交易日历逐日）。"""
+        from undertow.core import market_calendar as mc
+        out, d = [], t.astimezone(ET).date()
+        while len(out) < n:
+            if mc.is_trading_day(d) is None:
+                raise ValueError(f"{d} 超出交易日历覆盖期")
+            if mc.is_trading_day(d) and _settle_at_v4(d, spec) > t:
+                out.append(d)
+            d += timedelta(days=1)
+        return out
+
+    def settled(sessions):
+        return [(d, Dmap.get(d) if _session_end(d) <= asof else "future") for d in sessions]
+
+    def settle_verdict(sessions, crosses_fn, hit_name, pass_name, **kw):
+        cl = settled(sessions)
+        have = [x for _, x in cl if x not in (None, "future")]
+        b, mb = _first(have, crosses_fn)
+        if b is not None:
+            return b, res(hit_name, session=str(b[0]), **kw)
+        if mb:
+            return None, res("ambiguous", why="结算在门槛的代理误差内", **kw)
+        if any(x == "future" for _, x in cl):
+            return None, res("pending", n_settled=len(have), **kw)
+        if any(x is None for _, x in cl):
+            return None, res("incomplete_window", why="有会话缺结算", missing=[d.isoformat() for d, x in cl if x is None], **kw)
+        return None, res(pass_name, **kw)
+
+    if c in ("support", "resistance"):
+        L, sup = p["level"], c == "support"
+        S = settles_after(posted, TOUCH_DAYS)
+        end = _session_end(S[-1])
+        Hw = [h for h in H if h[0] + H1 <= end]
+        at_post = None
+        if before:
+            at_post = "already_through" if cross3(before[-1][4], _thr(L, 1, tick), sup, 0, strict=True, tick=tick) == "yes" else "approach"
+        zone = _thr(L, 1.001 if sup else 0.999, tick)
+        touch = lambda h: cross3(h[3] if sup else h[2], zone, sup, tol, strict=False, tick=tick)
+        t, touch_maybe = _first(Hw, touch)
+        kw0 = {"status_at_post": at_post}
+        if t is None:
+            if touch_maybe:
+                return res("ambiguous", why="只在代理误差内接近", **kw0)
+            return negative("untouched", posted, end, touch, **kw0)
+        pf = proof_no_event(hourly, posted, t[0], touch, asof)          # 首次触及的时点要确定
+        if not pf["ok"]:
+            return res("incomplete_window", why="观测到的首次触及之前有缺口或跨时刻那根已触及，首次触及时点不确定",
+                       touch_at=_ts(t), missing=pf["missing"][:10], straddle=pf["straddle"], **kw0)
+        fol = settles_after(t[0] + H1, FOLLOW_SETTLES)                  # 触及那一小时内的结算不计（事前固定）
+        thr_b = _thr(L, 0.995, tick) if sup else _thr(L, 1.005, tick)
+        thr_h = _thr(L, 1.01, tick) if sup else _thr(L, 0.99, tick)
+        brk = lambda d: cross3(d[4], thr_b, sup, tol, strict=True, tick=tick)
+        b, out = settle_verdict(fol, brk, "broken", "held", touch_at=_ts(t), touch_time_ambiguous=touch_maybe,
+                                follow_settles=[d.isoformat() for d in fol], **kw0)
+        have = [x for _, x in settled(fol) if x not in (None, "future")]
+        reb, _ = _first(have, lambda d: cross3(d[4], thr_h, not sup, 0, strict=False, tick=tick))
+        out["rebound_first"] = bool(reb and (b is None or reb[0] < b[0]))
+        out["later_broken"] = bool(b and reb and reb[0] < b[0])
+        dec = _settle_at_v4(b[0], spec) if b else None
+        return cal_guard(out, _session_end(fol[-1]), dec)
+    if c in ("no_support", "range"):
+        n = TOUCH_DAYS if c == "no_support" else p["days"]
+        S = settles_after(posted, n)
+        if c == "no_support":
+            fn = lambda d: cross3(d[4], _thr(p["level"], 0.995, tick), True, tol, strict=True, tick=tick)
+            b, out = settle_verdict(S, fn, "hit", "miss")
+        else:
+            def fn(d):
+                k = (cross3(d[4], _thr(p["lo"], 0.995, tick), True, tol, strict=True, tick=tick),
+                     cross3(d[4], _thr(p["hi"], 1.005, tick), False, tol, strict=True, tick=tick))
+                return "yes" if "yes" in k else ("maybe" if "maybe" in k else "no")
+            b, out = settle_verdict(S, fn, "broken", "held")
+            if b:
+                out.update(side="down" if b[4] < p["lo"] else "up", close=round(b[4], 2))
+        return cal_guard(out, _session_end(S[-1]), _settle_at_v4(b[0], spec) if b else None)
+    if c == "break_below":
+        L, dl = p["level"], datetime.fromisoformat(p["deadline"]).astimezone(timezone.utc)
+        brk = lambda h: cross3(h[3], _thr(L, 1, tick), True, tol, strict=True, tick=tick)
+        seg = [h for h in H if h[0] + H1 <= dl]
+        b, mb = _first(seg, brk)
+        if b is not None:                                                # 存在性：看见可信穿越即命中
+            return cal_guard(res("hit", at=_ts(b)), dl, b[0])
+        if mb and asof >= dl:
+            return res("ambiguous", why="只在代理误差内接近")
+        return negative("miss", posted, dl, brk, min_low=round(min(h[3] for h in seg), 2) if seg else None)
+    if c == "trade_long":
+        n = p.get("days", 10)
+        S = settles_after(posted, n)
+        end = _session_end(S[-1])
+        seg = [h for h in H if h[0] + H1 <= end]
+        e, st, tg = _thr(p["entry"], 1, tick), _thr(p["stop"], 1, tick), _thr(p["target"], 1, tick)
+        status = p.get("entry_status") or r.get("entry_status") or "pending_trigger"
+        extra = {"entry_status": status, "entry_status_assumed": not (p.get("entry_status") or r.get("entry_status"))}
+        if status == "declared_filled":
+            i0, trig = 0, None
+        else:
+            if not seg:
+                return negative("not_triggered", posted, end, lambda h: "no", **extra)
+            above = seg[0][1] >= float(e)
+            trig = lambda h: cross3(h[3] if above else h[2], e, above, 0, strict=False, tick=tick)
+            i0 = next((i for i, h in enumerate(seg) if trig(h) == "yes"), None)
+            if i0 is None:
+                if any(cross3(h[3] if above else h[2], e, above, tol, strict=False, tick=tick) != "no" for h in seg):
+                    return res("ambiguous", why="入场价在代理误差内，未确证触发", **extra)
+                return negative("not_triggered", posted, end, trig, **extra)
+            extra["triggered_at"] = _ts(seg[i0])
+        for i, h in enumerate(seg[i0:]):
+            s_ = cross3(h[3], st, True, tol, strict=False, tick=tick)
+            t_ = cross3(h[2], tg, False, tol, strict=False, tick=tick)
+            if s_ == "no" and t_ == "no":
+                continue
+            if (s_ != "no" and t_ != "no") or (i == 0 and status != "declared_filled"):
+                return res("ambiguous", why="同一根内先后不明（含触发那根）", at=_ts(h), **extra)
+            if "maybe" in (s_, t_):
+                return res("ambiguous", why="止损/目标在代理误差内", at=_ts(h), **extra)
+            # 先后顺序：发帖到这根之间不能有缺口，发帖跨过的那根也不能碰到入场/止损/目标
+            any_ev = lambda b: "yes" if (cross3(b[3], st, True, tol, strict=False, tick=tick) != "no" or
+                                         cross3(b[2], tg, False, tol, strict=False, tick=tick) != "no" or
+                                         (trig is not None and trig(b) != "no")) else "no"
+            pf = proof_no_event(hourly, posted, h[0], any_ev, asof)
+            if not pf["ok"]:
+                return res("ambiguous_order", why="决定性那根之前有缺口（或发帖跨过的那根已有事件），不能确认先后",
+                           at=_ts(h), missing=pf["missing"][:10], straddle=pf["straddle"], **extra)
+            return cal_guard(res("stop_first" if s_ == "yes" else "target_first", at=_ts(h), **extra), end, h[0])
+        return negative("neither", posted, end, lambda b: "yes" if (
+            cross3(b[3], st, True, tol, strict=False, tick=tick) != "no" or
+            cross3(b[2], tg, False, tol, strict=False, tick=tick) != "no") else "no", **extra)
+    return res("unsupported_claim")
+
+
+def tri_class(claim: str, result: str) -> str:
+    """作者对错三分类：right / wrong / undecided（未触及、未触发、窗口不全、模糊、日历未核实都算未决，不删出分母）。"""
+    if result in POSITIVE_RIGHT.get(claim, ()):
+        return "right"
+    if result in POSITIVE_WRONG.get(claim, ()):
+        return "wrong"
+    return "undecided"
+
+
 def _preserve_v1() -> None:
     """v1 结果只保存一次、标需复核，不静默覆盖历史（Codex 025-3）。"""
     if OUT.exists() and not OUT_V1.exists():
@@ -489,7 +737,7 @@ def _preserve_v1() -> None:
                                           "rows": old}, ensure_ascii=False, indent=1), "utf-8")
 
 
-OUT_CHANGES = ROOT / "data/soul/author_levels_v2_v3_changes.json"
+OUT_CHANGES = ROOT / "data/soul/author_levels_version_changes.json"
 
 
 def main():
@@ -505,40 +753,47 @@ def main():
         if inst.startswith("XAU") or inst.startswith("黄金"):
             if gold is None:
                 gold = (to_spot(yahoo_daily("GC=F", "2y")), to_spot_h(yahoo_hourly("GC=F")))
-            (d, h), spec = gold, SPECS["gold_proxy"]
+            (d, h), spec, spec4 = gold, SPECS["gold_proxy"], SPECS_V4["gold_proxy"]
             tol_v2 = 0.005
         elif "BZZ26" in inst:
             if "BZZ26" not in cache:
                 cache["BZZ26"] = (yahoo_daily("BZZ26.NYM", "6mo"), yahoo_hourly("BZZ26.NYM"))
-            (d, h), spec = cache["BZZ26"], SPECS["BZZ26"]
+            (d, h), spec, spec4 = cache["BZZ26"], SPECS["BZZ26"], SPECS_V4["BZZ26"]
             tol_v2 = 0.001
         else:
             out.append({**r, "score": {"result": "no_price_source"}}); continue
-        v3 = {**score_v3(r, d, h, spec, asof), "price_basis": spec["basis"], "tol": spec["tol"]}
+        v4 = {**score_v4(r, d, h, spec4, asof), "price_basis": spec4["basis"], "tol": spec4["tol"]}
+        v3 = {**score_v3(r, d, h, spec, asof), "tol": spec["tol"]}
         v2 = {**score(r, d, h, tol_v2, asof), "tol": tol_v2}
-        out.append({**r, "score": v3, "score_v2": v2})
+        out.append({**r, "score": v4, "score_v3": v3, "score_v2": v2})
     _preserve_v1()
     tmp = OUT.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"version": VERSION_V3, "asof": asof.isoformat(),
-                               "note": "v3 为看过 v2 结果后的口径修正（Codex 026），不是新证据；score_v2 并存供对照",
+    tmp.write_text(json.dumps({"version": VERSION_V4, "asof": asof.isoformat(),
+                               "note": "v4 为看过 v3 结果后的口径修正（Codex 027），不是新证据；score_v3/score_v2 并存供对照",
                                "rows": out}, ensure_ascii=False, indent=1), "utf-8")
     tmp.replace(OUT)
     changes = [{"author": x["author"], "posted_at": x["posted_at"], "claim": x["claim"], "params": x.get("params"),
-                "retrospective": bool(x.get("retrospective")), "v2": x["score_v2"]["result"], "v3": x["score"]["result"]}
+                "retrospective": bool(x.get("retrospective")), "v2": x["score_v2"]["result"],
+                "v3": x["score_v3"]["result"], "v4": x["score"]["result"]}
                for x in out if "score_v2" in x]
     OUT_CHANGES.write_text(json.dumps({"asof": asof.isoformat(), "rows": changes}, ensure_ascii=False, indent=1), "utf-8")
     for x in out:
         s = x["score"]
-        v2r = (x.get("score_v2") or {}).get("result")
+        v3r = (x.get("score_v3") or {}).get("result")
         print(f"{x['author']} {x['posted_at'][:16]} {'[事后]' if x.get('retrospective') else '[事前]'} "
-              f"{x['claim']} {x.get('params')} → {s['result']}{'' if v2r == s['result'] else f'（v2: {v2r}）'}  "
-              f"{({k: v for k, v in s.items() if k not in ('result', 'asof', 'price_basis', 'tol', 'version')})}")
+              f"{x['claim']} {x.get('params')} → {s['result']}{'' if v3r == s['result'] else f'（v3: {v3r}）'}  "
+              f"{({k: v for k, v in s.items() if k not in ('result', 'asof', 'price_basis', 'tol', 'version', 'calendar', 'settle_src')})}")
     # 分母要全：未触及 / 模糊 / 未决 / 窗口不全与终判一起报告，事前与事后分开（Codex 025/026）
     from collections import Counter
     for (a, retro), cnt in sorted(Counter((x["author"], bool(x.get("retrospective"))) for x in out).items()):
-        res = Counter(x["score"]["result"] for x in out if x["author"] == a and bool(x.get("retrospective")) == retro)
+        sel = [x for x in out if x["author"] == a and bool(x.get("retrospective")) == retro]
+        res = Counter(x["score"]["result"] for x in sel)
+        tri = Counter(tri_class(x["claim"], x["score"]["result"]) for x in sel)
+        n_ = tri["right"] + tri["wrong"] + tri["undecided"]
         print(f"  {a} {'事后' if retro else '事前'} n={cnt}：" + "、".join(f"{k} {v}" for k, v in sorted(res.items())))
-    print(f"  v2→v3 变化 {sum(c['v2'] != c['v3'] for c in changes)}/{len(changes)} 条（明细：{OUT_CHANGES.name}，私有）")
+        print(f"    对 {tri['right']} / 错 {tri['wrong']} / 未决 {tri['undecided']}（未决不删出分母；命中率界限 "
+              f"{tri['right']}/{n_} ~ {tri['right'] + tri['undecided']}/{n_}）")
+    print(f"  v3→v4 变化 {sum(c['v3'] != c['v4'] for c in changes)}/{len(changes)} 条（明细：{OUT_CHANGES.name}，私有）")
 
 
 if __name__ == "__main__":

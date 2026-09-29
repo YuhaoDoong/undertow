@@ -115,3 +115,88 @@ def test_status_at_post_already_through():
     h = hours("2026-09-29", [(98, 99), (98, 99), (97, 99)])                # 11:00、12:00 两根在发布前已低于 100
     s = au.score(r, days("2026-09-29", [98] * 25), h, 0, at("2026-11-30", 9))
     assert s["status_at_post"] == "already_through"
+
+
+# ═══ v3（Codex 026）：会话覆盖、按日历计窗口、结算时刻、严格边界、直接合约 tol=0 ═══
+BZ = au.SPECS["BZZ26"]
+GP = au.SPECS["gold_proxy"]
+
+
+def full_hours(start, end, lo, hi):
+    """[start, end) 内每个应有小时线时段都有数据（覆盖 100%）。"""
+    return [(t, (lo + hi) / 2, hi, lo, (lo + hi) / 2) for t in au.expected_slots(start, end)]
+
+
+def sess_days(start, n, close):
+    from undertow.core import market_calendar as mc
+    out, d = [], date.fromisoformat(start)
+    while len(out) < n:
+        if mc.is_trading_day(d):
+            out.append((d, close, close, close, close))
+        d += timedelta(days=1)
+    return out
+
+
+def test_v3_missing_window_is_not_miss():
+    """Codex 026 probe：截止已过、只有一根完整小时线、其余缺失 → v2 判 miss；v3 必须不终判。"""
+    x = {"posted_at": "2026-09-29T09:00:00-04:00", "claim": "break_below",
+         "params": {"level": 100, "deadline": "2026-09-30T16:00:00-04:00"}}
+    h = [(datetime(2026, 9, 29, 14, tzinfo=timezone.utc), 102, 103, 101, 102)]
+    asof = datetime(2026, 10, 1, 12, tzinfo=timezone.utc)
+    assert au.score(x, [], h, 0, asof)["result"] == "miss"                           # v2 原样保留（对照）
+    s = au.score_v3(x, [], h, BZ, asof)
+    assert s["result"] == "incomplete_window" and s["coverage"]["observed"] == 1
+    hf = full_hours(at("2026-09-29", 9), at("2026-09-30", 16), 101, 103)
+    assert au.score_v3(x, [], hf, BZ, asof)["result"] == "miss"                      # 覆盖足够才可判未发生
+
+
+def test_v3_strict_break_vs_inclusive_touch_and_tick():
+    assert au.cross3(100, au._thr(100, 1, "0.01"), True, 0, strict=True, tick="0.01") == "no"   # 恰好等于 ≠ 跌破
+    assert au.cross3(99.99, au._thr(100, 1, "0.01"), True, 0, strict=True, tick="0.01") == "yes"  # 差一个报价单位
+    assert au.cross3(100, au._thr(100, 1, "0.01"), True, 0, strict=False, tick="0.01") == "yes"  # 触及含等号
+    assert au.cross3(93.68000000001, au._thr(93.6, 1.001, "0.01"), True, 0, strict=False, tick="0.01") == "yes"
+    assert au.cross3(99.6, 100, True, 0.005, strict=True) == "maybe"                 # 代理：误差内
+    assert au.cross3(99.4, 100, True, 0.005, strict=True) == "yes"
+
+
+def test_v3_window_counts_calendar_sessions_not_rows():
+    r = {"posted_at": "2026-09-14T09:00:00-04:00", "claim": "no_support", "params": {"level": 100}}
+    d = sess_days("2026-09-14", 20, 101.0)
+    asof = datetime(2026, 11, 30, tzinfo=timezone.utc)
+    assert au.score_v3(r, d, [], BZ, asof)["result"] == "miss"
+    gap = [x for x in d if x[0] != date(2026, 9, 22)] + [(date(2026, 10, 12), 1, 1, 1, 90.0)]  # 缺一天，第 21 天破位
+    s = au.score_v3(r, gap, [], BZ, asof)
+    assert s["result"] == "incomplete_window" and s["missing"] == ["2026-09-22"]       # 不把窗口拉长到第 21 天
+
+
+def test_v3_same_day_settlement_before_post_is_excluded():
+    """GC 结算 13:30 ET：15:00 发帖时当日结算已定价，不能算发布后的收盘。"""
+    s = au.sessions_after(at("2026-09-29", 15), 2, GP)
+    assert s == [date(2026, 9, 30), date(2026, 10, 1)]
+    assert au.sessions_after(at("2026-09-29", 13), 1, GP) == [date(2026, 9, 29)]
+
+
+def test_v3_expected_slots_skip_weekend_and_break():
+    sl = au.expected_slots(at("2026-09-25", 12), at("2026-09-28", 12))
+    hrs = [t.astimezone(ZoneInfo("America/New_York")).strftime("%a %H") for t in sl]
+    assert len(sl) == 23 and "Fri 17" not in hrs and "Fri 18" not in hrs and hrs[5] == "Sun 18"
+
+
+def test_v3_held_requires_all_follow_sessions():
+    r = {"posted_at": "2026-09-14T09:00:00-04:00", "claim": "support", "params": {"level": 100}}
+    h = full_hours(at("2026-09-14", 9), at("2026-09-15", 9), 99.95, 100.5)            # 9/14 首根即触及
+    d = sess_days("2026-09-14", 25, 100.4)
+    asof = datetime(2026, 11, 30, tzinfo=timezone.utc)
+    assert au.score_v3(r, d, h, BZ, asof)["result"] == "held"
+    s = au.score_v3(r, [x for x in d if x[0] != date(2026, 9, 17)], h, BZ, asof)
+    assert s["result"] == "incomplete_window" and s["follow_missing"] == ["2026-09-17"]
+
+
+def test_v3_trade_not_triggered_needs_coverage():
+    r = {"posted_at": "2026-09-14T09:00:00-04:00", "claim": "trade_long",
+         "params": {"entry": 100, "stop": 99, "target": 103, "days": 2}}
+    asof = datetime(2026, 11, 30, tzinfo=timezone.utc)
+    part = full_hours(at("2026-09-14", 9), at("2026-09-14", 14), 101, 102)
+    assert au.score_v3(r, [], part, BZ, asof)["result"] == "incomplete_window"
+    full = full_hours(at("2026-09-14", 9), at("2026-09-15", 17), 101, 102)
+    assert au.score_v3(r, [], full, BZ, asof)["result"] == "not_triggered"

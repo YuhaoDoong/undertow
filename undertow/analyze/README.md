@@ -99,5 +99,5 @@ V（ΔATM ≥ +0.3pp 时取数据日价格方向）。H1 = S=F≠0 且 V∈{0,S}
 `expiry_type`：到期类型 Q/M/W/D 是**本项目按日历推断的分类**（Q=季度末最后交易日，M=第三个周五/休市前移，W=其余周五，
 D=其余日期），不是交易所或券商核实的原生标签。
 `expiry_pin`：到期日磁吸的纯计算 —— pull=(|开−K|−|收−K|)/ATR14；同日同侧同距离分箱安慰剂行权价；墙定义 W0/W1/W3(C/P/合并)；
-日期簇 bootstrap。`scripts/expiry_pin_explore.py` 跑历史描述（非检验）。已知边界：diff 只在收盘越过墙或安慰剂时非 0；
+日期簇 bootstrap；跨日重叠用 `block_bootstrap`（跨品种同步的移动块）；簇 < 5 不给区间。`scripts/expiry_pin_explore.py --start --end --asof` 跑历史描述（非检验，产物带输入哈希与运行清单、不覆盖）。已知边界：diff = d0 − d1，只在收盘越过墙或安慰剂时非 0（几何退化，未显示增量 ≠ 磁吸无效）；
 原始 pull 受墙距机械约束；W3 是 gamma-OI 强度代理，不是做市商净头寸；距离分箱界为未校准设计值。

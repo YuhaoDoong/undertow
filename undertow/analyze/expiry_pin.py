@@ -91,7 +91,8 @@ def wall_row(open_: float, close: float, atr: float, k_star: float, strikes) -> 
     pl = placebos(strikes, open_, k_star, atr)
     pp = statistics.fmean(pull(open_, close, k, atr) for k in pl) if pl else None
     return {"k": k_star, "dist_atr": round(abs(open_ - k_star) / atr, 4), "bin": dist_bin(abs(open_ - k_star) / atr),
-            "pull_wall": pw, "pull_placebo": pp, "diff": (pw - pp) if pp is not None else None, "n_placebo": len(pl)}
+            "pull_wall": pw, "pull_placebo": pp, "diff": (pw - pp) if pp is not None else None, "n_placebo": len(pl),
+            "placebos": pl, "open": open_, "close": close, "atr": atr}
 
 
 def cluster_bootstrap(rows: list, key, cluster, *, B: int = 2000, seed: int = 20260929) -> dict:
@@ -105,6 +106,9 @@ def cluster_bootstrap(rows: list, key, cluster, *, B: int = 2000, seed: int = 20
     xs = [v for c in cl for v in c]
     if not xs:
         return {"n": 0, "clusters": 0, "mean": None, "median": None, "lo": None, "hi": None}
+    if len(cl) < MIN_CLUSTERS:                 # Codex 026：单簇/少簇的零宽或窄区间不代表精确
+        return {"n": len(xs), "clusters": len(cl), "mean": statistics.fmean(xs), "median": statistics.median(xs),
+                "lo": None, "hi": None, "interval": "not_estimable（簇数不足，只作案例）"}
     rnd = random.Random(seed)
     means = []
     for _ in range(B):
@@ -113,3 +117,37 @@ def cluster_bootstrap(rows: list, key, cluster, *, B: int = 2000, seed: int = 20
     means.sort()
     return {"n": len(xs), "clusters": len(cl), "mean": statistics.fmean(xs), "median": statistics.median(xs),
             "lo": means[int(0.025 * B)], "hi": means[int(0.975 * B) - 1]}
+
+
+MIN_CLUSTERS = 5          # 簇数少于此 → 不给区间（只作案例）；设计值
+
+
+def block_bootstrap(rows: list, key, date_of, *, block: int, B: int = 2000, seed: int = 20260929) -> dict:
+    """跨品种同步的移动块 bootstrap：把所有出现过的日期排序，按长度 block 的连续日期块重抽样，块内全部行一起进样本。
+    用于持有期跨日重叠的统计（如 E−2 → E）；块长需做敏感性。簇数 < MIN_CLUSTERS → 不给区间。"""
+    by = defaultdict(list)
+    for r in rows:
+        v = key(r)
+        if v is not None:
+            by[date_of(r)].append(v)
+    ds = sorted(by)
+    xs = [v for d in ds for v in by[d]]
+    out = {"n": len(xs), "clusters": len(ds), "block": block,
+           "mean": statistics.fmean(xs) if xs else None, "lo": None, "hi": None}
+    if len(ds) < MIN_CLUSTERS or not xs:
+        out["interval"] = "not_estimable（簇数不足，只作案例）"
+        return out
+    b = min(block, len(ds))
+    starts = list(range(len(ds) - b + 1))
+    rnd = random.Random(seed)
+    means = []
+    for _ in range(B):
+        pick = []
+        while len(pick) < len(xs):
+            i = rnd.choice(starts)
+            for d in ds[i:i + b]:
+                pick.extend(by[d])
+        means.append(statistics.fmean(pick[:len(xs)]))
+    means.sort()
+    out.update(lo=means[int(0.025 * B)], hi=means[int(0.975 * B) - 1], interval="moving_block")
+    return out

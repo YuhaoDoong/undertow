@@ -52,4 +52,17 @@ def test_cluster_bootstrap_counts_clusters():
     rows = [{"d": 1, "v": 1.0}, {"d": 1, "v": 1.0}, {"d": 2, "v": -1.0}, {"d": 3, "v": None}]
     s = ep.cluster_bootstrap(rows, key=lambda r: r["v"], cluster=lambda r: r["d"], B=200)
     assert s["n"] == 3 and s["clusters"] == 2 and s["mean"] == pytest.approx(1 / 3)
+    assert s["lo"] is None and "not_estimable" in s["interval"]                       # 少簇不给区间（Codex 026）
+    rows = [{"d": i, "v": float(i % 3)} for i in range(12)]
+    s = ep.cluster_bootstrap(rows, key=lambda r: r["v"], cluster=lambda r: r["d"], B=200)
     assert s["lo"] <= s["mean"] <= s["hi"]
+
+
+def test_block_bootstrap_keeps_date_blocks_and_min_clusters():
+    rows = [{"d": i, "v": 1.0 if i < 10 else -1.0} for i in range(20)]
+    s1 = ep.block_bootstrap(rows, key=lambda r: r["v"], date_of=lambda r: r["d"], block=1, B=400)
+    s5 = ep.block_bootstrap(rows, key=lambda r: r["v"], date_of=lambda r: r["d"], block=5, B=400)
+    assert s1["mean"] == pytest.approx(0) and s5["interval"] == "moving_block"
+    assert (s5["hi"] - s5["lo"]) >= (s1["hi"] - s1["lo"])                             # 块长大 → 区间更宽（序列相关）
+    few = ep.block_bootstrap(rows[:3], key=lambda r: r["v"], date_of=lambda r: r["d"], block=2)
+    assert few["lo"] is None and "not_estimable" in few["interval"]

@@ -1,0 +1,8 @@
+2026-09-29 17:03 +08 | ET 2026-09-29 05:00 | ⚠️ 影子账采集/结算失败（ET 2026-09-29 05:00）
+  capture rc=0 settle rc=1：⚠️ GLD CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天   ⚠️ gold: LedgerConflictError: 2026-09-28|gold 首份事前记录已冻结，新输入不同；未改写 
+2026-09-29 17:04 +08 | ET 2026-09-29 05:00 | ⚠️ 方向判断台账失败（ET 2026-09-29 05:00）
+  record rc=0 score rc=0 conviction rc=0 expiry-profile rc=1：  ⚠️ shadow expiry-profile qqq: ValueError: data/history/expiry_profile/qqq.jsonl 临时文件回读验证失败；原文件未改 
+2026-09-29 17:04 +08 | ET 2026-09-29 05:00 | ⚠️ 盘中采样 2026-09-28 有缺失/失败的桶（ET 2026-09-29 05:00）
+    ⚠️ shadow sample-check iwm: iwm 10:00 partial（成功 24/25）   ⚠️ iwm 10:00 partial（成功 24/25） 
+2026-09-29 17:04 +08 | ET 2026-09-29 05:00 | ℹ️ 期权分钟线：长桥配额用尽（ET 2026-09-29 05:00）
+  未补完的下次自动续补；到期约一周后合约会查不到

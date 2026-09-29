@@ -390,5 +390,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-09-28T08:01:15.170079+00:00"
+ },
+ {
+  "instrument": "wti",
+  "date": "2026-09-29",
+  "spot": 92.76,
+  "state": "仅结构",
+  "struct_bias": "偏多(弱)",
+  "band": "中性",
+  "regime": "牛",
+  "stretch": 0.12266793824879994,
+  "stretch_pctile": 0.396,
+  "drawdown": -2.226381355427072,
+  "dd_pctile": 0.612,
+  "combo_pctile": 0.504,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-09-29T09:01:20.972731+00:00"
  }
 ]

@@ -1,0 +1,26 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 24909,
+ "started_at": "2026-09-29T09:03:55.480911+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/QQQ/2026-09-29",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-29.json.gz",
+   "sha256": "8b806a50ad8992d9647873f5646c28baff9e2fcc84df4784328b2decd8d3c4fd",
+   "captured_at": 1790672410.147556,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-09-29T09:04:03.136633+00:00",
+ "rc": 1,
+ "git_head": "0acce1a301efef32a7503f310cadaf2ee616a5a6"
+}

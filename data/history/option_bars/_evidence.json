@@ -1,0 +1,60 @@
+{
+ "generated_at": "2026-09-29T03:35:59.558045+00:00",
+ "cli_version": "longbridge 0.26.0",
+ "command": "longbridge kline history GLD260924C405000.US --period 1m --start 2026-09-24 --end 2026-09-24 --format json",
+ "official_doc": "https://open.longbridge.com/docs/quote/pull/history-candlestick（该页列美股期权历史数据暂不支持）",
+ "observation": "本仓库经 CLI kline history 实际取回美股期权 1 分钟 K 线：option_bars 中 status=ok 的合约日 1041 个（截至 2026-09-28）；与官方页说法不一致，原因未查证（可能是 CLI 走的端点/权限/版本不同）。不能据此推定长桥保证完整的历史期权覆盖。",
+ "sample": {
+  "symbol": "GLD260924C405000.US",
+  "day": "2026-09-24",
+  "fetched_at": "2026-09-27T03:48:04.395882+00:00",
+  "n_bars": 405,
+  "fields": [
+   "time",
+   "open",
+   "high",
+   "low",
+   "close",
+   "volume",
+   "turnover"
+  ],
+  "first_bars": [
+   [
+    "2026-09-24T13:30:00Z",
+    "0.08",
+    "0.08",
+    "0.08",
+    "0.08",
+    "0",
+    "0"
+   ],
+   [
+    "2026-09-24T13:31:00Z",
+    "0.08",
+    "0.08",
+    "0.08",
+    "0.08",
+    "0",
+    "0"
+   ],
+   [
+    "2026-09-24T13:32:00Z",
+    "0.08",
+    "0.08",
+    "0.08",
+    "0.08",
+    "0",
+    "0"
+   ]
+  ],
+  "last_bar": [
+   "2026-09-24T20:14:00Z",
+   "0.01",
+   "0.01",
+   "0.01",
+   "0.01",
+   "0",
+   "0"
+  ]
+ }
+}

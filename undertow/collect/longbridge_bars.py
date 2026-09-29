@@ -278,12 +278,13 @@ def new_intraday_day(root: str, day: date) -> dict:
             "fields": list(INTRADAY_FIELDS), "contracts": {}}
 
 
-def intraday_covered(root: str, day: date, base: Path = INTRADAY_DIR, *, need: str = "close") -> set:
+def intraday_covered(root: str, day: date, base: Path | None = None, *, need: str = "close") -> set:
     """按研究所需字段判覆盖（Codex 024-2）：need="close" → 质量为 full_session 的代码；
     need="ohlc" → 永远为空集（逐分钟只有分钟收盘，不能替代 OHLC 的路径/止损/极值研究）。
     坏文件 → 空集合（由抓取命令负责隔离）。"""
     if need != "close":
         return set()
+    base = base or INTRADAY_DIR            # 运行时取（默认参数在定义时求值，替换模块常量会失效）
     try:
         cur = load_day(path_of(root, day, base))
     except BarsFileCorrupt:

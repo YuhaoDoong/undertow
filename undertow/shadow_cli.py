@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 import pathlib
 import sys
 from datetime import date, datetime, timezone
@@ -1167,7 +1168,23 @@ def cmd_bars(args) -> int:
     else:
         plan = bars_plan(rows, last_day=last_day, insts=set(sh.CONFIG["pools"][BARS_SCOPE["pool"]]),
                          rules=BARS_SCOPE["rules"])
-    todo = sorted(plan.items(), key=lambda kv: kv[0][1])
+    if args.gaps:
+        import subprocess as _sp
+        from undertow.collect.asof_history import atomic_write_json
+        gaps = bars_gap_ledger(plan, today=today)
+        ver = _sp.run(["longbridge", "--version"], capture_output=True, text=True).stdout.strip() or None
+        atomic_write_json(BARS_GAPS, {"generated_at": _now_iso(), "cli_version": ver, "last_day": last_day.isoformat(),
+                                      "scope": "all" if args.all else "primary_A_B1", "n": len(gaps), "gaps": gaps,
+                                      "note": "「到期约一周后查不到」为本地观察，非长桥承诺；配额恢复后不保证补回"})
+        c = Counter(g["last_status"] for g in gaps)
+        print(f"缺口台账 → {BARS_GAPS}：{len(gaps)} 项；上次状态 {dict(c)}；"
+              f"已有逐分钟收盘可替代 {sum(g['close_available_from_intraday'] for g in gaps)}；CLI {ver}")
+        for g in gaps[:5]:
+            print(f"  #{g['priority']} {g['symbol']} 交易日 {g['day']} 到期 {g['expiry']} 上次 {g['last_status']}")
+        return 0
+    # 补数顺序（Codex 024-4）：按该 (标的, 日) 内最近的合约到期日由近到远（离「查不到」最近的先补），再按交易日
+    todo = sorted(plan.items(), key=lambda kv: (min((e for e in (_expiry_of(x) for x in kv[1]) if e), default=date.max),
+                                                kv[0][1]))
     n_new = n_ok = n_gone = 0
     issues, done = [], []
     for (root, day), syms in todo:
@@ -1216,6 +1233,51 @@ def cmd_bars(args) -> int:
 SAMPLE_INLINE_RETRY = True      # 采样：出错代码当场重试一次（下次唤醒可能已进下一桶）
 SAMPLE_RETRY_SLEEP_S = 2.0
 INTRADAY_PACE_S = 0.55          # 长桥行情接口约 60 次 / 30 秒（官方文档写于 history candlestick 页）；留余量
+
+
+BARS_GAPS = Path("data/history/option_bars/_gaps.json")
+BARS_EVIDENCE = Path("data/history/option_bars/_evidence.json")
+
+
+def _expiry_of(sym: str):
+    import re as _re
+    m = _re.match(r"^[A-Z]+(\d{6})[CP]\d+\.US$", sym)
+    return date(2000 + int(m.group(1)[:2]), int(m.group(1)[2:4]), int(m.group(1)[4:])) if m else None
+
+
+def bars_gap_ledger(plan: dict, *, today: date) -> list[dict]:
+    """逐项缺口台账（Codex 024-4）：交易日、到期日、所需字段、上次返回状态与时刻、当天逐分钟能否替代收盘、优先级。
+    优先级：已有全时段逐分钟收盘的（只缺 OHLC）排后；其余按到期日由近到远（离「查不到」最近的先补），
+    同到期按交易日由早到晚；已请求过返回查不到的排最后。「到期约一周后查不到」是本地观察，不是长桥承诺 —— 不保证配额恢复后一定补得回。"""
+    from undertow.collect import longbridge_bars as lbb
+    gaps = []
+    for (root, day), syms in plan.items():
+        try:
+            cur = lbb.load_day(lbb.path_of(root, day)) or {"contracts": {}}
+        except lbb.BarsFileCorrupt:
+            cur = {"contracts": {}, "_corrupt": True}
+        close_ok = lbb.intraday_covered(root, day, need="close")
+        for sym in syms:
+            v = cur["contracts"].get(sym)
+            if v and v.get("status") in ("ok", "empty"):
+                continue
+            exp = _expiry_of(sym)
+            gaps.append({"day": day.isoformat(), "root": root, "symbol": sym,
+                         "expiry": exp.isoformat() if exp else None,
+                         "days_since_expiry": (today - exp).days if exp else None,
+                         "last_status": (v or {}).get("status", "never_requested"),
+                         "last_attempt_at": (v or {}).get("fetched_at"),
+                         "last_error": str((v or {}).get("error"))[:160] if v and v.get("error") else None,
+                         "close_available_from_intraday": sym in close_ok,
+                         "fields_missing": "ohlc" if sym in close_ok else "ohlc+close"})
+    # 排序：①无任何替代且从未请求 ②从未请求但已有逐分钟收盘（只缺 OHLC）③已请求过、返回查不到（仅 --retry-missing 重查）；
+    # 各组内按到期日由近到远、交易日由早到晚
+    grp = lambda g: (0 if g["last_status"] == "never_requested" and not g["close_available_from_intraday"]
+                     else 1 if g["last_status"] == "never_requested" else 2)
+    gaps.sort(key=lambda g: (grp(g), g["expiry"] or "9999", g["day"]))
+    for i, g in enumerate(gaps, 1):
+        g["priority"] = i
+    return gaps
 
 
 INTRADAY_LOCK = Path("data/logs/.intraday.flock")
@@ -1433,6 +1495,7 @@ def register(sub):
     sp.set_defaults(func=cmd_sample)
     b = ss.add_parser("bars", help="补候选价差的历史盘中成交价（长桥 1 分钟 K 线；到期约一周后查不到，尽早补）")
     b.add_argument("--since", help="只补 session ≥ 该日的机会行"); b.add_argument("--status-file")
+    b.add_argument("--gaps", action="store_true", help="只写缺口台账（逐项到期日/字段/上次状态/优先级），不抓取")
     b.add_argument("--need", choices=("close", "ohlc"), default="close",
                    help="所需字段：close（默认；全时段逐分钟收盘已存的代码跳过，省配额）/ ohlc（分钟 OHLC，不跳过）")
     b.add_argument("--all", action="store_true", help="全部品种与规则（默认只补主池的 A、B1：长桥按不同代码数限额）")

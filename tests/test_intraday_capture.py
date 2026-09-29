@@ -204,3 +204,32 @@ def test_session_hooks_do_not_cut_bytes():
     """macOS `cut -c` 按字节截，会把汉字切成非法 UTF-8 → 整个日志被 grep 当二进制（2026-09-28 实测）。"""
     src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
     assert "| cut -c" not in src and "clip() {" in src and src.index("clip() {") < src.index("| clip ")
+
+
+# —— Codex 024-4：缺口台账逐项、按可恢复性排序 ——
+def test_gap_ledger_fields_and_priority(tmp_path, monkeypatch):
+    from undertow import shadow_cli as sc
+    assert sc._expiry_of("GLD260916C415000.US") == date(2026, 9, 16) and sc._expiry_of("GLD.US") is None
+    monkeypatch.setattr(lbb, "ROOT_DIR", tmp_path / "bars")
+    monkeypatch.setattr(lbb, "INTRADAY_DIR", tmp_path / "intra")
+    orig_path_of = lbb.path_of
+    monkeypatch.setattr(lbb, "path_of", lambda root, day, base=None: orig_path_of(root, day, base or tmp_path / "bars"))
+    d1, d2 = date(2026, 9, 25), date(2026, 9, 28)
+    bars = lbb.new_day("GLD", d1)
+    bars["contracts"] = {"GLD260926P380000.US": {"status": "not_found", "error": "e", "fetched_at": "t"},
+                         "GLD260930P370000.US": {"status": "ok", "bars": []}}
+    lbb.save_day(lbb.path_of("GLD", d1), bars)
+    intra = lbb.new_intraday_day("GLD", d2)
+    intra["contracts"] = {"GLD261002C400000.US": lbb.merge_attempt(None, _res("ok", _rows()))}
+    lbb.save_day(lbb.path_of("GLD", d2, tmp_path / "intra"), intra)
+    plan = {("GLD", d1): {"GLD260926P380000.US", "GLD260930P370000.US", "GLD261009P360000.US"},
+            ("GLD", d2): {"GLD261002C400000.US", "GLD260929P375000.US"}}
+    gaps = sc.bars_gap_ledger(plan, today=d2)
+    order = [g["symbol"] for g in gaps]
+    assert "GLD260930P370000.US" not in order                                     # 已补到的不算缺口
+    assert order == ["GLD260929P375000.US", "GLD261009P360000.US",                # 无替代、从未请求，按到期
+                     "GLD261002C400000.US",                                        # 已有逐分钟收盘，只缺 OHLC
+                     "GLD260926P380000.US"]                                        # 请求过、查不到
+    g0 = gaps[0]
+    assert g0["expiry"] == "2026-09-29" and g0["fields_missing"] == "ohlc+close" and g0["priority"] == 1
+    assert gaps[2]["fields_missing"] == "ohlc" and gaps[3]["last_status"] == "not_found"

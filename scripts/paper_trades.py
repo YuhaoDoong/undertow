@@ -3,19 +3,27 @@
   python3 scripts/paper_trades.py tick          # session 钩子每 5 分钟调用：到点才做事，没到点什么都不写
   python3 scripts/paper_trades.py status
 
-只读行情、只写私有 data/soul/journal.json（execution=模拟 且带 paper 规格的事前判断）；**从不下单**（AGENTS 第一条）。
-状态机（规则取自各条 paper 规格，事前写死）：
-- planned → 入场窗口（ET，默认 10:00–10:20）内取两腿实时盘口，保守价 权利金 = 卖腿 bid − 买腿 ask；
-  权利金/宽度 ≥ min_credit_ratio → entered；低于 → skipped(credit_low)；窗口结束仍取不到有效报价 → skipped(no_quote)。
-- entered → 每个交易日的盯市时点（默认 09:40、16:35 ET，各一次）：平仓价值 = 卖腿 ask − 买腿 bid；
-  ≥ stop_mult × 权利金 → closed_stop（按该价值平仓记账）。
-- entered → 到期日 ET 16:20 后按标的收盘价的到期内在价值结算 → settled。
-盈亏 = (权利金 − 平仓/到期价值) × 100 × 张数 − 每组往返费用。每一步都记原始报价与时刻（events）。
+只读行情、只写私有 data/soul/（journal.json 里 execution=模拟 且带 paper 规格的事前判断 + paper_discretionary.jsonl 研究台账）；
+**从不下单**（AGENTS 第一条）。规则版本 RULE_VERSION；每条 paper 规格记下它按哪一版执行。
+
+v2（Codex 025-1/2 修订，入场前生效）：
+- 规格校验：数值有限、qty 为正整数、宽度 > 0、腿方向正确（put 价差 卖腿行权价 > 买腿；call 相反）。不合格 → invalid_spec，不执行。
+- 报价校验：两腿 bid/ask 有限、> 0、bid ≤ ask；权利金 = 卖腿 bid − 买腿 ask 必须 0 < 权利金 < 宽度。
+  不合格 → 记下原始报价（entry_quote_invalid）并在窗口内继续取；**不截断报价制造可行成交**。
+- 入场政策：窗口内【第一份】合格且权利金/宽度 ≥ 门槛的报价即入场（不看完窗口再择优）；窗口已过仍未入场 →
+  missed（从未取得报价）或 skipped(no_valid_quote / credit_low)。错过入场日也终态标记，不会一直 planned。
+- 盯市：只在常规交易时段内的时点（默认 09:45、15:45 ET）取盘口估值；这是**稀疏检查，不是连续止损**。
+  时点落在常规时段之外 → 只记估值（mark_offhours），不执行止损。
+- 结算：**理论到期记账**（按到期日常规收盘价的内在价值现金化；不模拟提前行权、指派、到期处置与实物交割）。
+  收盘价取长桥日线中【日期 = 到期日】的那根，且只在到期日 16:20 ET 之后；取不到 → settlement_pending，之后每次唤醒重试；
+  到期后才恢复运行也能补结（用到期日那根，不用恢复当天的价）。
+- 手续费：fee_round_trip 为【每组】往返费用，整单 = 每组 × qty；最大亏损、最大收益、盈亏平衡都由 economics() 同一函数算。
 """
 from __future__ import annotations
 
 import fcntl
 import json
+import math
 import os
 import sys
 import tempfile
@@ -27,12 +35,51 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 JOURNAL = ROOT / "data/soul/journal.json"
 LOCK = ROOT / "data/soul/journal.json.lock"
+LEDGER = ROOT / "data/soul/paper_discretionary.jsonl"
 ET = ZoneInfo("America/New_York")
+RULE_VERSION = "paper-sim-v2-20260929"
+RTH = (time(9, 30), time(16, 0))
+TERMINAL = ("settled", "closed_stop", "skipped", "missed", "invalid_spec")
 
 
 def _hm(s: str) -> time:
     h, m = map(int, s.split(":"))
     return time(h, m)
+
+
+def _finite(*xs) -> bool:
+    return all(isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) for x in xs)
+
+
+def economics(side: str, k_sell: float, k_buy: float, credit: float, qty: int, fee_round_trip: float) -> dict:
+    """价差经济量的唯一来源（Codex 025-2）。fee_round_trip = 每组往返费用；整单 = 每组 × qty。"""
+    width = abs(k_sell - k_buy)
+    fee_ps = fee_round_trip / 100.0                      # 每股摊到的费用（1 组 = 100 股）
+    be = (k_sell - credit + fee_ps) if side == "P" else (k_sell + credit - fee_ps)
+    return {"width": width, "credit": credit,
+            "max_gain_usd": round((credit * 100 - fee_round_trip) * qty, 2),
+            "max_loss_usd": round(((width - credit) * 100 + fee_round_trip) * qty, 2),
+            "breakeven": round(be, 4), "fee_total_usd": round(fee_round_trip * qty, 2)}
+
+
+def validate_spec(p: dict) -> str | None:
+    if not _finite(p.get("k_sell"), p.get("k_buy"), p.get("min_credit_ratio"), p.get("stop_mult"), p.get("fee_round_trip")):
+        return "数值非有限或缺失"
+    if not (isinstance(p.get("qty"), int) and p["qty"] > 0):
+        return "qty 须为正整数"
+    if p.get("side") not in ("P", "C"):
+        return "side 须为 P/C"
+    if p["k_sell"] == p["k_buy"]:
+        return "宽度为 0"
+    if (p["side"] == "P") != (p["k_sell"] > p["k_buy"]):
+        return "腿方向错误（put 价差卖腿行权价须高于买腿，call 相反）"
+    if p["fee_round_trip"] < 0 or p["stop_mult"] <= 1 or not 0 <= p["min_credit_ratio"] < 1:
+        return "费用/止损倍数/门槛不在合理范围"
+    return None
+
+
+def quote_ok(q: dict) -> bool:
+    return q is not None and _finite(q.get("bid"), q.get("ask")) and 0 < q["bid"] <= q["ask"]
 
 
 def _depth(symbols):
@@ -42,76 +89,99 @@ def _depth(symbols):
                 "error": getattr(d.get(s), "error", None)} for s in symbols}
 
 
-def _close_price(underlying: str):
-    from undertow.collect.longbridge_quote import fetch_stock_quotes
-    q = fetch_stock_quotes([underlying]).get(underlying)
-    return getattr(q, "last", None) if q else None
+def _session_close(underlying: str, day: date):
+    """到期日常规收盘：长桥日线里日期 = day 的那根；没有 → None（settlement_pending）。"""
+    from undertow.collect.longbridge_kline import fetch_bars
+    for b in fetch_bars(underlying, period="day", count=10):
+        if b["ts"].astimezone(ET).date() == day and _finite(b["close"]):
+            return {"close": b["close"], "source": "longbridge kline day", "bar_date": day.isoformat()}
+    return None
 
 
-def step(p: dict, now: datetime, *, depth=_depth, close_price=_close_price) -> str | None:
+def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close) -> str | None:
     """推进一步；返回动作名（None = 没到点）。纯逻辑 + 注入的取数函数，便于测试。"""
     et = now.astimezone(ET)
     today = et.date()
-    width = abs(p["k_sell"] - p["k_buy"])
-    st = p["state"]
     ev = p.setdefault("events", [])
+    st = p["state"]
+    if st in TERMINAL:
+        return None
+    bad = validate_spec(p)
+    if bad:
+        p["state"] = "invalid_spec"; p["invalid_reason"] = bad
+        ev.append({"at": now.isoformat(), "action": "invalid_spec", "why": bad})
+        return "invalid_spec"
+    p.setdefault("rule_version", RULE_VERSION)
+    width = abs(p["k_sell"] - p["k_buy"])
     if st == "planned":
         lo, hi = (_hm(x) for x in p["entry_window_et"])
-        if today != date.fromisoformat(p["entry_date"]) or et.time() < lo:
+        ed = date.fromisoformat(p["entry_date"])
+        if today < ed or (today == ed and et.time() < lo):
             return None
-        if et.time() >= hi:
-            p["state"] = "skipped"; p["skip_reason"] = "no_quote（窗口内未取得有效报价）"
-            ev.append({"at": now.isoformat(), "action": "skip", "why": p["skip_reason"]})
-            return "skip"
+        if today > ed or et.time() >= hi:                  # 窗口已过（含错过入场日）→ 终态
+            tried = [e for e in ev if e.get("action", "").startswith("entry_quote")]
+            if not tried:
+                p["state"] = "missed"; p["skip_reason"] = "missed_window（窗口内未运行）"
+            else:
+                p["state"] = "skipped"; p["skip_reason"] = p.get("last_reject") or "no_valid_quote"
+            ev.append({"at": now.isoformat(), "action": p["state"], "why": p["skip_reason"]})
+            return p["state"]
         q = depth([p["sell"], p["buy"]])
-        sb, ba = q[p["sell"]]["bid"], q[p["buy"]]["ask"]
-        ev.append({"at": now.isoformat(), "action": "entry_quote", "quotes": q})
-        if sb is None or ba is None:
+        s, b = q.get(p["sell"]), q.get(p["buy"])
+        if not (quote_ok(s) and quote_ok(b)):
+            p["last_reject"] = "no_valid_quote（报价缺失/非有限/bid>ask）"
+            ev.append({"at": now.isoformat(), "action": "entry_quote_invalid", "quotes": q, "why": p["last_reject"]})
             return "retry"
-        credit = round(sb - ba, 4)
+        credit = round(s["bid"] - b["ask"], 4)
+        if not 0 < credit < width:
+            p["last_reject"] = f"quote_anomaly（权利金 {credit} 不在 (0, 宽度 {width:g})）"
+            ev.append({"at": now.isoformat(), "action": "entry_quote_invalid", "quotes": q, "why": p["last_reject"]})
+            return "retry"
         if credit / width < p["min_credit_ratio"]:
-            p["state"] = "skipped"; p["skip_reason"] = f"credit_low（{credit:.2f}/{width:g} < {p['min_credit_ratio']:.0%}）"
-            ev.append({"at": now.isoformat(), "action": "skip", "why": p["skip_reason"]})
-            return "skip"
-        fee = p["fee_round_trip"] / 100
-        p.update(state="entered", entered_at=now.isoformat(), entry_credit=credit,
-                 max_loss_usd=round((width - credit) * 100 * p["qty"] + p["fee_round_trip"], 2),
-                 breakeven=round(p["k_sell"] - credit + fee if p["side"] == "P" else p["k_sell"] + credit - fee, 4),
+            p["last_reject"] = f"credit_low（{credit:.2f}/{width:g} < {p['min_credit_ratio']:.0%}）"
+            ev.append({"at": now.isoformat(), "action": "entry_quote", "quotes": q, "why": p["last_reject"]})
+            return "retry"                                 # 窗口内继续取；第一份合格即入场
+        econ = economics(p["side"], p["k_sell"], p["k_buy"], credit, p["qty"], p["fee_round_trip"])
+        p.update(state="entered", entered_at=now.isoformat(), entry_credit=credit, economics=econ,
                  stop_value=round(p["stop_mult"] * credit, 4))
-        ev.append({"at": now.isoformat(), "action": "enter", "credit": credit})
+        ev.append({"at": now.isoformat(), "action": "enter", "quotes": q, "credit": credit, "economics": econ})
         return "enter"
-    if st != "entered":
-        return None
+    # —— entered ——
     exp = date.fromisoformat(p["expiry"])
-    if today == exp and et.time() >= time(16, 20):
-        s = close_price(p["underlying"])
-        if s is None:
-            return "retry"
-        if p["side"] == "P":
-            val = max(0.0, p["k_sell"] - s) - max(0.0, p["k_buy"] - s)
-        else:
-            val = max(0.0, s - p["k_sell"]) - max(0.0, s - p["k_buy"])
-        pnl = round((p["entry_credit"] - val) * 100 * p["qty"] - p["fee_round_trip"], 2)
-        p.update(state="settled", settled_at=now.isoformat(), settle_underlying=s, settle_value=round(val, 4), pnl_usd=pnl)
-        ev.append({"at": now.isoformat(), "action": "settle", "underlying_close": s, "value": val, "pnl": pnl})
+    if today > exp or (today == exp and et.time() >= time(16, 20)):
+        c = session_close(p["underlying"], exp)
+        if c is None:
+            if p.get("settlement_status") != "pending":
+                p["settlement_status"] = "pending"
+                ev.append({"at": now.isoformat(), "action": "settlement_pending", "why": "到期日收盘价尚不可得"})
+                return "settlement_pending"
+            return None
+        s = c["close"]
+        val = (max(0.0, p["k_sell"] - s) - max(0.0, p["k_buy"] - s)) if p["side"] == "P" else \
+              (max(0.0, s - p["k_sell"]) - max(0.0, s - p["k_buy"]))
+        pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
+        p.update(state="settled", settled_at=now.isoformat(), settlement_status="done", settle=c,
+                 settle_value=round(val, 4), pnl_usd=pnl,
+                 settlement_model="理论到期记账：按到期日常规收盘价的内在价值现金化；不模拟提前行权/指派/实物交割")
+        ev.append({"at": now.isoformat(), "action": "settle", "close": c, "value": val, "pnl": pnl})
         return "settle"
-    done = {e.get("slot") for e in ev if e.get("action") == "mark"}
+    done = {e.get("slot") for e in ev if e.get("action") in ("mark", "mark_offhours")}
     for slot in p["mark_slots_et"]:
         key = f"{today.isoformat()} {slot}"
         t0 = _hm(slot)
-        if key in done or et.time() < t0 or (et.hour * 60 + et.minute) > t0.hour * 60 + t0.minute + 15:
-            continue
-        if today > exp:
+        if key in done or today > exp or et.time() < t0 or (et.hour * 60 + et.minute) > t0.hour * 60 + t0.minute + 15:
             continue
         q = depth([p["sell"], p["buy"]])
-        sa, bb = q[p["sell"]]["ask"], q[p["buy"]]["bid"]
-        if sa is None or bb is None:
+        s, b = q.get(p["sell"]), q.get(p["buy"])
+        if not (quote_ok(s) and quote_ok(b)):
             ev.append({"at": now.isoformat(), "action": "mark_retry", "slot": key, "quotes": q})
             return "retry"
-        val = round(sa - bb, 4)
-        ev.append({"at": now.isoformat(), "action": "mark", "slot": key, "quotes": q, "value": val})
-        if val >= p["stop_value"]:
-            pnl = round((p["entry_credit"] - val) * 100 * p["qty"] - p["fee_round_trip"], 2)
+        val = round(s["ask"] - b["bid"], 4)
+        in_rth = RTH[0] <= et.time() < RTH[1]
+        ev.append({"at": now.isoformat(), "action": "mark" if in_rth else "mark_offhours", "slot": key,
+                   "quotes": q, "value": val, "note": "稀疏检查（非连续止损）" + ("" if in_rth else "；非常规时段只估值、不执行")})
+        if in_rth and val >= p["stop_value"]:
+            pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
             p.update(state="closed_stop", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
             ev.append({"at": now.isoformat(), "action": "stop", "value": val, "pnl": pnl})
             return "stop"
@@ -126,9 +196,23 @@ def _outcome(t: dict) -> None:
         full = p["state"] == "settled" and p.get("settle_value", 1) == 0
         t["outcome"] = "对" if full else ("错" if p["pnl_usd"] < 0 else "部分")
         t["scored_at"] = datetime.now(ET).date().isoformat()
-    elif p["state"] == "skipped":
+    elif p["state"] in ("skipped", "missed", "invalid_spec"):
         t["outcome"] = "未执行"
-        t["review"] = (t.get("review") or "") + f"【模拟仓未入场】{p.get('skip_reason')}"
+        t["review"] = (t.get("review") or "") + f"【模拟仓未入场】{p.get('skip_reason') or p.get('invalid_reason')}"
+
+
+def _ledger(t: dict, action: str, now: datetime) -> None:
+    """paper-discretionary 研究台账（Codex 025：与 journal 原判断关联，不混入 v5 或方向族 D）。只追加。"""
+    p = t["paper"]
+    row = {"thesis_id": t["id"], "rule_version": p.get("rule_version", RULE_VERSION), "action": action,
+           "at": now.isoformat(), "state": p["state"],
+           "spec": {k: p.get(k) for k in ("underlying", "expiry", "side", "sell", "buy", "k_sell", "k_buy", "qty",
+                                          "entry_window_et", "min_credit_ratio", "stop_mult", "fee_round_trip", "mark_slots_et")},
+           "evidence": (p.get("events") or [])[-1:], "result": {k: p.get(k) for k in
+                                                                 ("entry_credit", "economics", "pnl_usd", "settle", "skip_reason")}}
+    with open(LEDGER, "a", encoding="utf-8") as f:
+        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        f.flush(); os.fsync(f.fileno())
 
 
 def tick(now: datetime | None = None) -> list[str]:
@@ -150,8 +234,9 @@ def tick(now: datetime | None = None) -> list[str]:
                 a = "error"
             if a:
                 changed = True
-                if a in ("enter", "skip", "stop", "settle"):
+                if a in ("enter", "skipped", "missed", "invalid_spec", "stop", "settle"):
                     _outcome(t)
+                    _ledger(t, a, now)
                 out.append(f"{t['id']}:{a}")
         if changed:
             body = json.dumps(j, ensure_ascii=False, indent=2)
@@ -175,7 +260,8 @@ def main():
     for t in j.get("theses", []):
         p = t.get("paper")
         if t.get("execution") == "模拟" and p:
-            print(t["id"], p["state"], {k: p.get(k) for k in ("entry_credit", "breakeven", "stop_value", "pnl_usd", "skip_reason")})
+            print(t["id"], p["state"], {k: p.get(k) for k in ("rule_version", "entry_credit", "economics", "stop_value",
+                                                              "pnl_usd", "skip_reason", "settlement_status")})
     return 0
 
 

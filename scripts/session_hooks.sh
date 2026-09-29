@@ -209,7 +209,7 @@ paper_tick() {
   RES=$("$PY" scripts/paper_trades.py tick 2>&1); RC=$?
   if [[ "$RES" != *"无到点动作"* ]]; then
     hb "⑫模拟仓：$(printf '%s' "$RES" | tail -1 | clip 160)"
-    if printf '%s' "$RES" | grep -qE ':(enter|skip|stop|settle)'; then
+    if printf '%s' "$RES" | grep -qE ':(enter|skipped|missed|invalid_spec|stop|settle|settlement_pending|error)'; then
       notify "📒 模拟仓" "$(printf '%s' "$RES" | tail -1 | clip 160)"
     fi
   fi

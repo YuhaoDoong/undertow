@@ -369,8 +369,43 @@ def tick(now: datetime | None = None) -> list[str]:
     return out
 
 
+def size_report(theses: list) -> dict:
+    """挂单量子集（Codex 027）：sufficient / insufficient / unknown 三类，各列候选数、已入场数、结果与未入场原因。
+    全样本是主表，子集只是执行质量的敏感性分析 —— 不改入场规则，也不按子集结果反向调闸门。
+    单位：qty = 组数，每组每腿 1 张；bid_size/ask_size 为一档挂单张数（长桥 depth 的 volume），两者可比。"""
+    out = {"all": {"n": 0, "entered": 0, "pnl": [], "not_entered": {}}}
+    for t in theses:
+        p = t.get("paper") or {}
+        if t.get("execution") != "模拟" or not p:
+            continue
+        lab = (p.get("entry_quote_labels") or {}).get("size_sufficient")
+        k = {True: "sufficient", False: "insufficient"}.get(lab, "unknown")
+        for g in ("all", k):
+            b = out.setdefault(g, {"n": 0, "entered": 0, "pnl": [], "not_entered": {}})
+            b["n"] += 1
+            if p.get("entered_at"):
+                b["entered"] += 1
+                if p.get("pnl_usd") is not None:
+                    b["pnl"].append(p["pnl_usd"])
+            else:
+                why = p.get("skip_reason") or p.get("invalid_reason") or p.get("state")
+                b["not_entered"][why] = b["not_entered"].get(why, 0) + 1
+    return out
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
+    if cmd == "report":
+        j = json.loads(JOURNAL.read_text("utf-8"))
+        rep = size_report(j.get("theses", []))
+        print("模拟仓（主表 = 全样本；挂单量子集只作执行质量敏感性，未知不并入任何一类）")
+        for g in ("all", "sufficient", "insufficient", "unknown"):
+            b = rep.get(g)
+            if not b:
+                print(f"  {g:12s} n=0"); continue
+            print(f"  {g:12s} n={b['n']} 已入场 {b['entered']} 已结 {len(b['pnl'])} 盈亏合计 "
+                  f"{sum(b['pnl']):+.2f} 未入场原因 {b['not_entered'] or '—'}")
+        return 0
     if cmd == "tick":
         acts = tick()
         print("模拟仓：" + ("；".join(acts) if acts else "无到点动作"))

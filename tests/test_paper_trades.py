@@ -176,3 +176,15 @@ def test_settlement_audit_flip_marks_under_review_without_overwrite():
     assert a["status"] == "source_mismatch" and a["result_under_review"] and p["result_under_review"]
     assert p["settle_value"] == 0 and p["pnl_usd"] == round(41 - 3.2, 2)                    # 原记账不覆盖
     assert a["secondary_value"] == pytest.approx(0.1)
+
+
+def test_size_report_three_classes_unknown_kept_separate():
+    th = [{"execution": "模拟", "paper": {"entered_at": "x", "pnl_usd": 10.0, "entry_quote_labels": {"size_sufficient": True}}},
+          {"execution": "模拟", "paper": {"entered_at": "x", "pnl_usd": -5.0, "entry_quote_labels": {"size_sufficient": False}}},
+          {"execution": "模拟", "paper": {"entered_at": "x", "entry_quote_labels": {"size_sufficient": None}}},
+          {"execution": "模拟", "paper": {"state": "skipped", "skip_reason": "credit_low"}},
+          {"execution": "实盘", "paper": {"entered_at": "x"}}]
+    r = pt.size_report(th)
+    assert r["all"]["n"] == 4 and r["all"]["entered"] == 3 and sum(r["all"]["pnl"]) == 5.0
+    assert r["sufficient"]["n"] == 1 and r["insufficient"]["n"] == 1
+    assert r["unknown"]["n"] == 2 and r["unknown"]["not_entered"] == {"credit_low": 1}      # 未入场/无标签 → unknown

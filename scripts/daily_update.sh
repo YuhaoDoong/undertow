@@ -320,11 +320,14 @@ DL_OUT=$(python3 -m undertow dirledger record 2>&1); DL_RC=$?
 DS_OUT=$(python3 -m undertow dirledger score 2>&1); DS_RC=$?
 # 期权多层同向（Codex 022 冻结：conviction-h1-v1-20260928，正式起点 2026-09-29；积累期 T3，不参与决策）
 CV_OUT=$(python3 -m undertow dirledger conviction-record 2>&1); CV_RC=$?
+# 逐到期持仓画像（用户 2026-09-29：到期日类型 Q/M/W 与磁吸研究）：开盘前首份冻结，只记录不产生信号
+EP_OUT=$(python3 -m undertow shadow expiry-profile 2>&1); EP_RC=$?
 set -e
 printf '%s\n' "$DL_OUT" | head -3
 printf '%s\n' "$CV_OUT" | head -9
-if (( DL_RC != 0 || DS_RC != 0 || CV_RC != 0 )); then
-    alert "⚠️ 方向判断台账失败（ET $ET_NOW）" "record rc=$DL_RC score rc=$DS_RC conviction rc=$CV_RC：$(printf '%s\n%s\n%s' "$DL_OUT" "$DS_OUT" "$CV_OUT" | grep '⚠️' | head -2 | tr '\n' ' ')"
+printf '%s\n' "$EP_OUT" | tail -3
+if (( DL_RC != 0 || DS_RC != 0 || CV_RC != 0 || EP_RC != 0 )); then
+    alert "⚠️ 方向判断台账失败（ET $ET_NOW）" "record rc=$DL_RC score rc=$DS_RC conviction rc=$CV_RC expiry-profile rc=$EP_RC：$(printf '%s\n%s\n%s\n%s' "$DL_OUT" "$DS_OUT" "$CV_OUT" "$EP_OUT" | grep '⚠️' | head -2 | tr '\n' ' ')"
 fi
 
 # 研报输入存档（用户 2026-09-28：「数据永远是最主要的」）：价格/波动率/FRED/COT 原始下载只在 data/cache

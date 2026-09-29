@@ -1235,6 +1235,76 @@ SAMPLE_RETRY_SLEEP_S = 2.0
 INTRADAY_PACE_S = 0.55          # 长桥行情接口约 60 次 / 30 秒（官方文档写于 history candlestick 页）；留余量
 
 
+EXPIRY_PROFILE_DIR = Path("data/history/expiry_profile")
+EXPIRY_PROFILE_DTE = 35
+EXPIRY_PROFILE_BAND = 0.10
+
+
+def expiry_profile_row(inst: str, sym: str, session: date, snap, ident: dict | None, now: datetime) -> dict:
+    """某品种某交易日开盘前可得的逐到期持仓画像（纯组装）。到期日磁吸研究的事前记录（用户 2026-09-29）。
+    只记录，不产生信号：各到期的类型 Q/M/W/D、剩余交易日历天数、C/P 总 OI 与成交量、±10% 内各侧 OI 最大的 5 个行权价。"""
+    from undertow.analyze.expiry_type import classify
+    spot = snap.spot
+    by: dict = {}
+    for c in snap.contracts:
+        dte = (c.expiry - session).days
+        if not 0 <= dte <= EXPIRY_PROFILE_DTE:
+            continue
+        e = by.setdefault(c.expiry, {"oi": {"C": 0, "P": 0}, "vol": {"C": 0, "P": 0}, "near": {"C": {}, "P": {}}})
+        e["oi"][c.kind] += c.open_interest
+        e["vol"][c.kind] += c.volume
+        if spot and abs(c.strike / spot - 1) <= EXPIRY_PROFILE_BAND:
+            e["near"][c.kind][c.strike] = e["near"][c.kind].get(c.strike, 0) + c.open_interest
+    exps = []
+    for exp, e in sorted(by.items()):
+        t = classify(exp)
+        exps.append({"expiry": exp.isoformat(), "type": t["type"], "is_monthly": t["is_monthly"],
+                     "is_quarterly": t["is_quarterly"], "dte": (exp - session).days,
+                     "oi_c": e["oi"]["C"], "oi_p": e["oi"]["P"], "vol_c": e["vol"]["C"], "vol_p": e["vol"]["P"],
+                     "top_c": sorted(sorted(e["near"]["C"].items(), key=lambda x: -x[1])[:5]),
+                     "top_p": sorted(sorted(e["near"]["P"].items(), key=lambda x: -x[1])[:5])})
+    return {"key": f"{inst}|{session.isoformat()}", "instrument": inst, "symbol": sym, "session": session.isoformat(),
+            "recorded_at": now.astimezone(timezone.utc).isoformat(),
+            "before_open": now.astimezone(ET) < datetime.combine(session, datetime.min.time(), tzinfo=ET).replace(hour=9, minute=30),
+            "snapshot_sha": (ident or {}).get("sha256"), "captured_at": (ident or {}).get("captured_at"),
+            "spot": spot, "band": EXPIRY_PROFILE_BAND, "max_dte": EXPIRY_PROFILE_DTE, "expiries": exps}
+
+
+def cmd_expiry_profile(args) -> int:
+    """每个交易日开盘前冻结记录各品种逐到期持仓画像（首份冻结，重复运行 exists）。只读、从不下单。"""
+    from undertow.collect.cboe_options import snapshot_from_payload
+    from undertow.collect.store import SnapshotStore
+    from undertow.core.config import load_config
+    from undertow.dirledger_cli import session_index
+    cfg, store = load_config(), SnapshotStore()
+    session = market_today()
+    if mc.is_trading_day(session) is not True:
+        print(f"{session} 非交易日：不记录。")
+        return 0
+    now = datetime.now(timezone.utc)
+    rc, done, issues = 0, [], []
+    for inst in _instruments(cfg, args.instruments):
+        sym = inst.options.symbol
+        try:
+            idx = session_index(store, sym)
+            f = idx.get(session)
+            if f is None:
+                print(f"  {inst.key:6s} {session} 当日快照未到（未认证到该交易日），下次重试")
+                continue
+            payload, ident = store.load_with_identity("options", sym, f)
+            row = expiry_profile_row(inst.key, sym, session, snapshot_from_payload(payload, inst.key, sym), ident, now)
+            st = jl.insert_frozen(EXPIRY_PROFILE_DIR / f"{inst.key}.jsonl", row, key_field="key",
+                                  frozen=lambda r: {k: v for k, v in r.items() if k not in ("recorded_at", "before_open")})
+            q = [f"{e['expiry'][5:]}{e['type']}" for e in row["expiries"] if e["type"] in ("Q", "M")]
+            print(f"  {inst.key:6s} {session} {st}；到期 {len(row['expiries'])} 个，其中月度/季度 {q}"
+                  + ("" if row["before_open"] else "（⚠️ 开盘后记录）"))
+            done.append(inst.key)
+        except Exception as e:
+            issues.append({"instrument": inst.key, "error": f"{type(e).__name__}: {e}"[:200]}); rc = 1
+    _status(args, "expiry-profile", done, issues)
+    return rc
+
+
 BARS_GAPS = Path("data/history/option_bars/_gaps.json")
 BARS_EVIDENCE = Path("data/history/option_bars/_evidence.json")
 
@@ -1502,6 +1572,9 @@ def register(sub):
     b.add_argument("--retry-missing", action="store_true",
                    help="重查此前记为 not_found / invalid_symbol 的合约日（默认不重查；「本次未取得」不等于永久不可得）")
     b.set_defaults(func=cmd_bars)
+    ep = ss.add_parser("expiry-profile", help="开盘前冻结记录各品种逐到期持仓画像（类型 Q/M/W/D、OI、近价最大行权价）")
+    ep.add_argument("instruments", nargs="*"); ep.add_argument("--status-file")
+    ep.set_defaults(func=cmd_expiry_profile)
     it = ss.add_parser("intraday", help="收盘后存当天候选合约与标的的逐分钟成交价量（不占历史 K 线月配额）")
     it.add_argument("--status-file"); it.add_argument("--force", action="store_true", help="16:05 前也抓（盘中不完整）")
     it.set_defaults(func=cmd_intraday)

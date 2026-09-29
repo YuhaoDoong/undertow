@@ -849,7 +849,7 @@ def test_open_chain_filter_and_schedule():
     with pytest.raises(ValueError):
         filter_chain({"data": {"options": []}}, date(2026, 9, 28))
     src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
-    assert 'shadow chain --status-file' in src and 'shadow_window chain' in src
+    assert 'run_bound "shadow_${W}" "shadow chain" shadow chain' in src and 'shadow_window chain' in src
 
 
 # —— Codex 009 N02：开盘后全链快照的数据完整性 ——

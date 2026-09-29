@@ -315,5 +315,22 @@ def test_trade_proxy_window_volume_weighting_and_pairing():
     assert px == pytest.approx((1 * 2 + 4 * 6) / 8) and len(mins) == 2
     a = {datetime(2026, 9, 28, 14, 0, tzinfo=timezone.utc)}
     b = {datetime(2026, 9, 28, 14, 1, tzinfo=timezone.utc)}
-    assert tq.classify(a, a) == "both_same_minute" and tq.classify(a, b) == "both_async"
+    assert tq.classify(a, a) == "has_overlap" and tq.classify(a, b) == "both_async"
     assert tq.classify(a, set()) == "one_leg" and tq.classify(set(), set()) == "none"
+
+
+def test_trade_proxy_sync_uses_only_common_minutes():
+    """Codex 025-5 反例：卖腿主要在 10:00 成交、买腿主要在 10:19，只在 10:01 有少量重叠 ——
+    窗口代理混了两个时点；同步代理只用 10:01 那一分钟。"""
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from scripts import trade_vs_quote as tq
+    s = [["2026-09-28T14:00:00Z", "2.0", "100", "0", "0"], ["2026-09-28T14:01:00Z", "1.9", "1", "0", "0"]]
+    b = [["2026-09-28T14:01:00Z", "0.9", "1", "0", "0"], ["2026-09-28T14:19:00Z", "0.5", "100", "0", "0"]]
+    ps, ms = tq.leg_proxy(s, D)
+    pb, mb = tq.leg_proxy(b, D)
+    assert tq.classify(ms, mb) == "has_overlap"
+    assert (ps - pb) == pytest.approx((200 + 1.9) / 101 - (0.9 + 50) / 101)           # 窗口代理：两个时点混在一起
+    sp, n = tq.sync_proxy(s, b, D)
+    assert n == 1 and sp == pytest.approx(1.0)                                       # 同步代理：只有 10:01
+    assert tq.sync_proxy(s, [["2026-09-28T14:19:00Z", "0.5", "100", "0", "0"]], D) == (None, 0)

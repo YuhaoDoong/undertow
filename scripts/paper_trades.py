@@ -513,7 +513,7 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
                  settlement_model="理论到期记账：按到期日常规收盘价的内在价值现金化；不模拟提前行权/指派/实物交割")
         ev.append({"at": now.isoformat(), "action": "settle", "close": c, "value": val, "pnl": pnl})
         return "settle"
-    if p.get("close_request") and RTH[0] <= et.time() < RTH[1]:
+    if p.get("close_request") and RTH[0] <= et.time() < RTH[1] and et.weekday() < 5:
         # 用户主动平仓请求在非交易时段提出 → 到常规时段第一次唤醒时按当时保守报价执行（Codex 031）
         q = depth([p["sell"], p["buy"]])
         v = close_value(q, p)
@@ -539,7 +539,7 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             ev.append({"at": now.isoformat(), "action": "mark_retry", "slot": key, "quotes": q})
             return "retry"
         val, assume = v
-        in_rth = RTH[0] <= et.time() < RTH[1]
+        in_rth = RTH[0] <= et.time() < RTH[1] and et.weekday() < 5     # 周末按非常规时段：只估值、不执行
         ev.append({"at": now.isoformat(), "action": "mark" if in_rth else "mark_offhours", "slot": key,
                    "quotes": q, "value": val, "valuation_assumption": assume,
                    "note": "稀疏检查（非连续止损）" + ("" if in_rth else "；非常规时段只估值、不执行")})

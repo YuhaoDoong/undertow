@@ -508,3 +508,18 @@ def test_debit_dynamic_entry_uses_selection():
     assert pt.step(d, at(30, 10, 1), selector=lambda p, n: sel) == "enter"
     assert d["k_buy"] == 143.0 and d["k_sell"] == 153.0 and d["buy"].endswith("C143000.US")
     assert d["entry_credit"] == -3.7 and d["stop_value"] is None
+
+
+def test_weekend_marks_are_offhours_only():
+    """日历失效时 session 仍会在工作日 tick；状态机自身也不在周末执行止损（周六 09:46 只估值）。"""
+    p = _entered()
+    p["expiry"] = "2026-10-16"
+    sat = datetime(2026, 10, 3, 9, 46, tzinfo=ET)
+    assert pt.step(p, sat, depth=q(1.5, 1.7, 0.7, 0.8)) == "mark"
+    assert p["state"] == "entered" and p["events"][-1]["action"] == "mark_offhours"
+
+
+def test_session_hook_ticks_paper_when_calendar_unavailable():
+    src = (Path(__file__).resolve().parents[1] / "scripts" / "session_hooks.sh").read_text("utf-8")
+    fb = src[src.index("无法取得今日窗口"):]
+    assert "paper_tick" in fb[:600] and "%u" in fb[:600]

@@ -298,6 +298,9 @@ if (( SHW_RC == 0 )); then
 else
   # 日历失效（覆盖期外）或命令崩溃：窗口来源没了，不能当作「今天没窗口」静默跳过
   hb "④⑤影子窗口：无法取得今日窗口（rc=$SHW_RC）$(printf '%s' "$SHW" | tail -1)"
+  # 模拟仓入场/盯市/结算只看规格里的日期与时刻，不依赖交易日历；日历取不到时（9/30 06:00 实测出现过）
+  # 若跟着跳过，入场窗口内会整批记成 missed。工作日照常 tick；周末不跑（状态机内周末也不执行止损/平仓）。
+  if (( $(TZ=America/New_York date +%u) <= 5 )); then paper_tick; fi
   if (( ET_MIN >= 600 && ET_MIN <= 605 )); then
     notify "⚠️ 影子账窗口不可用" "$(printf '%s' "$SHW" | tail -1)"
   fi

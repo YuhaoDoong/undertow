@@ -523,3 +523,12 @@ def test_session_hook_ticks_paper_when_calendar_unavailable():
     src = (Path(__file__).resolve().parents[1] / "scripts" / "session_hooks.sh").read_text("utf-8")
     fb = src[src.index("无法取得今日窗口"):]
     assert "paper_tick" in fb[:600] and "%u" in fb[:600]
+
+
+def test_write_journal_accepts_tuples_in_selection(tmp_path, monkeypatch):
+    """选档结果里的 walls 是元组；旧的回读比对用对象相等，元组≠列表 → 每次 tick 都失败（2026-09-30 ET 09:40–09:52）。"""
+    import json
+    monkeypatch.setattr(pt, "JOURNAL", tmp_path / "journal.json")
+    j = {"theses": [{"id": "x", "paper": {"events": [{"selection": {"walls": [(400.0, 17445)]}}]}}]}
+    pt._write_journal(j)
+    assert json.loads((tmp_path / "journal.json").read_text("utf-8"))["theses"][0]["paper"]["events"][0]["selection"]["walls"] == [[400.0, 17445]]

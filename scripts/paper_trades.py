@@ -762,7 +762,10 @@ def _write_journal(j: dict) -> None:
     fd, name = tempfile.mkstemp(dir=JOURNAL.parent, prefix=".journal.", suffix=".tmp")
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(body); f.flush(); os.fsync(f.fileno())
-    if json.loads(Path(name).read_text("utf-8")) != j:
+    # 回读比对【序列化文本】而不是对象：选档结果里有元组，JSON 回读成列表，对象比较恒不等 →
+    # 2026-09-30 ET 09:40 起每次 tick 都「回读校验失败」、预选一条没存（入场前 8 分钟发现）。文本一致 = 落盘无损。
+    back = Path(name).read_text("utf-8")
+    if back != body or json.loads(back) is None:
         raise RuntimeError("journal 回读校验失败，未替换")
     os.replace(name, JOURNAL)
 

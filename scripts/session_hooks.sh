@@ -210,16 +210,17 @@ intraday_capture() {
 # ⑬ 资金流买卖方推断验证的采集（用户 2026-09-29「1 做一下」；协议 docs/prereg/2026-09-29_flow_side_check_v0.md）：
 # ET 16:05 起抓当天金银近价合约逐分钟（共用 ⑩ 的锁与存储，不占历史 K 线配额）；全部终态才写哨兵，否则下次唤醒重试。
 flowside_capture() {
-  local OKF="$LOG_DIR/.flowside_${ET_DATE}.ok" RES RC
+  # 复用本次运行绑定（run_bound：独立 run_id、状态路径与身份核对、lockf）；成功哨兵 = rc=0 且本次状态为 complete/no_candidates
+  local OKF="$LOG_DIR/.flowside_${ET_DATE}.ok"
   [[ -f "$OKF" ]] && return
   IN_SHADOW=1
-  RES=$("$PY" scripts/flow_side_capture.py gold silver 2>&1); RC=$?
-  if (( RC == 0 )); then
-    : > "$OKF"; hb "⑬资金流验证采集：✅ $(printf '%s' "$RES" | tail -1 | clip 120)"
-  elif (( RC == 4 )); then
-    hb "⑬资金流验证采集：⑩ 仍在运行（锁），跳过"
+  run_bound "flowside" "shadow flowside" shadow flowside gold silver
+  local RES="$RB_RES" RC=$RB_RC OV="$RB_OV"
+  if (( RC == 4 || RC == 75 )); then hb "⑬资金流代理采集：⑩ 或上一轮仍在跑（锁），跳过"; return; fi
+  if (( RC == 0 )) && [[ "$OV" == "complete" || "$OV" == "no_candidates" ]]; then
+    : > "$OKF"; hb "⑬资金流代理采集：✅ ${OV} $(printf '%s' "$RES" | tail -1 | clip 120)"
   else
-    hb "⑬资金流验证采集：⏳ rc=$RC $(printf '%s' "$RES" | tail -1 | clip 120)"
+    hb "⑬资金流代理采集：⏳ rc=$RC overall=$(ov_text "$OV") $(printf '%s' "$RES" | tail -1 | clip 100)"
   fi
 }
 # ⑪ 收盘后备份（用户 2026-09-28「数据最重要」；Codex 024-6）：ET 16:40 起把当天自动任务写下的数据提交并推送，

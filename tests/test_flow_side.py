@@ -37,3 +37,34 @@ def test_labels_and_agreement():
     a = fs.agreement(rows)
     assert a["n_labelled"] == 2 and a["agree_rate"] == 0.5 and a["agree_rate_weighted"] == 0.75
     assert a["weight_covered"] == 0.6 and a["n_mixed"] == 1 and a["n_unknown"] == 1
+
+
+# —— v1：主表只用严格过去的报价（Codex 030 反例）——
+def test_v1_future_quote_cannot_change_main_classification():
+    rows = [(m(0), 1.1, 100)]
+    prior = (m(-3), m(-1), 1.2, 1.4)                         # 桶在分钟起点前结束：严格过去
+    future = (m(0) + timedelta(seconds=30), m(1), 0.8, 1.0)   # 桶在分钟之后
+    a = fs.classify_v1(rows, [prior], "quote_past")
+    b = fs.classify_v1(rows, [prior, future], "quote_past")
+    assert a["sell"] == b["sell"] == 100 and a["buy"] == b["buy"] == 0
+    assert fs.classify_v1(rows, [future], "quote_past")["unclassified"] == 100      # 只有之后的报价 → 主表不分类
+    assert fs.classify_v1(rows, [future], "quote_any_window")["buy"] == 100        # 敏感性口径会被之后的报价改写
+
+
+def test_v1_quote_age_limit_and_bucket_spanning_minute():
+    rows = [(m(0), 1.1, 10)]
+    old = (m(-30), m(-20), 1.2, 1.4)                          # 最短年龄 20 分钟 > 15
+    assert fs.classify_v1(rows, [old], "quote_past")["unclassified"] == 10
+    spanning = (m(-1), m(1), 1.2, 1.4)                        # 桶跨过分钟起点：不算严格过去
+    assert fs.classify_v1(rows, [spanning], "quote_past")["unclassified"] == 10
+    c = fs.classify_v1(rows, [(m(-5), m(-2), 1.2, 1.4)], "quote_past")
+    assert c["quote_age_min_s"] == [120.0] and c["quote_age_max_s"] == [300.0]
+
+
+def test_v1_modes_reported_separately_and_confusion():
+    rows = [(m(0), 1.0, 5), (m(1), 1.2, 5)]
+    assert fs.classify_v1(rows, [], "tick_only")["buy"] == 5 and fs.classify_v1(rows, [], "quote_past")["unclassified"] == 10
+    assert fs.minute_sign_volume_share({"buy": 3, "sell": 1}) == 0.75
+    cm = fs.confusion([{"inferred": "buy", "traded": "buy"}, {"inferred": "buy", "traded": "sell"},
+                       {"inferred": "sell", "traded": "unknown"}])
+    assert cm["matrix"] == {"buy→buy": 1, "buy→sell": 1, "sell→unknown": 1} and cm["base_rate_traded_buy"] == 0.5

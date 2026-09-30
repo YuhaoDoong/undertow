@@ -1268,6 +1268,8 @@ def expiry_profile_row(inst: str, sym: str, session: date, snap, ident: dict | N
     return {"key": f"{inst}|{session.isoformat()}", "instrument": inst, "symbol": sym, "session": session.isoformat(),
             "recorded_at": now.astimezone(timezone.utc).isoformat(),
             "before_open": now.astimezone(ET) < datetime.combine(session, datetime.min.time(), tzinfo=ET).replace(hour=9, minute=30),
+            # 开盘后才记录 = 事后按开盘前快照重建，不是盘前冻结（Codex 030）；源快照可得时刻见 captured_at
+            "reconstructed": not (now.astimezone(ET) < datetime.combine(session, datetime.min.time(), tzinfo=ET).replace(hour=9, minute=30)),
             "snapshot_sha": (ident or {}).get("sha256"), "captured_at": (ident or {}).get("captured_at"),
             "spot": spot, "band": EXPIRY_PROFILE_BAND, "max_dte": EXPIRY_PROFILE_DTE, "expiries": exps}
 
@@ -1296,7 +1298,7 @@ def cmd_expiry_profile(args) -> int:
             payload, ident = store.load_with_identity("options", sym, f)
             row = expiry_profile_row(inst.key, sym, session, snapshot_from_payload(payload, inst.key, sym), ident, now)
             st = jl.insert_frozen(EXPIRY_PROFILE_DIR / f"{inst.key}.jsonl", row, key_field="key",
-                                  frozen=lambda r: {k: v for k, v in r.items() if k not in ("recorded_at", "before_open")})
+                                  frozen=lambda r: {k: v for k, v in r.items() if k not in ("recorded_at", "before_open", "reconstructed")})
             q = [f"{e['expiry'][5:]}{e['type']}" for e in row["expiries"] if e["type"] in ("Q", "M")]
             print(f"  {inst.key:6s} {session} {st}；到期 {len(row['expiries'])} 个，其中月度/季度 {q}"
                   + ("" if row["before_open"] else "（⚠️ 开盘后记录）"))
@@ -1471,6 +1473,104 @@ def _intraday_locked(args, today, lbb, _time) -> int:
     return 0 if overall == "complete" else 1
 
 
+FLOWSIDE_BAND, FLOWSIDE_MAX_DTE, FLOWSIDE_TYPES = 0.05, 45, ("Q", "M", "W")
+FLOWSIDE_D_MAX_DTE = 10        # 日度（D）到期也抓 10 天内的（2026-09-30 起；9/28 试跑显示 F 层里 D 到期腿权重很大：金约 16%）
+FLOWSIDE_PACE_S = 0.15
+
+
+def flowside_plan(inst_key: str, day: date) -> tuple[str, list, float | None]:
+    """资金流代理一致性研究的采集计划（协议 v0/v1 附录）：认证到 day 的快照里，现价 ±5%、45 天内、Q/M/W 的全部合约。
+    返回 (ETF 代码, 合约代码列表, 采集依据的现价)；快照未到 → (root, [], None)。"""
+    from undertow.analyze.expiry_type import classify
+    from undertow.collect import longbridge_bars as lbb
+    from undertow.collect.cboe_options import snapshot_from_payload
+    from undertow.collect.store import SnapshotStore
+    from undertow.core.config import load_config
+    from undertow.dirledger_cli import session_index
+    cfg, st = load_config(), SnapshotStore()
+    root = cfg.instruments[inst_key].options.symbol
+    f = session_index(st, root).get(day)
+    if f is None:
+        return root, [], None
+    snap = snapshot_from_payload(st.load("options", root, f), inst_key, root)
+    syms = sorted({lbb.option_symbol(root, c.expiry.isoformat(), c.kind, c.strike) for c in snap.contracts
+                   if abs(c.strike / snap.spot - 1) <= FLOWSIDE_BAND and 0 <= (c.expiry - day).days
+                   and ((c.expiry - day).days <= FLOWSIDE_MAX_DTE and classify(c.expiry)["type"] in FLOWSIDE_TYPES
+                        or (c.expiry - day).days <= FLOWSIDE_D_MAX_DTE and classify(c.expiry)["type"] == "D")})
+    return root, syms, snap.spot
+
+
+def cmd_flowside(args) -> int:
+    """⑬ 收盘后抓当天金银近价合约逐分钟（代理一致性研究；共用 ⑩ 的锁与存储，不占历史 K 线配额）。
+    状态：plan_unavailable（快照未到，重试）/ no_candidates（明确零计划）/ complete（全部终态）/ partial / unchanged / busy。
+    empty/gone 终态只表示停止重试，数据覆盖另报 data_coverage。只读、从不下单。"""
+    import fcntl
+    import time as _time
+    from undertow.collect import longbridge_bars as lbb
+    day = market_today()
+    now_et = datetime.now(ET)
+    insts = args.instruments or ["gold", "silver"]
+    if mc.is_trading_day(day) is not True or (now_et.hour, now_et.minute) < (16, 5):
+        print(f"{day} ET {now_et:%H:%M}：非交易日或未到 16:05，不抓。")
+        _status(args, "flowside", [], [], overall="unchanged", counts={"planned": 0})
+        return 0
+    lk = open(INTRADAY_LOCK, "a+")
+    try:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print("⑩ 当天逐分钟仍在运行（锁被占），本次跳过。")
+        _status(args, "flowside", [], [], overall="busy", counts={"planned": None})
+        lk.close()
+        return 4
+    try:
+        tot = comp = pend = req = 0
+        issues, done, unavailable = [], [], []
+        for k in insts:
+            root, syms, spot = flowside_plan(k, day)
+            if spot is None:
+                unavailable.append(k); continue
+            path = lbb.path_of(root, day, lbb.INTRADAY_DIR)
+            try:
+                cur = lbb.load_day(path) or lbb.new_intraday_day(root, day)
+            except lbb.BarsFileCorrupt as e:
+                q = lbb.quarantine(path)
+                print(f"  ⚠️ {e}；已隔离为 {q.name}", file=sys.stderr)
+                cur = lbb.new_intraday_day(root, day)
+            todo = [s_ for s_ in syms if lbb.symbol_state(cur["contracts"].get(s_)) == "pending"]
+            for s_ in todo:
+                try:
+                    res = lbb.fetch_intraday_today(s_, day)
+                except lbb.BarsUnavailable as e:
+                    res = {"status": "error", "error": str(e)[:160], "fetched_at": datetime.now(timezone.utc).isoformat()}
+                cur["contracts"][s_] = lbb.merge_attempt(cur["contracts"].get(s_), res)
+                req += 1
+                _time.sleep(FLOWSIDE_PACE_S)
+            if todo:
+                lbb.save_day(path, cur)
+            cur = lbb.load_day(path) or {"contracts": {}}                  # 回读落盘文件再判（不信内存）
+            sts = [lbb.symbol_state(cur["contracts"].get(s_)) for s_ in syms]
+            tot += len(syms); comp += sts.count("complete"); pend += sts.count("pending")
+            done.append(k)
+            print(f"  {root}: 计划 {len(syms)}，本次请求 {len(todo)}，完成 {sts.count('complete')}，"
+                  f"确认空 {sts.count('empty_confirmed')}，确认查不到 {sts.count('gone_confirmed')}，待续 {sts.count('pending')}")
+        if unavailable and not done:
+            overall = "plan_unavailable"
+        elif tot == 0:
+            overall = "no_candidates"
+        else:
+            overall = "partial" if (pend or unavailable) else "complete"
+        print(f"资金流代理采集 {day}：计划 {tot}、完成 {comp}、待续 {pend}、本次请求 {req}"
+              + (f"；快照未到 {unavailable}" if unavailable else "") + f" → {overall}")
+        _status(args, "flowside", done, issues, overall=overall,
+                counts={"planned": tot, "requested_now": req, "complete": comp, "pending": pend,
+                        "plan_unavailable": unavailable, "capture_finished": pend == 0 and not unavailable,
+                        "data_coverage": round(comp / tot, 4) if tot else None})
+        return 0 if overall in ("complete", "no_candidates") else 1
+    finally:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
+        lk.close()
+
+
 EXEC_DIR = Path("data/account/shadow_exec")      # 私有：gitignore；研究账在 data/history/shadow/（公开）
 
 
@@ -1609,6 +1709,8 @@ def register(sub):
     r.add_argument("--replay", action="store_true"); r.add_argument("--basis", nargs="*")
     r.add_argument("--output"); r.add_argument("--detail", action="store_true", help="同时输出 put/call/顺增仓方向 子集")
     r.set_defaults(func=cmd_report)
+    fs_ = ss.add_parser("flowside", help="⑬ 收盘后抓当天金银近价合约逐分钟（资金流代理一致性研究；只读）")
+    fs_.add_argument("instruments", nargs="*"); fs_.add_argument("--status-file"); fs_.set_defaults(func=cmd_flowside)
     # 所有写状态文件的子命令都接受 --run-id（Codex 026：调度层核对状态属于本次运行）
     for sp_ in ss.choices.values():
         dests = {a.dest for a in sp_._actions}

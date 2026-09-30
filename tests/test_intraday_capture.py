@@ -422,4 +422,46 @@ def test_flowside_capture_wired_after_intraday_and_defined_before_use():
     src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
     assert src.index("flowside_capture() {") < src.index("intraday_capture; flowside_capture; fi")
     daily = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
-    assert "scripts/flow_side_check.py" in daily and "FS_RC" in daily
+    assert "scripts/flow_side_check.py" in daily and "FS_RC != 0 && FS_RC != 3" in daily
+    body = src[src.index("flowside_capture() {"):src.index("# ⑪ 收盘后备份")]
+    assert 'run_bound "flowside" "shadow flowside"' in body                       # 复用本次运行绑定（Codex 030）
+
+
+def test_flowside_plan_statuses(tmp_path, monkeypatch):
+    from undertow import shadow_cli as sc
+
+    class FakeDT(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 9, 28, 16, 30, tzinfo=sc.ET)
+    monkeypatch.setattr(sc, "datetime", FakeDT)
+    monkeypatch.setattr(sc, "market_today", lambda: D)
+    monkeypatch.setattr(lbb, "INTRADAY_DIR", tmp_path / "intra")
+    monkeypatch.setattr(sc, "INTRADAY_LOCK", tmp_path / ".intraday.flock")
+    monkeypatch.setattr(sc, "FLOWSIDE_PACE_S", 0)
+
+    class A:
+        instruments = ["gold"]
+        status_file = str(tmp_path / "st.json")
+    st = lambda: json.loads((tmp_path / "st.json").read_text())
+    monkeypatch.setattr(sc, "flowside_plan", lambda k, d: ("GLD", [], None))
+    assert sc.cmd_flowside(A()) == 1 and st()["overall"] == "plan_unavailable"       # 快照未到 → 重试
+    monkeypatch.setattr(sc, "flowside_plan", lambda k, d: ("GLD", [], 380.0))
+    assert sc.cmd_flowside(A()) == 0 and st()["overall"] == "no_candidates"          # 明确零计划
+    monkeypatch.setattr(sc, "flowside_plan", lambda k, d: ("GLD", ["OPT.US"], 380.0))
+    monkeypatch.setattr(lbb, "fetch_intraday_today", lambda s, d, runner=None: _res("ok", _rows(10)))
+    assert sc.cmd_flowside(A()) == 1 and st()["overall"] == "partial" and st()["counts"]["pending"] == 1
+    monkeypatch.setattr(lbb, "fetch_intraday_today", lambda s, d, runner=None: _res("ok", _rows()))
+    assert sc.cmd_flowside(A()) == 0 and st()["overall"] == "complete" and st()["counts"]["data_coverage"] == 1.0
+
+
+def test_flow_side_check_pending_does_not_overwrite(tmp_path, monkeypatch):
+    import sys as _s
+    _s.path.insert(0, str(ROOT))
+    from scripts import flow_side_check as fc
+    monkeypatch.setattr(fc, "OUT", tmp_path)
+    old = tmp_path / "2026-09-29_gold.json"
+    old.write_text('{"status": "ok", "keep": true}')
+    monkeypatch.setattr(fc, "run", lambda k, X: {"status": "pending", "why": "快照未到"})
+    monkeypatch.setattr(_s, "argv", ["x", "2026-09-29", "gold"])
+    assert fc.main() == 3 and json.loads(old.read_text())["keep"] is True

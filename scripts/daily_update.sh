@@ -329,7 +329,8 @@ fi
 FS_DAY=$(python3 -c 'from undertow.core import market_calendar as mc; from undertow.core.clock import market_today; print(mc.prev_trading_day(market_today()))' 2>/dev/null)
 if [[ -n "$FS_DAY" ]]; then
   FS_OUT=$(python3 scripts/flow_side_check.py "$FS_DAY" gold silver 2>&1); FS_RC=$?
-  (( FS_RC != 0 )) && alert "⚠️ 资金流验证对照失败（ET $ET_NOW）" "$(printf '%s' "$FS_OUT" | tail -1 | cut -c1-120)"
+  # rc=3 = 输入未齐（快照/逐分钟未到）→ pending，不告警、不覆盖已有结果；其它非零才告警
+  if (( FS_RC != 0 && FS_RC != 3 )); then alert "⚠️ 资金流代理对照失败（ET $ET_NOW）" "$(printf '%s' "$FS_OUT" | tail -1 | cut -c1-120)"; fi
 fi
 # 逐到期持仓画像（用户 2026-09-29：到期日类型 Q/M/W 与磁吸研究）：开盘前首份冻结，只记录不产生信号
 EP_OUT=$(python3 -m undertow shadow expiry-profile 2>&1); EP_RC=$?

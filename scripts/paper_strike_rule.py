@@ -47,38 +47,44 @@ def params_hash(params: dict) -> str:
     return hashlib.sha256(json.dumps(params, sort_keys=True).encode()).hexdigest()[:16]
 
 
-def select_put_spread(spot: float, put_oi: dict, listed: list, quotes: dict, params: dict = PARAMS, *,
-                      fee_round_trip: float = 3.2, qty: int = 1, target_oi: dict | None = None) -> dict:
-    """纯函数。put_oi：{行权价: 0–14 天 put OI 合计}；target_oi：目标到期自身 put OI（只展示，不参与选档）；
-    listed：目标到期挂牌行权价；quotes：{行权价: {bid, ask, error, …}}。
-    卖腿语义（Codex 028 要求写明）：只锚定一档——「不高于最近墙、离价 ≥ 缓冲的最高挂牌行权价」；它没有有效买价就不开，
-    不向下继续找（向下枚举是另一版规则）。买腿只需有效卖价；任何一腿两侧都有且交叉 → 异常，拒绝。
-    合格 = 0 < 保守权利金 < 宽度、权利金/宽度 ≥ min_credit_ratio、且含费最大收益 > 0（economics 唯一口径）。"""
+def select_spread(side: str, spot: float, oi: dict, listed: list, quotes: dict, params: dict = PARAMS, *,
+                  fee_round_trip: float = 3.2, qty: int = 1, target_oi: dict | None = None) -> dict:
+    """纯函数，两侧镜像。side="P"：牛市看跌价差（墙在现价下方，卖腿不高于墙，买腿向下）；
+    side="C"：熊市看涨价差（墙在现价上方，卖腿不低于墙，买腿向上）。
+    oi：{行权价: 该侧 OI 合计}；target_oi：目标到期自身 OI（只展示）；listed：目标到期挂牌行权价；quotes：{行权价: {bid, ask, error}}。
+    卖腿只锚定一档（离价 ≥ 缓冲、最贴近墙的那档）；它没有有效买价就不开，不继续找。买腿只需有效卖价；交叉报价拒绝。
+    合格 = 0 < 保守权利金 < 宽度、含费最大收益 > 0（economics 唯一口径）、权利金/宽度 ≥ min_credit_ratio。"""
     from scripts.paper_trades import economics
-    tr = {"rule": RULE, "params": dict(params), "params_hash": params_hash(params), "spot": spot}
+    if side not in ("P", "C"):
+        raise ValueError(f"side 须为 P/C：{side}")
+    up = side == "C"
+    tr = {"rule": RULE, "side": side, "params": dict(params), "params_hash": params_hash(params), "spot": spot}
     if not _ok(spot):
         return {**tr, "ok": False, "reason": "bad_spot（现价非有限正数）"}
-    lo = spot * (1 - params["wall_range"])
-    zone = {k: v for k, v in put_oi.items() if lo <= k < spot and v > 0}
+    if up:
+        zone = {k: v for k, v in oi.items() if spot < k <= spot * (1 + params["wall_range"]) and v > 0}
+    else:
+        zone = {k: v for k, v in oi.items() if spot * (1 - params["wall_range"]) <= k < spot and v > 0}
     if not zone:
-        return {**tr, "ok": False, "reason": "no_wall（现价下方区间内无 put OI）"}
+        return {**tr, "ok": False, "reason": "no_wall（现价" + ("上方" if up else "下方") + "区间内无 OI）"}
     top = max(zone.values())
-    walls = sorted((k for k, v in zone.items() if v >= top * params["wall_frac"]), reverse=True)
+    walls = sorted((k for k, v in zone.items() if v >= top * params["wall_frac"]), reverse=not up)
     W = walls[0]
     tr.update(walls=[(k, zone[k], (target_oi or {}).get(k)) for k in walls], nearest_wall=W)
-    sells = [k for k in sorted(listed, reverse=True) if k <= W and (spot - k) / spot >= params["min_buffer"]]
+    dist = (lambda k: (k - spot) / spot) if up else (lambda k: (spot - k) / spot)
+    sells = [k for k in sorted(listed, reverse=not up) if (k >= W if up else k <= W) and dist(k) >= params["min_buffer"]]
     if not sells:
-        return {**tr, "ok": False, "reason": "no_sell_strike（墙下方无满足缓冲的挂牌行权价）"}
+        return {**tr, "ok": False, "reason": "no_sell_strike（墙外侧无满足缓冲的挂牌行权价）"}
     ks = sells[0]
-    tr.update(sell=ks, sell_buffer=round((spot - ks) / spot, 5), wall_buffer=round((spot - W) / spot, 5))
+    tr.update(sell=ks, sell_buffer=round(dist(ks), 5), wall_buffer=round(dist(W), 5))
     qs = quotes.get(ks) or {}
     if qs.get("error") or not _ok(qs.get("bid")):
-        return {**tr, "ok": False, "reason": f"sell_no_bid（{ks:g} 无有效买价；锚定一档，不向下找）"}
+        return {**tr, "ok": False, "reason": f"sell_no_bid（{ks:g} 无有效买价；锚定一档，不继续找）"}
     if _crossed(qs):
         return {**tr, "ok": False, "reason": f"sell_crossed（{ks:g} bid>ask）"}
     tried = []
-    for kb in sorted((k for k in listed if k < ks), reverse=True):
-        w = round(ks - kb, 6)
+    for kb in sorted((k for k in listed if (k > ks if up else k < ks)), reverse=not up):
+        w = round(abs(kb - ks), 6)
         if w > params["max_width_frac"] * spot:
             break
         qb = quotes.get(kb) or {}
@@ -90,7 +96,7 @@ def select_put_spread(spot: float, put_oi: dict, listed: list, quotes: dict, par
         row = {"buy": kb, "width": w, "credit": cr, "ratio": round(cr / w, 4)}
         if not 0 < cr < w:
             tried.append({**row, "reject": "credit_outside_0_width"}); continue
-        e = economics("P", ks, kb, cr, qty, fee_round_trip)
+        e = economics(side, ks, kb, cr, qty, fee_round_trip)
         row.update(max_gain_usd=e["max_gain_usd"], max_loss_usd=e["max_loss_usd"], breakeven=e["breakeven"],
                    gain_per_loss=round(e["max_gain_usd"] / e["max_loss_usd"], 4) if e["max_loss_usd"] > 0 else None)
         if e["max_gain_usd"] <= 0:
@@ -103,10 +109,15 @@ def select_put_spread(spot: float, put_oi: dict, listed: list, quotes: dict, par
     return {**tr, "ok": False, "reason": "no_qualifying_width（宽度上限内无合格买腿）", "tried": tried}
 
 
-def select_with_shadow(spot, put_oi, listed, quotes, params=PARAMS, **kw) -> dict:
+def select_put_spread(spot, put_oi, listed, quotes, params=PARAMS, **kw) -> dict:
+    """牛市看跌价差（side="P"）；保留旧名供既有调用与测试。"""
+    return select_spread("P", spot, put_oi, listed, quotes, params, **kw)
+
+
+def select_with_shadow(spot, oi, listed, quotes, params=PARAMS, *, side: str = "P", **kw) -> dict:
     """主规则（含 15% 门槛）与不设门槛的影子对照，在同一候选全集、同一时刻一起算（Codex 028）；主结果仍是含门槛的那个。"""
-    return {"main": select_put_spread(spot, put_oi, listed, quotes, params, **kw),
-            "shadow_no_ratio": select_put_spread(spot, put_oi, listed, quotes, {**params, "min_credit_ratio": 0.0}, **kw)}
+    return {"main": select_spread(side, spot, oi, listed, quotes, params, **kw),
+            "shadow_no_ratio": select_spread(side, spot, oi, listed, quotes, {**params, "min_credit_ratio": 0.0}, **kw)}
 
 
 def _dryrun(sym: str, expiry: str) -> int:

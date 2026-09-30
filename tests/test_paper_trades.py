@@ -265,3 +265,50 @@ def test_events_carry_scheduler_version(tmp_path, monkeypatch):
     monkeypatch.setenv("PAPER_SCHED", "session-hook-v2")
     pt.tick(at(29, 10, 6), depth=q(1.44, 1.6, 0.95, 1.03))
     assert load()["A"]["paper"]["events"][-1]["sched"] == "session-hook-v2"
+
+
+# —— 自动选档接入状态机（wall-dynamic-v1；用户 2026-09-30 金银熊市看涨价差）——
+def _dyn(**kw):
+    p = {"underlying": "GLD.US", "expiry": "2026-10-16", "side": "C", "qty": 1, "entry_date": "2026-09-30",
+         "entry_window_et": ["10:00", "10:30"], "min_credit_ratio": 0.15, "stop_mult": 2.0, "fee_round_trip": 3.2,
+         "mark_slots_et": ["09:45", "15:45"], "state": "planned", "events": [], "strike_rule": "wall-dynamic-v1"}
+    p.update(kw)
+    return p
+
+
+def _sel(ok=True, sell=390.0, buy=392.0, credit=0.4, sha="a", wall=390.0):
+    e = economics("C", sell, buy, credit, 1, 3.2) if ok else None
+    return {"ok": ok, "rule": "wall-dynamic-v1", "sell": sell, "buy": buy, "credit": credit, "nearest_wall": wall,
+            "economics": e, "reason": None if ok else "no_qualifying_width",
+            "inputs": {"oi_snapshot_sha256": sha, "params_hash": "p",
+                       "symbols": {str(sell): "GLD261016C390000.US", str(buy): "GLD261016C392000.US"},
+                       "quotes": {str(sell): {"bid": 1.3, "ask": 1.4, "bid_size": 5, "ask_size": 5, "error": ""},
+                                  str(buy): {"bid": 0.8, "ask": 0.9, "bid_size": 5, "ask_size": 5, "error": ""}}}}
+
+
+from scripts.paper_trades import economics  # noqa: E402
+
+
+def test_dynamic_selection_retries_then_enters_and_locks_strikes():
+    p = _dyn()
+    d = lambda d_, h, mi: datetime(2026, 9, d_, h, mi, tzinfo=ET)
+    assert pt.step(p, d(30, 9, 55), selector=lambda p, n: _sel()) is None                # 窗口前不选
+    assert pt.step(p, d(30, 10, 1), selector=lambda p, n: _sel(ok=False)) == "retry"
+    assert p["events"][-1]["wall_change_reason"] == "first_selection" and p["last_reject"] == "no_qualifying_width"
+    assert pt.step(p, d(30, 10, 6), selector=lambda p, n: _sel(wall=395.0, sell=395.0, buy=397.0)) == "enter"
+    ev = [e for e in p["events"] if e["action"] == "selection"]
+    assert ev[-1]["wall_change_reason"].startswith("spot_move")
+    assert p["state"] == "entered" and p["k_sell"] == 395.0 and p["k_buy"] == 397.0 and p["sell"].endswith("C390000.US")
+    assert p["economics"]["breakeven"] == pytest.approx(395 + 0.4 - 0.032)
+    assert pt.step(p, d(30, 10, 11), selector=lambda p, n: 1 / 0) is None                 # 入场后不再选档
+
+
+def test_dynamic_window_end_skipped_or_missed_and_oi_update_reason():
+    p = _dyn()
+    pt.step(p, datetime(2026, 9, 30, 10, 1, tzinfo=ET), selector=lambda p, n: _sel(ok=False, sha="a"))
+    pt.step(p, datetime(2026, 9, 30, 10, 6, tzinfo=ET), selector=lambda p, n: _sel(ok=False, sha="b"))
+    assert p["events"][-1]["wall_change_reason"].startswith("oi_update")
+    assert pt.step(p, datetime(2026, 9, 30, 10, 31, tzinfo=ET), selector=lambda p, n: _sel()) == "skipped"
+    q = _dyn()
+    assert pt.step(q, datetime(2026, 10, 1, 10, 5, tzinfo=ET), selector=lambda p, n: _sel()) == "missed"
+    assert pt.validate_spec(_dyn(strike_rule="other")) and pt.validate_spec(_dyn()) is None

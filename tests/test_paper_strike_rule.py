@@ -81,3 +81,20 @@ def test_shadow_without_ratio_computed_on_same_candidates():
     assert r["main"]["buy"] == 377 and r["shadow_no_ratio"]["buy"] == 378          # 378: 0.07/1=7%（含费仍为正）只在影子里过
     assert r["main"]["params_hash"] != r["shadow_no_ratio"]["params_hash"]
     assert not sr.select_put_spread(float("nan"), OI, LISTED, q)["ok"]
+
+
+
+def test_call_side_mirror_bear_call_spread():
+    """熊市看涨价差：墙在现价上方；墙离价太近则卖在墙上方一档；买腿向上找。"""
+    oi = {390: 5345, 395: 9758, 400: 16583, 383: 100}
+    listed = [383, 384, 385, 386, 387, 388, 389, 390, 391, 392, 395, 400]
+    q = {390: {"bid": 1.30, "ask": 1.40, "error": ""}, 391: {"bid": 1.1, "ask": 1.2, "error": ""},
+         392: {"bid": 0.85, "ask": 0.95, "error": ""}, 395: {"bid": 0.6, "ask": 0.7, "error": ""}}
+    r = sr.select_spread("C", 382.9, oi, listed, q)
+    assert r["nearest_wall"] == 395 and r["sell"] == 395                                # 最近墙 = 395（390 未达最大值一半）
+    assert not r["ok"] and r["tried"] == [{"buy": 400, "reject": "buy_no_ask"}]        # 400 无报价 → 不开
+    r = sr.select_spread("C", 382.9, {**oi, 390: 9000}, listed, q)
+    assert r["nearest_wall"] == 390 and r["sell"] == 390 and r["buy"] == 392 and r["credit"] == 0.35   # 0.35/2=17.5%
+    assert r["tried"][0]["reject"] == "credit_ratio_low"                              # 390/391：0.10/1=10%
+    r = sr.select_spread("C", 389.0, {390: 9000}, listed, q)                            # 墙离价 0.26% → 卖墙上方离价 ≥0.5% 的 391
+    assert r["sell"] == 391 and r["wall_buffer"] < 0.005 <= r["sell_buffer"]

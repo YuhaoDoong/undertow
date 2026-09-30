@@ -65,6 +65,14 @@ def economics(side: str, k_sell: float, k_buy: float, credit: float, qty: int, f
 
 
 def validate_spec(p: dict) -> str | None:
+    if p.get("strike_rule") and p.get("state") == "planned":          # 自动选档：入场前没有固定档位
+        if p["strike_rule"] != "wall-dynamic-v1":
+            return f"未知选档规则 {p['strike_rule']}"
+        if p.get("side") not in ("P", "C") or not (isinstance(p.get("qty"), int) and p["qty"] > 0):
+            return "side 须为 P/C、qty 须为正整数"
+        if not _finite(p.get("min_credit_ratio"), p.get("stop_mult"), p.get("fee_round_trip")):
+            return "数值非有限或缺失"
+        return None
     if not _finite(p.get("k_sell"), p.get("k_buy"), p.get("min_credit_ratio"), p.get("stop_mult"), p.get("fee_round_trip")):
         return "数值非有限或缺失"
     if not (isinstance(p.get("qty"), int) and p["qty"] > 0):
@@ -185,7 +193,70 @@ def audit_settlement(p: dict, now: datetime, *, cboe_close=_cboe_close) -> str |
     return a["status"]
 
 
-def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close) -> str | None:
+def _dynamic_select(p: dict, now: datetime) -> dict:
+    """wall-dynamic-v1 的一次选档（用户认可的规则，2026-09-29；call 侧为镜像）。输入全部留痕：
+    OI 取今天认证快照（前一交易日结算）里该侧 0…max(14, 目标 DTE) 天的合计；现价取长桥实时；报价取目标到期候选行权价的盘口。"""
+    import hashlib
+    from collections import defaultdict
+    from scripts.paper_strike_rule import PARAMS, params_hash, select_with_shadow
+    from undertow.collect.cboe_options import snapshot_from_payload
+    from undertow.collect.longbridge_bars import option_symbol
+    from undertow.collect.longbridge_quote import fetch_stock_quotes
+    from undertow.collect.store import SnapshotStore
+    from undertow.core.config import load_config
+    from undertow.dirledger_cli import session_index
+    root = p["underlying"].split(".")[0]
+    today = now.astimezone(ET).date()
+    exp = date.fromisoformat(p["expiry"])
+    cfg, st = load_config(), SnapshotStore()
+    key = next(k for k, i in cfg.instruments.items() if i.options and i.options.symbol == root)
+    f = session_index(st, root).get(today)
+    if f is None:
+        return {"ok": False, "reason": "no_snapshot（今天的认证快照未到）", "inputs": {}}
+    path = st.path_of("options", root, f)
+    snap = snapshot_from_payload(st.load("options", root, f), key, root)
+    horizon = max(14, (exp - today).days)
+    oi, toi = defaultdict(int), defaultdict(int)
+    for c in snap.contracts:
+        if c.kind == p["side"] and 0 <= (c.expiry - today).days <= horizon:
+            oi[c.strike] += c.open_interest
+        if c.kind == p["side"] and c.expiry == exp:
+            toi[c.strike] += c.open_interest
+    sq = fetch_stock_quotes([p["underlying"]])[p["underlying"]]
+    spot, spot_at = sq.last, datetime.now(timezone.utc).isoformat()
+    span = PARAMS["wall_range"] + PARAMS["max_width_frac"] + 0.01
+    lo, hi = (spot, spot * (1 + span)) if p["side"] == "C" else (spot * (1 - span), spot)
+    listed = sorted({c.strike for c in snap.contracts if c.expiry == exp and c.kind == p["side"] and lo <= c.strike <= hi})
+    syms = {k: option_symbol(root, p["expiry"], p["side"], k) for k in listed}
+    d = _depth(list(syms.values())) if syms else {}
+    quotes = {k: d[v] for k, v in syms.items()}
+    sel = select_with_shadow(spot, dict(oi), listed, quotes, side=p["side"], target_oi=dict(toi),
+                             fee_round_trip=p["fee_round_trip"], qty=p["qty"])
+    main = sel["main"]
+    return {**main, "shadow_no_ratio": {k: sel["shadow_no_ratio"].get(k) for k in ("ok", "sell", "buy", "credit", "reason")},
+            "inputs": {"oi_snapshot": str(path), "oi_snapshot_sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(),
+                       "oi_window_days": horizon, "spot": spot, "spot_fetched_at": spot_at,
+                       "quotes": {str(k): v for k, v in quotes.items()}, "symbols": {str(k): v for k, v in syms.items()},
+                       "params_hash": params_hash(PARAMS)}}
+
+
+def wall_change_reason(prev_sel: dict | None, sel: dict) -> str:
+    """墙为什么变了（Codex 028）：新结算 OI / 现价移动导致最近墙切换 / 参数变化 / 未变 / 首次选档。"""
+    if not prev_sel:
+        return "first_selection"
+    pi, ci = prev_sel.get("inputs") or {}, sel.get("inputs") or {}
+    if pi.get("params_hash") != ci.get("params_hash"):
+        return "params_change"
+    if pi.get("oi_snapshot_sha256") != ci.get("oi_snapshot_sha256"):
+        return "oi_update（新的结算 OI）"
+    if prev_sel.get("nearest_wall") != sel.get("nearest_wall"):
+        return "spot_move（现价移动导致最近墙切换）"
+    if (prev_sel.get("sell"), prev_sel.get("buy")) != (sel.get("sell"), sel.get("buy")):
+        return "quotes_or_spot（墙未变，报价或现价使选档变化）"
+    return "unchanged"
+
+
+def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, selector=_dynamic_select) -> str | None:
     """推进一步；返回动作名（None = 没到点）。纯逻辑 + 注入的取数函数，便于测试。"""
     et = now.astimezone(ET)
     today = et.date()
@@ -199,6 +270,8 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close) 
         ev.append({"at": now.isoformat(), "action": "invalid_spec", "why": bad})
         return "invalid_spec"
     p.setdefault("rule_version", RULE_VERSION)
+    if st == "planned" and p.get("strike_rule"):
+        return _step_dynamic(p, now, selector)
     width = abs(p["k_sell"] - p["k_buy"])
     if st == "planned":
         lo, hi = (_hm(x) for x in p["entry_window_et"])
@@ -275,6 +348,41 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close) 
             return "stop"
         return "mark"
     return None
+
+
+def _step_dynamic(p: dict, now: datetime, selector) -> str | None:
+    """自动选档的入场：窗口内每次唤醒按规则重选；第一份合格即入场并锁定档位（入场后不换档）。"""
+    et = now.astimezone(ET)
+    today = et.date()
+    ev = p.setdefault("events", [])
+    lo, hi = (_hm(x) for x in p["entry_window_et"])
+    ed = date.fromisoformat(p["entry_date"])
+    if today < ed or (today == ed and et.time() < lo):
+        return None
+    if today > ed or et.time() >= hi:
+        tried = [e for e in ev if e.get("action") == "selection"]
+        p["state"] = "missed" if not tried else "skipped"
+        p["skip_reason"] = "missed_window（窗口内未运行）" if not tried else (p.get("last_reject") or "no_qualifying_selection")
+        ev.append({"at": now.isoformat(), "action": p["state"], "why": p["skip_reason"]})
+        return p["state"]
+    sel = selector(p, now)
+    prev = next((e["selection"] for e in reversed(ev) if e.get("action") == "selection"), None)
+    reason = wall_change_reason(prev, sel)
+    ev.append({"at": now.isoformat(), "action": "selection", "selection": sel, "wall_change_reason": reason})
+    if not sel.get("ok"):
+        p["last_reject"] = sel.get("reason")
+        return "retry"
+    syms = (sel.get("inputs") or {}).get("symbols") or {}
+    qs = (sel.get("inputs") or {}).get("quotes") or {}
+    p.update(sell=syms.get(str(sel["sell"])), buy=syms.get(str(sel["buy"])), k_sell=float(sel["sell"]), k_buy=float(sel["buy"]))
+    q = {p["sell"]: qs.get(str(sel["sell"])), p["buy"]: qs.get(str(sel["buy"]))}
+    econ = sel["economics"]
+    lab = quote_labels(q, p["sell"], p["buy"], p["qty"])
+    p.update(state="entered", entered_at=now.isoformat(), entry_credit=sel["credit"], economics=econ,
+             stop_value=round(p["stop_mult"] * sel["credit"], 4), entry_quote_labels=lab)
+    ev.append({"at": now.isoformat(), "action": "enter", "quotes": q, "credit": sel["credit"], "economics": econ,
+               "quote_labels": lab, "selection_rule": sel.get("rule"), "wall_change_reason": reason})
+    return "enter"
 
 
 def _outcome(t: dict) -> None:

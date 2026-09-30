@@ -41,3 +41,18 @@ def test_scheduled_in_daily_before_set_e_and_session_after_close():
     assert last == "+"                                                            # 在 set +e 区间内，失败不中断 daily
     h = (root / "scripts" / "session_hooks.sh").read_text("utf-8")
     assert h.index("paper_book() {") < h.index("then paper_book; fi")
+
+
+
+def test_legacy_backfill_summary_and_render():
+    rows = [{"id": "l1", "state": "settled", "pnl_usd_recorded": 27.0, "pnl_usd_with_fee_3_20": 23.8, "max_loss_usd_recorded": 73.0,
+             "judgment": "q", "k_sell": 60, "k_buy": 61, "side": "C", "expiry": "2026-09-21", "underlying": "SLV", "entry_credit": 0.27},
+            {"id": "l2", "state": "settled_theoretical", "pnl_usd_recorded": 1.0, "pnl_usd_with_fee_3_20": -2.2,
+             "max_loss_usd_recorded": 142.0, "judgment": "s", "legs": [{"side": "buy", "sym": "P58"}], "underlying": "SLV"},
+            {"id": "l3", "state": "fill_not_recorded", "judgment": "x"}]
+    ls = pb.summarize_legacy(rows)
+    assert ls["closed"] == 2 and ls["wins"] == 2 and ls["pnl_usd"] == 28.0 and ls["pnl_usd_with_fee"] == 21.6
+    assert ls["incomplete"] == ["l3"] and ls["judgments"] == 2
+    c = pb.classify([])
+    md, _ = pb.render("d", c, pb.summarize(c), {}, "now", legacy=rows, shadow=["影子账 prospective：共 1 行"])
+    assert "旧模拟仓（9/29 之前" in md and "fill_not_recorded" in md and "> 影子账 prospective" in md

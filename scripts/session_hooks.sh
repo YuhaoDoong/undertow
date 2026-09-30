@@ -224,7 +224,7 @@ flowside_capture() {
   fi
 }
 # ⑭ 模拟仓台账报告（用户 2026-09-30：「模拟仓所有记录你应该定时统计分析生成一个report」）：ET 16:30 起每天一次，
-# 读私有 journal、写 data/reports/paper/（不入库）；用已记录的盯市，不另取报价。失败留痕，下次唤醒重试。
+# 读私有 journal、写 data/paper/reports/（不入库）；用已记录的盯市，不另取报价。失败留痕，下次唤醒重试。
 paper_book() {
   local OKF="$LOG_DIR/.paperbook_${ET_DATE}.ok" RES RC
   [[ -f "$OKF" ]] && return

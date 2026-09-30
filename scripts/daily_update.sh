@@ -232,7 +232,7 @@ RPT_RC=$?
 # 新研报体系 v2（用户 2026-09-30：「新建个研报体系……先只放期权墙……之前的研报也照常出」）：只放已证实内容，
 # 目前只有期权墙总览；只读已落盘快照。失败只告警，不影响旧研报与后续步骤。
 V2_OUT=$(python3 -m undertow report-v2 2>&1); V2_RC=$?
-# 模拟仓台账报告（私有输出 data/reports/paper/，不入库）：每天盘前一份；失败只告警（放在 set -e 之前，失败不中断 daily）
+# 模拟仓台账报告（私有输出 data/paper/reports/，不入库）：每天盘前一份；失败只告警（放在 set -e 之前，失败不中断 daily）
 PB_OUT=$(python3 scripts/paper_book.py 2>&1); PB_RC=$?
 set -e
 echo "$REPORT_OUT"

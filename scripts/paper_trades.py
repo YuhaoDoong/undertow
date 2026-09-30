@@ -3,7 +3,7 @@
   python3 scripts/paper_trades.py tick          # session 钩子每 5 分钟调用：到点才做事，没到点什么都不写
   python3 scripts/paper_trades.py status
 
-只读行情、只写私有 data/soul/（journal.json 里 execution=模拟 且带 paper 规格的事前判断 + paper_discretionary.jsonl 研究台账）；
+只读行情、只写私有文件（data/soul/journal.json 里 execution=模拟 且带 paper 规格的事前判断 + data/paper/ledger.jsonl 研究台账）；
 **从不下单**（AGENTS 第一条）。规则版本 RULE_VERSION；每条 paper 规格记下它按哪一版执行。
 
 v2（Codex 025-1/2 修订，入场前生效）：
@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 JOURNAL = ROOT / "data/soul/journal.json"
 LOCK = ROOT / "data/soul/journal.json.lock"
-LEDGER = ROOT / "data/soul/paper_discretionary.jsonl"
+LEDGER = ROOT / "data/paper/ledger.jsonl"          # 模拟仓数据单独一个文件夹（用户 2026-09-30），私有、不入库
 ET = ZoneInfo("America/New_York")
 RULE_VERSION = "paper-sim-v2-20260929"
 RTH = (time(9, 30), time(16, 0))

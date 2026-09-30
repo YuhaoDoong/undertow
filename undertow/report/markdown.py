@@ -672,7 +672,7 @@ def render_wall_overview_md(ov: dict, display_name: str) -> str:
         return ""
     name = {"Q": "季度", "M": "月度", "W": "周", "D": "日"}
     fmt = lambda top: "、".join(f"{k:g}({v:,})" for k, v in top) or "—"
-    L = [f"## {display_name} — 期权墙总览（按到期拆分；现价 {ov['spot']:.2f}，快照 {ov.get('asof', '')}）", "",
+    L = [f"## {display_name} — 期权墙总览（按到期拆分；现价 {ov['spot']:.2f}，源时间戳 {ov.get('asof', '')}（CBOE 原样、时区未核实））", "",
          f"> 显示范围 ±{ov['band']:.0%}，每个到期列 OI 前 3（不是全部墙位）；OI 是前一交易日结算的存量，不表示买卖方向、"
          "也不等于支撑/压力已验证；每行为单个到期，末行为 ≤14 天合计；类型按日历推断。", "",
          "| 到期 | 类型 | 剩余天数 | 总持仓 C / P | put OI 前 3（存量） | call OI 前 3（存量） |", "|---|---|---|---|---|---|"]

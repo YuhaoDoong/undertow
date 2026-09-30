@@ -91,7 +91,7 @@ def test_legacy_rows_are_not_prospective(tmp_path):
 def test_cmd_report_contract_in_source():
     """行为链太长，这里锁住源码层面的契约点（仓库既有做法）。"""
     src = (ROOT / "undertow" / "cli.py").read_text("utf-8")
-    i0 = src.index("def cmd_report")
+    i0 = src.index("def cmd_report(")                 # 精确匹配：cmd_report_v2 定义在它之前
     seg = src[i0:src.index("\ndef ", i0 + 10)]
     loop = seg[seg.index("for inst in instruments:"):]
     assert "_exec_day = None" in loop and "_sess_meta: dict = {}" in loop, "必须逐品种初始化"

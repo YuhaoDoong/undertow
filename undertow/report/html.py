@@ -2994,7 +2994,7 @@ def render_wall_overview_html(ov: dict, conv=None, unit: str = "", etf_symbol: s
     rows.append(f'<tr style="font-weight:600"><td colspan="4">≤{ov["agg_days"]} 天合计</td>'
                 f'<td>{cell(ov["agg_put_top"])}</td><td>{cell(ov["agg_call_top"])}</td></tr>')
     return ('<div class="card"><h2>期权墙总览（按到期拆分）</h2>'
-            f'<div class="sub">{_esc(etf_symbol)} 现价 {ov["spot"]:.2f}（快照 {_esc(str(ov.get("asof", "")))}）；'
+            f'<div class="sub">{_esc(etf_symbol)} 现价 {ov["spot"]:.2f}（源时间戳 {_esc(str(ov.get("asof", "")))}，CBOE 原样、时区未核实）；'
             f'显示范围只取现价 ±{ov["band"]:.0%} 内的行权价，每个到期列 OI 最大的 3 个 —— 不是全部墙位。'
             'OI 为前一交易日收盘结算的<b>存量</b>（盘中不变），本身不表示买方或卖方，也不等于支撑/压力已被验证。'
             '每行是<b>单个到期</b>自己的 OI；最后一行是 ≤14 天所有到期的<b>合计</b>（主报告墙位口径）。'

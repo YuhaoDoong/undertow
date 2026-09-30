@@ -1728,6 +1728,63 @@ def _index_summary(o) -> str:
     return ""
 
 
+REPORT_V2_DEFAULT = ("gold", "silver", "wti", "qqq", "tqqq", "tlt", "spy", "iwm")
+REPORT_V2_DIR = pathlib.Path("data/reports/v2")
+
+
+def cmd_report_v2(args) -> int:
+    """新研报体系 v2（用户 2026-09-30）：只放已证实的内容，目前只有期权墙总览。旧研报照常出，互不影响。
+    只读已落盘的认证快照（不在这里抓链）；商品价换算用期货【今天之前最后一个收盘】÷ ETF 快照价（与旧研报同源口径）。"""
+    import datetime as _dt
+    from zoneinfo import ZoneInfo
+    from undertow.analyze.expiry_ladder import wall_overview
+    ET = ZoneInfo("America/New_York")
+    from undertow.collect.cboe_options import snapshot_from_payload
+    from undertow.dirledger_cli import session_index
+    from undertow.report import v2 as rv2
+    cfg = load_config()
+    store = SnapshotStore()
+    fut_src = YahooFuturesSource()
+    today = market_today()
+    keys = args.instruments or list(REPORT_V2_DEFAULT)
+    items = []
+    for k in keys:
+        inst = cfg.instruments.get(k)
+        if inst is None or not inst.options:
+            items.append({"name": k, "symbol": "—", "status": "skip", "why": "未配置期权"}); continue
+        sym = inst.options.symbol
+        f = session_index(store, sym).get(today)
+        if f is None:
+            items.append({"name": inst.display_name, "symbol": sym, "status": "missing",
+                          "why": f"{today} 的开盘前快照未到（未认证到该交易日）"}); continue
+        snap = snapshot_from_payload(store.load("options", sym, f), k, sym)
+        ca = store.captured_at("options", sym, f)
+        ratio, conv = None, None
+        if inst.commodity is not None and snap.spot > 0:
+            try:
+                ser, _px, _asof = fut_src.fetch_for(inst, use_cache=True)
+                cl = [c for d, c in zip(ser.dates, ser.closes) if d < today] if ser else []
+                if cl:
+                    ratio = cl[-1] / snap.spot
+                    conv = (lambda r: (lambda x: x * r))(ratio)
+            except Exception as e:
+                print(f"[提示] {k} 期货价取不到，不做商品价换算：{e}", file=sys.stderr)
+        items.append({"name": inst.display_name, "symbol": sym, "status": "ok",
+                      "overview": wall_overview(snap, today=today), "ratio": ratio, "conv": conv,
+                      "captured_at": (_dt.datetime.fromtimestamp(ca, ET).strftime("%Y-%m-%d %H:%M ET") if ca else None)})
+    now = _dt.datetime.now(ET).strftime("%Y-%m-%d %H:%M ET")
+    REPORT_V2_DIR.mkdir(parents=True, exist_ok=True)
+    html_p = REPORT_V2_DIR / f"v2_{today.isoformat()}.html"
+    md_p = REPORT_V2_DIR / f"v2_{today.isoformat()}.md"
+    html_p.write_text(rv2.render_html(today.isoformat(), items, generated_at=now), "utf-8")
+    md_p.write_text(rv2.render_md(today.isoformat(), items, generated_at=now), "utf-8")
+    bad = [i["name"] for i in items if i["status"] != "ok"]
+    print(f"研报 v2 {today}：{len(items) - len(bad)}/{len(items)} 个品种有期权墙" + (f"；缺 {bad}" if bad else "")
+          + f" → {html_p.resolve()}")
+    # 快照未到 = 正常的「还没数据」（pending，rc=3，调度层不告警）；其余异常由调用方按非零告警
+    return 0 if not bad else 3
+
+
 def cmd_report(args) -> int:
     """综合研判报告：四层情报聚合 + 可视化 + 情景推演 → 自包含 HTML。"""
     cfg = load_config()
@@ -3950,6 +4007,9 @@ def build_parser() -> argparse.ArgumentParser:
     pai.add_argument("--status-file")
     pai.set_defaults(func=cmd_archive_inputs)
 
+    prv2 = sub.add_parser("report-v2", help="新研报体系 v2：只放已证实的内容（目前只有期权墙总览）；旧 report 照常")
+    prv2.add_argument("instruments", nargs="*", help="品种 key（留空=8 个默认品种）")
+    prv2.set_defaults(func=cmd_report_v2)
     pcl = sub.add_parser("claims", help="主张权限清单：每条指标主张的角色、证据等级、允许用途（Codex 015）")
     pcl.set_defaults(func=lambda a: (print(__import__("undertow.analyze.claims", fromlist=["x"]).render_md()), 0)[1])
 

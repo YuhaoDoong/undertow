@@ -229,8 +229,15 @@ set +e
 REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq tlt spy iwm \
              --no-snapshot --status-file "$RPT_ST" 2>&1)
 RPT_RC=$?
+# 新研报体系 v2（用户 2026-09-30：「新建个研报体系……先只放期权墙……之前的研报也照常出」）：只放已证实内容，
+# 目前只有期权墙总览；只读已落盘快照。失败只告警，不影响旧研报与后续步骤。
+V2_OUT=$(python3 -m undertow report-v2 2>&1); V2_RC=$?
 set -e
 echo "$REPORT_OUT"
+printf '%s\n' "$V2_OUT" | tail -1
+if (( V2_RC != 0 && V2_RC != 3 )); then          # rc=3 = 有品种当日快照未到（正常，下一次 daily 再生成）
+  alert "⚠️ 研报 v2 未完整生成（ET $ET_NOW）" "$(printf '%s' "$V2_OUT" | tail -1 | cut -c1-120)"
+fi
 RPT_JSON=$(python3 - "$RPT_ST" <<'PYEOF'
 import json, sys
 try:

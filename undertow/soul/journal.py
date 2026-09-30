@@ -59,6 +59,11 @@ class Thesis:
     scored_at: str = ""
     review: str = ""           # 事后评述：哪条依据成立/不成立
     trade_pnl: float | None = None   # 对应交易的盈亏（可与 outcome 背离）
+    # —— 模拟仓（scripts/paper_trades.py 写入，2026-09-29 起）——
+    # 漏了这两个字段时 load_theses 整体报错：9/29 盘前起「事前判断行情」捕获全部 rc=1、一份没存（2026-09-30 发现）。
+    # save 用 asdict 回写，缺字段还会把模拟仓规格与事件整段丢掉。
+    entry_rule: str = ""
+    paper: dict | None = None
 
 
 @dataclass(frozen=True)

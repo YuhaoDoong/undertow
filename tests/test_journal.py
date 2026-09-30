@@ -107,3 +107,19 @@ if __name__ == "__main__":
     for fn in fns:
         fn()
     print(f"\n{len(fns)} tests passed.")
+
+
+def test_theses_with_paper_fields_load_and_survive_save(tmp_path):
+    """模拟仓写入的 entry_rule / paper 字段：9/29 起 load_theses 因不认识它们整体报错，
+    「事前判断行情」捕获连续失败一天多；save_journal 用 asdict 回写，缺字段还会把模拟仓规格整段丢掉。"""
+    import json
+    from undertow.soul.journal import load_theses, save_journal
+    p = tmp_path / "journal.json"
+    paper = {"side": "C", "structure": "debit", "state": "planned", "events": [{"action": "prep_selection"}]}
+    p.write_text(json.dumps({"entries": [], "theses": [
+        {"id": "x", "date": "2026-09-30", "instrument": "USO", "direction": "看涨", "execution": "模拟",
+         "entry_rule": "user-debit-atm-v1", "paper": paper}]}, ensure_ascii=False), "utf-8")
+    t = load_theses(p)[0]
+    assert t.entry_rule == "user-debit-atm-v1" and t.paper == paper
+    save_journal([], p)
+    assert json.loads(p.read_text("utf-8"))["theses"][0]["paper"] == paper

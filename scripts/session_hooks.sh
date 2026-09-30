@@ -175,7 +175,7 @@ fieldcheck() {  # $1=phase
 # ⑨ 事前判断行情捕获（用户 2026-09-28）：近期未验证的事前判断涉及的品种，盘前（含夜盘结果）与收盘后各存一份行情原文，
 # 写 data/soul/thesis_quotes.jsonl（私有，不入库）。只存不判，打分事后按判断里写明的口径做。
 thesisq() {  # $1=pre|close
-  local OKF="$LOG_DIR/.thesisq_${1}_${ET_DATE}.ok"
+  local OKF="$LOG_DIR/.thesisq_${1}_${ET_DATE}.ok" FAILF="$LOG_DIR/.thesisq_fail_${1}_${ET_DATE}"
   [[ -f "$OKF" ]] && return
   IN_SHADOW=1
   local RES RC
@@ -184,6 +184,11 @@ thesisq() {  # $1=pre|close
     : > "$OKF"; hb "⑨事前判断行情 ${1}：✅ $(printf '%s' "$RES" | tail -1 | clip 60)"
   else
     hb "⑨事前判断行情 ${1}：⏳ rc=$RC，下次唤醒重试"
+    # 2026-09-29~30：journal 读取报错，这里连续 rc=1 一天多只写日志、没人知道（静默失败第 1 条）→ 连续 3 次通知一次
+    printf 'x' >> "$FAILF"
+    if [[ $(wc -c < "$FAILF") -eq 3 ]]; then
+      notify "⚠️ 事前判断行情 ${1} 连续失败" "$(printf '%s' "$RES" | tail -1 | clip 160)"
+    fi
   fi
 }
 # ⑩ 收盘后存当天逐分钟（用户 2026-09-28「记住数据最重要」）：longbridge intraday 只能取【当天】、不占按自然月计的

@@ -41,7 +41,8 @@ LEDGER = ROOT / "data/soul/paper_discretionary.jsonl"
 ET = ZoneInfo("America/New_York")
 RULE_VERSION = "paper-sim-v2-20260929"
 RTH = (time(9, 30), time(16, 0))
-TERMINAL = ("settled", "closed_stop", "skipped", "missed", "invalid_spec")
+TERMINAL = ("settled", "closed_stop", "closed_manual", "skipped", "missed", "invalid_spec")
+STRIKE_RULES = ("wall-dynamic-v1", "user-sell-fixed-v1")
 
 
 def _hm(s: str) -> time:
@@ -66,8 +67,11 @@ def economics(side: str, k_sell: float, k_buy: float, credit: float, qty: int, f
 
 def validate_spec(p: dict) -> str | None:
     if p.get("strike_rule") and p.get("state") == "planned":          # 自动选档：入场前没有固定档位
-        if p["strike_rule"] != "wall-dynamic-v1":
+        if p["strike_rule"] not in STRIKE_RULES:
             return f"未知选档规则 {p['strike_rule']}"
+        if p["strike_rule"] == "user-sell-fixed-v1" and not (_finite(p.get("k_sell"), p.get("target_width"))
+                                                              and p["target_width"] > 0):
+            return "user-sell-fixed-v1 需要 k_sell 与正的 target_width"
         if p.get("side") not in ("P", "C") or not (isinstance(p.get("qty"), int) and p["qty"] > 0):
             return "side 须为 P/C、qty 须为正整数"
         if not _finite(p.get("min_credit_ratio"), p.get("stop_mult"), p.get("fee_round_trip")):
@@ -256,7 +260,64 @@ def wall_change_reason(prev_sel: dict | None, sel: dict) -> str:
     return "unchanged"
 
 
-def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, selector=_dynamic_select) -> str | None:
+def _user_sell_select(p: dict, now: datetime) -> dict:
+    """user-sell-fixed-v1（用户 2026-09-30：「档位我选卖腿黄金380，白银卖腿55，保护腿你来挑吧，价差5左右看成交」）：
+    卖腿固定为用户指定行权价；保护腿在宽度 [target−1, target+1] 内、有有效 ask 的挂牌行权价里取最接近 target 的
+    （并列取更宽的，保护更远）。不设权利金比例门槛（用户批次），但仍要 0 < 权利金 < 宽度、含费最大收益 > 0、无交叉报价。"""
+    from undertow.collect.cboe_options import snapshot_from_payload
+    from undertow.collect.longbridge_bars import option_symbol
+    from undertow.collect.longbridge_quote import fetch_stock_quotes
+    from undertow.collect.store import SnapshotStore
+    from undertow.core.config import load_config
+    from undertow.dirledger_cli import session_index
+    root = p["underlying"].split(".")[0]
+    today = now.astimezone(ET).date()
+    cfg, st = load_config(), SnapshotStore()
+    key = next(k for k, i in cfg.instruments.items() if i.options and i.options.symbol == root)
+    f = session_index(st, root).get(today) or session_index(st, root).get(max(d for d in session_index(st, root) if d <= today))
+    snap = snapshot_from_payload(st.load("options", root, f), key, root)
+    ks, tw, up = float(p["k_sell"]), float(p["target_width"]), p["side"] == "C"
+    listed = sorted({c.strike for c in snap.contracts if c.expiry.isoformat() == p["expiry"] and c.kind == p["side"]})
+    cands = [k for k in listed if (k > ks if up else k < ks) and tw - 1 <= abs(k - ks) <= tw + 1]
+    syms = {k: option_symbol(root, p["expiry"], p["side"], k) for k in [ks] + cands}
+    d = _depth(list(syms.values()))
+    quotes = {k: d[v] for k, v in syms.items()}
+    sq = fetch_stock_quotes([p["underlying"]])[p["underlying"]]
+    base = {"rule": "user-sell-fixed-v1", "sell": ks, "nearest_wall": None,
+            "inputs": {"spot": sq.last, "spot_fetched_at": datetime.now(timezone.utc).isoformat(),
+                       "quotes": {str(k): v for k, v in quotes.items()}, "symbols": {str(k): v for k, v in syms.items()},
+                       "oi_snapshot": str(st.path_of("options", root, f)), "params_hash": f"target_width={tw}"}}
+    return {**base, **pick_protective(p["side"], ks, tw, cands, quotes, p["qty"], p["fee_round_trip"])}
+
+
+def pick_protective(side: str, ks: float, tw: float, cands: list, quotes: dict, qty: int, fee: float) -> dict:
+    """纯函数：卖腿 ks 固定；保护腿在宽度 [tw−1, tw+1] 的候选里按「离 tw 最近、并列取更宽」依次试，
+    第一个有有效 ask、无交叉、0 < 权利金 < 宽度、含费最大收益 > 0 的即选定。卖腿须有有效 bid。"""
+    from scripts.paper_strike_rule import _crossed, _ok
+    qs = quotes.get(ks) or {}
+    if qs.get("error") or not _ok(qs.get("bid")) or _crossed(qs):
+        return {"ok": False, "reason": f"sell_no_bid_or_crossed（{ks:g}）"}
+    tried = []
+    for kb in sorted((k for k in cands if tw - 1 <= abs(k - ks) <= tw + 1), key=lambda k: (abs(abs(k - ks) - tw), -abs(k - ks))):
+        qb = quotes.get(kb) or {}
+        if qb.get("error") or not _ok(qb.get("ask")) or _crossed(qb):
+            tried.append({"buy": kb, "reject": "buy_no_ask_or_crossed"}); continue
+        w = abs(kb - ks)
+        cr = round(qs["bid"] - qb["ask"], 4)
+        if not 0 < cr < w:
+            tried.append({"buy": kb, "credit": cr, "reject": "credit_outside_0_width"}); continue
+        e = economics(side, ks, kb, cr, qty, fee)
+        if e["max_gain_usd"] <= 0:
+            tried.append({"buy": kb, "credit": cr, "reject": "fee_exceeds_credit"}); continue
+        tried.append({"buy": kb, "credit": cr, "reject": None})
+        return {"ok": True, "buy": kb, "width": w, "credit": cr, "credit_ratio": round(cr / w, 4), "economics": e, "tried": tried}
+    return {"ok": False, "reason": "no_protective_leg（宽度 target±1 内无可成交保护腿）", "tried": tried}
+
+
+_SELECTORS = {"wall-dynamic-v1": "_dynamic_select", "user-sell-fixed-v1": "_user_sell_select"}
+
+
+def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, selector=None) -> str | None:
     """推进一步；返回动作名（None = 没到点）。纯逻辑 + 注入的取数函数，便于测试。"""
     et = now.astimezone(ET)
     today = et.date()
@@ -271,7 +332,7 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
         return "invalid_spec"
     p.setdefault("rule_version", RULE_VERSION)
     if st == "planned" and p.get("strike_rule"):
-        return _step_dynamic(p, now, selector)
+        return _step_dynamic(p, now, selector or globals()[_SELECTORS[p["strike_rule"]]])
     width = abs(p["k_sell"] - p["k_buy"])
     if st == "planned":
         lo, hi = (_hm(x) for x in p["entry_window_et"])
@@ -333,21 +394,66 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
         if key in done or today > exp or et.time() < t0 or (et.hour * 60 + et.minute) > t0.hour * 60 + t0.minute + 15:
             continue
         q = depth([p["sell"], p["buy"]])
-        s, b = q.get(p["sell"]), q.get(p["buy"])
-        if not (quote_ok(s) and quote_ok(b)):
+        v = close_value(q, p)
+        if v is None:
             ev.append({"at": now.isoformat(), "action": "mark_retry", "slot": key, "quotes": q})
             return "retry"
-        val = round(s["ask"] - b["bid"], 4)
+        val, assume = v
         in_rth = RTH[0] <= et.time() < RTH[1]
         ev.append({"at": now.isoformat(), "action": "mark" if in_rth else "mark_offhours", "slot": key,
-                   "quotes": q, "value": val, "note": "稀疏检查（非连续止损）" + ("" if in_rth else "；非常规时段只估值、不执行")})
+                   "quotes": q, "value": val, "valuation_assumption": assume,
+                   "note": "稀疏检查（非连续止损）" + ("" if in_rth else "；非常规时段只估值、不执行")})
+        pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
         if in_rth and val >= p["stop_value"]:
-            pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
             p.update(state="closed_stop", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
             ev.append({"at": now.isoformat(), "action": "stop", "value": val, "pnl": pnl})
             return "stop"
         return "mark"
     return None
+
+
+def close_value(q: dict, p: dict):
+    """平仓估值 = 卖腿 ask − 买腿 bid。卖腿必须有有效 ask；保护腿常无买盘 → 买腿 bid 缺失时按 0 计（保守：平仓收不回它），
+    并返回估值假设（Codex 028：缺保护腿 bid 不能静默折零、须单列假设）。报价不可用 → None。"""
+    s, b = q.get(p["sell"]), q.get(p["buy"])
+    s_ok = s is not None and not s.get("error") and _finite(s.get("ask")) and s["ask"] > 0 and \
+        not (_finite(s.get("bid")) and s["bid"] > s["ask"])
+    b_bid = b.get("bid") if b else None
+    b_ok = b is not None and not b.get("error") and (b_bid is None or (_finite(b_bid) and b_bid >= 0)) and \
+        not (_finite(b_bid) and _finite(b.get("ask")) and b_bid > b["ask"])
+    if not (s_ok and b_ok):
+        return None
+    assume = None if _finite(b_bid) and b_bid > 0 else "buy_bid_missing→按 0 计（保守）"
+    return round(s["ask"] - (b_bid if assume is None else 0.0), 4), assume
+
+
+def manual_close(tid: str, note: str, now: datetime | None = None, *, depth=_depth) -> dict:
+    """用户主动提前平仓（用户 2026-09-30：「提前平仓可以由我来主动提。暂时可以先不加规则」）：
+    按当时保守报价（卖腿 ask、买腿 bid，缺买盘按 0 并标注）平仓，记 closed_manual 与用户原话。与 tick 共用锁。"""
+    now = now or datetime.now(timezone.utc)
+    with open(LOCK, "a+") as lk:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+        j = json.loads(JOURNAL.read_text("utf-8"))
+        t = next((x for x in j.get("theses", []) if x["id"] == tid), None)
+        if t is None or (t.get("paper") or {}).get("state") != "entered":
+            return {"ok": False, "why": f"{tid} 不存在或不在场"}
+        p = t["paper"]
+        q = depth([p["sell"], p["buy"]])
+        v = close_value(q, p)
+        if v is None:
+            p["events"].append({"at": now.isoformat(), "action": "manual_close_retry", "quotes": q, "note": note})
+            _write_journal(j)
+            return {"ok": False, "why": "报价不可用，未平仓（已留痕）"}
+        val, assume = v
+        in_rth = RTH[0] <= now.astimezone(ET).time() < RTH[1]
+        pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
+        p.update(state="closed_manual", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
+        p["events"].append({"at": now.isoformat(), "action": "manual_close", "quotes": q, "value": val, "pnl": pnl,
+                            "valuation_assumption": assume, "in_rth": in_rth, "user_note": note})
+        _outcome(t)
+        _write_journal(j)
+        sync_ledger(j)
+        return {"ok": True, "value": val, "pnl_usd": pnl, "valuation_assumption": assume, "in_rth": in_rth}
 
 
 def _step_dynamic(p: dict, now: datetime, selector) -> str | None:
@@ -357,6 +463,15 @@ def _step_dynamic(p: dict, now: datetime, selector) -> str | None:
     ev = p.setdefault("events", [])
     lo, hi = (_hm(x) for x in p["entry_window_et"])
     ed = date.fromisoformat(p["entry_date"])
+    prep = _hm(p["prep_from_et"]) if p.get("prep_from_et") else None
+    if today == ed and prep is not None and prep <= et.time() < lo:
+        # 入场前预取盘面与数据（用户 2026-09-30：「10点前就要获取盘面和数据了」）：只记录预选，不入场
+        done_prep = [e for e in ev if e.get("action") == "prep_selection" and e.get("at", "")[:16] == now.isoformat()[:16]]
+        if done_prep:
+            return None
+        sel = selector(p, now)
+        ev.append({"at": now.isoformat(), "action": "prep_selection", "selection": sel})
+        return "prep"
     if today < ed or (today == ed and et.time() < lo):
         return None
     if today > ed or et.time() >= hi:
@@ -366,7 +481,7 @@ def _step_dynamic(p: dict, now: datetime, selector) -> str | None:
         ev.append({"at": now.isoformat(), "action": p["state"], "why": p["skip_reason"]})
         return p["state"]
     sel = selector(p, now)
-    prev = next((e["selection"] for e in reversed(ev) if e.get("action") == "selection"), None)
+    prev = next((e["selection"] for e in reversed(ev) if e.get("action") in ("selection", "prep_selection")), None)
     reason = wall_change_reason(prev, sel)
     ev.append({"at": now.isoformat(), "action": "selection", "selection": sel, "wall_change_reason": reason})
     if not sel.get("ok"):
@@ -387,7 +502,7 @@ def _step_dynamic(p: dict, now: datetime, selector) -> str | None:
 
 def _outcome(t: dict) -> None:
     p = t["paper"]
-    if p["state"] in ("settled", "closed_stop"):
+    if p["state"] in ("settled", "closed_stop", "closed_manual"):
         t["trade_pnl"] = f"{p['pnl_usd']:.2f}"
         full = p["state"] == "settled" and p.get("settle_value", 1) == 0
         t["outcome"] = "对" if full else ("错" if p["pnl_usd"] < 0 else "部分")
@@ -398,7 +513,8 @@ def _outcome(t: dict) -> None:
 
 
 OUTCOME_ACTIONS = ("enter", "skipped", "missed", "invalid_spec", "stop", "settle")
-LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit",)
+MANUAL_ACTIONS = ("manual_close",)
+LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit",) + MANUAL_ACTIONS
 
 
 def event_id(thesis_id: str, e: dict) -> str:
@@ -571,6 +687,10 @@ def size_report(theses: list) -> dict:
 
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
+    if cmd == "close":                                   # python3 scripts/paper_trades.py close <id> "用户原话"
+        r = manual_close(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "")
+        print(json.dumps(r, ensure_ascii=False))
+        return 0 if r.get("ok") else 1
     if cmd == "report":
         j = json.loads(JOURNAL.read_text("utf-8"))
         rep = size_report(j.get("theses", []))

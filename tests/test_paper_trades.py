@@ -312,3 +312,42 @@ def test_dynamic_window_end_skipped_or_missed_and_oi_update_reason():
     q = _dyn()
     assert pt.step(q, datetime(2026, 10, 1, 10, 5, tzinfo=ET), selector=lambda p, n: _sel()) == "missed"
     assert pt.validate_spec(_dyn(strike_rule="other")) and pt.validate_spec(_dyn()) is None
+
+
+
+def test_pick_protective_width_near_target_and_liquidity():
+    """用户批次：卖腿固定，保护腿宽度 5 左右「看成交」——离 5 最近、并列取更宽；无 ask 的跳过。"""
+    Q = lambda b, a: {"bid": b, "ask": a, "error": ""}
+    quotes = {380: Q(4.4, 4.6), 385: Q(1.8, 1.9), 384: Q(2.1, 2.2), 386: Q(1.5, 1.6), 390: Q(0.5, 0.6)}
+    r = pt.pick_protective("C", 380, 5, [384, 385, 386, 390], quotes, 1, 3.2)
+    assert r["ok"] and r["buy"] == 385 and r["credit"] == 2.5 and r["economics"]["max_loss_usd"] == 253.2
+    quotes[385] = {"bid": 1.8, "ask": None, "error": ""}
+    r = pt.pick_protective("C", 380, 5, [384, 385, 386, 390], quotes, 1, 3.2)
+    assert r["buy"] == 386 and r["tried"][0] == {"buy": 385, "reject": "buy_no_ask_or_crossed"}   # 4 与 6 并列 → 更宽
+    assert not pt.pick_protective("C", 380, 5, [390], quotes, 1, 3.2)["ok"]                          # 宽度 10 超出 5±1
+
+
+def test_prep_selection_before_window_does_not_enter():
+    p = _dyn(prep_from_et="09:40")
+    a = pt.step(p, datetime(2026, 9, 30, 9, 45, tzinfo=ET), selector=lambda p, n: _sel())
+    assert a == "prep" and p["state"] == "planned" and p["events"][-1]["action"] == "prep_selection"
+    assert pt.step(p, datetime(2026, 9, 30, 10, 1, tzinfo=ET), selector=lambda p, n: _sel()) == "enter"
+    assert [e for e in p["events"] if e["action"] == "selection"][-1]["wall_change_reason"] == "unchanged"
+
+
+def test_close_value_missing_buy_bid_is_conservative_and_labelled():
+    p = {"sell": "S", "buy": "B"}
+    assert pt.close_value({"S": {"bid": 1.0, "ask": 1.1, "error": ""}, "B": {"bid": 0.4, "ask": 0.5, "error": ""}}, p) == (0.7, None)
+    v, why = pt.close_value({"S": {"bid": 1.0, "ask": 1.1, "error": ""}, "B": {"bid": None, "ask": 0.02, "error": ""}}, p)
+    assert v == 1.1 and "按 0 计" in why
+    assert pt.close_value({"S": {"bid": 1.2, "ask": 1.1, "error": ""}, "B": {"bid": 0.4, "ask": 0.5, "error": ""}}, p) is None
+
+
+def test_manual_close_user_initiated(tmp_path, monkeypatch):
+    p = _entered(); p["events"] = p["events"]
+    load = _env(tmp_path, monkeypatch, [{"id": "M", "execution": "模拟", "paper": p}])
+    r = pt.manual_close("M", "用户：平掉", datetime(2026, 9, 30, 11, 0, tzinfo=ET), depth=q(1.0, 1.1, 0.5, 0.6))
+    st = load()["M"]["paper"]
+    assert r["ok"] and st["state"] == "closed_manual" and st["close_value"] == 0.6
+    assert st["pnl_usd"] == round((0.41 - 0.6) * 100 - 3.2, 2) and st["events"][-1]["user_note"] == "用户：平掉"
+    assert not pt.manual_close("M", "再平", depth=q(1.0, 1.1, 0.5, 0.6))["ok"]            # 已平仓不能再平

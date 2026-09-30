@@ -223,8 +223,11 @@ def intraday_quality(rows: list, day: date) -> dict:
         return {"label": "invalid", "why": "时间戳不在整分钟栅格", "n": len(rows)}
     if ts != sorted(ts) or len(set(ts)) != len(ts):
         return {"label": "invalid", "why": "时间未排序或有重复", "n": len(rows)}
-    if any(p <= 0 for p in px) or any(v < 0 for v in vol) or any(x < 0 for x in tov):
-        return {"label": "invalid", "why": "价格非正或成交量/成交额为负", "n": len(rows)}
+    # 价格 0 只在该分钟成交量也为 0 时合法：长桥在当天首笔成交之前的分钟返回 price=0、volume=0（「尚未成交」）。
+    # 2026-09-29 首版把所有 price≤0 判 invalid，没成交过的早盘分钟让正常合约永远 pending（⑩ 对一个合约重试了 64 次）。
+    if any(p < 0 for p in px) or any(p == 0 and v > 0 for p, v in zip(px, vol)) or any(v < 0 for v in vol) \
+            or any(x < 0 for x in tov):
+        return {"label": "invalid", "why": "价格为负、有成交却价格为 0，或成交量/成交额为负", "n": len(rows)}
     sm = session_minutes(day)
     if sm is None:
         return {"label": "invalid", "why": "非交易日", "n": len(rows)}

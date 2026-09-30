@@ -404,3 +404,15 @@ def test_shadow_sample_reports_only_this_run(tmp_path, status, rc, good):
     py = {"stale_rid": _st("shadow sample", "complete", "'old'"), "crash": ""}.get(status, _st("shadow sample", status))
     log = _run_hook(tmp_path, _fake_py(tmp_path, py, rc), "shadow_sample 585 779")
     assert ("✅" in log) is good and ("⏳" in log) is (not good)
+
+
+
+def test_zero_price_before_first_trade_is_valid():
+    """长桥在当天首笔成交之前返回 price=0、volume=0：属正常「尚未成交」，不能判 invalid（2026-09-29 首版误判）。"""
+    rows = _rows()
+    for r in rows[:30]:
+        r[1], r[2], r[3] = "0", "0", "0"
+    q = lbb.intraday_quality(rows, D)
+    assert q["label"] == "full_session" and q["traded_minutes"] == 360
+    rows[40][1] = "0"                                                           # 有成交量却价格为 0 → 异常
+    assert lbb.intraday_quality(rows, D)["label"] == "invalid"

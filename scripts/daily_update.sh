@@ -325,6 +325,12 @@ if [[ -f data/soul/author_levels.jsonl ]]; then
   AL_OUT=$(python3 scripts/author_levels_score.py 2>&1); AL_RC=$?
   (( AL_RC != 0 )) && alert "⚠️ 作者价位计分失败（ET $ET_NOW）" "$(printf '%s' "$AL_OUT" | tail -1 | cut -c1-120)"
 fi
+# 资金流买卖方推断验证（协议 docs/prereg/2026-09-29_flow_side_check_v0.md）：对前一交易日 X 对照（需今天盘前快照 = X 的结算）；失败不阻断
+FS_DAY=$(python3 -c 'from undertow.core import market_calendar as mc; from undertow.core.clock import market_today; print(mc.prev_trading_day(market_today()))' 2>/dev/null)
+if [[ -n "$FS_DAY" ]]; then
+  FS_OUT=$(python3 scripts/flow_side_check.py "$FS_DAY" gold silver 2>&1); FS_RC=$?
+  (( FS_RC != 0 )) && alert "⚠️ 资金流验证对照失败（ET $ET_NOW）" "$(printf '%s' "$FS_OUT" | tail -1 | cut -c1-120)"
+fi
 # 逐到期持仓画像（用户 2026-09-29：到期日类型 Q/M/W 与磁吸研究）：开盘前首份冻结，只记录不产生信号
 EP_OUT=$(python3 -m undertow shadow expiry-profile 2>&1); EP_RC=$?
 set -e

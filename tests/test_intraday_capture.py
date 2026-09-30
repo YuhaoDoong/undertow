@@ -261,8 +261,8 @@ intraday_capture
 
 def test_session_hook_runs_intraday_after_close():
     src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
-    assert src.index("intraday_capture() {") < src.index("then intraday_capture; fi")
-    assert "(( ET_MIN >= 965 )); then intraday_capture; fi" in src and "shadow intraday" in src
+    assert src.index("intraday_capture() {") < src.index("then intraday_capture; flowside_capture; fi")
+    assert "(( ET_MIN >= 965 )); then intraday_capture; flowside_capture; fi" in src and "shadow intraday" in src
     assert "lock_intraday" not in src                                                    # 旧 mkdir 锁已移除
 
 
@@ -416,3 +416,10 @@ def test_zero_price_before_first_trade_is_valid():
     assert q["label"] == "full_session" and q["traded_minutes"] == 360
     rows[40][1] = "0"                                                           # 有成交量却价格为 0 → 异常
     assert lbb.intraday_quality(rows, D)["label"] == "invalid"
+
+
+def test_flowside_capture_wired_after_intraday_and_defined_before_use():
+    src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
+    assert src.index("flowside_capture() {") < src.index("intraday_capture; flowside_capture; fi")
+    daily = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
+    assert "scripts/flow_side_check.py" in daily and "FS_RC" in daily

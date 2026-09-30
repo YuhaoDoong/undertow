@@ -207,6 +207,21 @@ intraday_capture() {
     fi
   fi
 }
+# ⑬ 资金流买卖方推断验证的采集（用户 2026-09-29「1 做一下」；协议 docs/prereg/2026-09-29_flow_side_check_v0.md）：
+# ET 16:05 起抓当天金银近价合约逐分钟（共用 ⑩ 的锁与存储，不占历史 K 线配额）；全部终态才写哨兵，否则下次唤醒重试。
+flowside_capture() {
+  local OKF="$LOG_DIR/.flowside_${ET_DATE}.ok" RES RC
+  [[ -f "$OKF" ]] && return
+  IN_SHADOW=1
+  RES=$("$PY" scripts/flow_side_capture.py gold silver 2>&1); RC=$?
+  if (( RC == 0 )); then
+    : > "$OKF"; hb "⑬资金流验证采集：✅ $(printf '%s' "$RES" | tail -1 | clip 120)"
+  elif (( RC == 4 )); then
+    hb "⑬资金流验证采集：⑩ 仍在运行（锁），跳过"
+  else
+    hb "⑬资金流验证采集：⏳ rc=$RC $(printf '%s' "$RES" | tail -1 | clip 120)"
+  fi
+}
 # ⑪ 收盘后备份（用户 2026-09-28「数据最重要」；Codex 024-6）：ET 16:40 起把当天自动任务写下的数据提交并推送，
 # 不等次日凌晨。只发布 allowlist 目录（data/history、data/snapshots），只提交【自动任务自己的产物】
 # （publish_dirs 用共享待发布记录判定，他人改动不带入；data/soul、data/account 本就 gitignore）；全局发布锁见 lib_publish。
@@ -260,7 +275,7 @@ if (( SHW_RC == 0 )); then
   if [[ -n "$SHW" ]]; then                      # 交易日
     if (( ET_MIN >= 540 && ET_MIN < 570 )); then fieldcheck pre; thesisq pre; fi
     if (( ET_MIN >= 640 && ET_MIN < 980 )); then fieldcheck open; fi
-    if (( ET_MIN >= 965 )); then intraday_capture; fi
+    if (( ET_MIN >= 965 )); then intraday_capture; flowside_capture; fi
     if (( ET_MIN >= 1000 )); then close_backup; fi
     if (( ET_MIN >= 980 )); then fieldcheck close; thesisq close; fi
   fi

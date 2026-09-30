@@ -60,7 +60,7 @@ def main():
             fcntl.flock(lk.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             print("⑩ 当天逐分钟仍在运行（锁被占），本次跳过。"); return 4
-        tot = full = req = 0
+        tot = full = req = pend = 0
         for k in insts:
             root, syms = plan(k, day)
             path = lbb.path_of(root, day, lbb.INTRADAY_DIR)
@@ -77,12 +77,12 @@ def main():
             if todo:
                 lbb.save_day(path, cur)
             st = [lbb.symbol_state(cur["contracts"].get(s)) for s in syms]
-            tot += len(syms); full += st.count("complete")
+            tot += len(syms); full += st.count("complete"); pend += st.count("pending")
             print(f"  {root}: 计划 {len(syms)}，本次请求 {len(todo)}，完成 {st.count('complete')}，"
                   f"确认空 {st.count('empty_confirmed')}，待续 {st.count('pending')}")
         fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
-    print(f"资金流验证采集 {day}：计划 {tot}、完成 {full}、本次请求 {req}")
-    return 0
+    print(f"资金流验证采集 {day}：计划 {tot}、完成 {full}、本次请求 {req}、待续 {pend}")
+    return 1 if pend else 0                           # 有待续 → rc=1，调度层下次唤醒重试
 
 
 if __name__ == "__main__":

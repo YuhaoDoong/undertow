@@ -229,5 +229,5 @@ def wall_overview(curr: OptionsSnapshot, *, today: date, band: float = OVERVIEW_
             continue
         rows.append({"expiry": e, "etype": et, "dte": (e - today).days, "total_call": tot[e][0], "total_put": tot[e][1],
                      "put_top": top(near[e]["P"]), "call_top": top(near[e]["C"])})
-    return {"spot": spot, "band": band, "rows": rows, "agg_days": OVERVIEW_AGG_DAYS,
+    return {"spot": spot, "band": band, "rows": rows, "agg_days": OVERVIEW_AGG_DAYS, "asof": getattr(curr, "asof", ""),
             "agg_put_top": top(agg["P"]), "agg_call_top": top(agg["C"])}

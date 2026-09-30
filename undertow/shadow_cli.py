@@ -1261,8 +1261,10 @@ def expiry_profile_row(inst: str, sym: str, session: date, snap, ident: dict | N
         exps.append({"expiry": exp.isoformat(), "type": t["type"], "is_monthly": t["is_monthly"],
                      "is_quarterly": t["is_quarterly"], "dte": (exp - session).days,
                      "oi_c": e["oi"]["C"], "oi_p": e["oi"]["P"], "vol_c": e["vol"]["C"], "vol_p": e["vol"]["P"],
-                     "top_c": sorted(sorted(e["near"]["C"].items(), key=lambda x: -x[1])[:5]),
-                     "top_p": sorted(sorted(e["near"]["P"].items(), key=lambda x: -x[1])[:5])})
+                     # 存成 [行权价, OI] 列表：元组写成 JSON 后读回是列表，元组 ≠ 列表会让 jsonl 回读校验恒失败
+                     #（2026-09-29 首日所有品种都因此没写进去）
+                     "top_c": [[k, v] for k, v in sorted(sorted(e["near"]["C"].items(), key=lambda x: -x[1])[:5])],
+                     "top_p": [[k, v] for k, v in sorted(sorted(e["near"]["P"].items(), key=lambda x: -x[1])[:5])]})
     return {"key": f"{inst}|{session.isoformat()}", "instrument": inst, "symbol": sym, "session": session.isoformat(),
             "recorded_at": now.astimezone(timezone.utc).isoformat(),
             "before_open": now.astimezone(ET) < datetime.combine(session, datetime.min.time(), tzinfo=ET).replace(hour=9, minute=30),

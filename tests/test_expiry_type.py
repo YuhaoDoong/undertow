@@ -32,5 +32,23 @@ def test_expiry_profile_row_types_and_top_strikes():
                                 datetime(2026, 9, 29, 9, 0, tzinfo=timezone.utc))
     e = {x["expiry"]: x for x in row["expiries"]}
     assert set(e) == {"2026-09-30", "2026-10-16"} and e["2026-09-30"]["type"] == "Q" and e["2026-10-16"]["type"] == "M"
-    assert e["2026-09-30"]["top_p"] == [[95, 700], [98, 400]] or e["2026-09-30"]["top_p"] == [(95, 700), (98, 400)]
+    assert e["2026-09-30"]["top_p"] == [[95, 700], [98, 400]] and isinstance(e["2026-09-30"]["top_p"][0], list)
     assert e["2026-09-30"]["oi_p"] == 700 + 400 + 9999 and row["before_open"] is True
+
+
+def test_expiry_profile_row_survives_real_jsonl_write(tmp_path):
+    """2026-09-29 首日：top_c/top_p 是元组，写成 JSON 读回是列表 → jsonl 回读校验恒失败，所有品种一行都没写进去。
+    旧测试只比对内存里的行（还接受元组），没走真实写盘。"""
+    from datetime import datetime, timezone
+    from types import SimpleNamespace as NS
+    from undertow import shadow_cli as sc
+    from undertow.collect import jsonl_ledger as jl
+    C = lambda e, k, s, oi: NS(expiry=e, kind=k, strike=s, open_interest=oi, volume=1)
+    snap = NS(spot=100.0, contracts=[C(date(2026, 9, 30), "P", 95, 700), C(date(2026, 9, 30), "C", 105, 500)])
+    row = sc.expiry_profile_row("gold", "GLD", date(2026, 9, 29), snap, {"sha256": "x", "captured_at": 1.0},
+                                datetime(2026, 9, 29, 9, 0, tzinfo=timezone.utc))
+    p = tmp_path / "gold.jsonl"
+    fz = lambda r: {k: v for k, v in r.items() if k not in ("recorded_at", "before_open")}
+    assert jl.insert_frozen(p, row, key_field="key", frozen=fz) == "inserted"
+    assert jl.insert_frozen(p, row, key_field="key", frozen=fz) == "exists"
+    assert jl.load(p, "key")[0]["expiries"][0]["top_p"] == [[95, 700]]

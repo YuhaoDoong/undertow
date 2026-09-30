@@ -13,6 +13,14 @@ from scripts import paper_trades as pt  # noqa: E402
 ET = ZoneInfo("America/New_York")
 
 
+@pytest.fixture(autouse=True)
+def _frozen_clock(monkeypatch):
+    """选档取回时刻 = max(请求时刻, _clock())。测试里的请求时刻是写死的 2026-09-30 等日期；若用真实时钟，
+    真实时间一过这些日期的入场窗口，所有自动选档测试都会变成 skipped。固定成远古时刻 → 取回时刻 = 请求时刻；
+    需要模拟慢取回的测试自己再 monkeypatch。"""
+    monkeypatch.setattr(pt, "_clock", lambda: datetime(2000, 1, 1, tzinfo=ET))
+
+
 def _p(**kw):
     p = {"underlying": "GLD.US", "expiry": "2026-09-30", "side": "P", "sell": "S", "buy": "B", "k_sell": 375.0,
          "k_buy": 373.0, "qty": 1, "entry_date": "2026-09-29", "entry_window_et": ["10:00", "10:20"],
@@ -415,3 +423,88 @@ def test_claude_exit_rule_take_profit_and_time_exit():
     assert r == "time_exit" and p2["state"] == "closed_time"                             # DTE=3
     p3 = _entered(); p3["expiry"] = "2026-10-16"                                          # 用户批次：没有 exit_rule，不自动出场
     assert pt.step(p3, at(30, 9, 46), depth=q(0.2, 0.25, 0.1, 0.12)) == "mark" and p3["state"] == "entered"
+
+
+# —— 借记价差（用户 2026-09-30 原油：「牛市看涨价差……干脆就买方」）——
+
+def _debit(**kw):
+    """牛市看涨价差：买 144C（buy/k_buy）、卖 154C（sell/k_sell）。"""
+    return _p(**{"underlying": "USO.US", "expiry": "2026-10-30", "side": "C", "structure": "debit",
+                 "k_sell": 154.0, "k_buy": 144.0, "stop_mult": None, "min_credit_ratio": None,
+                 "entry_date": "2026-09-30", "entry_window_et": ["10:00", "10:30"], **kw})
+
+
+def test_debit_economics_and_direction_check():
+    e = pt.economics("C", 154, 144, -3.5, 1, 3.2)
+    assert e["structure"] == "debit" and e["debit"] == 3.5
+    assert e["max_loss_usd"] == 353.2 and e["max_gain_usd"] == 646.8 and e["breakeven"] == pytest.approx(147.532)
+    assert pt.economics("P", 140, 150, -4.0, 1, 3.2)["breakeven"] == pytest.approx(150 - 4 - 0.032)    # 熊市看跌价差
+    assert pt.validate_spec(_debit()) is None
+    assert "腿方向" in pt.validate_spec(_debit(k_sell=140.0))                  # 声明借记、腿却是贷记方向
+    assert "腿方向" in pt.validate_spec(_p(side="C", k_sell=154.0, k_buy=144.0))   # 未声明借记（默认贷记）
+    assert pt.validate_spec(_debit(stop_mult=2.0))                            # 借记止损倍数只能 (0,1) 或 None
+    assert pt.validate_spec(_debit(structure="x"))
+
+
+def test_debit_entry_marks_no_auto_stop_and_settles():
+    p = _debit()
+    # 卖腿(S=154C) bid 2.1、买腿(B=144C) ask 5.6 → 付 3.5
+    assert pt.step(p, at(30, 10, 2), depth=q(2.1, 2.3, 5.4, 5.6)) == "enter"
+    assert p["entry_credit"] == -3.5 and p["stop_value"] is None and p["economics"]["max_loss_usd"] == 353.2
+    p["mark_slots_et"] = ["15:45"]
+    assert pt.step(p, at(30, 15, 46), depth=q(0.2, 0.3, 0.8, 0.9)) == "mark" and p["state"] == "entered"   # 大跌也不自动止损
+    assert p["events"][-1]["value"] == pytest.approx(0.3 - 0.8)
+    for close, pnl in ((160.0, (10 - 3.5) * 100 - 3.2), (149.0, (5 - 3.5) * 100 - 3.2), (140.0, -353.2)):
+        x = _debit(); pt.step(x, at(30, 10, 2), depth=q(2.1, 2.3, 5.4, 5.6))
+        sc = lambda u, d, c=close: {"close": c, "source": "t", "bar_date": d.isoformat()}
+        assert pt.step(x, datetime(2026, 10, 30, 16, 21, tzinfo=ET), session_close=sc) == "settle"
+        assert x["pnl_usd"] == pytest.approx(pnl)
+    t = {"paper": x}; pt._outcome(t); assert t["outcome"] == "错"
+    y = _debit(); pt.step(y, at(30, 10, 2), depth=q(2.1, 2.3, 5.4, 5.6))
+    pt.step(y, datetime(2026, 10, 30, 16, 21, tzinfo=ET), session_close=lambda u, d: {"close": 170.0, "source": "t"})
+    t = {"paper": y}; pt._outcome(t); assert t["outcome"] == "对"                    # 到期全额价内 = 最大收益
+
+
+def test_debit_debit_outside_width_is_anomaly_and_optional_stop():
+    p = _debit()
+    assert pt.step(p, at(30, 10, 2), depth=q(0.1, 0.2, 10.5, 10.6)) == "retry" and "quote_anomaly" in p["last_reject"]
+    s = _debit(stop_mult=0.5)
+    pt.step(s, at(30, 10, 2), depth=q(2.1, 2.3, 5.4, 5.6))
+    assert s["stop_value"] == -1.75
+    s["mark_slots_et"] = ["15:45"]
+    assert pt.step(s, at(30, 15, 46), depth=q(0.2, 0.3, 1.5, 1.6)) == "stop"        # 持有价值 1.2 ≤ 1.75
+
+
+def test_pick_debit_atm_and_short_leg():
+    Q = lambda b, a: {"bid": b, "ask": a, "error": ""}
+    assert pt.atm_strike(143.35, [142.0, 143.0, 144.0], side="C") == 143.0
+    assert pt.atm_strike(143.5, [143.0, 144.0], side="C") == 143.0 and pt.atm_strike(143.5, [143.0, 144.0], side="P") == 144.0
+    quotes = {143.0: Q(5.8, 6.0), 153.0: Q(2.3, 2.4), 152.0: Q(2.6, 2.7), 154.0: Q(2.0, 2.1)}
+    r = pt.pick_debit("C", 143.0, 10, [152.0, 153.0, 154.0], quotes, 1, 3.2)
+    assert r["ok"] and (r["buy"], r["sell"]) == (143.0, 153.0) and r["debit"] == 3.7 and r["credit"] == -3.7
+    assert r["economics"]["max_loss_usd"] == 373.2
+    quotes[153.0] = Q(None, 2.4)
+    r = pt.pick_debit("C", 143.0, 10, [152.0, 153.0, 154.0], quotes, 1, 3.2)
+    assert r["sell"] == 154.0 and r["tried"][0]["reject"] == "sell_no_bid_or_crossed"          # 9 与 11 并列 → 更宽
+    assert not pt.pick_debit("C", 143.0, 10, [152.0], {143.0: Q(5.8, None)}, 1, 3.2)["ok"]       # 买腿无 ask
+
+
+def test_debit_rule_spec_and_slot_separate_from_credit():
+    d = _debit(k_sell=None, k_buy=None, strike_rule="user-debit-atm-v1", target_width=10.0, batch="user_subjective")
+    assert pt.validate_spec(d) is None
+    assert pt.validate_spec({**d, "structure": "credit"})                     # 借记规则只配借记结构
+    assert pt.validate_spec(_dyn(structure="debit", stop_mult=None))          # 借记不能用墙规则
+    c = {"paper": {**d, "structure": "credit"}}
+    assert pt.slot_key({"paper": d}) != pt.slot_key(c) and len(pt.slot_key(c)) == 4
+
+
+def test_debit_dynamic_entry_uses_selection():
+    d = _debit(k_sell=None, k_buy=None, sell=None, buy=None, strike_rule="user-debit-atm-v1", target_width=10.0)
+    sel = {"ok": True, "rule": "user-debit-atm-v1", "sell": 153.0, "buy": 143.0, "credit": -3.7, "debit": 3.7,
+           "economics": pt.economics("C", 153.0, 143.0, -3.7, 1, 3.2), "nearest_wall": None,
+           "inputs": {"params_hash": "atm+target_width=10.0",
+                      "symbols": {"153.0": "USO261030C153000.US", "143.0": "USO261030C143000.US"},
+                      "quotes": {"153.0": {"bid": 2.3, "ask": 2.4}, "143.0": {"bid": 5.8, "ask": 6.0}}}}
+    assert pt.step(d, at(30, 10, 1), selector=lambda p, n: sel) == "enter"
+    assert d["k_buy"] == 143.0 and d["k_sell"] == 153.0 and d["buy"].endswith("C143000.US")
+    assert d["entry_credit"] == -3.7 and d["stop_value"] is None

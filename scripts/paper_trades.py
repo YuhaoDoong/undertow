@@ -47,7 +47,10 @@ TERMINAL = ("settled", "closed_stop", "closed_manual", "closed_tp", "closed_time
 def _clock() -> datetime:
     """取数返回后的真实时刻（Codex 031：选档可能耗时数分钟，入场时刻按报价取回时刻记，不按开始时刻）。测试可替换。"""
     return datetime.now(timezone.utc)
-STRIKE_RULES = ("wall-dynamic-v1", "wall-dynamic-v1.1", "user-sell-fixed-v1")
+STRIKE_RULES = ("wall-dynamic-v1", "wall-dynamic-v1.1", "user-sell-fixed-v1", "user-debit-atm-v1")
+# 结构：credit = 收权利金的价差（卖方，默认）；debit = 付权利金的价差（买方，用户 2026-09-30 原油：「干脆就买方」）。
+# 借记价差沿用同一套符号：entry_credit = 卖腿 bid − 买腿 ask < 0（= −付出的权利金），估值/结算/盈亏公式不变。
+STRUCTURES = ("credit", "debit")
 # 出场规则（只用于 Claude 批次；用户 2026-09-30：「你的那一批你可以自己设置提前平仓规则。不适用我的一批，我的由我主观操作。你可以测试一下」）
 EXIT_RULES = {"claude-exit-v1": {"take_profit_frac": 0.5, "time_exit_dte": 3}}
 
@@ -61,10 +64,23 @@ def _finite(*xs) -> bool:
     return all(isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) for x in xs)
 
 
+def is_debit(side: str, k_sell: float, k_buy: float) -> bool:
+    """借记价差 = 买腿更靠近价内（call 买低卖高、put 买高卖低）。由行权价顺序决定，与 validate_spec 的结构声明互相核对。"""
+    return (k_sell > k_buy) if side == "C" else (k_sell < k_buy)
+
+
 def economics(side: str, k_sell: float, k_buy: float, credit: float, qty: int, fee_round_trip: float) -> dict:
-    """价差经济量的唯一来源（Codex 025-2）。fee_round_trip = 每组往返费用；整单 = 每组 × qty。"""
+    """价差经济量的唯一来源（Codex 025-2）。fee_round_trip = 每组往返费用；整单 = 每组 × qty。
+    借记价差：credit 为负（= −付出的权利金 debit）；最大亏损 = debit + 费用，最大收益 = 宽度 − debit − 费用。"""
     width = abs(k_sell - k_buy)
     fee_ps = fee_round_trip / 100.0                      # 每股摊到的费用（1 组 = 100 股）
+    if is_debit(side, k_sell, k_buy):
+        debit = -credit
+        be = (k_buy + debit + fee_ps) if side == "C" else (k_buy - debit - fee_ps)
+        return {"structure": "debit", "width": width, "credit": credit, "debit": debit,
+                "max_gain_usd": round(((width - debit) * 100 - fee_round_trip) * qty, 2),
+                "max_loss_usd": round((debit * 100 + fee_round_trip) * qty, 2),
+                "breakeven": round(be, 4), "fee_total_usd": round(fee_round_trip * qty, 2)}
     be = (k_sell - credit + fee_ps) if side == "P" else (k_sell + credit - fee_ps)
     return {"width": width, "credit": credit,
             "max_gain_usd": round((credit * 100 - fee_round_trip) * qty, 2),
@@ -72,10 +88,26 @@ def economics(side: str, k_sell: float, k_buy: float, credit: float, qty: int, f
             "breakeven": round(be, 4), "fee_total_usd": round(fee_round_trip * qty, 2)}
 
 
+def _debit(p: dict) -> bool:
+    return p.get("structure", "credit") == "debit"
+
+
 def validate_spec(p: dict) -> str | None:
+    if p.get("structure", "credit") not in STRUCTURES:
+        return f"未知结构 {p.get('structure')}"
+    if _debit(p):
+        # 借记价差：最大亏损 = 已付权利金，没有 2 倍权利金止损这一说（AGENTS：止损是减损选择）；
+        # stop_mult = None 表示不设自动止损（用户批次由用户主动平仓），min_credit_ratio 不适用
+        if p.get("stop_mult") is not None and not (_finite(p["stop_mult"]) and 0 < p["stop_mult"] < 1):
+            return "借记价差 stop_mult 须为 None 或 (0,1)（价值跌到入场权利金的该比例即止损）"
+        p = {**p, "stop_mult": 2.0, "min_credit_ratio": 0.0}           # 以下通用校验对借记价差只查其余字段
     if p.get("strike_rule") and p.get("state") == "planned":          # 自动选档：入场前没有固定档位
         if p["strike_rule"] not in STRIKE_RULES:
             return f"未知选档规则 {p['strike_rule']}"
+        if (p["strike_rule"] == "user-debit-atm-v1") != _debit(p):
+            return "user-debit-atm-v1 只用于借记价差（structure=debit），借记价差也只能用它"
+        if p["strike_rule"] == "user-debit-atm-v1" and not (_finite(p.get("target_width")) and p["target_width"] > 0):
+            return "user-debit-atm-v1 需要正的 target_width"
         if p["strike_rule"] == "user-sell-fixed-v1" and not (_finite(p.get("k_sell"), p.get("target_width"))
                                                               and p["target_width"] > 0):
             return "user-sell-fixed-v1 需要 k_sell 与正的 target_width"
@@ -92,11 +124,20 @@ def validate_spec(p: dict) -> str | None:
         return "side 须为 P/C"
     if p["k_sell"] == p["k_buy"]:
         return "宽度为 0"
-    if (p["side"] == "P") != (p["k_sell"] > p["k_buy"]):
-        return "腿方向错误（put 价差卖腿行权价须高于买腿，call 相反）"
+    if is_debit(p["side"], p["k_sell"], p["k_buy"]) != _debit(p):
+        return ("腿方向错误（借记价差：call 买低卖高、put 买高卖低）" if _debit(p) else
+                "腿方向错误（put 价差卖腿行权价须高于买腿，call 相反）")
     if p["fee_round_trip"] < 0 or p["stop_mult"] <= 1 or not 0 <= p["min_credit_ratio"] < 1:
         return "费用/止损倍数/门槛不在合理范围"
     return None
+
+
+def stop_value_of(p: dict, credit: float):
+    """止损线（平仓价值口径，与 close_value 同号）。贷记：价值 ≥ stop_mult × 权利金；
+    借记：stop_mult 为 None → 不设自动止损；否则价值 ≥ −stop_mult × debit（即持有价值跌到 debit 的 stop_mult 倍以下）。"""
+    if p.get("stop_mult") is None:
+        return None
+    return round(p["stop_mult"] * credit, 4)
 
 
 def quote_ok(q: dict) -> bool:
@@ -199,7 +240,7 @@ def audit_settlement(p: dict, now: datetime, *, cboe_close=_cboe_close) -> str |
     v2 = _spread_value(p, c["close"])
     pnl2 = round(((p["entry_credit"] - v2) * 100 - p["fee_round_trip"]) * p["qty"], 2)
     same = abs(c["close"] - p["settle"]["close"]) <= AUDIT_TOL
-    flip = (v2 > 0) != (p["settle_value"] > 0) or (pnl2 >= 0) != (p["pnl_usd"] >= 0)
+    flip = (v2 != 0) != (p["settle_value"] != 0) or (pnl2 >= 0) != (p["pnl_usd"] >= 0)
     a.update(status="source_match" if same else "source_mismatch", secondary=c, secondary_value=round(v2, 4),
              secondary_pnl_usd=pnl2, result_under_review=bool(not same and flip))
     p["settle_audit"] = a
@@ -330,8 +371,75 @@ def pick_protective(side: str, ks: float, tw: float, cands: list, quotes: dict, 
     return {"ok": False, "reason": "no_protective_leg（宽度 target±1 内无可成交保护腿）", "tried": tried}
 
 
+def _debit_atm_select(p: dict, now: datetime) -> dict:
+    """user-debit-atm-v1（用户 2026-09-30 原油：「原油也考虑晚上模拟仓开仓 牛市看涨价差（原油期权墙好像一直不太准？所以干脆就买方）」）：
+    买腿 = 入场时离现价最近的挂牌行权价（平值），卖腿 = 买腿 ± target_width（call 向上、put 向下）。
+    不看墙；按入场时实时保守报价（买腿 ask、卖腿 bid）直接成交。"""
+    from undertow.collect.cboe_options import snapshot_from_payload
+    from undertow.collect.longbridge_bars import option_symbol
+    from undertow.collect.longbridge_quote import fetch_stock_quotes
+    from undertow.collect.store import SnapshotStore
+    from undertow.core.config import load_config
+    from undertow.dirledger_cli import session_index
+    root = p["underlying"].split(".")[0]
+    today = now.astimezone(ET).date()
+    cfg, st = load_config(), SnapshotStore()
+    key = next(k for k, i in cfg.instruments.items() if i.options and i.options.symbol == root)
+    idx = session_index(st, root)
+    f = idx.get(today) or idx.get(max(d for d in idx if d <= today))
+    snap = snapshot_from_payload(st.load("options", root, f), key, root)
+    listed = sorted({c.strike for c in snap.contracts if c.expiry.isoformat() == p["expiry"] and c.kind == p["side"]})
+    sq = fetch_stock_quotes([p["underlying"]])[p["underlying"]]
+    spot, spot_at = sq.last, datetime.now(timezone.utc).isoformat()
+    tw, up = float(p["target_width"]), p["side"] == "C"
+    kb = atm_strike(spot, listed, side=p["side"])
+    cands = [] if kb is None else [k for k in listed if (k > kb if up else k < kb) and tw - 1 <= abs(k - kb) <= tw + 1]
+    syms = {k: option_symbol(root, p["expiry"], p["side"], k) for k in ([kb] if kb is not None else []) + cands}
+    d = _depth(list(syms.values())) if syms else {}
+    quotes = {k: d[v] for k, v in syms.items()}
+    base = {"rule": "user-debit-atm-v1", "buy": kb, "nearest_wall": None,
+            "inputs": {"spot": spot, "spot_fetched_at": spot_at, "quotes": {str(k): v for k, v in quotes.items()},
+                       "symbols": {str(k): v for k, v in syms.items()}, "oi_snapshot": str(st.path_of("options", root, f)),
+                       "params_hash": f"atm+target_width={tw}"}}
+    if kb is None:
+        return {**base, "ok": False, "reason": "no_listed_strike（目标到期无挂牌行权价）"}
+    return {**base, **pick_debit(p["side"], kb, tw, cands, quotes, p["qty"], p["fee_round_trip"])}
+
+
+def atm_strike(spot, listed: list, *, side: str):
+    """离现价最近的挂牌行权价；并列时取更价内的一档（call 取低、put 取高）。"""
+    if not _finite(spot) or not listed:
+        return None
+    return min(listed, key=lambda k: (abs(k - spot), k if side == "C" else -k))
+
+
+def pick_debit(side: str, kb: float, tw: float, cands: list, quotes: dict, qty: int, fee: float) -> dict:
+    """纯函数：买腿 kb 固定（须有有效 ask）；卖腿在宽度 [tw−1, tw+1] 的候选里按「离 tw 最近、并列取更宽」依次试，
+    第一个有有效 bid、无交叉、0 < 付出权利金 < 宽度、含费最大收益 > 0 的即选定。返回的 credit 为负（= −debit）。"""
+    from scripts.paper_strike_rule import _crossed, _ok
+    qb = quotes.get(kb) or {}
+    if qb.get("error") or not _ok(qb.get("ask")) or _crossed(qb):
+        return {"ok": False, "reason": f"buy_no_ask_or_crossed（{kb:g}）"}
+    tried = []
+    for ks in sorted((k for k in cands if tw - 1 <= abs(k - kb) <= tw + 1), key=lambda k: (abs(abs(k - kb) - tw), -abs(k - kb))):
+        qs = quotes.get(ks) or {}
+        if qs.get("error") or not _ok(qs.get("bid")) or _crossed(qs):
+            tried.append({"sell": ks, "reject": "sell_no_bid_or_crossed"}); continue
+        w = abs(ks - kb)
+        debit = round(qb["ask"] - qs["bid"], 4)
+        if not 0 < debit < w:
+            tried.append({"sell": ks, "debit": debit, "reject": "debit_outside_0_width"}); continue
+        e = economics(side, ks, kb, -debit, qty, fee)
+        if e["max_gain_usd"] <= 0:
+            tried.append({"sell": ks, "debit": debit, "reject": "fee_exceeds_max_gain"}); continue
+        tried.append({"sell": ks, "debit": debit, "reject": None})
+        return {"ok": True, "sell": ks, "buy": kb, "width": w, "credit": -debit, "debit": debit,
+                "debit_ratio": round(debit / w, 4), "economics": e, "tried": tried}
+    return {"ok": False, "reason": "no_short_leg（宽度 target±1 内无可成交卖腿）", "tried": tried}
+
+
 _SELECTORS = {"wall-dynamic-v1": "_dynamic_select", "wall-dynamic-v1.1": "_dynamic_select",
-              "user-sell-fixed-v1": "_user_sell_select"}
+              "user-sell-fixed-v1": "_user_sell_select", "user-debit-atm-v1": "_debit_atm_select"}
 
 
 def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, selector=None) -> str | None:
@@ -371,18 +479,19 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             ev.append({"at": now.isoformat(), "action": "entry_quote_invalid", "quotes": q, "why": p["last_reject"]})
             return "retry"
         credit = round(s["bid"] - b["ask"], 4)
-        if not 0 < credit < width:
-            p["last_reject"] = f"quote_anomaly（权利金 {credit} 不在 (0, 宽度 {width:g})）"
+        amt = -credit if _debit(p) else credit             # 借记价差：付出的权利金
+        if not 0 < amt < width:
+            p["last_reject"] = f"quote_anomaly（{'付出' if _debit(p) else ''}权利金 {amt} 不在 (0, 宽度 {width:g})）"
             ev.append({"at": now.isoformat(), "action": "entry_quote_invalid", "quotes": q, "why": p["last_reject"]})
             return "retry"
-        if credit / width < p["min_credit_ratio"]:
+        if not _debit(p) and credit / width < p["min_credit_ratio"]:
             p["last_reject"] = f"credit_low（{credit:.2f}/{width:g} < {p['min_credit_ratio']:.0%}）"
             ev.append({"at": now.isoformat(), "action": "entry_quote", "quotes": q, "why": p["last_reject"]})
             return "retry"                                 # 窗口内继续取；第一份合格即入场
         econ = economics(p["side"], p["k_sell"], p["k_buy"], credit, p["qty"], p["fee_round_trip"])
         lab = quote_labels(q, p["sell"], p["buy"], p["qty"])
         p.update(state="entered", entered_at=now.isoformat(), entry_credit=credit, economics=econ,
-                 stop_value=round(p["stop_mult"] * credit, 4), entry_quote_labels=lab)
+                 stop_value=stop_value_of(p, credit), entry_quote_labels=lab)
         ev.append({"at": now.isoformat(), "action": "enter", "quotes": q, "credit": credit, "economics": econ,
                    "quote_labels": lab})
         return "enter"
@@ -435,7 +544,7 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
                    "quotes": q, "value": val, "valuation_assumption": assume,
                    "note": "稀疏检查（非连续止损）" + ("" if in_rth else "；非常规时段只估值、不执行")})
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
-        if in_rth and val >= p["stop_value"]:
+        if in_rth and p.get("stop_value") is not None and val >= p["stop_value"]:
             p.update(state="closed_stop", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
             ev.append({"at": now.isoformat(), "action": "stop", "value": val, "pnl": pnl})
             return "stop"
@@ -550,7 +659,7 @@ def _step_dynamic(p: dict, now: datetime, selector) -> str | None:
     econ = sel["economics"]
     lab = quote_labels(q, p["sell"], p["buy"], p["qty"])
     p.update(state="entered", entered_at=now.isoformat(), entry_credit=sel["credit"], economics=econ,
-             stop_value=round(p["stop_mult"] * sel["credit"], 4), entry_quote_labels=lab)
+             stop_value=stop_value_of(p, sel["credit"]), entry_quote_labels=lab)
     ev.append({"at": now.isoformat(), "action": "enter", "quotes": q, "credit": sel["credit"], "economics": econ,
                "quote_labels": lab, "selection_rule": sel.get("rule"), "wall_change_reason": reason})
     return "enter"
@@ -560,7 +669,8 @@ def _outcome(t: dict) -> None:
     p = t["paper"]
     if p["state"] in ("settled", "closed_stop", "closed_manual", "closed_tp", "closed_time"):
         t["trade_pnl"] = f"{p['pnl_usd']:.2f}"
-        full = p["state"] == "settled" and p.get("settle_value", 1) == 0
+        full = p["state"] == "settled" and (abs(p.get("settle_value", 0)) == (p.get("economics") or {}).get("width")
+                                            if _debit(p) else p.get("settle_value", 1) == 0)
         t["outcome"] = "对" if full else ("错" if p["pnl_usd"] < 0 else "部分")
         t["scored_at"] = datetime.now(ET).date().isoformat()
     elif p["state"] in ("skipped", "missed", "invalid_spec"):
@@ -601,7 +711,8 @@ def sync_ledger(j: dict, ledger: Path | None = None) -> int:
             new.append({"event_id": event_id(t["id"], e), "thesis_id": t["id"],
                         "rule_version": p.get("rule_version", RULE_VERSION), "action": e["action"], "at": e["at"],
                         "state_now": p["state"],
-                        "spec": {k: p.get(k) for k in ("underlying", "expiry", "side", "sell", "buy", "k_sell", "k_buy",
+                        "spec": {k: p.get(k) for k in ("underlying", "expiry", "side", "structure", "strike_rule",
+                                                       "target_width", "sell", "buy", "k_sell", "k_buy",
                                                        "qty", "entry_window_et", "min_credit_ratio", "stop_mult",
                                                        "fee_round_trip", "mark_slots_et")},
                         "evidence": e,
@@ -628,7 +739,8 @@ def slot_key(t: dict) -> tuple:
     """仓位槽位（Codex 031）= 批次 × 标的 × 到期 × 方向。入场锁定与修订都按槽位，不按判断：
     同一判断下不同到期是不同仓位，互不阻挡；修订只能改同一槽位里尚未入场的候选。"""
     p = t.get("paper") or {}
-    return (p.get("batch", "legacy"), p.get("underlying"), p.get("expiry"), p.get("side"))
+    k = (p.get("batch", "legacy"), p.get("underlying"), p.get("expiry"), p.get("side"))
+    return k + ("debit",) if _debit(p) else k               # 借记与贷记是不同仓位；贷记的槽位键保持原样
 
 
 def entered_in_slot(j: dict, slot: tuple, exclude: str | None = None) -> str | None:

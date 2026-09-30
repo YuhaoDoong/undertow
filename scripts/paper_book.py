@@ -46,6 +46,7 @@ def classify(theses: list) -> dict:
         row = {"id": t["id"], "date": t.get("date"), "instrument": t.get("instrument"), "batch": p.get("batch", "legacy"),
                "judgment": judgment_id(j, t), "state": p.get("state"), "side": p.get("side"), "expiry": p.get("expiry"),
                "k_sell": p.get("k_sell"), "k_buy": p.get("k_buy"), "credit": p.get("entry_credit"),
+               "structure": p.get("structure", "credit"),
                "econ": p.get("economics") or {}, "pnl": p.get("pnl_usd"), "stop": p.get("stop_value"),
                "exit_rule": p.get("exit_rule"), "strike_rule": p.get("strike_rule"), "entered_at": p.get("entered_at"),
                "reason": p.get("skip_reason") or p.get("invalid_reason"), "mark": _last_mark(p),
@@ -123,8 +124,20 @@ def summarize(c: dict) -> dict:
     return out
 
 
+def _amt(r: dict) -> str:
+    """入场权利金：贷记为收入；借记价差 credit 为负，显示成「付 x」。"""
+    c = r.get("credit")
+    if c is None:
+        return "—"
+    return f"付 {-c:g}" if r.get("structure") == "debit" else f"{c:g}"
+
+
 def _struct(r: dict) -> str:
     kind = {"P": "put", "C": "call"}.get(r["side"], "?")
+    if r.get("structure") == "debit":
+        if r["k_buy"] is None:
+            return f"{r['instrument']} {kind} 借记价差（入场时买平值、卖约 +宽度）· {r['expiry']}"
+        return f"{r['instrument']} 买 {r['k_buy']:g}{r['side']} / 卖 {r['k_sell']:g}{r['side']}（借记）· {r['expiry']}"
     if r["k_sell"] is None:
         return f"{r['instrument']} {kind} 价差（入场时自动选档）· {r['expiry']}"
     return f"{r['instrument']} 卖 {r['k_sell']:g}{r['side']} / 买 {r['k_buy']:g}{r['side']} · {r['expiry']}" if r["k_buy"] is not None \
@@ -164,8 +177,8 @@ def render(day: str, c: dict, sm: dict, live: dict, generated_at: str, legacy: l
         e = r["econ"]
         fee = e.get("fee_total_usd", 3.2)
         pnl = round(((r["credit"] or 0) - val) * 100 - fee, 2) if val is not None and r["credit"] is not None else None
-        md.append(f"| {r['id']}<br>{_struct(r)} | {r['batch']} | {r['credit']} | ${e.get('max_gain_usd')} / ${e.get('max_loss_usd')} | "
-                  f"{e.get('breakeven')} | {r['stop']} | {val if val is not None else '—'}（{when}{'；' + note if note else ''}） | "
+        md.append(f"| {r['id']}<br>{_struct(r)} | {r['batch']} | {_amt(r)} | ${e.get('max_gain_usd')} / ${e.get('max_loss_usd')} | "
+                  f"{e.get('breakeven')} | {r['stop'] if r['stop'] is not None else '不设'} | {val if val is not None else '—'}（{when}{'；' + note if note else ''}） | "
                   f"{'$%+.2f' % pnl if pnl is not None else '—'} | {r['exit_rule'] or ('用户主观' if r['batch'] == 'user_subjective' else '—')}"
                   f"{'；⏳ 平仓请求待开盘执行' if r['close_request'] else ''} |")
     if not c["open"]:
@@ -176,7 +189,7 @@ def render(day: str, c: dict, sm: dict, live: dict, generated_at: str, legacy: l
     for r in c["closed"]:
         ml = r["econ"].get("max_loss_usd")
         md.append(f"| {r['id']}<br>{_struct(r)} | {r['batch']} | {HOW.get(r['state'], r['state'])}"
-                  f"{'（待复核）' if r['result_under_review'] else ''} | {r['credit']} | ${r['pnl']:+.2f} | ${ml} | "
+                  f"{'（待复核）' if r['result_under_review'] else ''} | {_amt(r)} | ${r['pnl']:+.2f} | ${ml} | "
                   f"{round(r['pnl'] / ml, 3) if ml else '—'} |")
     if not c["closed"]:
         md.append("| （无） | | | | | | |")

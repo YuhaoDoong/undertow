@@ -2966,3 +2966,36 @@ def render_smc(zones, spot: float, display_name: str = "",
         '<table><thead><tr><th>类型</th><th class="r">区间</th>'
         '<th class="r">距现价</th><th class="r">区宽</th><th>来源</th></tr></thead>'
         f'<tbody>{"".join(rows)}</tbody></table></div>')
+
+
+_ETYPE_NAME = {"Q": "季度", "M": "月度", "W": "周", "D": "日"}
+
+
+def render_wall_overview_html(ov: dict, conv=None, unit: str = "", etf_symbol: str = "") -> str:
+    """期权墙总览（用户 2026-09-29：「以后研报里期权墙分析也要这么展示一下」）：每个到期一行 + ≤14 天合计。
+    ETF 行权价为主（下单用）；有 conv 时附商品价。纯 OI（前一交易日收盘结算）。"""
+    if not ov or not ov.get("rows"):
+        return ""
+    u = _esc(unit)
+
+    def cell(top):
+        if not top:
+            return "—"
+        return "、".join(f'<b>{k:g}</b>' + (f'<span class="sub">≈{conv(k):.0f}{u}</span>' if conv else "") + f"（{v:,}）"
+                        for k, v in top)
+    rows = []
+    for r in ov["rows"]:
+        t = r["etype"]
+        tag = (f'<span class="pill" style="background:#bc4c001a;color:#bc4c00">{_ETYPE_NAME.get(t, t)}</span>'
+               if t in ("Q", "M") else _esc(_ETYPE_NAME.get(t, t)))
+        rows.append(f'<tr><td>{_esc(r["expiry"].isoformat())}</td><td>{tag}</td><td>{r["dte"]}</td>'
+                    f'<td>C {r["total_call"]:,}<br>P {r["total_put"]:,}</td>'
+                    f'<td>{cell(r["put_top"])}</td><td>{cell(r["call_top"])}</td></tr>')
+    rows.append(f'<tr style="font-weight:600"><td colspan="4">≤{ov["agg_days"]} 天合计</td>'
+                f'<td>{cell(ov["agg_put_top"])}</td><td>{cell(ov["agg_call_top"])}</td></tr>')
+    return ('<div class="card"><h2>期权墙总览（按到期拆分）</h2>'
+            f'<div class="sub">{_esc(etf_symbol)} 现价 {ov["spot"]:.2f}；只看现价 ±{ov["band"]:.0%} 内的行权价，列各到期 OI 最大的 3 个；'
+            'OI 为前一交易日收盘结算（盘中不变）。类型按日历推断：季度=季末最后交易日，月度=第三个周五，周=其余周五，日=其余；'
+            '日度到期持仓太小时不单列（仍计入合计）。</div>'
+            '<table><tr><th>到期</th><th>类型</th><th>剩余天数</th><th>总持仓</th><th>put 墙（下方支撑）</th><th>call 墙（上方压力）</th></tr>'
+            + "".join(rows) + '</table></div>')

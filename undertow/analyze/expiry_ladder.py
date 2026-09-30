@@ -7,7 +7,7 @@
   不同到期日细节可能大不相同：当周周度可能全是卖方写权做压制，月度大到期却是买方囤 Call。
 
 本模块干一件事：
-  build_ladder(prev, curr) —— 选出【未来 3 个周五 + 最近月度 OPEX】这几个到期，
+  build_ladder(prev, curr) —— 选出【未来 3 个周五 + 最近月度 OPEX + 窗口内的季度到期】这几个到期，
   对每个到期【单独过滤快照】后复用 analyze_gamma（墙位）+ analyze_flow（买卖方），
   产出逐到期的墙位 + ΔOI 买卖方明细，直接服务"我要做 X 日到期的价差"。
 
@@ -80,6 +80,7 @@ class ExpirySlice:
     changes: list = field(default_factory=list)   # FlowChange，按 |ΔOI| 降序
     net_call_doi: int = 0   # ΔOI 求和（call 增仓净额）
     net_put_doi: int = 0
+    etype: str = ""         # 到期类型（analyze/expiry_type 日历推断）：Q 季度 / M 月度 / W 周五 / D 其余
 
 
 def _select_expiries(curr: OptionsSnapshot, today: date) -> list[date]:
@@ -103,6 +104,9 @@ def _select_expiries(curr: OptionsSnapshot, today: date) -> list[date]:
     targets = list(weeklies)
     if nearest_monthly is not None:
         targets.append(nearest_monthly)
+    # 季度到期（季末最后一个交易日，未必是周五 —— 2026-09-30 是周三，旧版因此漏掉；用户 2026-09-29 要求按到期拆分展示）
+    from undertow.analyze.expiry_type import classify
+    targets += [e for e in oi_by_exp if _ok(e) and classify(e)["type"] == "Q" and e <= max(targets, default=e)]
     return sorted(set(targets))
 
 
@@ -137,6 +141,8 @@ def build_ladder(
         if ga_e.call_wall_oi == 0 and ga_e.put_wall_oi == 0:
             continue
         monthly = _is_third_friday(exp)
+        from undertow.analyze.expiry_type import classify
+        etype = classify(exp)["type"] or ""
         # 标签：按 ISO 周历差贴 本周/下周/下下周五；再远的月度锚点直接标 月度OPEX
         if exp.weekday() == 4:
             n = (_week_monday(exp) - _week_monday(today)).days // 7
@@ -148,6 +154,8 @@ def build_ladder(
                 label = f"{n}周后周五"
         else:
             label = f"周{_WEEKDAY_CN[exp.weekday()]}"
+        if etype == "Q":
+            label = "季度到期（" + (label if exp.weekday() == 4 else f"周{_WEEKDAY_CN[exp.weekday()]}") + "）"
 
         total_c = sum(c.open_interest for c in c_e.contracts if c.is_call)
         total_p = sum(c.open_interest for c in c_e.contracts if not c.is_call)
@@ -180,6 +188,46 @@ def build_ladder(
             call_walls_top=ga_e.call_walls_top, put_walls_top=ga_e.put_walls_top,
             total_call_oi=total_c, total_put_oi=total_p, pcr=pcr,
             has_flow=has_flow, flow_tilt=flow_tilt, changes=changes,
-            net_call_doi=net_c, net_put_doi=net_p,
+            net_call_doi=net_c, net_put_doi=net_p, etype=etype,
         ))
     return slices
+
+
+# —— 期权墙总览（用户 2026-09-29：「以后研报里期权墙分析也要这么展示一下」）——
+OVERVIEW_HORIZON_DAYS = 21     # 列出这么多天内的到期
+OVERVIEW_AGG_DAYS = 14         # 合计行的窗口（与主报告「近端 ≤14 天」同口径）
+OVERVIEW_D_MIN_FRAC = 0.05     # 日度（D）到期总 OI 低于窗口内最大到期的此比例 → 不单列（仍计入合计）
+OVERVIEW_TOP = 3
+OVERVIEW_BAND = 0.06           # 总览只看现价 ±6%（主墙位口径是 ±15%，那样前 3 常被远端大仓位占满，看不出近处的墙）
+
+
+def wall_overview(curr: OptionsSnapshot, *, today: date, band: float = OVERVIEW_BAND) -> dict:
+    """逐到期的墙位总览：每个到期一行（类型、DTE、总 C/P OI、现价 ±band 内 put/call OI 前 3），外加 ≤14 天合计。
+    Q/M/W 到期全部列出；D 到期只在总 OI 够大时单列。纯 OI 口径（前一交易日收盘结算）。"""
+    from collections import defaultdict
+    from undertow.analyze.expiry_type import classify
+    spot = curr.spot
+    tot: dict = defaultdict(lambda: [0, 0])
+    near: dict = defaultdict(lambda: {"C": defaultdict(int), "P": defaultdict(int)})
+    agg = {"C": defaultdict(int), "P": defaultdict(int)}
+    for c in curr.contracts:
+        d = (c.expiry - today).days
+        if not 0 <= d <= OVERVIEW_HORIZON_DAYS or c.open_interest <= 0:
+            continue
+        k = "C" if c.is_call else "P"
+        tot[c.expiry][0 if k == "C" else 1] += c.open_interest
+        if spot and abs(c.strike / spot - 1) <= band:
+            near[c.expiry][k][c.strike] += c.open_interest
+            if d <= OVERVIEW_AGG_DAYS:
+                agg[k][c.strike] += c.open_interest
+    top = lambda m: sorted(m.items(), key=lambda x: (-x[1], x[0]))[:OVERVIEW_TOP]
+    biggest = max((sum(v) for v in tot.values()), default=0)
+    rows = []
+    for e in sorted(tot):
+        et = classify(e)["type"] or ""
+        if et == "D" and sum(tot[e]) < OVERVIEW_D_MIN_FRAC * biggest:
+            continue
+        rows.append({"expiry": e, "etype": et, "dte": (e - today).days, "total_call": tot[e][0], "total_put": tot[e][1],
+                     "put_top": top(near[e]["P"]), "call_top": top(near[e]["C"])})
+    return {"spot": spot, "band": band, "rows": rows, "agg_days": OVERVIEW_AGG_DAYS,
+            "agg_put_top": top(agg["P"]), "agg_call_top": top(agg["C"])}

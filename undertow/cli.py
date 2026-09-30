@@ -48,7 +48,7 @@ from undertow.analyze.flow import (analyze_flow, counter_signals, tradeable_info
 from undertow.analyze.outlook import (build_outlook, macro_to_votes,
                                       plain_summary_blocks)
 from undertow.analyze.strategy import build_strategy
-from undertow.analyze.expiry_ladder import build_ladder
+from undertow.analyze.expiry_ladder import build_ladder, wall_overview
 from undertow.analyze.fibonacci import build_fibonacci
 from undertow.analyze.risk_reward import build_risk_reward
 from undertow.analyze.verdict import build_verdict
@@ -77,7 +77,7 @@ from undertow.report.html import (render_report_html, render_index_html,
                           render_concentration_html, render_vol_regime_section,
                           render_vol_analysis_section,
                           render_strategy_hub, render_condor_section, render_structure_calculators,
-                          render_credit_spread_section, render_expiry_ladder_section,
+                          render_credit_spread_section, render_expiry_ladder_section, render_wall_overview_html,
                           render_fib_rr_section, render_strong_signal_banner,
                           render_structure_section, render_vintage_banner,
                           render_verdict_section, render_technicals_section)
@@ -1061,6 +1061,7 @@ def cmd_expiry(args) -> int:
             ladder = build_ladder(prev, curr, today=today,
                                   multiplier=inst.options.approx_commodity_multiplier,
                                   proxy_quality=inst.options.proxy_quality)
+            blocks.append(report_mod.render_wall_overview_md(wall_overview(curr, today=today), inst.display_name))
             blocks.append(report_mod.render_expiry_ladder(
                 ladder, inst.display_name, curr.spot,
                 prev_date=prev_date, curr_date=curr_date_s))
@@ -2186,7 +2187,9 @@ def cmd_report(args) -> int:
                 # 无需 obs_day；否则周一跑会把"本周五"错标成"下周五"）
                 ladder = build_ladder(prev, curr, today=today, multiplier=mult,
                                       proxy_quality=inst.options.proxy_quality)
-                expiry_html = render_expiry_ladder_section(
+                expiry_html = render_wall_overview_html(
+                    wall_overview(curr, today=today), conv=(ga.to_commodity if ratio is not None else None),
+                    etf_symbol=inst.options.symbol) + render_expiry_ladder_section(
                     ladder, conv=(ga.to_commodity if ratio is not None else None),
                     etf_symbol=inst.options.symbol)
             except Exception as e:

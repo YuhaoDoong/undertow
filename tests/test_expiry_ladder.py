@@ -104,3 +104,28 @@ if __name__ == "__main__":
         fn()
         print(f"PASS {fn.__name__}")
     print(f"\n{len(fns)} tests passed.")
+
+
+def test_wall_overview_lists_q_m_w_and_aggregate():
+    """用户 2026-09-29：期权墙按到期拆分展示；季度到期（周三）不能漏；日度到期太小不单列但计入合计。"""
+    from datetime import date as _d
+    from undertow.analyze.expiry_ladder import wall_overview
+    from undertow.core.models import OptionContract, OptionsSnapshot
+    C = lambda e, k, kind, oi: OptionContract(expiry=e, strike=k, kind=kind, open_interest=oi, volume=0,
+                                            gamma=0.01, delta=0.5, iv=0.2)
+    today = _d(2026, 9, 29)
+    cs = [C(_d(2026, 9, 30), 375, "P", 7000), C(_d(2026, 9, 30), 400, "C", 6000),     # Q（周三）
+          C(_d(2026, 10, 2), 380, "P", 12000), C(_d(2026, 10, 16), 380, "P", 12000),  # W、M
+          C(_d(2026, 10, 1), 376, "P", 50),                                             # D，太小
+          C(_d(2026, 10, 2), 300, "P", 99999)]                                          # ±6% 之外
+    snap = OptionsSnapshot(instrument="gold", proxy_symbol="GLD", spot=380.0, asof="t", contracts=cs)
+    ov = wall_overview(snap, today=today)
+    assert [(r["expiry"].isoformat(), r["etype"]) for r in ov["rows"]] == [
+        ("2026-09-30", "Q"), ("2026-10-02", "W"), ("2026-10-16", "M")]
+    assert ov["agg_put_top"][0] == (380, 12000) and (376, 50) in ov["agg_put_top"]     # M 在 14 天外；D 计入合计
+    assert all(k != 300 for k, _ in ov["rows"][1]["put_top"])
+    from undertow.report.html import render_wall_overview_html
+    from undertow.report.markdown import render_wall_overview_md
+    h = render_wall_overview_html(ov, etf_symbol="GLD")
+    assert "季度" in h and "≤14 天合计" in h and "375" in h
+    assert "| 2026-09-30 | 季度 | 1 |" in render_wall_overview_md(ov, "黄金")

@@ -664,3 +664,19 @@ def render_account_md(review, assets=None, health=None) -> str:
             L.append(f"- {lg.name}（{lg.side} {lg.qty:g}）")
         L.append("")
     return "\n".join(L)
+
+
+def render_wall_overview_md(ov: dict, display_name: str) -> str:
+    """期权墙总览终端版：每个到期一行 + ≤14 天合计（用户 2026-09-29 要求的展示方式）。"""
+    if not ov or not ov.get("rows"):
+        return ""
+    name = {"Q": "季度", "M": "月度", "W": "周", "D": "日"}
+    fmt = lambda top: "、".join(f"{k:g}({v:,})" for k, v in top) or "—"
+    L = [f"## {display_name} — 期权墙总览（按到期拆分；现价 {ov['spot']:.2f}，±{ov['band']:.0%} 内，OI 为前一交易日结算）", "",
+         "| 到期 | 类型 | 剩余天数 | 总持仓 C / P | put 墙（下方支撑） | call 墙（上方压力） |", "|---|---|---|---|---|---|"]
+    for r in ov["rows"]:
+        L.append(f"| {r['expiry']} | {name.get(r['etype'], r['etype'])} | {r['dte']} | {r['total_call']:,} / {r['total_put']:,} | "
+                 f"{fmt(r['put_top'])} | {fmt(r['call_top'])} |")
+    L.append(f"| **≤{ov['agg_days']} 天合计** | | | | {fmt(ov['agg_put_top'])} | {fmt(ov['agg_call_top'])} |")
+    L.append("")
+    return "\n".join(L)

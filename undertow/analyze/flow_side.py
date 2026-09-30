@@ -97,7 +97,8 @@ def classify_v1(rows: list, quotes: list, mode: str) -> dict:
             continue
         side = None
         if mode in ("quote_past", "mixed"):
-            past = [q for q in good if q[1] <= t and t - q[1] <= QUOTE_MAX_AGE]
+            # 最大年龄（分钟起点 − 桶 started_at）也要 ≤ 15 分钟：只看最短年龄不能保证真实年龄 ≤ 15 分钟（Codex 031）
+            past = [q for q in good if q[1] <= t and t - q[0] <= QUOTE_MAX_AGE]
             if past:
                 s, e, b, a = max(past, key=lambda q: q[1])
                 mid = (b + a) / 2

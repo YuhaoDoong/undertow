@@ -23,6 +23,9 @@ from undertow.report.html import render_wall_overview_html
 from undertow.report.markdown import render_wall_overview_md
 
 VERSION = "report-v2-20260930b"
+from pathlib import Path as _Path
+_ROOT = _Path(__file__).resolve().parents[2]
+_LEDGER = _ROOT / "data/history/direction_ledger"
 
 
 @dataclass(frozen=True)
@@ -56,9 +59,12 @@ def section_allowed(sec: Section) -> tuple[bool, str]:
         for cid in sec.claim_ids:
             c = _claims.CLAIMS.get(cid)
             if c is None or c.reason != "prospective_study" or not c.prereg_ref:
+                bad.append(cid); continue
+            # 冻结身份须真实存在（Codex 031：不能只认非空 prereg_ref）——引用的协议/清单文件都在，且台账里有这一规则版本的目录
+            if not all((_ROOT / r).exists() for r in c.evidence_refs) or not (_LEDGER / c.prereg_ref).is_dir():
                 bad.append(cid)
         if bad:
-            return False, f"主张 {bad} 未登记为前瞻预登记研究（或缺冻结规则版本），不能以「验证中」展示"
+            return False, f"主张 {bad} 未登记为前瞻预登记研究，或冻结身份（协议文件 / 台账规则版本目录）核对不上，不能以「验证中」展示"
         return True, "验证中（前瞻预登记检验未完成）——只展示、不进结论"
     if sec.role == "prediction":
         tiers = {cid: _claims.tier_of(cid) for cid in sec.claim_ids}

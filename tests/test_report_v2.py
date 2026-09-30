@@ -55,3 +55,10 @@ def test_daily_generates_v2_after_old_report_without_blocking():
     src = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
     assert src.index("python3 -m undertow report gold") < src.index("python3 -m undertow report-v2")
     assert "V2_RC != 0 && V2_RC != 3" in src and src.index("alert() {") < src.index("report-v2")
+
+
+
+def test_validating_requires_real_frozen_identity(monkeypatch, tmp_path):
+    monkeypatch.setattr(v2, "_LEDGER", tmp_path)                                  # 台账里没有这一规则版本的目录
+    ok, why = v2.section_allowed(v2.Section("d", "方向", "validating", ("conviction.h1.v1",)))
+    assert not ok and "冻结身份" in why

@@ -351,3 +351,67 @@ def test_manual_close_user_initiated(tmp_path, monkeypatch):
     assert r["ok"] and st["state"] == "closed_manual" and st["close_value"] == 0.6
     assert st["pnl_usd"] == round((0.41 - 0.6) * 100 - 3.2, 2) and st["events"][-1]["user_note"] == "用户：平掉"
     assert not pt.manual_close("M", "再平", depth=q(1.0, 1.1, 0.5, 0.6))["ok"]            # 已平仓不能再平
+
+
+
+def test_selection_returned_after_window_is_skipped_not_backdated(monkeypatch):
+    """Codex 031：10:29 开始选档、10:35 才取回报价 → 不能记 10:29 入场。"""
+    p = _dyn()
+    monkeypatch.setattr(pt, "_clock", lambda: datetime(2026, 9, 30, 10, 35, tzinfo=ET))
+    assert pt.step(p, datetime(2026, 9, 30, 10, 29, tzinfo=ET), selector=lambda p, n: _sel()) == "skipped"
+    assert "selection_returned_after_window" in p["skip_reason"] and p.get("entered_at") is None
+    sel = [e for e in p["events"] if e["action"] == "selection"][-1]
+    assert sel["requested_at"].startswith("2026-09-30T10:29") and sel["returned_at"].startswith("2026-09-30T10:35")
+    q = _dyn()
+    monkeypatch.setattr(pt, "_clock", lambda: datetime(2026, 9, 30, 10, 3, tzinfo=ET))
+    assert pt.step(q, datetime(2026, 9, 30, 10, 1, tzinfo=ET), selector=lambda p, n: _sel()) == "enter"
+    assert q["entered_at"].startswith("2026-09-30T10:03")                          # 入场时刻 = 取回时刻
+
+
+def test_eight_slots_independent_and_revision_cannot_change_slot(tmp_path, monkeypatch):
+    """Codex 031：2 批 × 2 品种 × 2 到期 = 8 个槽位互不阻挡；修订不得换到期来绕过锁定。"""
+    ths = []
+    for b in ("rule", "user"):
+        for u in ("GLD.US", "SLV.US"):
+            for e in ("2026-10-05", "2026-10-16"):
+                ths.append({"id": f"{b}-{u[:3]}-{e[5:7]}{e[8:]}", "execution": "模拟",
+                            "paper": _p(batch=b, underlying=u, expiry=e, side="P")})
+    load = _env(tmp_path, monkeypatch, ths)
+    pt.tick(at(29, 10, 6), depth=q(1.44, 1.6, 0.95, 1.03))
+    st = load()
+    assert all(v["paper"]["state"] == "entered" for v in st.values())               # 8 个槽位都能入场
+    new = {"id": "rule-GLD-1005-r2", "execution": "模拟",
+           "paper": _p(batch="rule", underlying="GLD.US", expiry="2026-10-16", side="P", continuation_of="rule-GLD-1005")}
+    r = pt.register_revision(new, at(29, 10, 30))
+    assert not r["ok"] and "不得改变仓位槽位" in r["why"]
+
+
+def test_fixed_path_short_needs_bid_long_needs_ask():
+    """Codex 031：固定档位也按腿校验——保护腿没有 bid 可以入场；交叉报价不行。"""
+    p = _p()
+    dq = lambda syms: {"S": {"bid": 1.44, "ask": 1.6, "error": ""}, "B": {"bid": None, "ask": 1.03, "error": ""}}
+    assert pt.step(p, at(29, 10, 6), depth=dq) == "enter"
+    p2 = _p()
+    dq2 = lambda syms: {"S": {"bid": 1.44, "ask": 1.3, "error": ""}, "B": {"bid": 0.9, "ask": 1.0, "error": ""}}
+    assert pt.step(p2, at(29, 10, 6), depth=dq2) == "retry"
+
+
+def test_manual_close_outside_rth_becomes_request_then_executes(tmp_path, monkeypatch):
+    p = _entered()
+    load = _env(tmp_path, monkeypatch, [{"id": "M", "execution": "模拟", "paper": p}])
+    r = pt.manual_close("M", "用户：平掉", datetime(2026, 9, 29, 20, 0, tzinfo=ET), depth=q(1.0, 1.1, 0.5, 0.6))
+    assert r["pending"] and load()["M"]["paper"]["state"] == "entered"
+    pt.tick(datetime(2026, 9, 30, 9, 35, tzinfo=ET), depth=q(1.0, 1.2, 0.5, 0.6))
+    st = load()["M"]["paper"]
+    assert st["state"] == "closed_manual" and st["close_value"] == 0.7 and st["events"][-1]["user_note"] == "用户：平掉"
+
+
+def test_claude_exit_rule_take_profit_and_time_exit():
+    p = _entered(); p["exit_rule"] = "claude-exit-v1"; p["expiry"] = "2026-10-16"
+    assert pt.step(p, at(30, 9, 46), depth=q(0.2, 0.25, 0.1, 0.12)) == "take_profit"    # 0.25−0.10=0.15 ≤ 0.5×0.41
+    assert p["state"] == "closed_tp"
+    p2 = _entered(); p2["exit_rule"] = "claude-exit-v1"; p2["expiry"] = "2026-10-16"
+    r = pt.step(p2, datetime(2026, 10, 13, 9, 46, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))
+    assert r == "time_exit" and p2["state"] == "closed_time"                             # DTE=3
+    p3 = _entered(); p3["expiry"] = "2026-10-16"                                          # 用户批次：没有 exit_rule，不自动出场
+    assert pt.step(p3, at(30, 9, 46), depth=q(0.2, 0.25, 0.1, 0.12)) == "mark" and p3["state"] == "entered"

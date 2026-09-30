@@ -30,6 +30,8 @@ sys.path.insert(0, str(ROOT))
 
 RULE = "wall-dynamic-v1"
 PARAMS = {"wall_range": 0.05, "wall_frac": 0.5, "min_buffer": 0.005, "max_width_frac": 0.015, "min_credit_ratio": 0.15}
+# v1.1（Codex 031）：墙 OI 窗口 = max(14, 目标到期 DTE)（v1 固定 14 天）；写进参数，规则身份与参数哈希随之改变
+PARAMS_V11 = {**PARAMS, "oi_window": "max(14,target_dte)"}
 
 
 def _ok(x) -> bool:

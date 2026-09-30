@@ -68,3 +68,10 @@ def test_v1_modes_reported_separately_and_confusion():
     cm = fs.confusion([{"inferred": "buy", "traded": "buy"}, {"inferred": "buy", "traded": "sell"},
                        {"inferred": "sell", "traded": "unknown"}])
     assert cm["matrix"] == {"buy→buy": 1, "buy→sell": 1, "sell→unknown": 1} and cm["base_rate_traded_buy"] == 0.5
+
+
+
+def test_v1_uses_max_age_conservatively():
+    rows = [(m(0), 1.1, 10)]
+    long_bucket = (m(-20), m(-10), 1.2, 1.4)                 # 最短年龄 10 分钟，但最大年龄 20 分钟 > 15
+    assert fs.classify_v1(rows, [long_bucket], "quote_past")["unclassified"] == 10

@@ -41,8 +41,15 @@ LEDGER = ROOT / "data/soul/paper_discretionary.jsonl"
 ET = ZoneInfo("America/New_York")
 RULE_VERSION = "paper-sim-v2-20260929"
 RTH = (time(9, 30), time(16, 0))
-TERMINAL = ("settled", "closed_stop", "closed_manual", "skipped", "missed", "invalid_spec")
-STRIKE_RULES = ("wall-dynamic-v1", "user-sell-fixed-v1")
+TERMINAL = ("settled", "closed_stop", "closed_manual", "closed_tp", "closed_time", "skipped", "missed", "invalid_spec")
+
+
+def _clock() -> datetime:
+    """取数返回后的真实时刻（Codex 031：选档可能耗时数分钟，入场时刻按报价取回时刻记，不按开始时刻）。测试可替换。"""
+    return datetime.now(timezone.utc)
+STRIKE_RULES = ("wall-dynamic-v1", "wall-dynamic-v1.1", "user-sell-fixed-v1")
+# 出场规则（只用于 Claude 批次；用户 2026-09-30：「你的那一批你可以自己设置提前平仓规则。不适用我的一批，我的由我主观操作。你可以测试一下」）
+EXIT_RULES = {"claude-exit-v1": {"take_profit_frac": 0.5, "time_exit_dte": 3}}
 
 
 def _hm(s: str) -> time:
@@ -95,6 +102,13 @@ def validate_spec(p: dict) -> str | None:
 def quote_ok(q: dict) -> bool:
     """报价可用：无显式错误、bid/ask 有限、0 < bid ≤ ask（Codex 026：带 error 的报价一律拒绝）。"""
     return q is not None and not q.get("error") and _finite(q.get("bid"), q.get("ask")) and 0 < q["bid"] <= q["ask"]
+
+
+def leg_ok(q: dict | None, need: str) -> bool:
+    """入场按腿校验（Codex 031：与自动选档一致）——卖腿要有效 bid、买腿要有效 ask；另一侧缺失可以，两侧都有而交叉不行；有 error 不行。"""
+    if q is None or q.get("error") or not (_finite(q.get(need)) and q[need] > 0):
+        return False
+    return not (_finite(q.get("bid")) and _finite(q.get("ask")) and q["bid"] > q["ask"])
 
 
 def quote_labels(q: dict, sell: str, buy: str, qty: int) -> dict:
@@ -202,7 +216,7 @@ def _dynamic_select(p: dict, now: datetime) -> dict:
     OI 取今天认证快照（前一交易日结算）里该侧 0…max(14, 目标 DTE) 天的合计；现价取长桥实时；报价取目标到期候选行权价的盘口。"""
     import hashlib
     from collections import defaultdict
-    from scripts.paper_strike_rule import PARAMS, params_hash, select_with_shadow
+    from scripts.paper_strike_rule import PARAMS, PARAMS_V11, params_hash, select_with_shadow
     from undertow.collect.cboe_options import snapshot_from_payload
     from undertow.collect.longbridge_bars import option_symbol
     from undertow.collect.longbridge_quote import fetch_stock_quotes
@@ -219,7 +233,9 @@ def _dynamic_select(p: dict, now: datetime) -> dict:
         return {"ok": False, "reason": "no_snapshot（今天的认证快照未到）", "inputs": {}}
     path = st.path_of("options", root, f)
     snap = snapshot_from_payload(st.load("options", root, f), key, root)
-    horizon = max(14, (exp - today).days)
+    v11 = p["strike_rule"] == "wall-dynamic-v1.1"
+    params = PARAMS_V11 if v11 else PARAMS             # v1.1：墙 OI 窗口 = max(14, 目标 DTE)，规则身份与参数哈希随之改变（Codex 031）
+    horizon = max(14, (exp - today).days) if v11 else 14
     oi, toi = defaultdict(int), defaultdict(int)
     for c in snap.contracts:
         if c.kind == p["side"] and 0 <= (c.expiry - today).days <= horizon:
@@ -228,20 +244,20 @@ def _dynamic_select(p: dict, now: datetime) -> dict:
             toi[c.strike] += c.open_interest
     sq = fetch_stock_quotes([p["underlying"]])[p["underlying"]]
     spot, spot_at = sq.last, datetime.now(timezone.utc).isoformat()
-    span = PARAMS["wall_range"] + PARAMS["max_width_frac"] + 0.01
+    span = params["wall_range"] + params["max_width_frac"] + 0.01
     lo, hi = (spot, spot * (1 + span)) if p["side"] == "C" else (spot * (1 - span), spot)
     listed = sorted({c.strike for c in snap.contracts if c.expiry == exp and c.kind == p["side"] and lo <= c.strike <= hi})
     syms = {k: option_symbol(root, p["expiry"], p["side"], k) for k in listed}
     d = _depth(list(syms.values())) if syms else {}
     quotes = {k: d[v] for k, v in syms.items()}
-    sel = select_with_shadow(spot, dict(oi), listed, quotes, side=p["side"], target_oi=dict(toi),
+    sel = select_with_shadow(spot, dict(oi), listed, quotes, params, side=p["side"], target_oi=dict(toi),
                              fee_round_trip=p["fee_round_trip"], qty=p["qty"])
     main = sel["main"]
     return {**main, "shadow_no_ratio": {k: sel["shadow_no_ratio"].get(k) for k in ("ok", "sell", "buy", "credit", "reason")},
             "inputs": {"oi_snapshot": str(path), "oi_snapshot_sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(),
                        "oi_window_days": horizon, "spot": spot, "spot_fetched_at": spot_at,
                        "quotes": {str(k): v for k, v in quotes.items()}, "symbols": {str(k): v for k, v in syms.items()},
-                       "params_hash": params_hash(PARAMS)}}
+                       "params_hash": params_hash(params)}}
 
 
 def wall_change_reason(prev_sel: dict | None, sel: dict) -> str:
@@ -314,7 +330,8 @@ def pick_protective(side: str, ks: float, tw: float, cands: list, quotes: dict, 
     return {"ok": False, "reason": "no_protective_leg（宽度 target±1 内无可成交保护腿）", "tried": tried}
 
 
-_SELECTORS = {"wall-dynamic-v1": "_dynamic_select", "user-sell-fixed-v1": "_user_sell_select"}
+_SELECTORS = {"wall-dynamic-v1": "_dynamic_select", "wall-dynamic-v1.1": "_dynamic_select",
+              "user-sell-fixed-v1": "_user_sell_select"}
 
 
 def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, selector=None) -> str | None:
@@ -349,8 +366,8 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             return p["state"]
         q = depth([p["sell"], p["buy"]])
         s, b = q.get(p["sell"]), q.get(p["buy"])
-        if not (quote_ok(s) and quote_ok(b)):
-            p["last_reject"] = "no_valid_quote（报价缺失/非有限/bid>ask）"
+        if not (leg_ok(s, "bid") and leg_ok(b, "ask")):
+            p["last_reject"] = "no_valid_quote（卖腿无有效 bid 或买腿无有效 ask，或报价交叉/出错）"
             ev.append({"at": now.isoformat(), "action": "entry_quote_invalid", "quotes": q, "why": p["last_reject"]})
             return "retry"
         credit = round(s["bid"] - b["ask"], 4)
@@ -387,6 +404,20 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
                  settlement_model="理论到期记账：按到期日常规收盘价的内在价值现金化；不模拟提前行权/指派/实物交割")
         ev.append({"at": now.isoformat(), "action": "settle", "close": c, "value": val, "pnl": pnl})
         return "settle"
+    if p.get("close_request") and RTH[0] <= et.time() < RTH[1]:
+        # 用户主动平仓请求在非交易时段提出 → 到常规时段第一次唤醒时按当时保守报价执行（Codex 031）
+        q = depth([p["sell"], p["buy"]])
+        v = close_value(q, p)
+        if v is None:
+            ev.append({"at": now.isoformat(), "action": "manual_close_retry", "quotes": q})
+            return "retry"
+        val, assume = v
+        pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
+        req = p.pop("close_request")
+        p.update(state="closed_manual", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
+        ev.append({"at": now.isoformat(), "action": "manual_close", "quotes": q, "value": val, "pnl": pnl,
+                   "valuation_assumption": assume, "in_rth": True, "user_note": req.get("note"), "requested_at": req.get("at")})
+        return "manual_close"
     done = {e.get("slot") for e in ev if e.get("action") in ("mark", "mark_offhours")}
     for slot in p["mark_slots_et"]:
         key = f"{today.isoformat()} {slot}"
@@ -408,6 +439,15 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             p.update(state="closed_stop", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
             ev.append({"at": now.isoformat(), "action": "stop", "value": val, "pnl": pnl})
             return "stop"
+        xr = EXIT_RULES.get(p.get("exit_rule") or "")
+        if in_rth and xr and val <= xr["take_profit_frac"] * p["entry_credit"]:
+            p.update(state="closed_tp", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
+            ev.append({"at": now.isoformat(), "action": "take_profit", "value": val, "pnl": pnl, "exit_rule": p["exit_rule"]})
+            return "take_profit"
+        if in_rth and xr and (exp - today).days <= xr["time_exit_dte"]:
+            p.update(state="closed_time", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
+            ev.append({"at": now.isoformat(), "action": "time_exit", "value": val, "pnl": pnl, "exit_rule": p["exit_rule"]})
+            return "time_exit"
         return "mark"
     return None
 
@@ -438,6 +478,14 @@ def manual_close(tid: str, note: str, now: datetime | None = None, *, depth=_dep
         if t is None or (t.get("paper") or {}).get("state") != "entered":
             return {"ok": False, "why": f"{tid} 不存在或不在场"}
         p = t["paper"]
+        in_rth = RTH[0] <= now.astimezone(ET).time() < RTH[1] and now.astimezone(ET).weekday() < 5
+        if not in_rth:
+            p["close_request"] = {"at": now.isoformat(), "note": note}
+            p["events"].append({"at": now.isoformat(), "action": "close_requested", "user_note": note,
+                                "why": "非常规交易时段：记下请求，常规时段第一次唤醒按当时保守报价执行"})
+            _write_journal(j)
+            sync_ledger(j)
+            return {"ok": True, "pending": True, "why": "非交易时段，已记平仓请求，开盘后执行"}
         q = depth([p["sell"], p["buy"]])
         v = close_value(q, p)
         if v is None:
@@ -445,7 +493,6 @@ def manual_close(tid: str, note: str, now: datetime | None = None, *, depth=_dep
             _write_journal(j)
             return {"ok": False, "why": "报价不可用，未平仓（已留痕）"}
         val, assume = v
-        in_rth = RTH[0] <= now.astimezone(ET).time() < RTH[1]
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
         p.update(state="closed_manual", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
         p["events"].append({"at": now.isoformat(), "action": "manual_close", "quotes": q, "value": val, "pnl": pnl,
@@ -481,9 +528,18 @@ def _step_dynamic(p: dict, now: datetime, selector) -> str | None:
         ev.append({"at": now.isoformat(), "action": p["state"], "why": p["skip_reason"]})
         return p["state"]
     sel = selector(p, now)
+    back = max(now, _clock())                          # 报价取回时刻（选档可能耗时数分钟；取回不可能早于请求）
     prev = next((e["selection"] for e in reversed(ev) if e.get("action") in ("selection", "prep_selection")), None)
     reason = wall_change_reason(prev, sel)
-    ev.append({"at": now.isoformat(), "action": "selection", "selection": sel, "wall_change_reason": reason})
+    ev.append({"at": now.isoformat(), "action": "selection", "selection": sel, "wall_change_reason": reason,
+               "requested_at": now.isoformat(), "returned_at": back.isoformat()})
+    b_et = back.astimezone(ET)
+    if b_et.date() != today or b_et.time() >= hi:
+        p.update(state="skipped", skip_reason=f"selection_returned_after_window（{now.astimezone(ET):%H:%M:%S} 开始、"
+                                               f"{b_et:%H:%M:%S} 才取回，已过窗口 {p['entry_window_et'][1]}）")
+        ev.append({"at": back.isoformat(), "action": "skipped", "why": p["skip_reason"]})
+        return "skipped"
+    now = back                                         # 入场时刻 = 报价取回时刻
     if not sel.get("ok"):
         p["last_reject"] = sel.get("reason")
         return "retry"
@@ -502,7 +558,7 @@ def _step_dynamic(p: dict, now: datetime, selector) -> str | None:
 
 def _outcome(t: dict) -> None:
     p = t["paper"]
-    if p["state"] in ("settled", "closed_stop", "closed_manual"):
+    if p["state"] in ("settled", "closed_stop", "closed_manual", "closed_tp", "closed_time"):
         t["trade_pnl"] = f"{p['pnl_usd']:.2f}"
         full = p["state"] == "settled" and p.get("settle_value", 1) == 0
         t["outcome"] = "对" if full else ("错" if p["pnl_usd"] < 0 else "部分")
@@ -512,8 +568,8 @@ def _outcome(t: dict) -> None:
         t["review"] = (t.get("review") or "") + f"【模拟仓未入场】{p.get('skip_reason') or p.get('invalid_reason')}"
 
 
-OUTCOME_ACTIONS = ("enter", "skipped", "missed", "invalid_spec", "stop", "settle")
-MANUAL_ACTIONS = ("manual_close",)
+OUTCOME_ACTIONS = ("enter", "skipped", "missed", "invalid_spec", "stop", "settle", "take_profit", "time_exit")
+MANUAL_ACTIONS = ("manual_close", "close_requested")
 LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit",) + MANUAL_ACTIONS
 
 
@@ -558,21 +614,28 @@ def sync_ledger(j: dict, ledger: Path | None = None) -> int:
     return len(new)
 
 
-def chain_key(j: dict, t: dict) -> tuple:
-    """判断 × 批次：沿 continuation_of 追到根记录（同一事前判断），批次缺省为 legacy。"""
+def judgment_id(j: dict, t: dict) -> str:
+    """同一事前判断：沿 continuation_of 追到根记录（统计时判断只算一次）。"""
     by = {x["id"]: x for x in j.get("theses", [])}
     root, seen = t, set()
     while (root.get("paper") or {}).get("continuation_of") in by and root["id"] not in seen:
         seen.add(root["id"])
         root = by[root["paper"]["continuation_of"]]
-    return root["id"], (t.get("paper") or {}).get("batch", "legacy")
+    return root["id"]
 
 
-def entered_in_chain(j: dict, key: tuple, exclude: str | None = None) -> str | None:
-    """同一判断 × 批次里已有模拟成交的记录 id（有 entered_at 即算，含已结算/已止损）。"""
+def slot_key(t: dict) -> tuple:
+    """仓位槽位（Codex 031）= 批次 × 标的 × 到期 × 方向。入场锁定与修订都按槽位，不按判断：
+    同一判断下不同到期是不同仓位，互不阻挡；修订只能改同一槽位里尚未入场的候选。"""
+    p = t.get("paper") or {}
+    return (p.get("batch", "legacy"), p.get("underlying"), p.get("expiry"), p.get("side"))
+
+
+def entered_in_slot(j: dict, slot: tuple, exclude: str | None = None) -> str | None:
+    """同一槽位里已有模拟成交的记录 id（有 entered_at 即算，含已结算/已止损/已平仓）。"""
     for x in j.get("theses", []):
         if x["id"] != exclude and x.get("execution") == "模拟" and (x.get("paper") or {}).get("entered_at") \
-                and chain_key(j, x) == key:
+                and slot_key(x) == slot:
             return x["id"]
     return None
 
@@ -594,8 +657,8 @@ def _write_journal(j: dict) -> None:
 
 def register_revision(new: dict, now: datetime | None = None) -> dict:
     """登记新版本（用户 2026-09-29：墙/价格更新后重新判断算延续；「盘中已成交，那么就不应该乱动了，换挡应该是开没开仓的时候」）。
-    与 tick 共用同一把锁：同一判断 × 批次已有模拟成交 → 拒绝（入场后行权价/到期/数量固定，不自动平旧开新）；
-    否则把同链上仍 planned 的旧版本记 superseded（原因留痕），再追加新版本。返回 {"ok", "why", "superseded"}。"""
+    与 tick 共用同一把锁：同一槽位已有模拟成交 → 拒绝；修订不得改变槽位（入场后行权价/到期/数量固定，不自动平旧开新）；
+    否则把同槽位上仍 planned 的旧版本记 superseded（原因留痕），再追加新版本。返回 {"ok", "why", "superseded"}。"""
     now = now or datetime.now(timezone.utc)
     LOCK.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK, "a+") as lk:
@@ -603,15 +666,20 @@ def register_revision(new: dict, now: datetime | None = None) -> dict:
         j = json.loads(JOURNAL.read_text("utf-8"))
         if any(x["id"] == new["id"] for x in j.get("theses", [])):
             return {"ok": False, "why": f"id 已存在：{new['id']}", "superseded": []}
+        pred_id = (new.get("paper") or {}).get("continuation_of")
+        pred = next((x for x in j.get("theses", []) if x["id"] == pred_id), None) if pred_id else None
+        if pred is not None and pred.get("paper") and slot_key(pred) != slot_key(new):
+            return {"ok": False, "why": f"修订不得改变仓位槽位（{slot_key(pred)} → {slot_key(new)}）；另一个到期/方向请登记为新仓位",
+                    "superseded": []}
         j.setdefault("theses", []).append(new)
-        key = chain_key(j, new)
-        hit = entered_in_chain(j, key, exclude=new["id"])
+        key = slot_key(new)
+        hit = entered_in_slot(j, key, exclude=new["id"])
         if hit:
             j["theses"].pop()
-            return {"ok": False, "why": f"同一判断×批次已有模拟成交（{hit}）：入场后不换档", "superseded": []}
+            return {"ok": False, "why": f"同一槽位已有模拟成交（{hit}）：入场后不换档", "superseded": []}
         sup = []
         for x in j["theses"][:-1]:
-            if x.get("execution") == "模拟" and (x.get("paper") or {}).get("state") == "planned" and chain_key(j, x) == key:
+            if x.get("execution") == "模拟" and (x.get("paper") or {}).get("state") == "planned" and slot_key(x) == key:
                 _supersede(x["paper"], now, f"superseded_by_revision：由 {new['id']} 替代（入场前重新选档）")
                 x["paper"]["continued_by"] = new["id"]
                 sup.append(x["id"])
@@ -635,9 +703,9 @@ def tick(now: datetime | None = None, *, depth=None) -> list[str]:
                 continue
             n_ev = len(p.get("events") or [])
             if p.get("state") == "planned":                     # 同一判断×批次已成交 → 其余候选不再入场（入场后不换档）
-                hit = entered_in_chain(j, chain_key(j, t), exclude=t["id"])
+                hit = entered_in_slot(j, slot_key(t), exclude=t["id"])
                 if hit:
-                    _supersede(p, now, f"superseded_by_entry：同一判断×批次已有模拟成交（{hit}），入场后不换档")
+                    _supersede(p, now, f"superseded_by_entry：同一槽位已有模拟成交（{hit}），入场后不换档")
                     _outcome(t)
                     changed = True
                     out.append(f"{t['id']}:skipped")

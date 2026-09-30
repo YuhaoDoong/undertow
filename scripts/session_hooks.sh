@@ -223,6 +223,15 @@ flowside_capture() {
     hb "⑬资金流代理采集：⏳ rc=$RC overall=$(ov_text "$OV") $(printf '%s' "$RES" | tail -1 | clip 100)"
   fi
 }
+# ⑭ 模拟仓台账报告（用户 2026-09-30：「模拟仓所有记录你应该定时统计分析生成一个report」）：ET 16:30 起每天一次，
+# 读私有 journal、写 data/reports/paper/（不入库）；用已记录的盯市，不另取报价。失败留痕，下次唤醒重试。
+paper_book() {
+  local OKF="$LOG_DIR/.paperbook_${ET_DATE}.ok" RES RC
+  [[ -f "$OKF" ]] && return
+  RES=$("$PY" scripts/paper_book.py 2>&1); RC=$?
+  if (( RC == 0 )); then : > "$OKF"; hb "⑭模拟仓台账：✅ $(printf '%s' "$RES" | tail -1 | clip 100)"
+  else hb "⑭模拟仓台账：⏳ rc=$RC $(printf '%s' "$RES" | tail -1 | clip 100)"; fi
+}
 # ⑪ 收盘后备份（用户 2026-09-28「数据最重要」；Codex 024-6）：ET 16:40 起把当天自动任务写下的数据提交并推送，
 # 不等次日凌晨。只发布 allowlist 目录（data/history、data/snapshots），只提交【自动任务自己的产物】
 # （publish_dirs 用共享待发布记录判定，他人改动不带入；data/soul、data/account 本就 gitignore）；全局发布锁见 lib_publish。
@@ -278,6 +287,7 @@ if (( SHW_RC == 0 )); then
     if (( ET_MIN >= 640 && ET_MIN < 980 )); then fieldcheck open; fi
     if (( ET_MIN >= 965 )); then intraday_capture; flowside_capture; fi
     if (( ET_MIN >= 1000 )); then close_backup; fi
+    if (( ET_MIN >= 990 )); then paper_book; fi
     if (( ET_MIN >= 980 )); then fieldcheck close; thesisq close; fi
   fi
 else

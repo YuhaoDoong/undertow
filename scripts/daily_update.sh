@@ -411,8 +411,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" data/snapshots data/his
 set -e
 case $PUB_RC in
   0) echo "[完成] 已提交并推送（或无变更）" ;;
-  3|5) echo "[暂停发布] $PUB"
+  3) echo "[暂停发布] $PUB"
      alert "⚠️ 每日数据未提交（ET $ET_NOW）" "索引里有他人暂存的文件，已停止自动提交；数据已落盘，下次运行再发" ;;
+  5) echo "[暂停发布] $PUB"      # 与 3 分开报：2026-09-30 实为发布冲突，却报成「他人暂存」，查错方向
+     alert "⚠️ 每日数据未提交（ET $ET_NOW）" "发布冲突：运行前已有未提交改动的路径本次又被写入（$(printf '%s' "$PUB" | cut -d'：' -f2 | cut -c1-120)），已停止自动提交；数据已落盘，需人工核对后提交" ;;
   4) echo "[警告] 已提交但推送失败"
      alert "⚠️ 每日数据推送失败（ET $ET_NOW）" "已本地提交，git push 失败；数据未备份到远端" ;;
   *) echo "[失败] 提交失败 rc=$PUB_RC"

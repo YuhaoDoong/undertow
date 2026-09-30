@@ -166,6 +166,13 @@ _ALL = [
        prereg_ref="skew-reading-v1-20260928",
        note="主终点已由命中率改为 D_reg（运行前修订）；若通过只可称「分层带符号平均收益关联检出」，"
             "不等于准确率提高；命中率仅描述，经济性由价差 Δ 另答"),
+    _p("conviction.h1.v1", "analyze/conviction.py：偏斜 S、资金流 F、波动 V 三层同向 → 多层看涨/看跌（H1）",
+       "8 个品种（ETF 期权）· 方向族 D，冻结 conviction-h1-v1-20260928，正式起点 2026-09-29", "T3", "prospective_study",
+       ["（方向判断台账；研报 v2 只作「验证中」展示，不进结论）"], "前瞻计分中",
+       ["docs/prereg/2026-09-28_conviction_v1.1.md", "docs/prereg/2026-09-28_conviction_v1.4.md",
+        "docs/prereg/2026-09-28_direction_freeze_manifest.json"],
+       prereg_ref="conviction-h1-v1-20260928",
+       note="统计合约见 analyze/direction_stats.py；未检验前不得用于方向、过滤或仓位"),
     _p("vp.v1.H1", "analyze/volume_profile.py：首次触及成交密集区后先反弹 1 ATR", "GLD/SLV 日线 · 2016–2026 检验集",
        "T3", "negative_sample", ["（研究，不进研报）"], "只观察",
        ["docs/prereg/2026-09-28_volume_profile_v1.md", "data/backtest/vp_v1/test.json",

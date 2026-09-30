@@ -1732,19 +1732,43 @@ REPORT_V2_DEFAULT = ("gold", "silver", "wti", "qqq", "tqqq", "tlt", "spy", "iwm"
 REPORT_V2_DIR = pathlib.Path("data/reports/v2")
 
 
+def _v2_direction(inst_key: str, day) -> dict | None:
+    """方向族 D 今日读数（冻结台账，只读）+ 累计进度。不读任何收益字段。"""
+    import json as _json
+    from undertow.analyze.direction_stats import FAMILY_D_START
+    base = pathlib.Path("data/history/direction_ledger")
+    out = {}
+    for key, rv in (("conviction", "conviction-h1-v1-20260928"), ("skew", "skew-reading-v1-20260928")):
+        p = base / rv / "prospective" / f"{inst_key}.jsonl"
+        if not p.exists():
+            continue
+        rows = [_json.loads(x) for x in p.read_text("utf-8").splitlines() if x.strip()]
+        today_row = next((r for r in rows if r.get("session") == day.isoformat()), None)
+        if today_row:
+            out[key] = {k: today_row.get(k) for k in ("reading", "features", "quote_day", "recorded_at", "status")}
+        if key == "conviction":
+            live = [r for r in rows if r.get("session", "") >= FAMILY_D_START.isoformat()]
+            out["progress"] = {"start": FAMILY_D_START.isoformat(), "sessions": len(live),
+                               "events": sum(1 for r in live if (r.get("features") or {}).get("H1") not in (0, None))}
+    return out or None
+
+
 def cmd_report_v2(args) -> int:
-    """新研报体系 v2（用户 2026-09-30）：只放已证实的内容，目前只有期权墙总览。旧研报照常出，互不影响。
-    只读已落盘的认证快照（不在这里抓链）；商品价换算用期货【今天之前最后一个收盘】÷ ETF 快照价（与旧研报同源口径）。"""
+    """新研报体系 v2（用户 2026-09-30）：首页 + 各品种详情页。
+    详情页 = ① 期权墙总览（按到期）② 按到期分层 ③ 关键点位 + 价格图 + 近价 OI 分布 ④ 墙位历史 ⑤ 方向判断（验证中）。
+    只读已落盘的认证快照（不抓链）；计算全部复用旧研报同一批 analyze 函数（不另立口径）；旧研报照常出。"""
     import datetime as _dt
     from zoneinfo import ZoneInfo
     from undertow.analyze.expiry_ladder import wall_overview
-    ET = ZoneInfo("America/New_York")
+    from undertow.analyze.outlook import _key_levels
     from undertow.collect.cboe_options import snapshot_from_payload
+    from undertow.core import market_calendar as _mc
     from undertow.dirledger_cli import session_index
     from undertow.report import v2 as rv2
+    ET = ZoneInfo("America/New_York")
     cfg = load_config()
     store = SnapshotStore()
-    fut_src = YahooFuturesSource()
+    fut_src, px_src = YahooFuturesSource(), CboeHistorySource()
     today = market_today()
     keys = args.instruments or list(REPORT_V2_DEFAULT)
     items = []
@@ -1753,36 +1777,89 @@ def cmd_report_v2(args) -> int:
         if inst is None or not inst.options:
             items.append({"name": k, "symbol": "—", "status": "skip", "why": "未配置期权"}); continue
         sym = inst.options.symbol
-        f = session_index(store, sym).get(today)
+        idx = session_index(store, sym)
+        f = idx.get(today)
         if f is None:
             items.append({"name": inst.display_name, "symbol": sym, "status": "missing",
                           "why": f"{today} 的开盘前快照未到（未认证到该交易日）"}); continue
-        snap = snapshot_from_payload(store.load("options", sym, f), k, sym)
+        curr = snapshot_from_payload(store.load("options", sym, f), k, sym)
+        prev_day = _mc.prev_trading_day(today)
+        pf = idx.get(prev_day)
+        prev = snapshot_from_payload(store.load("options", sym, pf), k, sym) if pf else None
         ca = store.captured_at("options", sym, f)
-        ratio, conv = None, None
-        if inst.commodity is not None and snap.spot > 0:
+        it = {"key": k, "name": inst.display_name, "symbol": sym, "status": "ok",
+              "detail_href": f"v2_{today.isoformat()}_{k}.html",
+              "captured_at": (_dt.datetime.fromtimestamp(ca, ET).strftime("%Y-%m-%d %H:%M ET") if ca else None),
+              "overview": wall_overview(curr, today=today), "ratio": None, "conv": None}
+        real_series = real_price = None
+        if inst.commodity is not None and curr.spot > 0:
             try:
-                ser, _px, _asof = fut_src.fetch_for(inst, use_cache=True)
-                cl = [c for d, c in zip(ser.dates, ser.closes) if d < today] if ser else []
+                real_series, real_price, _asof = fut_src.fetch_for(inst, use_cache=True)
+                cl = [c for d, c in zip(real_series.dates, real_series.closes) if d < today] if real_series else []
                 if cl:
-                    ratio = cl[-1] / snap.spot
-                    conv = (lambda r: (lambda x: x * r))(ratio)
+                    it["ratio"] = cl[-1] / curr.spot
             except Exception as e:
                 print(f"[提示] {k} 期货价取不到，不做商品价换算：{e}", file=sys.stderr)
-        items.append({"name": inst.display_name, "symbol": sym, "status": "ok",
-                      "overview": wall_overview(snap, today=today), "ratio": ratio, "conv": conv,
-                      "captured_at": (_dt.datetime.fromtimestamp(ca, ET).strftime("%Y-%m-%d %H:%M ET") if ca else None)})
+        mult = it["ratio"] if it["ratio"] is not None else inst.options.approx_commodity_multiplier
+        obs_day = _prev_weekday(today)                 # 与旧研报同一口径：链交易日
+        try:
+            ga = analyze_gamma(curr, multiplier=mult, proxy_quality=inst.options.proxy_quality, today=obs_day,
+                               horizon_days=45)
+            fa = analyze_flow(prev, curr, today=obs_day, horizon_days=45, call_wall=ga.call_wall, put_wall=ga.put_wall,
+                              prev_date=prev_day.isoformat() if pf else None, curr_date=today.isoformat())
+            conv = ga.to_commodity if it["ratio"] is not None else None
+            it["conv"] = conv
+            it["levels"] = _key_levels(ga, fa)
+            lvl = (lambda v: ga.to_commodity(v)) if it["ratio"] is not None else (lambda v: v)
+            levels = []
+            if ga.call_wall_oi > 0:
+                levels.append(("call墙", lvl(ga.call_wall), viz.C_RES))
+            if ga.put_wall_oi > 0:
+                levels.append(("put墙", lvl(ga.put_wall), viz.C_SUP))
+            if ga.zero_gamma is not None:
+                levels.append(("零伽马", lvl(ga.zero_gamma), viz.C_FLIP))
+            if real_series is not None:
+                dts = [d for d in real_series.dates if d < today]
+                cls = real_series.closes[:len(dts)]
+                it["price_svg"] = viz.price_levels_svg(dts, cls, levels, cls[-1] if cls else ga.spot,
+                                                       title=f"期货日线 + 关键位（{real_series.symbol}，至前收）")
+            else:
+                ps = px_src.fetch_series(inst, use_cache=True)
+                dts = [d for d in ps.dates if d < today]
+                it["price_svg"] = viz.price_levels_svg(dts, ps.closes[:len(dts)], levels, ga.spot,
+                                                       title=f"ETF 日线 + 关键位（{ps.symbol}，至前收）")
+            it["oi_svg"] = viz.oi_walls_svg([(lvl(r.strike), r.call_oi, r.put_oi) for r in ga.strike_rows],
+                                            lvl(ga.spot), lvl(ga.call_wall), lvl(ga.put_wall),
+                                            title="近价 OI 墙（按" + ("商品价" if it["ratio"] is not None else "ETF 行权价") + "）")
+            it["layers_html"] = render_wall_layers_section(
+                ga, ladder=support_ladder(curr, obs_day, curr.spot, expiring_on=today),
+                bands=ladder_bands(curr, obs_day, curr.spot),
+                agree={sd: wall_agreement(ga.layers, sd) for sd in ("put", "call")},
+                conv=conv, unit="", etf_symbol=sym)
+        except Exception as e:
+            print(f"⚠️ {k} 研报 v2 期权结构计算失败：{type(e).__name__}: {e}", file=sys.stderr)
+            it["struct_error"] = f"{type(e).__name__}: {e}"[:160]
+        try:
+            it["history_html"] = render_wall_history(_wall_history_rows(inst, sym, today), inst.display_name)
+        except Exception as e:
+            print(f"⚠️ {k} 研报 v2 墙位历史图失败：{type(e).__name__}: {e}", file=sys.stderr)
+        it["direction"] = _v2_direction(k, today)
+        items.append(it)
     now = _dt.datetime.now(ET).strftime("%Y-%m-%d %H:%M ET")
     REPORT_V2_DIR.mkdir(parents=True, exist_ok=True)
-    html_p = REPORT_V2_DIR / f"v2_{today.isoformat()}.html"
-    md_p = REPORT_V2_DIR / f"v2_{today.isoformat()}.md"
-    html_p.write_text(rv2.render_html(today.isoformat(), items, generated_at=now), "utf-8")
-    md_p.write_text(rv2.render_md(today.isoformat(), items, generated_at=now), "utf-8")
+    idx_name = f"v2_{today.isoformat()}.html"
+    (REPORT_V2_DIR / idx_name).write_text(rv2.render_index_html(today.isoformat(), items, generated_at=now), "utf-8")
+    for it in items:
+        if it["status"] == "ok":
+            (REPORT_V2_DIR / it["detail_href"]).write_text(
+                rv2.render_detail_html(today.isoformat(), it, generated_at=now, index_href=idx_name), "utf-8")
+    (REPORT_V2_DIR / f"v2_{today.isoformat()}.md").write_text(rv2.render_md(today.isoformat(), items, generated_at=now), "utf-8")
     bad = [i["name"] for i in items if i["status"] != "ok"]
-    print(f"研报 v2 {today}：{len(items) - len(bad)}/{len(items)} 个品种有期权墙" + (f"；缺 {bad}" if bad else "")
-          + f" → {html_p.resolve()}")
-    # 快照未到 = 正常的「还没数据」（pending，rc=3，调度层不告警）；其余异常由调用方按非零告警
-    return 0 if not bad else 3
+    broken = [i["name"] for i in items if i.get("struct_error")]
+    print(f"研报 v2 {today}：{len(items) - len(bad)}/{len(items)} 个品种" + (f"；缺快照 {bad}" if bad else "")
+          + (f"；期权结构计算失败 {broken}" if broken else "") + f" → {(REPORT_V2_DIR / idx_name).resolve()}")
+    # 快照未到 = 正常的「还没数据」（pending，rc=3，不告警）；计算失败 = rc=1（告警）
+    return 1 if broken else (3 if bad else 0)
 
 
 def cmd_report(args) -> int:

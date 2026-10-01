@@ -1,0 +1,2 @@
+2026-10-01 16:03 +08 | ET 2026-10-01 04:00 | ⚠️ 影子账采集/结算失败（ET 2026-10-01 04:00）
+  capture rc=1 settle rc=1：  ⚠️ gold: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）   ⚠️ silver: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError） 

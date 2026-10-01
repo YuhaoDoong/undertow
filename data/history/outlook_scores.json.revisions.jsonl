@@ -18,3 +18,16 @@
 {"key": ["gold", "2026-09-29"], "published": -3.0, "revision": -0.8, "revised_at": "2026-09-30T09:39:40.886384+08:00"}
 {"key": ["silver", "2026-09-30"], "published": -1.0, "revision": -2.6, "revised_at": "2026-09-30T18:45:53.551302+08:00"}
 {"key": ["wti", "2026-09-30"], "published": -0.9, "revision": 1.3, "revised_at": "2026-09-30T18:46:08.772273+08:00"}
+{"key": ["wti", "2026-10-01"], "published": 1.3, "revision": -1.5, "revised_at": "2026-10-01T18:01:29.457911+08:00"}
+{"key": ["qqq", "2026-10-01"], "published": -3.7, "revision": -4.5, "revised_at": "2026-10-01T18:01:52.353904+08:00"}
+{"key": ["tqqq", "2026-10-01"], "published": -5.1, "revision": -3.5, "revised_at": "2026-10-01T18:02:09.770838+08:00"}
+{"key": ["tlt", "2026-10-01"], "published": -0.9, "revision": -1.1, "revised_at": "2026-10-01T18:02:16.560295+08:00"}
+{"key": ["spy", "2026-10-01"], "published": -2.4, "revision": -3.2, "revised_at": "2026-10-01T18:02:25.915037+08:00"}
+{"key": ["iwm", "2026-10-01"], "published": 0.2, "revision": -1.4, "revised_at": "2026-10-01T18:02:38.496985+08:00"}
+{"key": ["silver", "2026-10-01"], "published": -3.2, "revision": -3.8, "revised_at": "2026-10-01T18:45:54.799207+08:00"}
+{"key": ["wti", "2026-10-01"], "published": 1.3, "revision": -1.5, "revised_at": "2026-10-01T18:46:09.883696+08:00"}
+{"key": ["qqq", "2026-10-01"], "published": -3.7, "revision": -4.5, "revised_at": "2026-10-01T18:46:33.056011+08:00"}
+{"key": ["tqqq", "2026-10-01"], "published": -5.1, "revision": -3.5, "revised_at": "2026-10-01T18:46:49.361146+08:00"}
+{"key": ["tlt", "2026-10-01"], "published": -0.9, "revision": -1.1, "revised_at": "2026-10-01T18:46:55.546773+08:00"}
+{"key": ["spy", "2026-10-01"], "published": -2.4, "revision": -3.2, "revised_at": "2026-10-01T18:47:04.638317+08:00"}
+{"key": ["iwm", "2026-10-01"], "published": 0.2, "revision": -1.4, "revised_at": "2026-10-01T18:47:16.226737+08:00"}

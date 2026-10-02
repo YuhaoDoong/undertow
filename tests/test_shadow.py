@@ -1188,9 +1188,13 @@ def test_fieldcheck_skips_non_trading_day(tmp_path, monkeypatch):
 def test_session_hooks_fieldcheck_phases():
     src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
     assert src.index("fieldcheck() {") < src.index("fieldcheck pre")
-    for ph, cond in (("pre", "ET_MIN >= 540 && ET_MIN < 570"), ("open", "ET_MIN >= 640 && ET_MIN < 980"),
-                     ("close", "ET_MIN >= 980")):
+    for ph, cond in (("open", "ET_MIN >= 640 && ET_MIN < 980"), ("close", "ET_MIN >= 980")):
         assert f"{cond} )); then fieldcheck {ph}" in src
+    # pre（Codex 032 O3）：仍在 09:00–09:30 窗口内，先盘前补齐，补齐完成或 09:25 截止后才核验
+    blk = src[src.index("ET_MIN >= 540 && ET_MIN < 570 )); then"):]
+    blk = blk[:blk.index("    fi\n")]
+    assert blk.index("premarket_fill") < blk.index("fieldcheck pre")
+    assert '.premarket_fill_${ET_DATE}.ok" ]] || (( ET_MIN >= 565 )); then fieldcheck pre; fi' in blk
     assert src.index("thesisq() {") < src.index("thesisq pre") and "thesisq close" in src
 
 

@@ -172,6 +172,28 @@ fieldcheck() {  # $1=phase
     notify "⚠️ 现场核验 ${PH} 有异常" "$(printf '%s' "$RES" | grep '^- ⚠️' | head -3 | tr '\n' ' ') 详见 data/history/fieldcheck/"
   fi
 }
+# ⑮ 影子账盘前补齐（Codex 032 O3；10/1 早上 CBOE 429 → daily 的盘前捕获整批失败，靠人手 09:13 补）：
+# ET 09:00–09:25 每次唤醒查缺口 —— 今天没行的品种补 capture（只补缺的，不碰已冻结行）；仍 provisional 的补 settle 认证。
+# 09:25 后不再补（09:30 后的行不是前瞻样本）；届时仍有缺口 → 通知一次。三个时刻（快照可得/候选冻结/认证）各自保留在行里。
+premarket_fill() {
+  local G RC MISS PROV R1 R2 DONEF="$LOG_DIR/.premarket_fill_${ET_DATE}.ok" NOTF="$LOG_DIR/.premarket_fill_${ET_DATE}.notified"
+  [[ -f "$DONEF" ]] && return
+  G=$("$PY" scripts/shadow_premarket_gaps.py 2>&1); RC=$?
+  if (( RC != 0 )); then hb "⑮盘前补齐：⏳ 缺口检查 rc=$RC"; return; fi
+  MISS=$(printf '%s\n' "$G" | sed -n 's/^missing //p'); PROV=$(printf '%s\n' "$G" | sed -n 's/^provisional //p')
+  if [[ -z "${MISS// }" && -z "${PROV// }" ]]; then : > "$DONEF"; hb "⑮盘前补齐：✅ 无缺口"; return; fi
+  if (( ET_MIN >= 565 )); then                   # 09:25 后不补，只报
+    if [[ ! -f "$NOTF" ]]; then
+      : > "$NOTF"; hb "⑮盘前补齐：⚠️ 截止仍缺 [${MISS}] 未认证 [${PROV}]"
+      notify "⚠️ 影子账盘前仍有缺口" "缺行：${MISS:-无}；未认证：${PROV:-无}"
+    fi
+    return
+  fi
+  R1=0; R2=0
+  if [[ -n "${MISS// }" ]]; then "$PY" -m undertow shadow capture ${=MISS} >/dev/null 2>&1; R1=$?; fi
+  if [[ -n "${MISS// }${PROV// }" ]]; then "$PY" -m undertow shadow settle ${=MISS} ${=PROV} >/dev/null 2>&1; R2=$?; fi
+  hb "⑮盘前补齐：缺行 [${MISS}] → capture rc=$R1；未认证 [${PROV}] → settle rc=$R2（下次唤醒复查）"
+}
 # ⑨ 事前判断行情捕获（用户 2026-09-28）：近期未验证的事前判断涉及的品种，盘前（含夜盘结果）与收盘后各存一份行情原文，
 # 写 data/soul/thesis_quotes.jsonl（私有，不入库）。只存不判，打分事后按判断里写明的口径做。
 thesisq() {  # $1=pre|close
@@ -279,7 +301,12 @@ if (( SHW_RC == 0 )); then
     if [[ "$_W" == "sample" ]]; then shadow_sample "$_LO" "$_HI"; fi
   done <<< "$SHW"
   if [[ -n "$SHW" ]]; then                      # 交易日
-    if (( ET_MIN >= 540 && ET_MIN < 570 )); then fieldcheck pre; thesisq pre; fi
+    if (( ET_MIN >= 540 && ET_MIN < 570 )); then
+      premarket_fill
+      # 现场核验 pre 每天只跑一次：等补齐完成（或到 09:25 截止）再核，免得报一个随后就补上的缺口
+      if [[ -f "$LOG_DIR/.premarket_fill_${ET_DATE}.ok" ]] || (( ET_MIN >= 565 )); then fieldcheck pre; fi
+      thesisq pre
+    fi
     if (( ET_MIN >= 640 && ET_MIN < 980 )); then fieldcheck open; fi
     if (( ET_MIN >= 965 )); then intraday_capture; flowside_capture; fi
     if (( ET_MIN >= 1000 )); then close_backup; fi

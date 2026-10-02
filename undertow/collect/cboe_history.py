@@ -6,6 +6,8 @@ USO 因展期损耗对 WTI 有偏差，已在 config/报告中标注）。
 """
 from __future__ import annotations
 
+import random
+import time
 from datetime import date, datetime
 
 from undertow.core.config import Instrument
@@ -18,6 +20,21 @@ CBOE_HIST_URL = "https://cdn.cboe.com/api/global/delayed_quotes/charts/historica
 
 _STALE_REFETCHED: set = set()
 _STALE_WARNED: set = set()
+# 跨进程的「刚为落后重抓过」标记（Codex 032 O3）：daily 一次运行起几十个进程，每个进程都对每个代码重抓一次，
+# 源端本就没更新时只会撞 429（10/1 ET 04:00/06:45 实测 → 交易日历取不到、影子账盘前捕获整批失败）。
+REFETCH_MARK_TTL_S = 1800
+RETRY_429_SLEEPS = (2.0, 5.0)             # 只对 429 有界重试，带抖动；其它错误不重试
+
+
+def _get_with_backoff(url: str):
+    for i, base in enumerate((0.0,) + RETRY_429_SLEEPS):
+        if base:
+            time.sleep(base + random.uniform(0, 1.0))
+        try:
+            return http_get_json(url)
+        except DataSourceError as e:
+            if "HTTP 429" not in str(e) or i == len(RETRY_429_SLEEPS):
+                raise
 
 
 def _last_bar(payload) -> date | None:
@@ -52,18 +69,34 @@ class CboeHistorySource:
         cache_key = f"cboehist_{sym}"
 
         payload = self.cache.get(cache_key, self.CACHE_TTL if use_cache else 0) if use_cache else None
+        mark = f"cboehist_refetch_{sym}"
         # 2026-09-28：周日晚缓存的日线最后一根停在 9/24，周一 06:45 研报仍在 12 小时有效期内沿用 →
         # SPY/TLT/IWM 研报名字与价格分析都少了周五一天。缓存命中但落后于「上一个交易日」→ 不用缓存，重抓。
         expect = _expected_last_bar()
         lb0 = _last_bar(payload) if payload is not None else None
         # 只处理「近期轻微落后」（≤7 天：12 小时有效期内沿用了前一晚的缓存）；更旧的数据交给 TTL 机制
+        stale = None
         if lb0 is not None and expect is not None and lb0 < expect and (expect - lb0).days <= 7 \
-                and sym not in _STALE_REFETCHED:
-            payload = None                        # 同一进程内每个代码只为「落后」重抓一次（源端本就滞后时不反复请求）
+                and sym not in _STALE_REFETCHED and self.cache.get(mark, REFETCH_MARK_TTL_S) is None:
+            stale, payload = payload, None        # 同一进程每代码只重抓一次；跨进程 30 分钟内也只重抓一次
             _STALE_REFETCHED.add(sym)
+            self.cache.set(mark, {"at": datetime.now().isoformat()})
         if payload is None:
-            payload = http_get_json(CBOE_HIST_URL.format(symbol=sym))
-            self.cache.set(cache_key, payload)
+            try:
+                payload = _get_with_backoff(CBOE_HIST_URL.format(symbol=sym))
+            except DataSourceError as e:
+                # 重抓失败：手里有缓存（落后的或已过 TTL 的）就沿用并显式标注，不让一次 429 把下游整批打成「日历不可用」。
+                # 这只是复用已到手的历史日线；「今天是否交易日」仍由预存交易日历在认证时判断，缓存不能单独证明今日开市。
+                fb = stale if stale is not None else self.cache.get(cache_key, None)
+                lbf = _last_bar(fb) if fb is not None else None
+                if lbf is None or (expect is not None and (expect - lbf).days > 7):
+                    raise                         # 没有缓存，或缓存落后一周以上：不拿陈旧数据充数
+                import sys as _sys
+                print(f"⚠️ {sym} CBOE 日线重抓失败（{str(e).splitlines()[0][:60]}），沿用本地缓存（最后一根 {_last_bar(fb)}）",
+                      file=_sys.stderr)
+                payload = fb
+            else:
+                self.cache.set(cache_key, payload)
         lb = _last_bar(payload)
         if expect is not None and lb is not None and lb < expect and sym not in _STALE_WARNED:
             _STALE_WARNED.add(sym)

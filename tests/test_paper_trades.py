@@ -601,3 +601,20 @@ def test_paper_has_its_own_scheduler_and_session_no_longer_ticks():
     assert 'PDIR="data/paper"' in sh and 'LOG="$PDIR/' in sh               # 含仓位 id 的日志只进私有目录
     pl = (root / "scripts" / "launchd" / "com.yuhaodoong.undertow.paper.plist").read_text("utf-8")
     assert "<integer>60</integer>" in pl and "paper_tick.sh" in pl
+
+
+def test_explicit_judgment_id_spans_slots_and_revisions_keep_it(tmp_path, monkeypatch):
+    """Codex 032 R4：同一观点跨到期计一个判断；不同观点各自计数；修订沿用判断身份、不能改；成交锁不变。"""
+    a = _th("A", "rule", judgment_id="J1"); b = _th("B", "rule", judgment_id="J1"); c = _th("C", "rule", judgment_id="J2")
+    b["paper"]["expiry"] = "2026-10-16"; c["paper"]["expiry"] = "2026-10-23"
+    j = {"theses": [a, b, c]}
+    assert pt.judgment_id(j, a) == pt.judgment_id(j, b) == "J1" and pt.judgment_id(j, c) == "J2"
+    assert pt.judgment_id(j, _th("L", "rule")) == "L"                        # 旧记录无显式身份：退回修订链根，不推断
+    _env(tmp_path, monkeypatch, [a])
+    r = pt.register_revision(_th("A2", "rule", cont="A", judgment_id="J9"))
+    assert not r["ok"] and "判断身份" in r["why"]
+    r = pt.register_revision(_th("A3", "rule", cont="A"))
+    assert r["ok"]
+    import json
+    st = {t["id"]: t for t in json.loads(pt.JOURNAL.read_text())["theses"]}
+    assert st["A3"]["paper"]["judgment_id"] == "J1"

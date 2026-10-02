@@ -766,7 +766,8 @@ def sync_ledger(j: dict, ledger: Path | None = None) -> int:
             new.append({"event_id": event_id(t["id"], e), "thesis_id": t["id"],
                         "rule_version": p.get("rule_version", RULE_VERSION), "action": e["action"], "at": e["at"],
                         "state_now": p["state"],
-                        "spec": {k: p.get(k) for k in ("underlying", "expiry", "side", "structure", "strike_rule",
+                        "spec": {k: p.get(k) for k in ("underlying", "expiry", "side", "structure", "strike_rule", "batch",
+                                                       "judgment_id", "exit_rule",
                                                        "target_width", "sell", "buy", "k_sell", "k_buy",
                                                        "qty", "entry_window_et", "min_credit_ratio", "stop_mult",
                                                        "fee_round_trip", "mark_slots_et")},
@@ -781,7 +782,12 @@ def sync_ledger(j: dict, ledger: Path | None = None) -> int:
 
 
 def judgment_id(j: dict, t: dict) -> str:
-    """同一事前判断：沿 continuation_of 追到根记录（统计时判断只算一次）。"""
+    """同一事前判断的标识（统计时判断只算一次）。三种身份分离（Codex 032 R4）：
+    judgment_id = 观点（可跨到期/结构/批次）；slot_key = 仓位槽位（成交锁）；continuation_of 链 = 同槽位的修订版本。
+    规格里有显式 paper.judgment_id 就用它；没有（旧记录）才退回修订链的根 —— 未知的历史判断关系不自动推断。"""
+    jid = (t.get("paper") or {}).get("judgment_id")
+    if jid:
+        return jid
     by = {x["id"]: x for x in j.get("theses", [])}
     root, seen = t, set()
     while (root.get("paper") or {}).get("continuation_of") in by and root["id"] not in seen:
@@ -841,6 +847,12 @@ def register_revision(new: dict, now: datetime | None = None) -> dict:
         if pred is not None and pred.get("paper") and slot_key(pred) != slot_key(new):
             return {"ok": False, "why": f"修订不得改变仓位槽位（{slot_key(pred)} → {slot_key(new)}）；另一个到期/方向请登记为新仓位",
                     "superseded": []}
+        if pred is not None and pred.get("paper"):          # 修订沿用原判断身份；显式改判断 = 新观点，不能挂在修订链上
+            pj, nj = pred["paper"].get("judgment_id"), new["paper"].get("judgment_id")
+            if pj and nj and pj != nj:
+                return {"ok": False, "why": f"修订不得改变判断身份（{pj} → {nj}）；新观点请登记为新仓位", "superseded": []}
+            if pj and not nj:
+                new["paper"]["judgment_id"] = pj
         j.setdefault("theses", []).append(new)
         key = slot_key(new)
         hit = entered_in_slot(j, key, exclude=new["id"])

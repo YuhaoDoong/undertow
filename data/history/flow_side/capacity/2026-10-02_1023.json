@@ -1,0 +1,61 @@
+{
+ "schema": 1,
+ "measured_at": "2026-10-02T10:23:10.129209-04:00",
+ "rth": true,
+ "plan_unique_symbols": 1038,
+ "plan_by_instrument_type": {
+  "gold/D": 300,
+  "gold/M": 76,
+  "gold/W": 448,
+  "silver/D": 66,
+  "silver/M": 22,
+  "silver/W": 126
+ },
+ "sample_n": 150,
+ "sample_rule": "计划代码字典序等距抽样（与成交量无关）",
+ "runs": [
+  {
+   "workers": 1,
+   "n": 150,
+   "wall_s": 80.5,
+   "per_symbol_wall_s": 0.537,
+   "latency_median_s": 0.519,
+   "latency_p90_s": 0.595,
+   "ok": 150,
+   "two_sided": 134,
+   "errors": {}
+  },
+  {
+   "workers": 4,
+   "n": 150,
+   "wall_s": 21.66,
+   "per_symbol_wall_s": 0.144,
+   "latency_median_s": 0.502,
+   "latency_p90_s": 0.609,
+   "ok": 150,
+   "two_sided": 134,
+   "errors": {}
+  },
+  {
+   "workers": 8,
+   "n": 150,
+   "wall_s": 5.05,
+   "per_symbol_wall_s": 0.034,
+   "latency_median_s": 0.157,
+   "latency_p90_s": 0.533,
+   "ok": 50,
+   "two_sided": 46,
+   "errors": {
+    "LiveQuotesUnavailable: 全部 1 个代码的盘口都取不到——": 100
+   }
+  }
+ ],
+ "full_round_estimate_s": {
+  "1": 557.4,
+  "4": 149.5,
+  "8": 35.3
+ },
+ "quote_max_age_s": 900,
+ "note": "option quote 批量接口无 bid/ask，不能替代 depth（2026-10-02 实测）",
+ "best_workers": 8
+}

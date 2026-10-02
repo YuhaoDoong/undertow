@@ -55,23 +55,48 @@ def section_allowed(sec: Section) -> tuple[bool, str]:
     if sec.role == "observation":
         return True, "观测类（不表达方向判断）"
     if sec.role == "validating":
-        bad = []
+        if not sec.claim_ids:                         # Codex 032 R6：空集合不能「全部通过」
+            return False, "没有登记任何主张，不能以「验证中」展示"
+        bad, drift = [], []
         for cid in sec.claim_ids:
             c = _claims.CLAIMS.get(cid)
             if c is None or c.reason != "prospective_study" or not c.prereg_ref:
                 bad.append(cid); continue
             # 冻结身份须真实存在（Codex 031：不能只认非空 prereg_ref）——引用的协议/清单文件都在，且台账里有这一规则版本的目录
             if not all((_ROOT / r).exists() for r in c.evidence_refs) or not (_LEDGER / c.prereg_ref).is_dir():
-                bad.append(cid)
+                bad.append(cid); continue
+            drift += _manifest_drift(c.evidence_refs)
         if bad:
             return False, f"主张 {bad} 未登记为前瞻预登记研究，或冻结身份（协议文件 / 台账规则版本目录）核对不上，不能以「验证中」展示"
-        return True, "验证中（前瞻预登记检验未完成）——只展示、不进结论"
+        if drift:
+            return False, f"冻结清单哈希不一致（{drift[:3]}），代码已偏离冻结版本，不能以「验证中」展示"
+        # 这里只证明「规则版本与冻结代码一致」；逐日样本是否在截止前冻结是另一件事，由台账/现场核验单独展示
+        return True, "验证中（前瞻预登记检验未完成）——只展示、不进结论；逐日样本是否按时冻结另行核验"
     if sec.role == "prediction":
         tiers = {cid: _claims.tier_of(cid) for cid in sec.claim_ids}
         if sec.claim_ids and all(t == "T1" for t in tiers.values()):
             return True, "已通过预登记检验（T1）"
         return False, f"未达 T1：{tiers}"
     return False, f"未知角色 {sec.role}"
+
+
+def _manifest_drift(refs) -> list:
+    """引用里若有冻结清单（含 files_sha256），逐个核对现行文件哈希；返回不一致的路径（缺文件也算）。"""
+    import hashlib
+    import json
+    out = []
+    for r in refs:
+        if not str(r).endswith(".json"):
+            continue
+        try:
+            files = (json.loads((_ROOT / r).read_text("utf-8")) or {}).get("files_sha256") or {}
+        except (OSError, ValueError):
+            out.append(str(r)); continue
+        for path, sha in files.items():
+            f = _ROOT / path
+            if not f.exists() or hashlib.sha256(f.read_bytes()).hexdigest() != sha:
+                out.append(path)
+    return out
 
 
 def _allowed() -> dict:

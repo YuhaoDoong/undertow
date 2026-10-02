@@ -62,3 +62,16 @@ def test_validating_requires_real_frozen_identity(monkeypatch, tmp_path):
     monkeypatch.setattr(v2, "_LEDGER", tmp_path)                                  # 台账里没有这一规则版本的目录
     ok, why = v2.section_allowed(v2.Section("d", "方向", "validating", ("conviction.h1.v1",)))
     assert not ok and "冻结身份" in why
+
+
+def test_validating_rejects_empty_and_manifest_drift(monkeypatch, tmp_path):
+    ok, why = v2.section_allowed(v2.Section("d", "方向", "validating", ()))
+    assert not ok and "没有登记任何主张" in why                                    # Codex 032 R6
+    import json
+    m = tmp_path / "m.json"
+    (tmp_path / "f.py").write_text("x")
+    m.write_text(json.dumps({"files_sha256": {"f.py": "0" * 64}}))
+    monkeypatch.setattr(v2, "_ROOT", tmp_path)
+    assert v2._manifest_drift(["m.json"]) == ["f.py"]
+    ok, why = v2.section_allowed(v2.Section("d", "方向", "validating", ("conviction.h1.v1",)))
+    assert not ok                                                               # 根目录换了：引用文件不在 → 拒绝

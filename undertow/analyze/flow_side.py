@@ -85,7 +85,7 @@ MODES = ("quote_past", "tick_only", "mixed", "quote_any_window")     # 最后一
 
 def classify_v1(rows: list, quotes: list, mode: str) -> dict:
     """rows：[(分钟起点, 收盘价, 成交量)] 升序；quotes：[(桶 started_at, 桶 ended_at, bid, ask)]。
-    quote_past：只用 ended_at ≤ 分钟起点 且 最短年龄 ≤ QUOTE_MAX_AGE 的报价（逐合约报价时刻未知，只知在桶区间内）。
+    quote_past：只用 ended_at ≤ 分钟起点 且 最大年龄（分钟起点 − 桶 started_at）≤ QUOTE_MAX_AGE 的报价（逐合约报价时刻未知，只知在桶区间内，所以按最坏情况的年龄判）。
     返回成交量口径的 buy/sell/unclassified，以及用到的报价年龄区间。"""
     assert mode in MODES
     out = {"mode": mode, "buy": 0.0, "sell": 0.0, "unclassified": 0.0, "quote_age_min_s": [], "quote_age_max_s": []}

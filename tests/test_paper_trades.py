@@ -121,13 +121,6 @@ def test_never_places_orders():
         assert bad not in src
 
 
-def test_session_hook_runs_paper_tick_each_trading_wake():
-    src = (Path(__file__).resolve().parents[1] / "scripts/session_hooks.sh").read_text("utf-8")
-    assert src.index("paper_tick() {") < src.index('[[ -n "$SHW" ]] && paper_tick')
-    assert src.index('[[ -n "$SHW" ]] && paper_tick') < src.index("while read -r _W _LO _HI")    # ⑫ 先于影子窗口与采样
-    assert "scripts/paper_trades.py tick" in src
-
-
 def test_quote_with_explicit_error_rejected():
     """Codex 026 probe：带 stale 错误、挂单量 0 的报价曾被接受。"""
     assert not pt.quote_ok({"bid": 1, "ask": 1.1, "error": "stale", "bid_size": 0, "ask_size": 0})
@@ -519,12 +512,6 @@ def test_weekend_marks_are_offhours_only():
     assert p["state"] == "entered" and p["events"][-1]["action"] == "mark_offhours"
 
 
-def test_session_hook_ticks_paper_when_calendar_unavailable():
-    src = (Path(__file__).resolve().parents[1] / "scripts" / "session_hooks.sh").read_text("utf-8")
-    fb = src[src.index("无法取得今日窗口"):]
-    assert "paper_tick" in fb[:600] and "%u" in fb[:600]
-
-
 def test_write_journal_accepts_tuples_in_selection(tmp_path, monkeypatch):
     """选档结果里的 walls 是元组；旧的回读比对用对象相等，元组≠列表 → 每次 tick 都失败（2026-09-30 ET 09:40–09:52）。"""
     import json
@@ -601,3 +588,16 @@ def test_tick_uses_per_position_request_time(tmp_path, monkeypatch):
     assert st["A"]["paper"]["state"] == "entered"
     assert st["B"]["paper"]["state"] == "missed" and st["B"]["paper"].get("entered_at") is None   # B 请求时已过窗口，不倒填成 10:09
     assert "A:enter" in out and "B:missed" in out
+
+
+def test_paper_has_its_own_scheduler_and_session_no_longer_ticks():
+    """Codex 032 O1：模拟仓独立调度（60 秒），session 不再调用，避免两个调度器同时主控。"""
+    root = Path(__file__).resolve().parents[1]
+    sess = (root / "scripts" / "session_hooks.sh").read_text("utf-8")
+    assert "paper_tick\n" not in sess and "&& paper_tick" not in sess and "then paper_tick" not in sess
+    sh = (root / "scripts" / "paper_tick.sh").read_text("utf-8")
+    assert 'lockf -t 0' in sh and 'PAPER_SCHED="$SCHED"' in sh and 'SCHED="paper-launchd-v1"' in sh
+    assert ".paper_alive" in sh and ".status_paper.json" in sh and "FAILURE_" in sh
+    assert 'PDIR="data/paper"' in sh and 'LOG="$PDIR/' in sh               # 含仓位 id 的日志只进私有目录
+    pl = (root / "scripts" / "launchd" / "com.yuhaodoong.undertow.paper.plist").read_text("utf-8")
+    assert "<integer>60</integer>" in pl and "paper_tick.sh" in pl

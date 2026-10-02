@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.yuhaodoong.undertow.paper</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/bin/zsh</string>
+		<string>/Users/yhdong/Trading/scripts/paper_tick.sh</string>
+	</array>
+	<!-- 模拟仓独立调度（Codex 032 O1）：每 60 秒唤醒，脚本自己按规格里的 ET 时刻判断该做什么 -->
+	<key>StartInterval</key>
+	<integer>60</integer>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>StandardErrorPath</key>
+	<string>/Users/yhdong/Trading/data/paper/paper_tick.err</string>
+	<key>StandardOutPath</key>
+	<string>/Users/yhdong/Trading/data/paper/paper_tick.out</string>
+	<key>WorkingDirectory</key>
+	<string>/Users/yhdong/Trading</string>
+</dict>
+</plist>

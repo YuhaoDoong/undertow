@@ -231,11 +231,16 @@ flowside_capture() {
 # ⑭ 模拟仓台账报告（用户 2026-09-30：「模拟仓所有记录你应该定时统计分析生成一个report」）：ET 16:30 起每天一次，
 # 读私有 journal、写 data/paper/reports/（不入库）；用已记录的盯市，不另取报价。失败留痕，下次唤醒重试。
 paper_book() {
-  local OKF="$LOG_DIR/.paperbook_${ET_DATE}.ok" RES RC
+  local OKF="$LOG_DIR/.paperbook_${ET_DATE}.ok" FAILF="$LOG_DIR/.paperbook_fail_${ET_DATE}" RES RC
   [[ -f "$OKF" ]] && return
   RES=$("$PY" scripts/paper_book.py 2>&1); RC=$?
-  if (( RC == 0 )); then : > "$OKF"; hb "⑭模拟仓台账：✅ $(printf '%s' "$RES" | tail -1 | clip 100)"
-  else hb "⑭模拟仓台账：⏳ rc=$RC $(printf '%s' "$RES" | tail -1 | clip 100)"; fi
+  # 本日志会入库：只记成败，不记台账内容（台账含交易判断，属私有 data/paper/）
+  if (( RC == 0 )); then : > "$OKF"; hb "⑭模拟仓台账：✅"
+  else
+    hb "⑭模拟仓台账：⏳ rc=$RC，下次唤醒重试（详情见私有输出）"
+    printf 'x' >> "$FAILF"                        # Codex 032 R7：无人值守失败要当场可见
+    [[ $(wc -c < "$FAILF") -eq 3 ]] && notify "⚠️ 模拟仓台账连续生成失败" "rc=$RC"
+  fi
 }
 # ⑪ 收盘后备份（用户 2026-09-28「数据最重要」；Codex 024-6）：ET 16:40 起把当天自动任务写下的数据提交并推送，
 # 不等次日凌晨。只发布 allowlist 目录（data/history、data/snapshots），只提交【自动任务自己的产物】
@@ -258,28 +263,12 @@ close_backup() {
     fi
   fi
 }
-# ⑫ 模拟仓（用户 2026-09-29：「模拟仓开仓……自动定时进行」）：每次唤醒推进一步（入场窗口、盯市时点、到期结算），
-# 没到点什么都不写；只读报价、只写私有 data/soul/journal.json，从不下单。有动作留痕并通知；取数出错下次重试。
-# 调度（Codex 028，2026-09-29 起）：⑫ 先于 ④⑤⑥⑦ 运行 —— 原先排在 ⑦ 盘中采样（约 4 分钟）之后，9/29 10:00–10:20 入场窗口
-# 只取到一次价（10:16 那次唤醒轮到 ⑫ 时已 10:20:25）。⑫ 只取几个合约的盘口，耗时数秒，不会饿死后面的采样。
-# 调度版本写进每个模拟仓事件（PAPER_SCHED），旧窗口（一次取价）与新窗口分层统计，不补造取价。
-PAPER_SCHED="session-hook-v2（⑫ 先于 ④⑤⑥⑦；2026-09-29 起）"; export PAPER_SCHED
-paper_tick() {
-  local RES RC T0
-  T0=$(TZ=America/New_York date +%H:%M:%S)
-  RES=$("$PY" scripts/paper_trades.py tick 2>&1); RC=$?
-  if [[ "$RES" != *"无到点动作"* ]]; then
-    hb "⑫模拟仓（${T0}→$(TZ=America/New_York date +%H:%M:%S)）：$(printf '%s' "$RES" | tail -1 | clip 160)"
-    if printf '%s' "$RES" | grep -qE ':(enter|skipped|missed|invalid_spec|stop|settle|settlement_pending|error|exit_rule_config_error|take_profit|time_exit|manual_close)'; then
-      notify "📒 模拟仓" "$(printf '%s' "$RES" | tail -1 | clip 160)"
-    fi
-  fi
-  (( RC != 0 )) && hb "⑫模拟仓：⏳ rc=$RC，下次唤醒重试"
-}
+# ⑫ 模拟仓：2026-10-02 起由独立任务 scripts/paper_tick.sh（launchd com.yuhaodoong.undertow.paper，60 秒）主控（Codex 032 O1）。
+# 原先在这里每次唤醒先跑一次，但 9/30 入场窗口里 10:07/10:12/10:22 的唤醒被本进程的长任务占住，30 分钟只取了 3 次价。
+# 本脚本不再调用模拟仓，避免两个调度器同时主控；旧事件里的 sched 标记（session-hook-v2）保留，供分层统计。
 # 本脚本未开 set -e；分开捕获 rc（AGENTS.md 静默失败第 5 条：不用 `|| true`）
 SHW=$("$PY" -m undertow.cli shadow windows 2>&1); SHW_RC=$?
 if (( SHW_RC == 0 )); then
-  [[ -n "$SHW" ]] && paper_tick                 # 交易日：短窗口入场先于长耗时的影子窗口与采样
   while read -r _W _LO _HI; do
     [[ -z "$_W" ]] && continue
     if [[ "$_W" == "open" ]]; then shadow_window open "$_LO" "$_HI" "④影子开盘窗"; fi
@@ -298,9 +287,6 @@ if (( SHW_RC == 0 )); then
 else
   # 日历失效（覆盖期外）或命令崩溃：窗口来源没了，不能当作「今天没窗口」静默跳过
   hb "④⑤影子窗口：无法取得今日窗口（rc=$SHW_RC）$(printf '%s' "$SHW" | tail -1)"
-  # 模拟仓入场/盯市/结算只看规格里的日期与时刻，不依赖交易日历；日历取不到时（9/30 06:00 实测出现过）
-  # 若跟着跳过，入场窗口内会整批记成 missed。工作日照常 tick；周末不跑（状态机内周末也不执行止损/平仓）。
-  if (( $(TZ=America/New_York date +%u) <= 5 )); then paper_tick; fi
   if (( ET_MIN >= 600 && ET_MIN <= 605 )); then
     notify "⚠️ 影子账窗口不可用" "$(printf '%s' "$SHW" | tail -1)"
   fi

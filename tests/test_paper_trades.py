@@ -415,10 +415,10 @@ def test_manual_close_outside_rth_becomes_request_then_executes(tmp_path, monkey
 
 
 def test_claude_exit_rule_take_profit_and_time_exit():
-    p = _entered(); p["exit_rule"] = "claude-exit-v1"; p["expiry"] = "2026-10-16"
+    p = _entered(); p.update(exit_rule="claude-exit-v1", expiry="2026-10-16", batch="rule_dynamic")
     assert pt.step(p, at(30, 9, 46), depth=q(0.2, 0.25, 0.1, 0.12)) == "take_profit"    # 0.25−0.10=0.15 ≤ 0.5×0.41
     assert p["state"] == "closed_tp"
-    p2 = _entered(); p2["exit_rule"] = "claude-exit-v1"; p2["expiry"] = "2026-10-16"
+    p2 = _entered(); p2.update(exit_rule="claude-exit-v1", expiry="2026-10-16", batch="rule_dynamic")
     r = pt.step(p2, datetime(2026, 10, 13, 9, 46, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))
     assert r == "time_exit" and p2["state"] == "closed_time"                             # DTE=3
     p3 = _entered(); p3["expiry"] = "2026-10-16"                                          # 用户批次：没有 exit_rule，不自动出场
@@ -532,3 +532,72 @@ def test_write_journal_accepts_tuples_in_selection(tmp_path, monkeypatch):
     j = {"theses": [{"id": "x", "paper": {"events": [{"selection": {"walls": [(400.0, 17445)]}}]}}]}
     pt._write_journal(j)
     assert json.loads((tmp_path / "journal.json").read_text("utf-8"))["theses"][0]["paper"]["events"][0]["selection"]["walls"] == [[400.0, 17445]]
+
+
+# —— Codex 032 R1：所有执行路径按报价取回时刻判断资格；R3：出场规则只授权给规则批 ——
+
+def test_fixed_entry_returned_after_window_is_skipped(monkeypatch):
+    p = _p()
+    monkeypatch.setattr(pt, "_clock", lambda: datetime(2026, 9, 29, 10, 25, tzinfo=ET))   # 窗口 10:00–10:20
+    assert pt.step(p, at(29, 10, 19), depth=q(1.44, 1.6, 0.95, 1.03)) == "skipped"
+    assert p.get("entered_at") is None and "quote_returned_after_window" in p["skip_reason"]
+    p2 = _p()
+    monkeypatch.setattr(pt, "_clock", lambda: datetime(2026, 9, 29, 10, 7, tzinfo=ET))
+    assert pt.step(p2, at(29, 10, 6), depth=q(1.44, 1.6, 0.95, 1.03)) == "enter"
+    assert p2["entered_at"].startswith("2026-09-29T10:07") and p2["events"][-1]["requested_at"].startswith("2026-09-29T10:06")
+
+
+def test_exit_returned_after_close_only_marks(monkeypatch):
+    p = _entered(); p.update(mark_slots_et=["15:45"], expiry="2026-10-16")
+    monkeypatch.setattr(pt, "_clock", lambda: datetime(2026, 9, 29, 16, 1, tzinfo=ET))   # 15:59 请求、16:01 取回
+    assert pt.step(p, at(29, 15, 59), depth=q(1.5, 1.7, 0.7, 0.8)) == "mark"             # 已到止损线也不执行
+    assert p["state"] == "entered" and p["events"][-1]["action"] == "mark_offhours"
+
+
+def test_close_request_kept_when_quote_fails_or_returns_after_close(monkeypatch):
+    p = _entered(); p["close_request"] = {"at": "2026-09-29T20:00:00-04:00", "note": "平"}
+    assert pt.step(p, at(30, 10, 0), depth=lambda s: {}) == "retry" and p.get("close_request")      # 报价不可用：请求保留
+    monkeypatch.setattr(pt, "_clock", lambda: datetime(2026, 9, 30, 16, 2, tzinfo=ET))
+    assert pt.step(p, at(30, 15, 59), depth=q(1.5, 1.7, 0.7, 0.8)) == "retry" and p.get("close_request")
+    assert p["state"] == "entered"
+
+
+def test_user_batch_with_exit_rule_never_auto_exits():
+    p = _entered(); p.update(exit_rule="claude-exit-v1", expiry="2026-10-05", batch="user_subjective")
+    r = pt.step(p, datetime(2026, 10, 2, 9, 46, tzinfo=ET), depth=q(0.2, 0.25, 0.1, 0.12))
+    assert r == "exit_rule_config_error" and p["state"] == "entered"
+    assert pt.step(p, datetime(2026, 10, 2, 15, 46, tzinfo=ET), depth=q(0.2, 0.25, 0.1, 0.12)) == "mark"
+    assert p["state"] == "entered"
+    planned = _p(exit_rule="claude-exit-v1", batch="user_subjective")
+    assert "未授权" in pt.validate_spec(planned)
+    assert "未知出场规则" in pt.validate_spec(_p(exit_rule="x", batch="rule_dynamic"))
+    assert pt.validate_spec(_p(exit_rule="claude-exit-v1", batch="rule_dynamic")) is None
+
+
+def test_manual_close_quote_failure_or_late_return_keeps_request(tmp_path, monkeypatch):
+    p = _entered()
+    load = _env(tmp_path, monkeypatch, [{"id": "M", "execution": "模拟", "paper": p}])
+    r = pt.manual_close("M", "平", datetime(2026, 9, 30, 11, 0, tzinfo=ET), depth=lambda s: {})
+    st = load()["M"]["paper"]
+    assert r["pending"] and st["state"] == "entered" and st["close_request"]["note"] == "平"
+    p2 = _entered()
+    load = _env(tmp_path, monkeypatch, [{"id": "N", "execution": "模拟", "paper": p2}])
+    monkeypatch.setattr(pt, "_clock", lambda: datetime(2026, 9, 30, 16, 1, tzinfo=ET))
+    r = pt.manual_close("N", "平", datetime(2026, 9, 30, 15, 59, tzinfo=ET), depth=q(1.0, 1.1, 0.5, 0.6))
+    assert r["pending"] and load()["N"]["paper"]["state"] == "entered"
+
+
+def test_tick_uses_per_position_request_time(tmp_path, monkeypatch):
+    """整批 tick：排在后面的仓位按自己的请求时刻判断窗口（032 R1）。"""
+    a, b = _p(), _p()
+    b["expiry"] = "2026-10-01"                                  # 不同槽位，互不阻挡
+    load = _env(tmp_path, monkeypatch, [{"id": "A", "execution": "模拟", "paper": a},
+                                        {"id": "B", "execution": "模拟", "paper": b}])
+    clock = iter([datetime(2026, 9, 29, 10, 10, tzinfo=ET), datetime(2026, 9, 29, 10, 10, 5, tzinfo=ET),
+                  datetime(2026, 9, 29, 10, 25, tzinfo=ET), datetime(2026, 9, 29, 10, 25, 5, tzinfo=ET)])
+    monkeypatch.setattr(pt, "_clock", lambda: next(clock))
+    out = pt.tick(datetime(2026, 9, 29, 10, 9, tzinfo=ET), depth=q(1.44, 1.6, 0.95, 1.03))
+    st = load()
+    assert st["A"]["paper"]["state"] == "entered"
+    assert st["B"]["paper"]["state"] == "missed" and st["B"]["paper"].get("entered_at") is None   # B 请求时已过窗口，不倒填成 10:09
+    assert "A:enter" in out and "B:missed" in out

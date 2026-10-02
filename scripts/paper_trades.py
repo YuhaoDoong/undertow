@@ -53,6 +53,25 @@ STRIKE_RULES = ("wall-dynamic-v1", "wall-dynamic-v1.1", "user-sell-fixed-v1", "u
 STRUCTURES = ("credit", "debit")
 # 出场规则（只用于 Claude 批次；用户 2026-09-30：「你的那一批你可以自己设置提前平仓规则。不适用我的一批，我的由我主观操作。你可以测试一下」）
 EXIT_RULES = {"claude-exit-v1": {"take_profit_frac": 0.5, "time_exit_dte": 3}}
+EXIT_RULE_BATCHES = ("rule_dynamic",)        # 自动出场只授权给 Claude 的规则批；用户批次由用户主观操作（Codex 032 R3）
+
+
+def exit_rule_error(p: dict) -> str | None:
+    """出场规则配置是否合法：未知规则名，或挂在未授权批次（如 user_subjective）上 → 返回原因；没有 exit_rule → None。"""
+    r = p.get("exit_rule")
+    if not r:
+        return None
+    if r not in EXIT_RULES:
+        return f"未知出场规则 {r}"
+    if p.get("batch") not in EXIT_RULE_BATCHES:
+        return f"出场规则 {r} 未授权给批次 {p.get('batch')}（只授权 {', '.join(EXIT_RULE_BATCHES)}）"
+    return None
+
+
+def in_rth(t: datetime) -> bool:
+    """常规交易时段：工作日 09:30–16:00 ET（节假日由交易日历另管；这里只防周末与盘外）。"""
+    e = t.astimezone(ET)
+    return e.weekday() < 5 and RTH[0] <= e.time() < RTH[1]
 
 
 def _hm(s: str) -> time:
@@ -93,6 +112,8 @@ def _debit(p: dict) -> bool:
 
 
 def validate_spec(p: dict) -> str | None:
+    if p.get("state") == "planned" and exit_rule_error(p):
+        return exit_rule_error(p)
     if p.get("structure", "credit") not in STRUCTURES:
         return f"未知结构 {p.get('structure')}"
     if _debit(p):
@@ -473,6 +494,15 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             ev.append({"at": now.isoformat(), "action": p["state"], "why": p["skip_reason"]})
             return p["state"]
         q = depth([p["sell"], p["buy"]])
+        back = max(now, _clock())                      # 报价取回时刻（Codex 032 R1：固定档位路径同样不得倒填）
+        b_et = back.astimezone(ET)
+        if b_et.date() != today or b_et.time() >= hi:
+            p.update(state="skipped", skip_reason=f"quote_returned_after_window（{et:%H:%M:%S} 请求、{b_et:%H:%M:%S} 才取回，"
+                                                   f"已过窗口 {p['entry_window_et'][1]}）")
+            ev.append({"at": back.isoformat(), "action": "skipped", "why": p["skip_reason"], "quotes": q,
+                       "requested_at": now.isoformat(), "returned_at": back.isoformat()})
+            return "skipped"
+        req, now = now, back                           # 以下入场时刻 = 取回时刻
         s, b = q.get(p["sell"]), q.get(p["buy"])
         if not (leg_ok(s, "bid") and leg_ok(b, "ask")):
             p["last_reject"] = "no_valid_quote（卖腿无有效 bid 或买腿无有效 ask，或报价交叉/出错）"
@@ -493,7 +523,7 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
         p.update(state="entered", entered_at=now.isoformat(), entry_credit=credit, economics=econ,
                  stop_value=stop_value_of(p, credit), entry_quote_labels=lab)
         ev.append({"at": now.isoformat(), "action": "enter", "quotes": q, "credit": credit, "economics": econ,
-                   "quote_labels": lab})
+                   "quote_labels": lab, "requested_at": req.isoformat(), "returned_at": now.isoformat()})
         return "enter"
     # —— entered ——
     exp = date.fromisoformat(p["expiry"])
@@ -513,19 +543,26 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
                  settlement_model="理论到期记账：按到期日常规收盘价的内在价值现金化；不模拟提前行权/指派/实物交割")
         ev.append({"at": now.isoformat(), "action": "settle", "close": c, "value": val, "pnl": pnl})
         return "settle"
-    if p.get("close_request") and RTH[0] <= et.time() < RTH[1] and et.weekday() < 5:
+    if p.get("close_request") and in_rth(now):
         # 用户主动平仓请求在非交易时段提出 → 到常规时段第一次唤醒时按当时保守报价执行（Codex 031）
         q = depth([p["sell"], p["buy"]])
+        back = max(now, _clock())
+        if not in_rth(back) or back.astimezone(ET).date() != today:   # 取回时已收盘：请求保留，下个常规时段再执行（032 R1）
+            ev.append({"at": back.isoformat(), "action": "manual_close_retry", "quotes": q, "why": "报价取回时已出常规时段，请求保留",
+                       "requested_at": now.isoformat(), "returned_at": back.isoformat()})
+            return "retry"
+        req, now = now, back
         v = close_value(q, p)
         if v is None:
-            ev.append({"at": now.isoformat(), "action": "manual_close_retry", "quotes": q})
+            ev.append({"at": now.isoformat(), "action": "manual_close_retry", "quotes": q, "why": "报价不可用，请求保留"})
             return "retry"
         val, assume = v
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
-        req = p.pop("close_request")
+        rq = p.pop("close_request")
         p.update(state="closed_manual", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
         ev.append({"at": now.isoformat(), "action": "manual_close", "quotes": q, "value": val, "pnl": pnl,
-                   "valuation_assumption": assume, "in_rth": True, "user_note": req.get("note"), "requested_at": req.get("at")})
+                   "valuation_assumption": assume, "in_rth": True, "user_note": rq.get("note"), "requested_at": rq.get("at"),
+                   "quote_requested_at": req.isoformat(), "returned_at": now.isoformat()})
         return "manual_close"
     done = {e.get("slot") for e in ev if e.get("action") in ("mark", "mark_offhours")}
     for slot in p["mark_slots_et"]:
@@ -534,26 +571,35 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
         if key in done or today > exp or et.time() < t0 or (et.hour * 60 + et.minute) > t0.hour * 60 + t0.minute + 15:
             continue
         q = depth([p["sell"], p["buy"]])
+        back = max(now, _clock())                  # 报价取回时刻：执行资格按取回时判断（032 R1：15:59 请求、16:01 取回不得当盘内执行）
         v = close_value(q, p)
         if v is None:
-            ev.append({"at": now.isoformat(), "action": "mark_retry", "slot": key, "quotes": q})
+            ev.append({"at": back.isoformat(), "action": "mark_retry", "slot": key, "quotes": q})
             return "retry"
         val, assume = v
-        in_rth = RTH[0] <= et.time() < RTH[1] and et.weekday() < 5     # 周末按非常规时段：只估值、不执行
-        ev.append({"at": now.isoformat(), "action": "mark" if in_rth else "mark_offhours", "slot": key,
+        req, now = now, back
+        live = in_rth(now) and now.astimezone(ET).date() == today       # 周末/盘外/跨日：只估值、不执行
+        ev.append({"at": now.isoformat(), "action": "mark" if live else "mark_offhours", "slot": key,
                    "quotes": q, "value": val, "valuation_assumption": assume,
-                   "note": "稀疏检查（非连续止损）" + ("" if in_rth else "；非常规时段只估值、不执行")})
+                   "requested_at": req.isoformat(), "returned_at": now.isoformat(),
+                   "note": "稀疏检查（非连续止损）" + ("" if live else "；取回时不在常规时段，只估值、不执行")})
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
-        if in_rth and p.get("stop_value") is not None and val >= p["stop_value"]:
+        if live and p.get("stop_value") is not None and val >= p["stop_value"]:
             p.update(state="closed_stop", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
             ev.append({"at": now.isoformat(), "action": "stop", "value": val, "pnl": pnl})
             return "stop"
+        bad = exit_rule_error(p)
+        if bad:                                     # 误带出场规则（如用户批次）：绝不自动退出，配置错误显式上报一次（032 R3）
+            if not any(e.get("action") == "exit_rule_config_error" for e in ev):
+                ev.append({"at": now.isoformat(), "action": "exit_rule_config_error", "why": bad})
+                return "exit_rule_config_error"
+            return "mark"
         xr = EXIT_RULES.get(p.get("exit_rule") or "")
-        if in_rth and xr and val <= xr["take_profit_frac"] * p["entry_credit"]:
+        if live and xr and val <= xr["take_profit_frac"] * p["entry_credit"]:
             p.update(state="closed_tp", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
             ev.append({"at": now.isoformat(), "action": "take_profit", "value": val, "pnl": pnl, "exit_rule": p["exit_rule"]})
             return "take_profit"
-        if in_rth and xr and (exp - today).days <= xr["time_exit_dte"]:
+        if live and xr and (exp - today).days <= xr["time_exit_dte"]:
             p.update(state="closed_time", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
             ev.append({"at": now.isoformat(), "action": "time_exit", "value": val, "pnl": pnl, "exit_rule": p["exit_rule"]})
             return "time_exit"
@@ -587,29 +633,37 @@ def manual_close(tid: str, note: str, now: datetime | None = None, *, depth=_dep
         if t is None or (t.get("paper") or {}).get("state") != "entered":
             return {"ok": False, "why": f"{tid} 不存在或不在场"}
         p = t["paper"]
-        in_rth = RTH[0] <= now.astimezone(ET).time() < RTH[1] and now.astimezone(ET).weekday() < 5
-        if not in_rth:
+
+        def _pend(at: datetime, why: str, q=None) -> dict:
+            # 不能当场执行 → 记成待执行请求，tick 在下一个常规时段按当时保守报价执行（032 R1：失败不能只留孤立 retry）
             p["close_request"] = {"at": now.isoformat(), "note": note}
-            p["events"].append({"at": now.isoformat(), "action": "close_requested", "user_note": note,
-                                "why": "非常规交易时段：记下请求，常规时段第一次唤醒按当时保守报价执行"})
+            e = {"at": at.isoformat(), "action": "close_requested", "user_note": note, "why": why}
+            if q is not None:
+                e["quotes"] = q
+            p["events"].append(e)
             _write_journal(j)
             sync_ledger(j)
-            return {"ok": True, "pending": True, "why": "非交易时段，已记平仓请求，开盘后执行"}
+            return {"ok": True, "pending": True, "why": why}
+        if not in_rth(now):
+            return _pend(now, "非常规交易时段：记下请求，常规时段第一次唤醒按当时保守报价执行")
         q = depth([p["sell"], p["buy"]])
+        back = max(now, _clock())
+        if not in_rth(back):
+            return _pend(back, "报价取回时已出常规时段：请求保留，下个常规时段执行", q)
         v = close_value(q, p)
         if v is None:
-            p["events"].append({"at": now.isoformat(), "action": "manual_close_retry", "quotes": q, "note": note})
-            _write_journal(j)
-            return {"ok": False, "why": "报价不可用，未平仓（已留痕）"}
+            return _pend(back, "报价不可用：请求保留，下次常规时段唤醒重试", q)
+        req, now = now, back
         val, assume = v
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
         p.update(state="closed_manual", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
         p["events"].append({"at": now.isoformat(), "action": "manual_close", "quotes": q, "value": val, "pnl": pnl,
-                            "valuation_assumption": assume, "in_rth": in_rth, "user_note": note})
+                            "valuation_assumption": assume, "in_rth": True, "user_note": note,
+                            "requested_at": req.isoformat(), "returned_at": now.isoformat()})
         _outcome(t)
         _write_journal(j)
         sync_ledger(j)
-        return {"ok": True, "value": val, "pnl_usd": pnl, "valuation_assumption": assume, "in_rth": in_rth}
+        return {"ok": True, "value": val, "pnl_usd": pnl, "valuation_assumption": assume, "in_rth": True}
 
 
 def _step_dynamic(p: dict, now: datetime, selector) -> str | None:
@@ -825,10 +879,11 @@ def tick(now: datetime | None = None, *, depth=None) -> list[str]:
                     changed = True
                     out.append(f"{t['id']}:skipped")
                     continue
+            pnow = max(now, _clock())                  # 每个仓位按自己的请求时刻（032 R1：整批复用开始时刻会让排在后面的仓位倒填）
             try:
-                a = step(p, now, **({"depth": depth} if depth else {})) or audit_settlement(p, now)
+                a = step(p, pnow, **({"depth": depth} if depth else {})) or audit_settlement(p, pnow)
             except Exception as e:                      # 取数失败：留痕并在下次唤醒重试
-                p.setdefault("events", []).append({"at": now.isoformat(), "action": "error", "error": f"{type(e).__name__}: {e}"[:200]})
+                p.setdefault("events", []).append({"at": pnow.isoformat(), "action": "error", "error": f"{type(e).__name__}: {e}"[:200]})
                 a = "error"
             for e in (p.get("events") or [])[n_ev:]:          # 调度版本随事件落盘（旧/新调度分层统计）
                 e.setdefault("sched", os.environ.get("PAPER_SCHED", "manual_or_unknown"))

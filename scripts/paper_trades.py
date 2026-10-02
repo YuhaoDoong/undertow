@@ -559,7 +559,7 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
         val, assume = v
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
         rq = p.pop("close_request")
-        p.update(state="closed_manual", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
+        p.update(state="closed_manual", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
         ev.append({"at": now.isoformat(), "action": "manual_close", "quotes": q, "value": val, "pnl": pnl,
                    "valuation_assumption": assume, "in_rth": True, "user_note": rq.get("note"), "requested_at": rq.get("at"),
                    "quote_requested_at": req.isoformat(), "returned_at": now.isoformat()})
@@ -585,7 +585,7 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
                    "note": "稀疏检查（非连续止损）" + ("" if live else "；取回时不在常规时段，只估值、不执行")})
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
         if live and p.get("stop_value") is not None and val >= p["stop_value"]:
-            p.update(state="closed_stop", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
+            p.update(state="closed_stop", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
             ev.append({"at": now.isoformat(), "action": "stop", "value": val, "pnl": pnl})
             return "stop"
         bad = exit_rule_error(p)
@@ -596,11 +596,11 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             return "mark"
         xr = EXIT_RULES.get(p.get("exit_rule") or "")
         if live and xr and val <= xr["take_profit_frac"] * p["entry_credit"]:
-            p.update(state="closed_tp", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
+            p.update(state="closed_tp", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
             ev.append({"at": now.isoformat(), "action": "take_profit", "value": val, "pnl": pnl, "exit_rule": p["exit_rule"]})
             return "take_profit"
         if live and xr and (exp - today).days <= xr["time_exit_dte"]:
-            p.update(state="closed_time", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
+            p.update(state="closed_time", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
             ev.append({"at": now.isoformat(), "action": "time_exit", "value": val, "pnl": pnl, "exit_rule": p["exit_rule"]})
             return "time_exit"
         return "mark"
@@ -618,7 +618,8 @@ def close_value(q: dict, p: dict):
         not (_finite(b_bid) and _finite(b.get("ask")) and b_bid > b["ask"])
     if not (s_ok and b_ok):
         return None
-    assume = None if _finite(b_bid) and b_bid > 0 else "buy_bid_missing→按 0 计（保守）"
+    # 真实买价 0（报价就是 0）与缺失分开（Codex 032 R2）：前者是可执行报价，后者是估算假设
+    assume = None if _finite(b_bid) else "buy_bid_missing→按 0 计（保守估算，非两腿完成退出）"
     return round(s["ask"] - (b_bid if assume is None else 0.0), 4), assume
 
 
@@ -656,7 +657,7 @@ def manual_close(tid: str, note: str, now: datetime | None = None, *, depth=_dep
         req, now = now, back
         val, assume = v
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
-        p.update(state="closed_manual", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl)
+        p.update(state="closed_manual", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
         p["events"].append({"at": now.isoformat(), "action": "manual_close", "quotes": q, "value": val, "pnl": pnl,
                             "valuation_assumption": assume, "in_rth": True, "user_note": note,
                             "requested_at": req.isoformat(), "returned_at": now.isoformat()})

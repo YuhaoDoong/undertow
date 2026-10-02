@@ -56,3 +56,52 @@ def test_legacy_backfill_summary_and_render():
     c = pb.classify([])
     md, _ = pb.render("d", c, pb.summarize(c), {}, "now", legacy=rows, shadow=["影子账 prospective：共 1 行"])
     assert "旧模拟仓（9/29 之前" in md and "fill_not_recorded" in md and "> 影子账 prospective" in md
+
+
+# —— Codex 032 R2 / R5 / R7 ——
+
+def test_missing_values_are_unknown_not_flat_and_assumed_exit_separate():
+    import math
+    nan = T("n", "settled", pnl=float("nan"))
+    none = T("x", "settled", pnl=None); none["paper"]["economics"] = {}
+    noml = T("m", "settled", pnl=20.0); noml["paper"]["economics"] = {}
+    zero = T("z", "settled", pnl=0.0)                                         # 真实打平：仍算正式
+    rev = T("r", "settled", pnl=30.0); rev["paper"]["result_under_review"] = True
+    asm = T("s", "closed_tp", pnl=25.0); asm["paper"]["exit_assumption"] = "buy_bid_missing→按 0 计"
+    ok = T("o", "settled", pnl=40.0)
+    c = pb.classify([nan, none, noml, zero, rev, asm, ok])
+    sm = pb.summarize(c)["rule"]
+    assert sm["closed"] == 2 and sm["flat"] == 1 and sm["wins"] == 1 and sm["pnl_usd"] == 40.0
+    assert sm["unknown"] == 3 and sm["under_review"] == 1 and sm["assumed"] == 1 and sm["assumed_pnl_usd"] == 25.0
+    assert sm["max_loss_sum_usd"] == 200.0 and sm["pnl_per_max_loss"] == 0.2 and sm["complete"] is False
+    md, _ = pb.render("2026-10-02", c, pb.summarize(c), {}, "now")              # 不崩、缺失显示「—」
+    assert "（结果未知）" in md and "估算退出" in md and "（不完整）" in md and "| 3 / 1 / 1（$+25.00） |" in md
+
+
+def test_legacy_missing_values_go_to_incomplete():
+    rows = [{"id": "a", "state": "settled", "pnl_usd_recorded": None, "max_loss_usd_recorded": 50.0, "judgment": "j"},
+            {"id": "b", "state": "settled", "pnl_usd_recorded": 10.0, "pnl_usd_with_fee_3_20": 6.8, "max_loss_usd_recorded": 90.0,
+             "judgment": "k"}]
+    s = pb.summarize_legacy(rows)
+    assert s["closed"] == 1 and s["flat"] == 0 and s["incomplete"] == ["a"] and s["max_loss_sum_usd"] == 90.0
+
+
+def test_open_valuation_multiplies_qty():
+    r = T("q2", "entered"); r["paper"].update(qty=2, entry_credit=1.0,
+                                             economics={"max_loss_usd": 806.4, "max_gain_usd": 193.6, "fee_total_usd": 6.4})
+    r["paper"]["events"] = [{"action": "mark", "at": "2026-10-02T15:45", "value": 0.5}]
+    c = pb.classify([r])
+    md, _ = pb.render("2026-10-02", c, pb.summarize(c), {}, "now")
+    assert "$+93.60" in md and "$+43.60" not in md
+
+
+def test_atomic_write_keeps_previous_on_readback_failure(tmp_path, monkeypatch):
+    f = tmp_path / "paper.md"
+    pb._atomic_write(f, "v1")
+    assert f.read_text("utf-8") == "v1"
+    real = pb.Path.read_text
+    monkeypatch.setattr(pb.Path, "read_text", lambda self, *a, **k: "corrupt" if self.name.endswith(".tmp") else real(self, *a, **k))
+    import pytest
+    with pytest.raises(RuntimeError):
+        pb._atomic_write(f, "v2")
+    assert real(f, "utf-8") == "v1" and not list(tmp_path.glob("*.tmp"))

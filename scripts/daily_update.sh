@@ -237,7 +237,9 @@ PB_OUT=$(python3 scripts/paper_book.py 2>&1); PB_RC=$?
 set -e
 echo "$REPORT_OUT"
 printf '%s\n' "$V2_OUT" | tail -1
-if (( PB_RC != 0 )); then alert "⚠️ 模拟仓台账报告失败（ET $ET_NOW）" "$(printf '%s' "$PB_OUT" | tail -1 | cut -c1-120)"; fi
+# 台账内容私有：告警只写成败与返回码，不带输出内容（rc 3 = 已生成但局部不完整，如影子账汇总失败）
+if (( PB_RC == 3 )); then alert "⚠️ 模拟仓台账局部不完整（ET $ET_NOW）" "已生成，见私有 data/paper/reports/.status_paper_book.json"
+elif (( PB_RC != 0 )); then alert "⚠️ 模拟仓台账报告失败（ET $ET_NOW）" "rc=$PB_RC，上一份保留；详情见私有输出"; fi
 if (( V2_RC != 0 && V2_RC != 3 )); then          # rc=3 = 有品种当日快照未到（正常，下一次 daily 再生成）
   alert "⚠️ 研报 v2 未完整生成（ET $ET_NOW）" "$(printf '%s' "$V2_OUT" | tail -1 | cut -c1-120)"
 fi

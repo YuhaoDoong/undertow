@@ -236,6 +236,8 @@ paper_book() {
   RES=$("$PY" scripts/paper_book.py 2>&1); RC=$?
   # 本日志会入库：只记成败，不记台账内容（台账含交易判断，属私有 data/paper/）
   if (( RC == 0 )); then : > "$OKF"; hb "⑭模拟仓台账：✅"
+  elif (( RC == 3 )); then : > "$OKF"; hb "⑭模拟仓台账：⚠️ 已生成但局部不完整（见私有 .status_paper_book.json）"
+    notify "⚠️ 模拟仓台账局部不完整" "已生成；详见私有状态文件"
   else
     hb "⑭模拟仓台账：⏳ rc=$RC，下次唤醒重试（详情见私有输出）"
     printf 'x' >> "$FAILF"                        # Codex 032 R7：无人值守失败要当场可见

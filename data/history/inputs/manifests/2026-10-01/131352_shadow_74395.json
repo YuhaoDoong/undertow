@@ -1,0 +1,51 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "capture",
+  "silver"
+ ],
+ "pid": 74395,
+ "started_at": "2026-10-01T13:13:50.752817+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/SLV/2026-10-01",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SLV/2026-10-01.json.gz",
+   "sha256": "4c86ff15c439336ad649e229a8bd16eab15a3b386fce6ed8bc666c78a8d2be16",
+   "captured_at": 1790851510.888781,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_SLV",
+   "status": "cache_hit",
+   "size": 515041,
+   "sha256": "5017ae4a0b99a204a7d21c0cd006018d87be034d6414fe162272251cf5a00a14",
+   "fetched_at": "2026-10-01T10:48:39.384385+00:00",
+   "age_s": 8711.4,
+   "ttl_s": 43200,
+   "stored": true,
+   "seq": 1
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_SLV",
+   "status": "fresh_fetch",
+   "size": 515145,
+   "sha256": "880906b5788e1d72c303d8df8676e9e1e258731ee030700785b018be02d32d11",
+   "fetched_at": "2026-10-01T13:13:51.959788+00:00",
+   "age_s": 0.0,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 2
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-01T13:13:52.235470+00:00",
+ "rc": 0,
+ "git_head": "1520c9f2781e239f158f14dc99afc72d9f20b286"
+}

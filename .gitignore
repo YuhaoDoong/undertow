@@ -59,6 +59,9 @@ data/backtest/step4_holding.jsonl
 # 用户放入的文章 PDF（2026-09-28，可能为付费内容，涉版权；AGENTS.md 第一节第 4 条）
 /docs/articles/
 /docs/screenshot/
+# 2026-10-03：外部作者帖子/群聊截图改放 docs/ 下以非 ASCII 名称命名的目录（具体目录名含作者名，不写进公开文件，
+# 写在本地 .git/info/exclude）。兜底：docs/ 下首字符非 ASCII 的条目一律不入库
+/docs/[!a-zA-Z0-9_.-]*
 /docs/author_notes.md
 /docs/author_playbook.md
 # AGENTS.md 第一节第 4 条写的是 docs/author_*.md（付费作者内容），原规则只列了两个具体文件（2026-09-28 补齐）

@@ -19,7 +19,8 @@ if (( RC != 0 )); then
   echo "PRECOMMIT_FAIL pytest rc=$RC（日志 $LOG）——不得提交"
   exit 10
 fi
-STAGED_SENS=$(git diff --cached --name-only | grep -E '^(data/soul/|data/account/|data/paper/|docs/screenshot/)|^docs/author_[^/]*\.md$|article')
+# docs/ 下首字符非 ASCII 的条目 = 外部作者帖子目录（2026-10-03 起；目录名含作者名，不写进本文件）。core.quotepath=off 让中文路径按原文输出
+STAGED_SENS=$(git -c core.quotepath=off diff --cached --name-only | grep -E '^(data/soul/|data/account/|data/paper/|docs/screenshot/)|^docs/author_[^/]*\.md$|article|^docs/[^a-zA-Z0-9_.-]')
 if [[ -n "$STAGED_SENS" ]]; then
   echo "PRECOMMIT_FAIL 暂存区含敏感路径——不得提交：$(printf '%s' "$STAGED_SENS" | tr '\n' ' ')"
   exit 11

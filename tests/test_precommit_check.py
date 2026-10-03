@@ -48,3 +48,13 @@ def test_staged_sensitive_path_blocks(tmp_path):
     subprocess.run(["git", "add", "-f", "data/soul/journal.json"], cwd=tmp_path, check=True)
     r, called, commits = _run(tmp_path, "true")
     assert r.returncode == 11 and "敏感路径" in r.stdout and not called and commits == 0
+
+
+def test_staged_non_ascii_docs_dir_blocks(tmp_path):
+    """外部作者帖子目录：docs/ 下首字符非 ASCII（目录名含作者名，不写进公开文件；此处用占位名）。"""
+    _repo(tmp_path)
+    (tmp_path / "docs/作者甲").mkdir(parents=True)
+    (tmp_path / "docs/作者甲/a.png").write_text("x")
+    subprocess.run(["git", "add", "-f", "docs/作者甲/a.png"], cwd=tmp_path, check=True)
+    r, called, commits = _run(tmp_path, "true")
+    assert r.returncode == 11 and "敏感路径" in r.stdout and not called and commits == 0

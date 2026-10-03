@@ -23,6 +23,7 @@
    只用可合法访问的 CFTC / CBOE / Yahoo / FRED / FairEconomy 公开 JSON feed。
 4. **敏感数据永不入库。** 已 gitignore：`data/account/`（实盘持仓资金）、
    `data/soul/`（个人交易体系、亏损史、心理弱点）、`data/paper/`（模拟仓：交易判断与模拟成交）、`article`、`docs/screenshot/`、
+   `docs/` 下以非 ASCII（中文）命名的外部作者帖子目录（目录名含作者名，具体名单只写在本地 `.git/info/exclude`）、
    `docs/author_*.md`（付费订阅内容，含水印，涉版权）。
    **每次提交前跑一遍**：
    `git status --short | grep -iE "article|screenshot|author|playbook|private|account/|soul/|paper/"`（或直接用 `scripts/precommit_check.sh`）

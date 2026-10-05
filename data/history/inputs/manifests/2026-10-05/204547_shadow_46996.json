@@ -1,0 +1,32 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "flowside",
+  "gold",
+  "silver",
+  "--status-file",
+  "data/logs/.status_flowside_2026-10-05.run-46671-24920-1791233143.json",
+  "--run-id",
+  "46671-24920-1791233143"
+ ],
+ "pid": 46996,
+ "started_at": "2026-10-05T20:45:43.806258+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-10-05",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-10-05.json.gz",
+   "sha256": "14928d6c0ec39dfb28a40dd45ab6d5fe1b08589afeeea59da638d6ed72f0ea3f",
+   "captured_at": 1791193506.491711,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-05T20:45:47.927867+00:00",
+ "rc": 1,
+ "git_head": "f44e9541888fc3f99f3ef7294d49b3b00a9fde1a"
+}

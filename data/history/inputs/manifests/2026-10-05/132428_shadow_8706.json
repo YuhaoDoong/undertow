@@ -1,0 +1,108 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "capture",
+  "silver",
+  "wti",
+  "iwm",
+  "tqqq"
+ ],
+ "pid": 8706,
+ "started_at": "2026-10-05T13:24:25.465449+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/SLV/2026-10-02",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SLV/2026-10-02.json.gz",
+   "sha256": "c90cbab02677681c6aa6b8ecb11114a69ecf7cdd209baeabb44bd93a51383c43",
+   "captured_at": 1790937912.656843,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_SLV",
+   "status": "cache_hit",
+   "size": 515352,
+   "sha256": "6ac5f58c7bfc37bb95877396069f8d8fbacbab0551d826c2f87341bf747b5a44",
+   "fetched_at": "2026-10-05T13:03:54.238212+00:00",
+   "age_s": 1231.4,
+   "ttl_s": 43200,
+   "stored": true,
+   "seq": 1
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/USO/2026-10-02",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/USO/2026-10-02.json.gz",
+   "sha256": "9131238ca4b7c57aa1431a00712b5befd6c6b97c9fc5ec191d5bed8577fdd2d1",
+   "captured_at": 1790935210.555068,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 2
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_USO",
+   "status": "cache_hit",
+   "size": 522513,
+   "sha256": "a953a0c655aa3ac35cfa0ca3538f39769204b62f41a87830efdc947199ed9823",
+   "fetched_at": "2026-10-05T13:03:55.887440+00:00",
+   "age_s": 1230.6,
+   "ttl_s": 43200,
+   "stored": true,
+   "seq": 3
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/IWM/2026-10-02",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/IWM/2026-10-02.json.gz",
+   "sha256": "7226453760309102f68c3ce9806cbc6dcda711033c17eb2bad13888a189b963f",
+   "captured_at": 1790935218.029519,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 4
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_IWM",
+   "status": "cache_hit",
+   "size": 605971,
+   "sha256": "4d31e9f016530ffb4638dce28069b16b2a9b8463e65c0a37b6c669fcb71997d2",
+   "fetched_at": "2026-10-05T13:03:58.482560+00:00",
+   "age_s": 1228.7,
+   "ttl_s": 43200,
+   "stored": true,
+   "seq": 5
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/TQQQ/2026-10-02",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/TQQQ/2026-10-02.json.gz",
+   "sha256": "9c78725bf650ff703ab3d7ca784b4fa4a2e09d6d28104218649968824cff9ec6",
+   "captured_at": 1790935214.022627,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 6
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_TQQQ",
+   "status": "cache_hit",
+   "size": 426523,
+   "sha256": "48d2fefe25970008dc8b449767a1fa0b6c7e4e7e9fce3a9fb43bba597e526ea6",
+   "fetched_at": "2026-10-05T13:04:01.024253+00:00",
+   "age_s": 1226.8,
+   "ttl_s": 43200,
+   "stored": true,
+   "seq": 7
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-05T13:24:28.380244+00:00",
+ "rc": 1,
+ "git_head": "f44e9541888fc3f99f3ef7294d49b3b00a9fde1a"
+}

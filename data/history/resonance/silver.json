@@ -462,5 +462,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-10-02T10:01:06.670154+00:00"
+ },
+ {
+  "instrument": "silver",
+  "date": "2026-10-05",
+  "spot": 61.985,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "中性",
+  "regime": "熊",
+  "stretch": -1.8155541153596995,
+  "stretch_pctile": 0.112,
+  "drawdown": -5.788723266364232,
+  "dd_pctile": 0.408,
+  "combo_pctile": 0.26,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-10-05T09:46:03.236174+00:00"
  }
 ]

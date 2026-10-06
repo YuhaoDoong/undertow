@@ -9,42 +9,16 @@
         <string>/bin/zsh</string>
         <string>/Users/yhdong/Trading/scripts/daily_update.sh</string>
     </array>
-    <!-- 多时点触发（本地 UTC+8 = 夏令时 ET+12 / 冬令时 ET+13）：
-         18:00/19:00/20:00/20:45 ≈ 夏令时 ET 06:00/07:00/08:00/08:45。
-         2026-09-02 实测改：原首班 14:05（ET 02:05）注定抓不到 —— CBOE 的 OI
-         要到次日 ET 04:09~06:45 才刷新（周末样本：周五结算周一 04:09 才到；
-         8/28、9/1 均 06:45；8/31 06:00）。8/27 曾在 ET 01:06 抓到 4 个品种，
-         是个例。首班改到 18:00（ET 06:00）为最早有把握的时点；
-         20:00 恰在 ADP/非农（ET 08:15/08:30）之前，是数据前最后一次读数。
-         脚本幂等：OI 未结算的点跳过不出报告，OCC 发布后第一个命中的点提交，
-         其余点因"无变更"不重复提交。末班车（20:45）由脚本读本文件最大时点识别。 -->
-    <key>StartCalendarInterval</key>
-    <array>
-        <dict>
-            <key>Hour</key>
-            <integer>18</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-        <dict>
-            <key>Hour</key>
-            <integer>19</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-        <dict>
-            <key>Hour</key>
-            <integer>20</integer>
-            <key>Minute</key>
-            <integer>0</integer>
-        </dict>
-        <dict>
-            <key>Hour</key>
-            <integer>20</integer>
-            <key>Minute</key>
-            <integer>45</integer>
-        </dict>
-    </array>
+    <!-- 2026-10-06 改为每 15 分钟轮询，脚本自己按美东时间判窗口（ET 1:00–8:59）与末班车（ET 08:45 起）。
+         原因：原日历时点 18:00/19:00/20:00/20:45 被 launchd 按悉尼时区解读（系统时区是新加坡），
+         实际在本地 16:00/17:00/18:00/18:45 触发；10/4 悉尼进夏令时后再提前 1 小时，末班落在 ET 05:45。
+         CBOE 的 OI 要到 ET 04:09~06:45 才刷新（周一更晚）→ 10/5 SLV/USO/TQQQ/IWM 缺链，
+         且脚本按「本地 20:45」识别末班车，永远不触发告警。轮询与时区无关（AGENTS：需要「窗口内至少跑一次」用 StartInterval）。
+         脚本幂等：全部品种已有当日快照 → 立即跳过；OI 未结算 → 不落盘不出报告。 -->
+    <key>StartInterval</key>
+    <integer>900</integer>
+    <key>RunAtLoad</key>
+    <false/>
     <key>StandardOutPath</key>
     <string>/Users/yhdong/Library/Logs/undertow-daily.log</string>
     <key>StandardErrorPath</key>

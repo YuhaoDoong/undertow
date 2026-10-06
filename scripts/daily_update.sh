@@ -3,7 +3,7 @@
 #   快照当日期权链 → 有新持仓数据才出报告 → commit + push（= 备份）
 # 时窗守卫：只在 ET 凌晨 1:00–8:59 运行（OCC 隔夜 OI 已更新、美股未开盘），
 # 错过窗口（如合盖补跑落到美盘时段）宁可跳过也不落脏数据。
-# 多时点重试：plist 在 ET02:05 主跑 + ET07:00/08:00/08:45 重试。OCC 隔夜 OI
+# 多时点重试：launchd StartInterval=900 每 15 分钟唤醒（2026-10-06 起；此前日历时点被 launchd 按悉尼时区解读）。OCC 隔夜 OI
 # 的发布时刻有波动（实测 ET02:27 常未结算、ET08:xx 已结算），太早的时点抓到的
 # OI 与上一交易日逐行相同 → chain_fingerprint 判为无新持仓 → 不落盘、不出报告，
 # 交给后续时点在 OCC 发布后再抓。本脚本幂等：当日报告一旦提交，后续时点即跳过。
@@ -26,6 +26,12 @@ alert() {  # $1=标题 $2=正文
   /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Basso\"" 2>/dev/null || true
 }
 notify() { alert "$@"; }   # 兼容旧调用名
+
+# 15 分钟轮询下，窗口外的唤醒只 touch 心跳（mtime = 上次被唤醒），不往日志里灌行（一天约 60 次）
+if (( ET_HOUR < 1 || ET_HOUR >= 9 )); then
+    mkdir -p data/logs; : > data/logs/.daily_alive
+    exit 0
+fi
 
 # —— 运行日志归档进仓库 ——
 # 用户 2026-08-28 提出：日志要能核对。原先只写 ~/Library/Logs/undertow-daily.log，
@@ -51,27 +57,18 @@ trap 'publish_record data/snapshots data/history data/reports' EXIT   # 早退�
 # 这是"整天没数据"的最后一道防线。前面每个时点失败都会推送，但如果全天所有时点
 # 都因 OCC 未结算而静默跳过（这是【正常】行为，不推送），到收盘前就没人知道
 # 当天缺数据了。整条交易流程依赖每日研报，缺一天必须让人当场知道。
-# —— 末班车识别：不能写死 ET 时刻 ——
-# ⚠️ codex review 2026-08-28 指出：plist 时点是【本地时间】，ET 随夏令时漂 1 小时。
-# 夏令时 本地20:45→ET08:45；冬令时 本地20:45→ET07:45。
-# 若判据写死 "ET_MIN>=08:30"，**冬令时半年内永远不成立** ——
-# 修静默失败的代码自己会静默失效，正是我们要消灭的那类 bug。
-# 改为：直接读 plist 的本地触发时刻，判断"本次是否为当日最后一个时点"。
-LAST_LOCAL=$(python3 - <<'PYEOF'
-import plistlib, pathlib
-try:
-    d = plistlib.loads((pathlib.Path.home() /
-        "Library/LaunchAgents/com.yuhaodoong.undertow.daily.plist").read_bytes())
-    pts = [(x.get("Hour", 0), x.get("Minute", 0)) for x in d.get("StartCalendarInterval", [])]
-    print(max(h * 60 + m for h, m in pts) if pts else -1)
-except Exception:
-    print(-1)          # 读不到就退化为"不是末班车"，宁可不报也不误报
-PYEOF
-)
-LOCAL_MIN=$(( 10#$(date +%H) * 60 + 10#$(date +%M) ))
+# —— 末班车识别（2026-10-06 改）：按【美东时间】判，plist 改为 StartInterval=900 轮询 ——
+# 旧做法读 plist 的本地日历时点（20:45）与本地时钟比较，以绕开夏令时漂移（codex 2026-08-28）。
+# 但 2026-10 实测：launchd 按悉尼时区解读日历时点（系统时区是新加坡），10/4 悉尼进夏令时后
+# 全部时点再提前 1 小时，末班落在 ET 05:45、本地 17:45 —— 永远到不了「本地 20:45」，末班车告警从不触发；
+# 10/5 SLV/USO/TQQQ/IWM 的 OI 在 05:45 后才发布，当天缺链、零告警。
+# 现在：launchd 每 15 分钟唤醒（与时区无关），脚本只在 ET 1:00–8:59 干活；ET 08:45 起的首次运行即末班车，
+# 当日只告警一次（哨兵文件）。ET 由 TZ=America/New_York 直接算，夏令时自动正确。
+ET_MOD=$(( 10#$(TZ=America/New_York date +%H) * 60 + 10#$(TZ=America/New_York date +%M) ))
+LAST_SLOT_ET_MIN=525          # ET 08:45；窗口 8:59 收，15 分钟轮询保证窗口末段至少唤醒一次
 IS_LAST_SLOT=0
-# 允许 launchd 迟到几分钟：落在最后时点之后即算末班车
-if (( LAST_LOCAL >= 0 && LOCAL_MIN >= LAST_LOCAL )); then IS_LAST_SLOT=1; fi
+if (( ET_MOD >= LAST_SLOT_ET_MIN )); then IS_LAST_SLOT=1; fi
+LAST_SLOT_SENT="data/logs/.daily_lastslot_alert_${ET_DATE}"
 
 # 幂等守卫：当日报告已提交（早前时点已成功）→ 后续重试点直接跳过，省掉重复抓取/出报告
 # ⚠️ 幂等守卫必须看【全部期权品种是否都已有当日快照】，不能只看 gold 的报告。
@@ -95,9 +92,10 @@ if [[ -z "${MISSING// /}" ]]; then
     exit 0
 fi
 echo "[待补] 尚缺当日快照：${MISSING}"
-if (( IS_LAST_SLOT )); then
-    # 已是末班车还缺 → 今天大概率就补不上了，当场告警（不 exit，仍尝试抓一次）
-    alert "🚨 末班车仍缺当日快照" "仍缺:${MISSING}。这是当日最后一个重试点，缺则当天无数据。"
+if (( IS_LAST_SLOT )) && [[ ! -f "$LAST_SLOT_SENT" ]]; then
+    # 已是末班车还缺 → 今天大概率就补不上了，当场告警（不 exit，仍尝试抓一次）；当日只报一次
+    : > "$LAST_SLOT_SENT"
+    alert "🚨 末班车仍缺当日快照" "仍缺:${MISSING}。ET 08:45 后仍未发布，缺则当天无数据。"
 fi
 
 

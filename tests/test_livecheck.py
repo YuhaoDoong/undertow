@@ -361,8 +361,16 @@ def test_daily_update_hardening():
     #    夏令时 本地20:45→ET08:45；冬令时→ET07:45。写死 "ET_MIN>=08:30" 会让
     #    **冬令时半年内永远不触发** —— 修静默失败的代码自己静默失效（codex review）。
     assert "ET_MIN_NOW >= 510" not in txt, "② 不得写死 ET 时刻（冬令时会失效）"
-    assert "LAST_LOCAL" in txt and "StartCalendarInterval" in txt, \
-        "② 末班车须从 plist 读【本地】最后时点"
+    # 2026-10-06 改：daily 改为 StartInterval=900 轮询，末班车按【美东时间】判（ET 直接由 TZ 算，夏令时自动正确）。
+    # 旧的「读 plist 本地最后时点」被 launchd 按悉尼时区解读日历时点击穿：末班落在本地 17:45，永远到不了 20:45，告警从不触发。
+    assert "LAST_SLOT_ET_MIN" in txt and "TZ=America/New_York" in txt, "② 末班车须按美东时间判"
+    assert "LAST_LOCAL" not in txt, "② 不得再用本地日历时点识别末班车（launchd 时区不可信）"
+    assert "LAST_SLOT_SENT" in txt, "② 末班车告警当日只发一次"
+    import plistlib
+    pl = plistlib.loads((Path(__file__).resolve().parents[1] / "scripts/launchd/com.yuhaodoong.undertow.daily.plist").read_bytes())
+    assert pl.get("StartInterval") == 900 and "StartCalendarInterval" not in pl, "daily 须为 StartInterval 轮询"
+    head = txt[:txt.index("RUNLOG=")]
+    assert "ET_HOUR < 1 || ET_HOUR >= 9" in head, "窗口外须在写日志之前退出"
     assert "FAILURE_${ET_DATE}.txt" in txt, "③ 告警须落兜底文件"
     assert "data/logs/daily_" in txt, "运行日志须归档进仓库"
     # ⑤ 判成败只读机器可读状态 JSON，绝不 grep 人读文案（脆弱耦合：改文案即静默失效）

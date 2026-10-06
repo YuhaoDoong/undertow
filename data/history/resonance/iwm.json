@@ -446,5 +446,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-10-05T09:47:47.861146+00:00"
+ },
+ {
+  "instrument": "iwm",
+  "date": "2026-10-06",
+  "spot": 283.38,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "偏超卖",
+  "regime": "牛",
+  "stretch": -0.2592400370714123,
+  "stretch_pctile": 0.352,
+  "drawdown": -5.657089898053746,
+  "dd_pctile": 0.052,
+  "combo_pctile": 0.20199999999999999,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-10-06T07:04:21.635801+00:00"
  }
 ]

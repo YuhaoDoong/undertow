@@ -618,3 +618,15 @@ def test_explicit_judgment_id_spans_slots_and_revisions_keep_it(tmp_path, monkey
     import json
     st = {t["id"]: t for t in json.loads(pt.JOURNAL.read_text())["theses"]}
     assert st["A3"]["paper"]["judgment_id"] == "J1"
+
+
+def test_missing_protective_bid_with_real_ask_never_triggers_exit():
+    """2026-10-05 GLD 10/16 380/385C 假止损：385C 瞬时无买价（卖价 3.2），按 0 计估值 5.3 ≥ 止损 4.9 被平。"""
+    p = _entered(); p.update(mark_slots_et=["15:45"], expiry="2026-10-16")
+    S = lambda syms: {"S": {"bid": 1.5, "ask": 1.6, "error": None}, "B": {"bid": None, "ask": 0.9, "error": None}}
+    assert pt.step(p, at(29, 15, 46), depth=S) == "retry"                          # 估值 1.6 ≥ 止损 0.82，但不执行
+    assert p["state"] == "entered" and p["events"][-1]["action"] == "mark_incomplete"
+    assert pt.step(p, at(29, 15, 47), depth=q(1.5, 1.6, 0.85, 0.9)) == "mark"      # 同一时点窗口内重取到完整报价 → 正常估值 0.75 < 0.82
+    W = lambda syms: {"S": {"bid": 1.5, "ask": 1.6, "error": None}, "B": {"bid": None, "ask": 0.05, "error": None}}
+    p2 = _entered(); p2.update(mark_slots_et=["15:45"], expiry="2026-10-16")
+    assert pt.step(p2, at(29, 15, 46), depth=W) == "stop"                          # 保护腿确实一文不值 → 仍按 0 计执行

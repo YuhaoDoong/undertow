@@ -553,8 +553,9 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             return "retry"
         req, now = now, back
         v = close_value(q, p)
-        if v is None:
-            ev.append({"at": now.isoformat(), "action": "manual_close_retry", "quotes": q, "why": "报价不可用，请求保留"})
+        if v is None or not exit_executable(q, p, v[1]):
+            ev.append({"at": now.isoformat(), "action": "manual_close_retry", "quotes": q,
+                       "why": "报价不可用或保护腿缺买价且卖价不可忽略，请求保留"})
             return "retry"
         val, assume = v
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
@@ -579,6 +580,12 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
         val, assume = v
         req, now = now, back
         live = in_rth(now) and now.astimezone(ET).date() == today       # 周末/盘外/跨日：只估值、不执行
+        if live and not exit_executable(q, p, assume):
+            # 保护腿缺买价但卖价不可忽略：估值不完整，不执行任何退出；不占用本时点，窗口内下次唤醒重取
+            ev.append({"at": now.isoformat(), "action": "mark_incomplete", "slot": key, "quotes": q, "value": val,
+                       "valuation_assumption": assume, "requested_at": req.isoformat(), "returned_at": now.isoformat(),
+                       "note": "保护腿缺买价且卖价 > %.2f，估值不完整：不执行止损/止盈/时间出场，窗口内重取" % WORTHLESS_ASK})
+            return "retry"
         ev.append({"at": now.isoformat(), "action": "mark" if live else "mark_offhours", "slot": key,
                    "quotes": q, "value": val, "valuation_assumption": assume,
                    "requested_at": req.isoformat(), "returned_at": now.isoformat(),
@@ -605,6 +612,19 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             return "time_exit"
         return "mark"
     return None
+
+
+WORTHLESS_ASK = 0.05      # 保护腿无买价、但卖价 ≤ 此值 → 视作确实一文不值，按 0 计可以执行
+
+
+def exit_executable(q: dict, p: dict, assume) -> bool:
+    """按估值执行退出（止损/止盈/时间出场/平仓请求）之前：估值必须是两腿可成交报价，或缺买价的那条腿确实一文不值。
+    2026-10-05 15:45 GLD 10/16 380/385C：385C 瞬时无买价（卖价 3.2），按 0 计 → 估值 5.3 越过止损 4.9 被平；
+    同时刻真实价值约 2.1（盈利中），当天收盘 379.55 仍在卖腿下方 —— 一次报价缺口触发了几乎满额亏损的假止损。"""
+    if assume is None:
+        return True
+    b = q.get(p["buy"]) or {}
+    return _finite(b.get("ask")) and b["ask"] <= WORTHLESS_ASK
 
 
 def close_value(q: dict, p: dict):
@@ -652,8 +672,8 @@ def manual_close(tid: str, note: str, now: datetime | None = None, *, depth=_dep
         if not in_rth(back):
             return _pend(back, "报价取回时已出常规时段：请求保留，下个常规时段执行", q)
         v = close_value(q, p)
-        if v is None:
-            return _pend(back, "报价不可用：请求保留，下次常规时段唤醒重试", q)
+        if v is None or not exit_executable(q, p, v[1]):
+            return _pend(back, "报价不可用或保护腿缺买价（卖价不可忽略）：请求保留，下次常规时段唤醒重试", q)
         req, now = now, back
         val, assume = v
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)

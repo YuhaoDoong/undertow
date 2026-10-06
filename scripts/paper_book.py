@@ -62,7 +62,19 @@ def result_class(r: dict) -> str:
 
 
 def _last_mark(p: dict) -> dict | None:
-    return next((e for e in reversed(p.get("events") or []) if e.get("action") in ("mark", "mark_offhours")), None)
+    """最近一次可信的盯市估值：未通过估值体检的（如保护腿缺买价却按 0 计、估值越出价差范围）不当作有效估值（2026-10-06 严查）。"""
+    from scripts.paper_trades import exit_problem
+    for e in reversed(p.get("events") or []):
+        if e.get("action") not in ("mark", "mark_offhours"):
+            continue
+        try:
+            bad = p.get("sell") and exit_problem(e.get("quotes") or {}, p, e.get("value"), e.get("valuation_assumption"),
+                                                 automatic=False)
+        except (KeyError, TypeError):
+            bad = None
+        if not bad:
+            return e
+    return None
 
 
 def classify(theses: list) -> dict:
@@ -205,7 +217,13 @@ def live_marks(rows: list) -> dict:
         sym = r.get("_sell"), r.get("_buy")
         if not all(sym):
             continue
-        v = close_value(_depth(list(sym)), {"sell": sym[0], "buy": sym[1]})
+        pp = {"sell": sym[0], "buy": sym[1], "k_sell": r["k_sell"], "k_buy": r["k_buy"], "structure": r.get("structure")}
+        qq = _depth(list(sym))
+        v = close_value(qq, pp)
+        if v is not None:
+            from scripts.paper_trades import exit_problem
+            bad = exit_problem(qq, pp, v[0], v[1], automatic=False)
+            v = (v[0], f"⚠️ 估值不可信：{bad}") if bad else v
         out[r["id"]] = v
     return out
 

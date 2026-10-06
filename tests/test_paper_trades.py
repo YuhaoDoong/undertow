@@ -630,3 +630,47 @@ def test_missing_protective_bid_with_real_ask_never_triggers_exit():
     W = lambda syms: {"S": {"bid": 1.5, "ask": 1.6, "error": None}, "B": {"bid": None, "ask": 0.05, "error": None}}
     p2 = _entered(); p2.update(mark_slots_et=["15:45"], expiry="2026-10-16")
     assert pt.step(p2, at(29, 15, 46), depth=W) == "stop"                          # 保护腿确实一文不值 → 仍按 0 计执行
+
+
+# —— 2026-10-06 用户：「恢复，但是要严查错误……这种错误不要影响模拟仓」——
+
+def Q2(s, b):
+    return lambda syms: {"S": {"error": None, **s}, "B": {"error": None, **b}}
+
+
+def test_out_of_range_value_or_wide_leg_never_auto_exits_but_manual_allows_wide():
+    p = _entered(); p.update(mark_slots_et=["15:45"], expiry="2026-10-16")      # 宽 2，止损 0.82
+    assert pt.step(p, at(29, 15, 46), depth=Q2({"bid": 2.4, "ask": 2.6}, {"bid": 0.1, "ask": 0.2})) == "retry"
+    assert p["events"][-1]["action"] == "mark_incomplete" and "越出" in p["events"][-1]["why"]    # 2.5 > 宽 2
+    assert pt.step(p, at(29, 15, 47), depth=Q2({"bid": 0.5, "ask": 1.6}, {"bid": 0.6, "ask": 0.7})) == "retry"
+    assert "过宽" in p["events"][-1]["why"] and p["state"] == "entered"                          # 卖腿买卖差 1.1
+    assert pt.exit_problem({"S": {"bid": 0.5, "ask": 1.6}, "B": {"bid": 0.6, "ask": 0.7}}, p, 1.0, None, automatic=False) is None
+
+
+def test_debit_long_leg_missing_bid_with_value_is_not_a_valuation():
+    d = _debit(); pt.step(d, at(30, 10, 2), depth=q(2.1, 2.3, 5.4, 5.6))
+    d["mark_slots_et"] = ["15:45"]
+    r = pt.step(d, at(30, 15, 46), depth=Q2({"bid": 4.55, "ask": 4.75}, {"bid": None, "ask": 9.25}))
+    assert r == "retry" and d["events"][-1]["action"] == "mark_incomplete"                        # 10/1 USO 那种 +5.05 的假估值
+
+
+def test_void_exit_only_for_bad_data_and_keeps_history(tmp_path, monkeypatch):
+    bad = _entered(); bad.update(k_sell=380.0, k_buy=385.0, side="C", expiry="2026-10-16", batch="user_subjective")
+    good = _entered(); good.update(expiry="2026-10-16")
+    load = _env(tmp_path, monkeypatch, [{"id": "BAD", "execution": "模拟", "paper": bad}, {"id": "GOOD", "execution": "模拟", "paper": good}])
+    import json
+    j = json.loads(pt.JOURNAL.read_text())
+    b, g = j["theses"][0]["paper"], j["theses"][1]["paper"]
+    qb = {"S": {"bid": 5.2, "ask": 5.3}, "B": {"bid": None, "ask": 3.2}}
+    b.update(state="closed_stop", close_value=5.3, pnl_usd=-288.2, closed_at="t", exit_assumption="buy_bid_missing")
+    b["events"] += [{"at": "t", "action": "mark", "quotes": qb, "value": 5.3}, {"at": "t", "action": "stop", "value": 5.3}]
+    g.update(state="closed_stop", close_value=1.0, pnl_usd=-62.2, closed_at="t")
+    g["events"] += [{"at": "t", "action": "mark", "quotes": {"S": {"bid": 1.4, "ask": 1.45}, "B": {"bid": 0.45, "ask": 0.5}}, "value": 1.0},
+                    {"at": "t", "action": "stop", "value": 1.0}]
+    pt._write_journal(j)
+    assert not pt.void_exit("GOOD", "恢复", "x")["ok"]                                     # 真实止损不能恢复
+    r = pt.void_exit("BAD", "恢复，但是要严查错误", "保护腿瞬时无买价")
+    st = load()["BAD"]
+    assert r["ok"] and st["paper"]["state"] == "entered" and st["outcome"] == "未验证"
+    assert st["paper"]["voided_exits"][0]["pnl_usd"] == -288.2 and st["paper"]["events"][-1]["action"] == "exit_voided"
+    assert any(json.loads(l)["action"] == "exit_voided" for l in (tmp_path / "ledger.jsonl").read_text().splitlines())

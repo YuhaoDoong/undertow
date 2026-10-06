@@ -553,9 +553,9 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             return "retry"
         req, now = now, back
         v = close_value(q, p)
-        if v is None or not exit_executable(q, p, v[1]):
-            ev.append({"at": now.isoformat(), "action": "manual_close_retry", "quotes": q,
-                       "why": "报价不可用或保护腿缺买价且卖价不可忽略，请求保留"})
+        prob = "报价不可用" if v is None else exit_problem(q, p, v[0], v[1], automatic=False)
+        if prob:
+            ev.append({"at": now.isoformat(), "action": "manual_close_retry", "quotes": q, "why": f"{prob}；请求保留"})
             return "retry"
         val, assume = v
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
@@ -580,11 +580,12 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
         val, assume = v
         req, now = now, back
         live = in_rth(now) and now.astimezone(ET).date() == today       # 周末/盘外/跨日：只估值、不执行
-        if live and not exit_executable(q, p, assume):
-            # 保护腿缺买价但卖价不可忽略：估值不完整，不执行任何退出；不占用本时点，窗口内下次唤醒重取
+        prob = exit_problem(q, p, val, assume, automatic=True)
+        if prob:
+            # 估值不可信：不执行任何退出、不占用本时点，窗口内下次唤醒重取（坏报价不得影响模拟仓）
             ev.append({"at": now.isoformat(), "action": "mark_incomplete", "slot": key, "quotes": q, "value": val,
                        "valuation_assumption": assume, "requested_at": req.isoformat(), "returned_at": now.isoformat(),
-                       "note": "保护腿缺买价且卖价 > %.2f，估值不完整：不执行止损/止盈/时间出场，窗口内重取" % WORTHLESS_ASK})
+                       "why": prob, "note": "估值不可信：不执行止损/止盈/时间出场，窗口内重取；盘外也不当作有效估值"})
             return "retry"
         ev.append({"at": now.isoformat(), "action": "mark" if live else "mark_offhours", "slot": key,
                    "quotes": q, "value": val, "valuation_assumption": assume,
@@ -617,14 +618,41 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
 WORTHLESS_ASK = 0.05      # 保护腿无买价、但卖价 ≤ 此值 → 视作确实一文不值，按 0 计可以执行
 
 
-def exit_executable(q: dict, p: dict, assume) -> bool:
-    """按估值执行退出（止损/止盈/时间出场/平仓请求）之前：估值必须是两腿可成交报价，或缺买价的那条腿确实一文不值。
-    2026-10-05 15:45 GLD 10/16 380/385C：385C 瞬时无买价（卖价 3.2），按 0 计 → 估值 5.3 越过止损 4.9 被平；
-    同时刻真实价值约 2.1（盈利中），当天收盘 379.55 仍在卖腿下方 —— 一次报价缺口触发了几乎满额亏损的假止损。"""
-    if assume is None:
-        return True
-    b = q.get(p["buy"]) or {}
-    return _finite(b.get("ask")) and b["ask"] <= WORTHLESS_ASK
+VALUE_TOL = 0.05          # 估值越界容差：贷记价差价值 ∈ [−tol, 宽度+tol]，借记 ∈ [−宽度−tol, +tol]
+LEG_SPREAD_MAX = (0.50, 0.50)   # 自动退出时单腿买卖差上限：max(0.50 美元, 中间价的 50%)；更宽视为报价异常
+
+
+def exit_problem(q: dict, p: dict, val, assume, *, automatic: bool = True) -> str | None:
+    """执行任何退出之前的估值体检（用户 2026-10-06：「要严查错误。模拟仓主要是为了记录交易和数据。这种错误不要影响模拟仓」）。
+    返回问题描述（不得执行，只记估值、窗口内重取），None = 可以执行。
+    1) 保护腿缺买价、但卖价 > 0.05（不是一文不值）→ 按 0 计的估值不可信。
+       起因：2026-10-05 15:45 GLD 10/16 380/385C，385C 瞬时无买价（卖价 3.2）→ 估值 5.3 越过止损 4.9 被平（−$288.2，
+       超过该价差理论最大亏损 $258.2）；同时刻按两腿报价约 2.1–2.3，当天收盘 379.55 仍在卖腿下方。
+    2) 估值越出价差的理论范围（贷记 0…宽度，借记 −宽度…0）→ 报价异常。
+    3) 仅自动退出：任一腿买卖差过宽（> max(0.50, 中间价 50%)）→ 报价异常。用户主动平仓不受此限（宽报价本身是可成交的现实）。"""
+    w = abs(p["k_sell"] - p["k_buy"])
+    if assume is not None:
+        b = q.get(p["buy"]) or {}
+        if not (_finite(b.get("ask")) and b["ask"] <= WORTHLESS_ASK):
+            return f"保护腿缺买价且卖价 {b.get('ask')} > {WORTHLESS_ASK}，按 0 计的估值不可信"
+    lo, hi = ((-w - VALUE_TOL, VALUE_TOL) if p.get("structure") == "debit" else (-VALUE_TOL, w + VALUE_TOL))
+    if not (_finite(val) and lo <= val <= hi):
+        return f"估值 {val} 越出价差理论范围 [{lo:.2f}, {hi:.2f}]（宽 {w:g}）"
+    if automatic:
+        for sym in (p["sell"], p["buy"]):
+            x = q.get(sym) or {}
+            if _finite(x.get("bid")) and _finite(x.get("ask")):
+                mid, spr = (x["bid"] + x["ask"]) / 2, x["ask"] - x["bid"]
+                if spr > max(LEG_SPREAD_MAX[0], LEG_SPREAD_MAX[1] * mid):
+                    return f"{sym} 买卖差 {spr:.2f} 过宽（中间价 {mid:.2f}）"
+    return None
+
+
+def exit_executable(q: dict, p: dict, assume, val=None, *, automatic: bool = True) -> bool:
+    if val is None:                               # 兼容旧调用：只查保护腿假设
+        b = q.get(p["buy"]) or {}
+        return assume is None or (_finite(b.get("ask")) and b["ask"] <= WORTHLESS_ASK)
+    return exit_problem(q, p, val, assume, automatic=automatic) is None
 
 
 def close_value(q: dict, p: dict):
@@ -672,8 +700,9 @@ def manual_close(tid: str, note: str, now: datetime | None = None, *, depth=_dep
         if not in_rth(back):
             return _pend(back, "报价取回时已出常规时段：请求保留，下个常规时段执行", q)
         v = close_value(q, p)
-        if v is None or not exit_executable(q, p, v[1]):
-            return _pend(back, "报价不可用或保护腿缺买价（卖价不可忽略）：请求保留，下次常规时段唤醒重试", q)
+        prob = "报价不可用" if v is None else exit_problem(q, p, v[0], v[1], automatic=False)
+        if prob:
+            return _pend(back, f"{prob}：请求保留，下次常规时段唤醒重试", q)
         req, now = now, back
         val, assume = v
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
@@ -753,8 +782,38 @@ def _outcome(t: dict) -> None:
         t["review"] = (t.get("review") or "") + f"【模拟仓未入场】{p.get('skip_reason') or p.get('invalid_reason')}"
 
 
+def void_exit(tid: str, note: str, why: str, now: datetime | None = None) -> dict:
+    """作废一次由坏数据触发的退出，恢复在场（用户 2026-10-06：「恢复，但是要严查错误……这种错误不要影响模拟仓」）。
+    不删任何事件：原退出事件与平仓字段整体移入 voided_exits（含作废理由与用户原话），追加 exit_voided 事件并投影到研究台账；
+    只允许作废带估值假设或估值越界的退出（真实止损不能被「恢复」）。"""
+    now = now or datetime.now(timezone.utc)
+    with open(LOCK, "a+") as lk:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+        j = json.loads(JOURNAL.read_text("utf-8"))
+        t = next((x for x in j.get("theses", []) if x["id"] == tid), None)
+        p = (t or {}).get("paper") or {}
+        if p.get("state") not in ("closed_stop", "closed_tp", "closed_time", "closed_manual"):
+            return {"ok": False, "why": f"{tid} 不是已退出状态"}
+        ex = next(e for e in reversed(p["events"]) if e["action"] in ("stop", "take_profit", "time_exit", "manual_close"))
+        mk = next((e for e in reversed(p["events"]) if e.get("at") == ex["at"] and e["action"] in ("mark", "mark_offhours")), {})
+        q = ex.get("quotes") or mk.get("quotes") or {}
+        prob = exit_problem(q, p, p.get("close_value"), p.get("exit_assumption"), automatic=ex["action"] != "manual_close")
+        if not prob:
+            return {"ok": False, "why": "该退出的估值通过体检，不能作废（真实退出不得恢复）"}
+        keep = {k: p.pop(k) for k in ("closed_at", "close_value", "pnl_usd", "exit_assumption") if k in p}
+        p.setdefault("voided_exits", []).append({"state": p["state"], **keep, "exit_event_at": ex["at"], "problem": prob,
+                                                 "why": why, "user_note": note, "voided_at": now.isoformat()})
+        p["state"] = "entered"
+        p["events"].append({"at": now.isoformat(), "action": "exit_voided", "exit_event_at": ex["at"], "problem": prob,
+                            "why": why, "user_note": note})
+        t.update(outcome="未验证", trade_pnl=None, scored_at=None)
+        _write_journal(j)
+        sync_ledger(j)
+        return {"ok": True, "problem": prob, "voided": keep}
+
+
 OUTCOME_ACTIONS = ("enter", "skipped", "missed", "invalid_spec", "stop", "settle", "take_profit", "time_exit")
-MANUAL_ACTIONS = ("manual_close", "close_requested")
+MANUAL_ACTIONS = ("manual_close", "close_requested", "exit_voided")
 LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit",) + MANUAL_ACTIONS
 
 
@@ -960,6 +1019,10 @@ def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
     if cmd == "close":                                   # python3 scripts/paper_trades.py close <id> "用户原话"
         r = manual_close(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "")
+        print(json.dumps(r, ensure_ascii=False))
+        return 0 if r.get("ok") else 1
+    if cmd == "void-exit":                               # python3 scripts/paper_trades.py void-exit <id> "用户原话" "作废理由"
+        r = void_exit(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "", sys.argv[4] if len(sys.argv) > 4 else "")
         print(json.dumps(r, ensure_ascii=False))
         return 0 if r.get("ok") else 1
     if cmd == "report":

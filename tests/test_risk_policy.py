@@ -51,3 +51,13 @@ def test_kelly_cannot_loosen_policy():
     k = kelly(0.95, 30.0, 35.0)                              # Kelly 很大
     v = size(1000.0, 300.0, k, buying_power=1000.0, unit_stop_loss=100.0, allow_over=True)
     assert not v.ok and "风控政策" in v.reason                # 最大亏 300 > 200
+
+
+def test_policy_status_registry_marks_draft_and_pending():
+    """Codex 033 C2：当前实现与用户已确认分开；草案、未决显式标出；数值不因登记而改变。"""
+    from undertow.analyze import risk_policy as rp
+    assert rp.POLICY["max_stop_risk_frac"] == 0.10 and rp.POLICY["max_loss_frac"] == 0.20
+    lines = "\n".join(rp.policy_status_lines())
+    assert "cluster_max_loss_frac = 20%：草案" in lines and "account_max_loss_frac = 未设定：未决" in lines and "待讨论" in lines
+    n, notes = rp.max_units(net_assets=1000, unit_max_loss=50, cluster_open_max_loss=180)
+    assert n == 0 and "受限于：同簇合计 ≤20%（草案，用户未确认）" in notes[0]          # 草案限额起作用时显式说明是草案

@@ -27,6 +27,34 @@ POLICY = {
 }
 
 
+# 每条限额的状态（Codex 033 C2：「当前实现」与「用户已确认」必须分得清；未决项显示未决，不伪称硬性用户规则）。
+# 数值与执行行为不变（既有 10%/20% 不擅自放宽）；改任何状态或数值 = 升 VERSION。
+POLICY_META = {
+    "max_stop_risk_frac": {"status": "生效", "source": "AGENTS.md 五节；用户私有档案 size_cap",
+                           "effective_from": "2026-09-26", "confirmed_by": "用户（档案 size_cap 条）"},
+    "max_loss_frac": {"status": "生效", "source": "AGENTS.md 五节；用户私有档案 size_cap",
+                      "effective_from": "2026-09-26", "confirmed_by": "用户（档案 size_cap 条）"},
+    "cluster_max_loss_frac": {"status": "草案（实现中参与组数计算，但用户未确认）", "source": "影子账 P5 沿用",
+                              "effective_from": "2026-09-26", "confirmed_by": None},
+    "account_max_loss_frac": {"status": "未决（用户未设定）", "source": None, "effective_from": None, "confirmed_by": None},
+    "_pending_conflicts": ["conflict_pct_sizing_vs_jit_funding（按净资产百分比 vs 用多少入多少，2026-10-06 登记，待讨论）",
+                           "conflict_refill_vs_trading（亏损后不追加入金的字面含义，2026-10-06 登记，待讨论）"],
+}
+
+
+def policy_status_lines(policy: dict = POLICY, meta: dict = POLICY_META) -> list[str]:
+    """给研报/体检显示用：每条限额的现值与状态；未决与草案显式标出。"""
+    out = []
+    for k, m in meta.items():
+        if k.startswith("_"):
+            continue
+        v = policy.get(k)
+        out.append(f"{k} = {('%.0f%%' % (v * 100)) if isinstance(v, (int, float)) else '未设定'}：{m['status']}"
+                   + (f"（确认：{m['confirmed_by']}）" if m.get("confirmed_by") else ""))
+    out += [f"待讨论：{c}" for c in meta.get("_pending_conflicts", [])]
+    return out
+
+
 def _finite_pos(x) -> bool:
     return isinstance(x, (int, float)) and math.isfinite(x) and x > 0
 
@@ -56,7 +84,7 @@ def max_units(*, net_assets, unit_max_loss, unit_stop_loss=None, buying_power=No
     }
     if policy.get("cluster_max_loss_frac") is not None:
         room = policy["cluster_max_loss_frac"] * net_assets - max(0.0, cluster_open_max_loss)
-        caps["同簇合计 ≤{:.0%}".format(policy["cluster_max_loss_frac"])] = max(0, int(max(0.0, room) // unit_max_loss))
+        caps["同簇合计 ≤{:.0%}（草案，用户未确认）".format(policy["cluster_max_loss_frac"])] = max(0, int(max(0.0, room) // unit_max_loss))
     if policy.get("account_max_loss_frac") is not None:
         room = policy["account_max_loss_frac"] * net_assets - max(0.0, account_open_max_loss)
         caps["全账户合计 ≤{:.0%}".format(policy["account_max_loss_frac"])] = max(0, int(max(0.0, room) // unit_max_loss))

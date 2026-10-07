@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from undertow.collect import lb_budget   # 同账户行情调用共享并发/速率预算（Codex 033 A4）
 import subprocess
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -29,7 +30,7 @@ def _run(args: list[str], *, timeout: float = 20.0):
     if not available():
         raise NewsUnavailable("未找到 longbridge CLI")
     try:
-        proc = subprocess.run([BIN, *args, "--format", "json"],
+        proc = lb_budget.run([BIN, *args, "--format", "json"],
                               capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as e:
         raise NewsUnavailable(f"longbridge {' '.join(args)} 超时") from e

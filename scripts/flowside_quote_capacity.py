@@ -65,7 +65,11 @@ def main() -> int:
     from undertow.shadow_cli import flowside_plan
     args = sys.argv[1:]
     n = int(args[args.index("--n") + 1]) if "--n" in args else 120
-    workers = [int(x) for x in (args[args.index("--workers") + 1] if "--workers" in args else "1,4").split(",")]
+    workers = [int(x) for x in (args[args.index("--workers") + 1] if "--workers" in args else "1,2,4").split(",")]
+    from undertow.collect import lb_budget
+    if max(workers) > lb_budget.N_SLOTS:               # Codex 033：不再以超过并发预算的设置去撞限频
+        print(f"并发 {max(workers)} 超过共享预算 {lb_budget.N_SLOTS}，拒绝测量"); return 1
+    os.environ.setdefault("LB_PRIORITY", "low")        # 研究测量：低优先级，给模拟仓/实盘体检留余量
     day = market_today()
     plan, by_type = {}, Counter()
     for k in ("gold", "silver"):
@@ -82,13 +86,16 @@ def main() -> int:
     sample = allsyms[::step][:n]
     now = datetime.now(ET)
     runs = [measure(sample, w) for w in workers]
-    best = min(runs, key=lambda r: r["per_symbol_wall_s"])
+    # Codex 033：先按可靠性筛（失败率 ≤ 1%），再比【成功】吞吐；没有合格方案 → unknown（旧版按最短耗时选出了 67% 失败的 8 并发）
+    ok_runs = [r for r in runs if r["n"] and (r["n"] - r["ok"]) / r["n"] <= 0.01]
+    best = min(ok_runs, key=lambda r: r["wall_s"] / max(1, r["ok"])) if ok_runs else None
     rec = {"schema": 1, "measured_at": now.isoformat(), "rth": now.weekday() < 5 and (9, 30) <= (now.hour, now.minute) < (16, 0),
            "plan_unique_symbols": len(allsyms), "plan_by_instrument_type": {f"{a}/{b}": v for (a, b), v in sorted(by_type.items())},
            "sample_n": len(sample), "sample_rule": "计划代码字典序等距抽样（与成交量无关）", "runs": runs,
            "full_round_estimate_s": {r["workers"]: round(r["per_symbol_wall_s"] * len(allsyms), 1) for r in runs},
            "quote_max_age_s": 900, "note": "option quote 批量接口无 bid/ask，不能替代 depth（2026-10-02 实测）",
-           "best_workers": best["workers"]}
+           "best_workers": best["workers"] if best else "unknown",
+           "selection_rule": "失败率 ≤ 1% 的方案中成功请求吞吐最高者；无合格 → unknown", "priority": os.environ.get("LB_PRIORITY")}
     OUT.mkdir(parents=True, exist_ok=True)
     path = OUT / f"{now:%Y-%m-%d_%H%M}.json"
     fd, tmp = tempfile.mkstemp(dir=OUT, suffix=".tmp")

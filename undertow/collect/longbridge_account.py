@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import math
 import shutil
+from undertow.collect import lb_budget   # 同账户行情调用共享并发/速率预算（Codex 033 A4）
 import subprocess
 from dataclasses import dataclass, field
 
@@ -46,7 +47,7 @@ def _run(args: list[str], *, timeout: float = 30.0) -> object:
             "未找到 longbridge CLI。安装：brew install --cask longbridge/tap/longbridge-terminal，"
             "然后 `longbridge auth login` 登录一次。")
     try:
-        proc = subprocess.run([BIN, *args, "--format", "json"],
+        proc = lb_budget.run([BIN, *args, "--format", "json"],
                               capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as e:
         raise LongbridgeUnavailable(f"longbridge {' '.join(args)} 超时（{timeout}s）") from e

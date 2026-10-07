@@ -131,7 +131,8 @@ shadow_window() {  # $1=open|close $2=窗口起(分) $3=窗口止(分) $4=标签
 # 没有「今日完成」哨兵：每次唤醒都跑，命令只重取本桶内尚未成功观测的合约。
 # Codex 014 N14-02：失败提醒按【当前桶】判 —— 本桶最后 6 分钟仍失败就当场提醒，每桶最多一次；
 # 次日盘前 daily_update 再跑 `shadow sample --check` 收尾核对整天各桶。
-shadow_sample() {  # $1=起(分) $2=止(分，闭区间末分钟)
+shadow_sample() {
+  local LB_PRIORITY=low; export LB_PRIORITY      # 研究采样：长桥调用低优先级（Codex 033 A4 共享预算）  # $1=起(分) $2=止(分，闭区间末分钟)
   local LO="$1" HI="$2"
   if (( ET_MIN < LO || ET_MIN > HI )); then return; fi
   IN_SHADOW=1
@@ -216,6 +217,7 @@ thesisq() {  # $1=pre|close
 # ⑩ 收盘后存当天逐分钟（用户 2026-09-28「记住数据最重要」）：longbridge intraday 只能取【当天】、不占按自然月计的
 # 历史 K 线配额（400 代码/月，主池两周即用掉 349）。ET 16:05 起每次唤醒尝试，成功写哨兵；rc≠0 连续 3 次后通知一次。
 intraday_capture() {
+  local LB_PRIORITY=low; export LB_PRIORITY      # 研究采样：长桥调用低优先级（Codex 033 A4 共享预算）
   # Codex 024/025/026：成功哨兵 = 本次运行的结构化状态（overall=complete/no_candidates）且 rc=0（run_bound 核对身份）；
   # 命令内另有 fcntl.flock（rc=4），hook 层 lockf 撞锁为 75 —— 两者都表示上一轮仍在跑。
   local OKF="$LOG_DIR/.intraday_${ET_DATE}.ok" FAILF="$LOG_DIR/.intraday_fail_${ET_DATE}"
@@ -237,6 +239,7 @@ intraday_capture() {
 # ⑬ 资金流买卖方推断验证的采集（用户 2026-09-29「1 做一下」；协议 docs/prereg/2026-09-29_flow_side_check_v0.md）：
 # ET 16:05 起抓当天金银近价合约逐分钟（共用 ⑩ 的锁与存储，不占历史 K 线配额）；全部终态才写哨兵，否则下次唤醒重试。
 flowside_capture() {
+  local LB_PRIORITY=low; export LB_PRIORITY      # 研究采样：长桥调用低优先级（Codex 033 A4 共享预算）
   # 复用本次运行绑定（run_bound：独立 run_id、状态路径与身份核对、lockf）；成功哨兵 = rc=0 且本次状态为 complete/no_candidates
   local OKF="$LOG_DIR/.flowside_${ET_DATE}.ok"
   [[ -f "$OKF" ]] && return

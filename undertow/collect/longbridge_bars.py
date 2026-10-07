@@ -19,6 +19,7 @@ import gzip
 import json
 import os
 import shutil
+from undertow.collect import lb_budget   # 同账户行情调用共享并发/速率预算（Codex 033 A4）
 import subprocess
 import tempfile
 import time
@@ -57,7 +58,7 @@ def _run(args: list[str], *, timeout: float = 30.0) -> tuple[str, object]:
     if shutil.which(BIN) is None:
         raise BarsUnavailable("未找到 longbridge CLI")
     try:
-        p = subprocess.run([BIN, *args, "--format", "json"], capture_output=True, text=True, timeout=timeout)
+        p = lb_budget.run([BIN, *args, "--format", "json"], capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as e:
         raise BarsUnavailable(f"longbridge {' '.join(args)} 超时") from e
     err = (p.stderr or "") + (p.stdout if p.returncode else "")

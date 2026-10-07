@@ -1,0 +1,46 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 67562,
+ "started_at": "2026-10-07T07:16:22.588659+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/USO/2026-10-07",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/USO/2026-10-07.json.gz",
+   "sha256": "d70d4319fd7ddc359144423ddc309805392daaa462efe28149985c5103dcc21c",
+   "captured_at": 1791349870.6618218,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/IWM/2026-10-07",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/IWM/2026-10-07.json.gz",
+   "sha256": "eb3a8b00a5b5df64002410954320b9d2f9d0b4b231505d6fcabc72335989aae1",
+   "captured_at": 1791349876.8814871,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/AAPL/2026-10-07",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/AAPL/2026-10-07.json.gz",
+   "sha256": "48bdb3bdaaaa3ff6341c90f7214b69eec0e98585a1c0ff3ba1e91b76f07fbadb",
+   "captured_at": 1791357172.175191,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 2
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-07T07:16:35.524575+00:00",
+ "rc": 0,
+ "git_head": "7619ccc9a8bdc28c9d9a47a7ad4c42cbdc789c46"
+}

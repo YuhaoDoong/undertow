@@ -233,6 +233,33 @@ def _spread_value(p: dict, s: float) -> float:
            (max(0.0, s - p["k_sell"]) - max(0.0, s - p["k_buy"]))
 
 
+EARLY_EXITS = ("closed_stop", "closed_tp", "closed_time", "closed_manual")
+
+
+def hold_to_expiry(p: dict, now: datetime, *, session_close=None) -> str | None:
+    """提前了结的仓位，到期后补记「假设持有到期」的盈亏（用户 2026-10-07：「提前平仓的卖方，要同时记录假设到期后的盈亏。
+    这样也可以方便我们计算提前平仓规则」）。只是反事实对照，不改实际状态与盈亏。
+    口径与正式结算相同：到期日常规收盘价的内在价值、整单往返费用；收盘价取长桥日线（provisional），取不到下次唤醒重试。"""
+    if p.get("state") not in EARLY_EXITS or p.get("hold_to_expiry"):
+        return None
+    exp = date.fromisoformat(p["expiry"])
+    et = now.astimezone(ET)
+    if et.date() < exp or (et.date() == exp and et.time() < time(16, 20)):
+        return None
+    c = (session_close or _session_close)(p["underlying"], exp)
+    if c is None:
+        return None
+    val = _spread_value(p, c["close"])
+    pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
+    h = {"close": c["close"], "source": c.get("source"), "status": "provisional", "value": round(val, 4), "pnl_usd": pnl,
+         "actual_pnl_usd": p.get("pnl_usd"), "early_exit_effect_usd": round((p.get("pnl_usd") or 0) - pnl, 2)
+         if _finite(p.get("pnl_usd")) else None, "actual_state": p["state"], "at": now.isoformat()}
+    p["hold_to_expiry"] = h
+    p.setdefault("events", []).append({"at": now.isoformat(), "action": "hold_to_expiry", **{k: h[k] for k in
+                                       ("close", "value", "pnl_usd", "actual_pnl_usd", "early_exit_effect_usd", "actual_state")}})
+    return "hold_to_expiry"
+
+
 AUDIT_TOL = 0.01          # 两源收盘差 ≤ 1 美分算一致（ETF 报价精度 0.01）
 AUDIT_RETRY_S = 3600      # 第二来源未到时最多每小时查一次
 
@@ -814,7 +841,7 @@ def void_exit(tid: str, note: str, why: str, now: datetime | None = None) -> dic
 
 OUTCOME_ACTIONS = ("enter", "skipped", "missed", "invalid_spec", "stop", "settle", "take_profit", "time_exit")
 MANUAL_ACTIONS = ("manual_close", "close_requested", "exit_voided")
-LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit",) + MANUAL_ACTIONS
+LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit", "hold_to_expiry") + MANUAL_ACTIONS
 
 
 def event_id(thesis_id: str, e: dict) -> str:
@@ -973,7 +1000,7 @@ def tick(now: datetime | None = None, *, depth=None) -> list[str]:
                     continue
             pnow = max(now, _clock())                  # 每个仓位按自己的请求时刻（032 R1：整批复用开始时刻会让排在后面的仓位倒填）
             try:
-                a = step(p, pnow, **({"depth": depth} if depth else {})) or audit_settlement(p, pnow)
+                a = step(p, pnow, **({"depth": depth} if depth else {})) or audit_settlement(p, pnow) or hold_to_expiry(p, pnow)
             except Exception as e:                      # 取数失败：留痕并在下次唤醒重试
                 p.setdefault("events", []).append({"at": pnow.isoformat(), "action": "error", "error": f"{type(e).__name__}: {e}"[:200]})
                 a = "error"

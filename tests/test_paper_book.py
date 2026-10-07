@@ -105,3 +105,13 @@ def test_atomic_write_keeps_previous_on_readback_failure(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError):
         pb._atomic_write(f, "v2")
     assert real(f, "utf-8") == "v1" and not list(tmp_path.glob("*.tmp"))
+
+
+def test_early_exit_vs_hold_to_expiry_section():
+    a = T("t1", "closed_time", pnl=-10.2); a["paper"]["hold_to_expiry"] = {"pnl_usd": 11.8, "close": 55.13, "early_exit_effect_usd": -22.0}
+    b = T("t2", "closed_tp", pnl=20.0)                                        # 尚未到期补记
+    c = T("t3", "settled", pnl=40.0)
+    cl = pb.classify([a, b, c])
+    md, _ = pb.render("2026-10-07", cl, pb.summarize(cl), {}, "now")
+    assert "$+11.80（到期收 55.13）；提前了结影响 $-22.00" in md and "待到期后补记" in md and "（到期结算，不适用）" in md
+    assert "| rule | 规则时间出场 | 1（1） | $-10.20 | $+11.80 | $-22.00 |" in md

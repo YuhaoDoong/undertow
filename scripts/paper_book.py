@@ -91,7 +91,7 @@ def classify(theses: list) -> dict:
         row = {"id": t["id"], "date": t.get("date"), "instrument": t.get("instrument"), "batch": p.get("batch", "legacy"),
                "judgment": judgment_id(j, t), "state": p.get("state"), "side": p.get("side"), "expiry": p.get("expiry"),
                "k_sell": p.get("k_sell"), "k_buy": p.get("k_buy"), "credit": p.get("entry_credit"),
-               "structure": p.get("structure", "credit"), "qty": p.get("qty", 1),
+               "structure": p.get("structure", "credit"), "qty": p.get("qty", 1), "hold": p.get("hold_to_expiry"),
                "exit_assumption": p.get("exit_assumption") or _close_assumption(p),
                "econ": p.get("economics") or {}, "pnl": p.get("pnl_usd"), "stop": p.get("stop_value"),
                "exit_rule": p.get("exit_rule"), "strike_rule": p.get("strike_rule"), "entered_at": p.get("entered_at"),
@@ -189,6 +189,41 @@ def summarize(c: dict) -> dict:
     return out
 
 
+def _hold_cell(r: dict) -> str:
+    """提前了结的仓位：到期后补记的「假设持有到期」盈亏与提前了结的影响；到期结算的仓位不适用。"""
+    if r.get("state") == "settled":
+        return "（到期结算，不适用）"
+    h = r.get("hold")
+    if not h:
+        return "待到期后补记"
+    eff = h.get("early_exit_effect_usd")
+    return (f"${h['pnl_usd']:+.2f}（到期收 {h['close']}）；提前了结影响 "
+            + (f"${eff:+.2f}" if _num(eff) else "—"))
+
+
+def early_exit_section(closed: list) -> list:
+    """按批次 × 了结方式汇总：提前了结的实际含费盈亏 vs 假设持有到期，差额 = 提前了结规则/决定的贡献。
+    只统计已补记反事实的仓位；样本极小时只作描述，不据此改规则（规则改动须事前登记）。"""
+    rows = [r for r in closed if r.get("state") != "settled"]
+    if not rows:
+        return []
+    by = defaultdict(lambda: {"n": 0, "done": 0, "actual": 0.0, "hold": 0.0})
+    for r in rows:
+        k = (r["batch"], HOW.get(r["state"], r["state"]))
+        b = by[k]; b["n"] += 1
+        h = r.get("hold")
+        if h and _num(h.get("pnl_usd")) and _num(r.get("pnl")):
+            b["done"] += 1; b["actual"] += r["pnl"]; b["hold"] += h["pnl_usd"]
+    out = ["", "## 提前了结 vs 假设持有到期（反事实对照）", "",
+           "> 差额 > 0 表示提前了结比持有到期多赚（或少亏）。样本很小，只作描述；改出场规则须事前登记新版本。", "",
+           "| 批次 | 了结方式 | 笔数（已补记） | 实际含费合计 | 持有到期含费合计 | 提前了结的影响 |", "|---|---|---|---|---|---|"]
+    for (b, how), v in sorted(by.items()):
+        diff = v["actual"] - v["hold"]
+        out.append(f"| {b} | {how} | {v['n']}（{v['done']}） | ${v['actual']:+.2f} | ${v['hold']:+.2f} | "
+                   f"{'$%+.2f' % diff if v['done'] else '—'} |")
+    return out
+
+
 def _amt(r: dict) -> str:
     """入场权利金：贷记为收入；借记价差 credit 为负，显示成「付 x」。"""
     c = r.get("credit")
@@ -260,16 +295,18 @@ def render(day: str, c: dict, sm: dict, live: dict, generated_at: str, legacy: l
         md.append("| （无） | | | | | | | | |")
     md += ["", "## 待入场", ""] + [f"- {r['id']}：{_struct(r)}（{r['batch']}，{r['strike_rule'] or '固定档位'}）" for r in c["planned"]] + \
           ([] if c["planned"] else ["- （无）"])
-    md += ["", "## 已了结", "", "| 仓位 | 批次 | 了结方式 | 入场权利金 | 含费盈亏 | 含费最大亏损 | 盈亏/最大亏损 |", "|---|---|---|---|---|---|---|"]
+    md += ["", "## 已了结", "", "| 仓位 | 批次 | 了结方式 | 入场权利金 | 含费盈亏 | 含费最大亏损 | 盈亏/最大亏损 | 若持有到期（反事实） |",
+           "|---|---|---|---|---|---|---|---|"]
     for r in c["closed"]:
         ml, k = r["econ"].get("max_loss_usd"), result_class(r)
         tag = {"unknown": "（结果未知）", "under_review": "（待复核）",
                "assumed": f"（估算退出：{r['exit_assumption']}）", "formal": ""}[k]
         md.append(f"| {r['id']}<br>{_struct(r)} | {r['batch']} | {HOW.get(r['state'], r['state'])}{tag} | {_amt(r)} | "
                   f"{'$%+.2f' % r['pnl'] if _num(r['pnl']) else '—'} | {'$' + str(ml) if _num(ml) else '—'} | "
-                  f"{round(r['pnl'] / ml, 3) if _num(r['pnl']) and _num(ml) and ml else '—'} |")
+                  f"{round(r['pnl'] / ml, 3) if _num(r['pnl']) and _num(ml) and ml else '—'} | {_hold_cell(r)} |")
     if not c["closed"]:
-        md.append("| （无） | | | | | | |")
+        md.append("| （无） | | | | | | | |")
+    md += early_exit_section(c["closed"])
     md += ["", "## 未入场（按规则放弃）", ""] + [f"- {r['id']}（{r['batch']}）：{r['reason']}" for r in c["not_entered"]] + \
           ([] if c["not_entered"] else ["- （无）"])
     md += ["", f"## 被修订替代的版本（{len(c['superseded'])}，不算失败）", ""] + [f"- {r['id']}：{str(r['reason'])[:80]}" for r in c["superseded"]]

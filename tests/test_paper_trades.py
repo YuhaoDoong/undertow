@@ -674,3 +674,18 @@ def test_void_exit_only_for_bad_data_and_keeps_history(tmp_path, monkeypatch):
     assert r["ok"] and st["paper"]["state"] == "entered" and st["outcome"] == "未验证"
     assert st["paper"]["voided_exits"][0]["pnl_usd"] == -288.2 and st["paper"]["events"][-1]["action"] == "exit_voided"
     assert any(json.loads(l)["action"] == "exit_voided" for l in (tmp_path / "ledger.jsonl").read_text().splitlines())
+
+
+def test_early_exit_records_hold_to_expiry_counterfactual():
+    """用户 2026-10-07：提前平仓的仓位到期后补记「假设持有到期」盈亏，便于评估提前平仓规则。"""
+    p = _entered(); p.update(mark_slots_et=["09:45"], expiry="2026-10-05", exit_rule="claude-exit-v1", batch="rule_dynamic")
+    assert pt.step(p, datetime(2026, 10, 2, 9, 46, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25)) == "time_exit"
+    actual = p["pnl_usd"]
+    sc = lambda u, d: {"close": 376.0, "source": "t"} if d == date(2026, 10, 5) else None
+    assert pt.hold_to_expiry(p, datetime(2026, 10, 5, 16, 0, tzinfo=ET), session_close=sc) is None      # 到期日收盘前不算
+    assert pt.hold_to_expiry(p, datetime(2026, 10, 5, 16, 21, tzinfo=ET), session_close=sc) == "hold_to_expiry"
+    h = p["hold_to_expiry"]
+    assert h["pnl_usd"] == round(0.41 * 100 - 3.2, 2) and h["actual_pnl_usd"] == actual        # 376 在卖腿 375 上方 → 全额
+    assert h["early_exit_effect_usd"] == round(actual - h["pnl_usd"], 2) and p["state"] == "closed_time"   # 实际状态不变
+    assert pt.hold_to_expiry(p, datetime(2026, 10, 6, 10, 0, tzinfo=ET), session_close=sc) is None       # 只记一次
+    s = _p(); assert pt.hold_to_expiry(s, datetime(2026, 10, 6, 10, 0, tzinfo=ET), session_close=sc) is None  # 未提前了结的不记

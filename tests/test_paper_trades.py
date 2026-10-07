@@ -629,7 +629,7 @@ def test_missing_protective_bid_with_real_ask_never_triggers_exit():
     assert pt.step(p, at(29, 15, 47), depth=q(1.5, 1.6, 0.85, 0.9)) == "mark"      # 同一时点窗口内重取到完整报价 → 正常估值 0.75 < 0.82
     W = lambda syms: {"S": {"bid": 1.5, "ask": 1.6, "error": None}, "B": {"bid": None, "ask": 0.05, "error": None}}
     p2 = _entered(); p2.update(mark_slots_et=["15:45"], expiry="2026-10-16")
-    assert pt.step(p2, at(29, 15, 46), depth=W) == "stop"                          # 保护腿确实一文不值 → 仍按 0 计执行
+    assert pt.step(p2, at(29, 15, 46), depth=W) == "retry" and p2["state"] == "entered"   # Codex 033：小卖价也不证明有买盘
 
 
 # —— 2026-10-06 用户：「恢复，但是要严查错误……这种错误不要影响模拟仓」——
@@ -654,27 +654,68 @@ def test_debit_long_leg_missing_bid_with_value_is_not_a_valuation():
     assert r == "retry" and d["events"][-1]["action"] == "mark_incomplete"                        # 10/1 USO 那种 +5.05 的假估值
 
 
-def test_void_exit_only_for_bad_data_and_keeps_history(tmp_path, monkeypatch):
+def test_void_exit_only_for_data_integrity_and_keeps_history(tmp_path, monkeypatch):
+    """Codex 033 P1-01：只有原始数据不成立的退出可在用户授权下作废；现行点差/成本政策不能撤销历史退出。"""
+    T0 = "2026-10-05T15:45:00-04:00"
     bad = _entered(); bad.update(k_sell=380.0, k_buy=385.0, side="C", expiry="2026-10-16", batch="user_subjective")
     good = _entered(); good.update(expiry="2026-10-16")
-    load = _env(tmp_path, monkeypatch, [{"id": "BAD", "execution": "模拟", "paper": bad}, {"id": "GOOD", "execution": "模拟", "paper": good}])
+    wide = _entered(); wide.update(k_sell=380.0, k_buy=385.0, side="C", expiry="2026-10-16")
+    load = _env(tmp_path, monkeypatch, [{"id": "BAD", "execution": "模拟", "paper": bad}, {"id": "GOOD", "execution": "模拟", "paper": good},
+                                        {"id": "WIDE", "execution": "模拟", "paper": wide}])
     import json
     j = json.loads(pt.JOURNAL.read_text())
-    b, g = j["theses"][0]["paper"], j["theses"][1]["paper"]
-    qb = {"S": {"bid": 5.2, "ask": 5.3}, "B": {"bid": None, "ask": 3.2}}
-    b.update(state="closed_stop", close_value=5.3, pnl_usd=-288.2, closed_at="t", exit_assumption="buy_bid_missing")
-    b["events"] += [{"at": "t", "action": "mark", "quotes": qb, "value": 5.3}, {"at": "t", "action": "stop", "value": 5.3}]
-    g.update(state="closed_stop", close_value=1.0, pnl_usd=-62.2, closed_at="t")
-    g["events"] += [{"at": "t", "action": "mark", "quotes": {"S": {"bid": 1.4, "ask": 1.45}, "B": {"bid": 0.45, "ask": 0.5}}, "value": 1.0},
-                    {"at": "t", "action": "stop", "value": 1.0}]
+    def close(p, quotes, val, pnl, assume=None):
+        p.update(state="closed_stop", close_value=val, pnl_usd=pnl, closed_at=T0, exit_assumption=assume)
+        p["events"] += [{"at": T0, "action": "mark", "quotes": quotes, "value": val}, {"at": T0, "action": "stop", "value": val}]
+    close(j["theses"][0]["paper"], {"S": {"bid": 5.2, "ask": 5.3}, "B": {"bid": None, "ask": 3.2}}, 5.3, -288.2, "buy_bid_missing")
+    close(j["theses"][1]["paper"], {"S": {"bid": 1.4, "ask": 1.45}, "B": {"bid": 0.45, "ask": 0.5}}, 1.0, -62.2)
+    close(j["theses"][2]["paper"], {"S": {"bid": 1.60, "ask": 3.00}, "B": {"bid": 0.50, "ask": 0.60}}, 2.5, -153.2)
     pt._write_journal(j)
-    assert not pt.void_exit("GOOD", "恢复", "x")["ok"]                                     # 真实止损不能恢复
-    r = pt.void_exit("BAD", "恢复，但是要严查错误", "保护腿瞬时无买价")
+    assert not pt.void_exit("GOOD", "恢复", "x")["ok"]                                         # 真实止损
+    r = pt.void_exit("WIDE", "恢复", "点差太宽")
+    assert not r["ok"] and "现行政策" in r["why"]                                               # 只因新点差门槛 → 不能作废
+    assert not pt.void_exit("BAD", "", "x")["ok"]                                              # 没有用户授权
+    now = datetime(2026, 10, 6, 9, 52, tzinfo=ET)
+    r = pt.void_exit("BAD", "恢复，但是要严查错误", "保护腿缺买价", now)
     st = load()["BAD"]
     assert r["ok"] and st["paper"]["state"] == "entered" and st["outcome"] == "未验证"
-    assert st["paper"]["voided_exits"][0]["pnl_usd"] == -288.2 and st["paper"]["events"][-1]["action"] == "exit_voided"
+    v = st["paper"]["voided_exits"][0]
+    assert v["pnl_usd"] == -288.2 and v["exit_event"] == {"action": "stop", "at": T0} and v["rule_at_exit"]["stop_value"] is not None
+    assert v["observation_gap"]["missed_mark_slots"] == ["2026-10-06 09:45"]                    # 退出到恢复之间漏掉的盯市
+    assert st["paper"]["events"][-1]["action"] == "exit_voided"
+    assert not pt.void_exit("BAD", "再来", "x")["ok"]                                          # 幂等：已恢复不能再作废
     assert any(json.loads(l)["action"] == "exit_voided" for l in (tmp_path / "ledger.jsonl").read_text().splitlines())
 
+
+def test_exit_assessment_categories_and_formal_exit_rules():
+    """Codex 033 验收：缺 bid+小 ask、零 bid、双边正价但成本越界、宽点差、交叉报价分别归类；没有完整可执行报价不进正式退出。"""
+    p = _entered(); p.update(k_sell=380.0, k_buy=385.0, side="C", sell="S", buy="B")
+    A = lambda s, b, v: pt.exit_assessment({"S": s, "B": b}, p, v)
+    a = A({"bid": 2.0, "ask": 2.1}, {"bid": None, "ask": 0.04}, 2.1)
+    assert a["data_integrity"] and pt.exit_problem({"S": {"bid": 2.0, "ask": 2.1}, "B": {"bid": None, "ask": 0.04}}, p, 2.1, automatic=False)
+    a = A({"bid": 2.0, "ask": 2.1}, {"bid": 0.0, "ask": 0.04}, 2.1)
+    assert not a["data_integrity"] and any("无可成交" in x for x in a["execution_cost"])
+    assert pt.exit_problem({"S": {"bid": 2.0, "ask": 2.1}, "B": {"bid": 0.0, "ask": 0.04}}, p, 2.1, automatic=False)   # 用户平仓也不行
+    a = A({"bid": 4.9, "ask": 5.8}, {"bid": 0.5, "ask": 0.8}, 5.3)
+    assert not a["data_integrity"] and any("outside_payoff_range" in x for x in a["execution_cost"])
+    q = {"S": {"bid": 4.9, "ask": 5.8}, "B": {"bid": 0.5, "ask": 0.8}}
+    assert pt.exit_problem(q, p, 5.3, automatic=True) and pt.exit_problem(q, p, 5.3, automatic=False) is None    # 自动不执行，用户可主动
+    a = A({"bid": 1.6, "ask": 3.0}, {"bid": 0.5, "ask": 0.6}, 2.5)
+    assert not a["data_integrity"] and a["execution_policy"]
+    a = A({"bid": 2.2, "ask": 2.1}, {"bid": 0.5, "ask": 0.6}, 1.6)
+    assert any("交叉" in x for x in a["data_integrity"])
+
+
+def test_window_exhausted_with_only_incomplete_marks_escalates_once():
+    p = _entered(); p.update(mark_slots_et=["15:45"], expiry="2026-10-16")
+    M = lambda syms: {"S": {"bid": 1.5, "ask": 1.6, "error": None}, "B": {"bid": None, "ask": 0.9, "error": None}}
+    assert pt.step(p, at(29, 15, 46), depth=M) == "retry"
+    assert pt.step(p, at(29, 15, 55), depth=M) == "retry"
+    r = pt.step(p, at(29, 16, 5), depth=M)
+    assert r == "exit_unresolved" and p["state"] == "entered"
+    e = p["events"][-1]
+    assert e["attempts"] == 2 and e["indicative_crosses_stop"] is True
+    assert pt.step(p, at(29, 16, 10), depth=M) is None                                         # 只升级一次
 
 def test_early_exit_records_hold_to_expiry_counterfactual():
     """用户 2026-10-07：提前平仓的仓位到期后补记「假设持有到期」盈亏，便于评估提前平仓规则。"""

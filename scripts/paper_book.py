@@ -92,6 +92,7 @@ def classify(theses: list) -> dict:
                "judgment": judgment_id(j, t), "state": p.get("state"), "side": p.get("side"), "expiry": p.get("expiry"),
                "k_sell": p.get("k_sell"), "k_buy": p.get("k_buy"), "credit": p.get("entry_credit"),
                "structure": p.get("structure", "credit"), "qty": p.get("qty", 1), "hold": p.get("hold_to_expiry"),
+               "voided": p.get("voided_exits") or [], "unresolved": [e for e in p.get("events") or [] if e.get("action") == "exit_unresolved"],
                "exit_assumption": p.get("exit_assumption") or _close_assumption(p),
                "econ": p.get("economics") or {}, "pnl": p.get("pnl_usd"), "stop": p.get("stop_value"),
                "exit_rule": p.get("exit_rule"), "strike_rule": p.get("strike_rule"), "entered_at": p.get("entered_at"),
@@ -201,6 +202,31 @@ def _hold_cell(r: dict) -> str:
             + (f"${eff:+.2f}" if _num(eff) else "—"))
 
 
+def audit_section(rows: list) -> list:
+    """审计视图（Codex 033 P1-01）：更正视图里恢复的仓位照常显示；这里并列原退出与作废，损益不双计；
+    另列「窗口耗尽仍无可执行报价」的升级记录（未执行、不等于没触发）。"""
+    out = []
+    v = [(r, x) for r in rows for x in r.get("voided") or []]
+    if v:
+        out += ["", "## 审计视图：被作废的退出（不计入任何合计）", "",
+                "| 仓位 | 原退出 | 原记账盈亏 | 作废依据（数据不成立） | 用户授权 | 退出→恢复间漏掉的盯市 |", "|---|---|---|---|---|---|"]
+        for r, x in v:
+            ev = x.get("exit_event") or {}
+            gap = (x.get("observation_gap") or {}).get("missed_mark_slots")
+            out.append(f"| {r['id']} | {ev.get('action', x.get('state'))} @ {str(ev.get('at') or x.get('exit_event_at'))[:16]} | "
+                       f"{'$%+.2f' % x['pnl_usd'] if _num(x.get('pnl_usd')) else '—'} | "
+                       f"{'；'.join((x.get('assessment') or {}).get('data_integrity') or []) or x.get('problem') or '—'} | "
+                       f"{str(x.get('user_authorization') or x.get('user_note') or '—')[:30]} | {('、'.join(gap) or '无') if gap is not None else '未记录'} |")
+    u = [(r, e) for r in rows for e in r.get("unresolved") or []]
+    if u:
+        out += ["", "## 窗口耗尽仍无可执行报价（未执行任何退出，需人工关注）", "",
+                "| 仓位 | 盯市时点 | 尝试次数 | 参考估值是否越过止损线 | 原因 |", "|---|---|---|---|---|"]
+        for r, e in u:
+            out.append(f"| {r['id']} | {e.get('slot')} | {e.get('attempts')} | {'是' if e.get('indicative_crosses_stop') else '否'} | "
+                       f"{str(e.get('last_why'))[:60]} |")
+    return out
+
+
 def early_exit_section(closed: list) -> list:
     """按批次 × 了结方式汇总：提前了结的实际含费盈亏 vs 假设持有到期，差额 = 提前了结规则/决定的贡献。
     只统计已补记反事实的仓位；样本极小时只作描述，不据此改规则（规则改动须事前登记）。"""
@@ -307,6 +333,7 @@ def render(day: str, c: dict, sm: dict, live: dict, generated_at: str, legacy: l
     if not c["closed"]:
         md.append("| （无） | | | | | | | |")
     md += early_exit_section(c["closed"])
+    md += audit_section(c["open"] + c["closed"])
     md += ["", "## 未入场（按规则放弃）", ""] + [f"- {r['id']}（{r['batch']}）：{r['reason']}" for r in c["not_entered"]] + \
           ([] if c["not_entered"] else ["- （无）"])
     md += ["", f"## 被修订替代的版本（{len(c['superseded'])}，不算失败）", ""] + [f"- {r['id']}：{str(r['reason'])[:80]}" for r in c["superseded"]]

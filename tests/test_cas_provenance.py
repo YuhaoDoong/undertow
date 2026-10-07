@@ -59,7 +59,13 @@ def test_provenance_records_consumed_version_even_if_cache_changes_later(tmp_pat
     got = provenance.restore_inputs(man)
     assert got["complete"] and len(got["items"]) == 1
     raw = got["items"][0]["raw"]
-    assert b"4.1" in raw and b"9.9" not in raw
+    # Codex 033：原断言对整个缓存 JSON 字节判「不含 9.9」，fetched_at=1791380139.95… 偶然含该子串 → 误报。
+    # 改为解析出 data 再断言；完整字节的一致性另由记录的内容哈希保证。
+    data = json.loads(raw.decode("utf-8"))["data"]
+    assert data == "DATE,V\n2026-09-25,4.1\n"
+    import hashlib
+    sha = run["items"][0].get("sha256")
+    assert sha is None or hashlib.sha256(raw).hexdigest() == sha
     assert run["items"][0]["status"] == "fresh_fetch" and run["rc"] == 0
 
 

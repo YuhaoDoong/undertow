@@ -593,6 +593,24 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
                    "quote_requested_at": req.isoformat(), "returned_at": now.isoformat()})
         return "manual_close"
     done = {e.get("slot") for e in ev if e.get("action") in ("mark", "mark_offhours")}
+    # 窗口耗尽仍只有不可信估值 → 升级通知一次（Codex 033 A1(c)：retry 不推送，过窗不能当作「没触发」）
+    unresolved = {e.get("slot") for e in ev if e.get("action") == "exit_unresolved"}
+    for e in ev:
+        k = e.get("slot")
+        if e.get("action") != "mark_incomplete" or k in done or k in unresolved:
+            continue
+        d_s, sl = k.split(" ")
+        end = datetime.combine(date.fromisoformat(d_s), _hm(sl), tzinfo=ET).timestamp() + 16 * 60
+        if now.timestamp() > end:
+            inc = [x for x in ev if x.get("action") == "mark_incomplete" and x.get("slot") == k]
+            last = inc[-1]
+            sv = p.get("stop_value")
+            ev.append({"at": now.isoformat(), "action": "exit_unresolved", "slot": k, "first_incomplete_at": inc[0]["at"],
+                       "attempts": len(inc), "last_why": last.get("why"), "indicative_value": last.get("value"),
+                       "indicative_crosses_stop": bool(sv is not None and _finite(last.get("value")) and last["value"] >= sv),
+                       "open_exposure_usd": (p.get("economics") or {}).get("max_loss_usd"),
+                       "note": "该盯市时点窗口耗尽仍无可执行两腿报价：未执行任何退出、仓位仍在场，下一时点再判；需人工关注"})
+            return "exit_unresolved"
     for slot in p["mark_slots_et"]:
         key = f"{today.isoformat()} {slot}"
         t0 = _hm(slot)
@@ -642,43 +660,62 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
     return None
 
 
-WORTHLESS_ASK = 0.05      # 保护腿无买价、但卖价 ≤ 此值 → 视作确实一文不值，按 0 计可以执行
+VALUE_TOL = 0.05          # 未校准：估值相对到期收益范围的容差（贷记 0…宽度，借记 −宽度…0）
+LEG_SPREAD_MAX = (0.50, 0.50)   # 未校准的【执行政策】：自动退出时单腿买卖差上限 max(0.50 美元, 中间价 50%)
 
 
-VALUE_TOL = 0.05          # 估值越界容差：贷记价差价值 ∈ [−tol, 宽度+tol]，借记 ∈ [−宽度−tol, +tol]
-LEG_SPREAD_MAX = (0.50, 0.50)   # 自动退出时单腿买卖差上限：max(0.50 美元, 中间价的 50%)；更宽视为报价异常
-
-
-def exit_problem(q: dict, p: dict, val, assume, *, automatic: bool = True) -> str | None:
-    """执行任何退出之前的估值体检（用户 2026-10-06：「要严查错误。模拟仓主要是为了记录交易和数据。这种错误不要影响模拟仓」）。
-    返回问题描述（不得执行，只记估值、窗口内重取），None = 可以执行。
-    1) 保护腿缺买价、但卖价 > 0.05（不是一文不值）→ 按 0 计的估值不可信。
-       起因：2026-10-05 15:45 GLD 10/16 380/385C，385C 瞬时无买价（卖价 3.2）→ 估值 5.3 越过止损 4.9 被平（−$288.2，
-       超过该价差理论最大亏损 $258.2）；同时刻按两腿报价约 2.1–2.3，当天收盘 379.55 仍在卖腿下方。
-    2) 估值越出价差的理论范围（贷记 0…宽度，借记 −宽度…0）→ 报价异常。
-    3) 仅自动退出：任一腿买卖差过宽（> max(0.50, 中间价 50%)）→ 报价异常。用户主动平仓不受此限（宽报价本身是可成交的现实）。"""
-    w = abs(p["k_sell"] - p["k_buy"])
-    if assume is not None:
-        b = q.get(p["buy"]) or {}
-        if not (_finite(b.get("ask")) and b["ask"] <= WORTHLESS_ASK):
-            return f"保护腿缺买价且卖价 {b.get('ask')} > {WORTHLESS_ASK}，按 0 计的估值不可信"
-    lo, hi = ((-w - VALUE_TOL, VALUE_TOL) if p.get("structure") == "debit" else (-VALUE_TOL, w + VALUE_TOL))
-    if not (_finite(val) and lo <= val <= hi):
-        return f"估值 {val} 越出价差理论范围 [{lo:.2f}, {hi:.2f}]（宽 {w:g}）"
-    if automatic:
+def exit_assessment(q: dict, p: dict, val) -> dict:
+    """退出前的报价体检，分三类（Codex 033 P1-01/02/03）：
+    - data_integrity：缺报价、报价出错、交叉、所需一侧缺失（缺失输入）——数据本身不成立；唯一可作为「作废历史退出」依据的一类。
+    - execution_cost：数据成立但无法按两腿完成退出或成本越界——所需一侧价格 ≤ 0（零买价≠有可成交买盘）、
+      两腿正报价下清算成本越出到期收益范围（execution_cost_outside_payoff_range，流动性/成本问题，不是坏数据）。
+    - execution_policy：数据成立、可成交，但现行（未校准）政策不接受，如单腿买卖差过宽。
+    卖腿需要可成交的 ask，买腿需要可成交的 bid。"""
+    data, cost, pol = [], [], []
+    for sym, need in ((p["sell"], "ask"), (p["buy"], "bid")):
+        x = q.get(sym)
+        if not x:
+            data.append(f"{sym} 无报价"); continue
+        if x.get("error"):
+            data.append(f"{sym} 报价出错：{str(x['error'])[:40]}")
+        v = x.get(need)
+        if v is None or not _finite(v):
+            data.append(f"{sym} 缺 {need}（缺失输入）")
+        elif v <= 0:
+            cost.append(f"{sym} {need}={v:g}：无可成交{'买' if need == 'bid' else '卖'}盘（零价不等于可成交）")
+        if _finite(x.get("bid")) and _finite(x.get("ask")) and x["bid"] > x["ask"]:
+            data.append(f"{sym} 交叉报价 {x['bid']}/{x['ask']}")
+    if not data and not cost:
+        w = abs(p["k_sell"] - p["k_buy"])
+        lo, hi = ((-w - VALUE_TOL, VALUE_TOL) if p.get("structure") == "debit" else (-VALUE_TOL, w + VALUE_TOL))
+        if not (_finite(val) and lo <= val <= hi):
+            cost.append(f"execution_cost_outside_payoff_range：两腿清算成本 {val} 越出到期收益范围 [{lo:.2f}, {hi:.2f}]")
         for sym in (p["sell"], p["buy"]):
             x = q.get(sym) or {}
             if _finite(x.get("bid")) and _finite(x.get("ask")):
                 mid, spr = (x["bid"] + x["ask"]) / 2, x["ask"] - x["bid"]
                 if spr > max(LEG_SPREAD_MAX[0], LEG_SPREAD_MAX[1] * mid):
-                    return f"{sym} 买卖差 {spr:.2f} 过宽（中间价 {mid:.2f}）"
+                    pol.append(f"{sym} 买卖差 {spr:.2f} 过宽（中间价 {mid:.2f}，未校准政策阈值）")
+    return {"data_integrity": data, "execution_cost": cost, "execution_policy": pol}
+
+
+def exit_problem(q: dict, p: dict, val, assume=None, *, automatic: bool = True) -> str | None:
+    """执行任何退出前的体检；返回阻止原因，None = 可以执行（用户 2026-10-06：「这种错误不要影响模拟仓」）。
+    起因：2026-10-05 15:45 GLD 10/16 380/385C，385C 无买价被按 0 计 → 估值 5.3 越过止损 4.9 → 假止损。
+    规则：数据不成立 → 任何退出都不执行；所需一侧无可成交价（缺失或 ≤0）→ 不能写成两腿完成退出（含用户平仓）；
+    自动退出另外不执行成本越界与政策不接受的情形（只记录、升级通知）；用户主动平仓可在有效两腿报价下执行，但标为人工干预并带上标签。"""
+    a = exit_assessment(q, p, val)
+    if a["data_integrity"]:
+        return "数据不成立：" + "；".join(a["data_integrity"])
+    zero = [x for x in a["execution_cost"] if "无可成交" in x]
+    if zero:
+        return "无法按两腿完成退出：" + "；".join(zero)
+    if automatic and (a["execution_cost"] or a["execution_policy"]):
+        return "自动退出不执行：" + "；".join(a["execution_cost"] + a["execution_policy"])
     return None
 
 
 def exit_executable(q: dict, p: dict, assume, val=None, *, automatic: bool = True) -> bool:
-    if val is None:                               # 兼容旧调用：只查保护腿假设
-        b = q.get(p["buy"]) or {}
-        return assume is None or (_finite(b.get("ask")) and b["ask"] <= WORTHLESS_ASK)
     return exit_problem(q, p, val, assume, automatic=automatic) is None
 
 
@@ -693,8 +730,9 @@ def close_value(q: dict, p: dict):
         not (_finite(b_bid) and _finite(b.get("ask")) and b_bid > b["ask"])
     if not (s_ok and b_ok):
         return None
-    # 真实买价 0（报价就是 0）与缺失分开（Codex 032 R2）：前者是可执行报价，后者是估算假设
-    assume = None if _finite(b_bid) else "buy_bid_missing→按 0 计（保守估算，非两腿完成退出）"
+    # 缺失与 0 分开记（Codex 032 R2），但两者都不是可成交买盘（Codex 033 P1-03）：只作「残余多头按 0 计」的估值情景
+    assume = None if (_finite(b_bid) and b_bid > 0) else \
+        ("buy_bid_zero→按 0 计（无可成交买盘，仅估值情景）" if _finite(b_bid) else "buy_bid_missing→按 0 计（缺失，仅估值情景）")
     return round(s["ask"] - (b_bid if assume is None else 0.0), 4), assume
 
 
@@ -733,8 +771,10 @@ def manual_close(tid: str, note: str, now: datetime | None = None, *, depth=_dep
         req, now = now, back
         val, assume = v
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
+        flags = exit_assessment(q, p, val)
         p.update(state="closed_manual", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
         p["events"].append({"at": now.isoformat(), "action": "manual_close", "quotes": q, "value": val, "pnl": pnl,
+                            "human_intervention": True, "execution_flags": flags["execution_cost"] + flags["execution_policy"],
                             "valuation_assumption": assume, "in_rth": True, "user_note": note,
                             "requested_at": req.isoformat(), "returned_at": now.isoformat()})
         _outcome(t)
@@ -809,6 +849,22 @@ def _outcome(t: dict) -> None:
         t["review"] = (t.get("review") or "") + f"【模拟仓未入场】{p.get('skip_reason') or p.get('invalid_reason')}"
 
 
+def observation_gap(p: dict, frm: str, to: datetime) -> dict:
+    """退出到恢复之间没有做的盯市时点（Codex 033：不能假设这段时间没有合格止损，恢复后的结果也不是完整前瞻）。"""
+    from datetime import timedelta
+    a, b = datetime.fromisoformat(frm).astimezone(ET), to.astimezone(ET)
+    missed, d = [], a.date()
+    while d <= b.date():
+        if d.weekday() < 5:
+            for sl in p.get("mark_slots_et") or []:
+                t = datetime.combine(d, _hm(sl), tzinfo=ET)
+                if a < t <= b:
+                    missed.append(f"{d.isoformat()} {sl}")
+        d += timedelta(days=1)
+    return {"from": frm, "to": to.isoformat(), "missed_mark_slots": missed,
+            "note": "这段时间未盯市：不能假设期间没有触发止损；恢复后的结果不是完整前瞻样本"}
+
+
 def void_exit(tid: str, note: str, why: str, now: datetime | None = None) -> dict:
     """作废一次由坏数据触发的退出，恢复在场（用户 2026-10-06：「恢复，但是要严查错误……这种错误不要影响模拟仓」）。
     不删任何事件：原退出事件与平仓字段整体移入 voided_exits（含作废理由与用户原话），追加 exit_voided 事件并投影到研究台账；
@@ -824,24 +880,33 @@ def void_exit(tid: str, note: str, why: str, now: datetime | None = None) -> dic
         ex = next(e for e in reversed(p["events"]) if e["action"] in ("stop", "take_profit", "time_exit", "manual_close"))
         mk = next((e for e in reversed(p["events"]) if e.get("at") == ex["at"] and e["action"] in ("mark", "mark_offhours")), {})
         q = ex.get("quotes") or mk.get("quotes") or {}
-        prob = exit_problem(q, p, p.get("close_value"), p.get("exit_assumption"), automatic=ex["action"] != "manual_close")
-        if not prob:
-            return {"ok": False, "why": "该退出的估值通过体检，不能作废（真实退出不得恢复）"}
+        a = exit_assessment(q, p, p.get("close_value"))
+        if not a["data_integrity"]:
+            # Codex 033 P1-01：只有「原始数据不成立」可作为作废依据；现行执行政策（点差/成本）不能事后撤销历史退出
+            return {"ok": False, "why": "该退出的原始数据成立（" + ("；".join(a["execution_cost"] + a["execution_policy"]) or "无问题")
+                    + "），不能作废：现行政策不接受≠历史退出无效", "assessment": a}
+        if not note.strip():
+            return {"ok": False, "why": "作废须有用户明确授权（原话）"}
         keep = {k: p.pop(k) for k in ("closed_at", "close_value", "pnl_usd", "exit_assumption") if k in p}
-        p.setdefault("voided_exits", []).append({"state": p["state"], **keep, "exit_event_at": ex["at"], "problem": prob,
-                                                 "why": why, "user_note": note, "voided_at": now.isoformat()})
+        gap = observation_gap(p, ex["at"], now)
+        rec = {"state": p["state"], **keep, "exit_event": {"action": ex["action"], "at": ex["at"]},
+               "rule_at_exit": {k: p.get(k) for k in ("rule_version", "stop_mult", "stop_value", "exit_rule", "batch")},
+               "evidence_quotes": q, "assessment": a, "why": why, "user_authorization": note, "voided_at": now.isoformat(),
+               "observation_gap": gap,
+               "views": "更正视图：恢复为在场、同一 entry、不算新交易；审计视图：原退出与作废两条事件并存、损益不双计"}
+        p.setdefault("voided_exits", []).append(rec)
         p["state"] = "entered"
-        p["events"].append({"at": now.isoformat(), "action": "exit_voided", "exit_event_at": ex["at"], "problem": prob,
-                            "why": why, "user_note": note})
+        p["events"].append({"at": now.isoformat(), "action": "exit_voided", "exit_event_at": ex["at"],
+                            "problem": "；".join(a["data_integrity"]), "why": why, "user_note": note, "observation_gap": gap})
         t.update(outcome="未验证", trade_pnl=None, scored_at=None)
         _write_journal(j)
         sync_ledger(j)
-        return {"ok": True, "problem": prob, "voided": keep}
+        return {"ok": True, "problem": "；".join(a["data_integrity"]), "voided": keep, "observation_gap": gap}
 
 
 OUTCOME_ACTIONS = ("enter", "skipped", "missed", "invalid_spec", "stop", "settle", "take_profit", "time_exit")
 MANUAL_ACTIONS = ("manual_close", "close_requested", "exit_voided")
-LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit", "hold_to_expiry") + MANUAL_ACTIONS
+LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit", "hold_to_expiry", "exit_unresolved") + MANUAL_ACTIONS
 
 
 def event_id(thesis_id: str, e: dict) -> str:

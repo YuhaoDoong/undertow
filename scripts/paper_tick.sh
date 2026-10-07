@@ -67,7 +67,7 @@ fi
 rm -f "$FAILF"
 if [[ "$RES" != *"无到点动作"* ]]; then
   printf '%s | start %s end %s | %s\n' "$WAKE" "$START" "$END" "$LAST" >> "$LOG"
-  if printf '%s' "$RES" | grep -qE ':(enter|skipped|missed|invalid_spec|stop|settle|settlement_pending|error|exit_rule_config_error|take_profit|time_exit|manual_close)'; then
+  if printf '%s' "$RES" | grep -qE ':(enter|skipped|missed|invalid_spec|stop|settle|settlement_pending|error|exit_rule_config_error|exit_unresolved|take_profit|time_exit|manual_close|hold_to_expiry)'; then
     notify "📒 模拟仓" "$(printf '%s' "$LAST" | clip 160)"
   fi
 fi

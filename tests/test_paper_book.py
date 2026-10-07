@@ -115,3 +115,13 @@ def test_early_exit_vs_hold_to_expiry_section():
     md, _ = pb.render("2026-10-07", cl, pb.summarize(cl), {}, "now")
     assert "$+11.80（到期收 55.13）；提前了结影响 $-22.00" in md and "待到期后补记" in md and "（到期结算，不适用）" in md
     assert "| rule | 规则时间出场 | 1（1） | $-10.20 | $+11.80 | $-22.00 |" in md
+
+
+def test_audit_view_lists_voided_exit_without_double_counting():
+    r = T("g", "entered"); r["paper"]["voided_exits"] = [{"state": "closed_stop", "pnl_usd": -288.2,
+        "exit_event": {"action": "stop", "at": "2026-10-05T19:45"}, "assessment": {"data_integrity": ["B 缺 bid（缺失输入）"]},
+        "user_authorization": "恢复，但是要严查错误", "observation_gap": {"missed_mark_slots": []}}]
+    c = pb.classify([r]); sm = pb.summarize(c)
+    md, _ = pb.render("2026-10-07", c, sm, {}, "now")
+    assert "审计视图：被作废的退出" in md and "$-288.20" in md and "B 缺 bid" in md
+    assert sm["rule"]["pnl_usd"] == 0.0 and sm["rule"]["open"] == 1                 # 不进合计、仍按在场计

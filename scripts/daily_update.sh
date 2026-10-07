@@ -27,8 +27,14 @@ alert() {  # $1=标题 $2=正文
 }
 notify() { alert "$@"; }   # 兼容旧调用名
 
-# 15 分钟轮询下，窗口外的唤醒只 touch 心跳（mtime = 上次被唤醒），不往日志里灌行（一天约 60 次）
-if (( ET_HOUR < 1 || ET_HOUR >= 9 )); then
+# 15 分钟轮询下，窗口外的唤醒只 touch 心跳（mtime = 上次被唤醒），不往日志里灌行（一天约 60 次）。
+# 例外（Codex 033 A2）：ET 09:00–11:59 首次唤醒做一次【只读】缺口检查——08:40 睡眠、09:05 醒来，或前轮超时占住末段，
+# 都不能让当天的缺口一声不吭；不再制造盘前快照。
+MODE_GAPCHECK=0
+if (( ET_HOUR >= 9 && ET_HOUR < 12 )) && [[ ! -f "data/logs/.daily_gapcheck_${ET_DATE}" ]] \
+   && (( $(TZ=America/New_York date +%u) <= 5 )); then
+    MODE_GAPCHECK=1
+elif (( ET_HOUR < 1 || ET_HOUR >= 9 )); then
     mkdir -p data/logs; : > data/logs/.daily_alive
     exit 0
 fi
@@ -41,7 +47,7 @@ RUNLOG="data/logs/daily_$(TZ=America/New_York date +%Y-%m).log"
 mkdir -p data/logs
 exec > >(tee -a "$RUNLOG") 2>&1
 echo "==== $(date '+%F %H:%M %Z') | ET $ET_NOW ===="
-if (( ET_HOUR < 1 || ET_HOUR >= 9 )); then
+if (( ! MODE_GAPCHECK )) && (( ET_HOUR < 1 || ET_HOUR >= 9 )); then
     echo "[跳过] ET ${ET_HOUR}时 不在快照窗口(1:00–8:59)——避免旧OI/盘中脏数据"
     exit 0
 fi
@@ -52,6 +58,23 @@ source scripts/lib_publish.sh
 PUBLISH_PENDING="data/logs/.publish_pending_auto"; export PUBLISH_PENDING   # 所有自动化任务共用：彼此的未发布产物互认
 publish_begin data/snapshots data/history data/reports
 trap 'publish_record data/snapshots data/history data/reports' EXIT   # 早退路径也记下本次产物（如 FAILURE_ 凭证）
+
+if (( MODE_GAPCHECK )); then
+    # 截止后只读缺口检查：按数据集（盘前快照 / 影子账 / 方向台账）记缺口与原因（源未发布 / 抓取失败 / 错过窗口 / 损坏），
+    # 写 data/history/coverage_gaps/（随下次 daily 发布）；有缺口当场告警。哨兵只代表本日已检查并留痕，不代表数据已齐。
+    set +e
+    GC_OUT=$(python3 scripts/daily_stage.py gapcheck "$ET_DATE" 2>&1); GC_RC=$?
+    set -e
+    echo "$GC_OUT"
+    if (( GC_RC == 2 )); then
+        alert "🚨 当日数据缺口（ET $ET_NOW，截止后检查）" "$(printf '%s' "$GC_OUT" | tail -1)；明细见 data/history/coverage_gaps/"
+    elif (( GC_RC != 0 && GC_RC != 3 )); then
+        alert "⚠️ 当日缺口检查失败（ET $ET_NOW）" "rc=$GC_RC $(printf '%s' "$GC_OUT" | tail -1 | cut -c1-100)"
+    fi
+    : > "data/logs/.daily_gapcheck_${ET_DATE}"
+    exit 0
+fi
+python3 scripts/daily_stage.py lastrun "$ET_DATE" || true   # 记窗口内最后一次运行的 ET 时刻（缺口归因用；失败不影响主流程）
 
 # —— 末班车兜底：最后一个重试点（ET08:45）跑完若仍缺当日快照，必须当场告警 ——
 # 这是"整天没数据"的最后一道防线。前面每个时点失败都会推送，但如果全天所有时点
@@ -83,19 +106,35 @@ from undertow.core.config import load_config
 print(" ".join(v.options.symbol for v in load_config().instruments.values() if v.options))
 PYEOF
 )
-MISSING=""
-for SYM in ${=EXPECTED}; do
-    [[ -f "data/snapshots/options/${SYM}/${ET_DATE}.json.gz" ]] || MISSING="$MISSING $SYM"
-done
-if [[ -z "${MISSING// /}" ]]; then
-    echo "[跳过] 全部品种(${EXPECTED})均已有 ${ET_DATE} 快照，本时点无需重复运行"
-    exit 0
+# Codex 033 A2：不能只看「文件存在」——损坏的 gz 不算齐；快照齐了但下游（研报/台账/发布）上次没跑完，要续跑而不是永久跳过。
+STAGE=$(python3 scripts/daily_stage.py snapshots "$ET_DATE")
+MISSING=$(printf '%s\n' "$STAGE" | sed -n 's/^MISSING //p'); CORRUPT=$(printf '%s\n' "$STAGE" | sed -n 's/^CORRUPT //p')
+RESUME=0
+if [[ -n "${CORRUPT// /}" ]]; then
+    alert "🚨 当日快照文件损坏（ET $ET_NOW）" "损坏:${CORRUPT}（gz/JSON 无法解析）；不计为已齐，请人工核对（原件不删）"
 fi
-echo "[待补] 尚缺当日快照：${MISSING}"
-if (( IS_LAST_SLOT )) && [[ ! -f "$LAST_SLOT_SENT" ]]; then
-    # 已是末班车还缺 → 今天大概率就补不上了，当场告警（不 exit，仍尝试抓一次）；当日只报一次
-    : > "$LAST_SLOT_SENT"
-    alert "🚨 末班车仍缺当日快照" "仍缺:${MISSING}。ET 08:45 后仍未发布，缺则当天无数据。"
+if [[ -z "${MISSING// /}${CORRUPT// /}" ]]; then
+    if python3 scripts/daily_stage.py done-match "$ET_DATE"; then
+        echo "[跳过] 全部品种(${EXPECTED})均已有有效 ${ET_DATE} 快照，且下游阶段已在同一快照身份下完成"
+        exit 0
+    fi
+    RESUME=1
+    RESUME_N="data/logs/.daily_resume_${ET_DATE}"; printf 'x' >> "$RESUME_N"
+    if (( $(wc -c < "$RESUME_N") > 3 )); then          # 续跑上限：同日最多 3 次（如发布冲突持续），不每 15 分钟重算一遍
+        if (( $(wc -c < "$RESUME_N") == 4 )); then
+            alert "⚠️ daily 下游阶段反复未完成（ET $ET_NOW）" "快照已齐，但研报/台账/发布已续跑 3 次仍未完成（常见原因：发布冲突）；需人工核对"
+        fi
+        echo "[停止续跑] 当日已续跑 3 次仍未完成"; exit 0
+    fi
+    echo "[续跑] 快照已齐但下游阶段未在当前快照身份下完成（上次崩溃/未发布）→ 跳过抓取，续跑研报/台账/发布"
+else
+    echo "[待补] 尚缺当日快照：${MISSING}${CORRUPT:+；损坏：$CORRUPT}"
+    PRE_SENT="data/logs/.daily_lastslot_pre_${ET_DATE}"
+    if (( IS_LAST_SLOT )) && [[ ! -f "$PRE_SENT" ]]; then
+        # 预警（不是结论）：ET 08:45 后仍缺，本次还会再抓一次；抓完再核验，仍缺才发末班结论告警
+        : > "$PRE_SENT"
+        alert "⚠️ 末班预警：仍缺当日快照，再抓一次" "仍缺:${MISSING}（ET 08:45 只是运营预警时点，不代表 OI 已发布完毕）"
+    fi
 fi
 
 
@@ -108,6 +147,7 @@ fi
 # codex review 2026-08-28：靠 grep 中文串（'快照失败'/'没有保存任何快照'）是脆弱耦合，
 # 改一句提示文案告警就静默失效 —— 而我们恰恰在修"静默失败"。
 # 另：`$(...) || true` 会把原始退出码永远变成 0（实测），进程崩溃会被当成正常跑完。
+if (( ! RESUME )); then
 SNAP_ST="data/logs/.status_snapshot_${ET_DATE}.json"
 rm -f "$SNAP_ST"
 set +e
@@ -136,6 +176,14 @@ SNAP_BAD="${_R%%|*}"; _R="${_R#*|}"
 SNAP_FB="${_R%%|*}"; SNAP_STALE="${_R#*|}"
 echo "[状态] snapshot overall=$SNAP_OVERALL saved=$SNAP_SAVED failed=$SNAP_NFAIL rc=$SNAP_RC"\
 "${SNAP_FB:+ fallback=$SNAP_FB}${SNAP_STALE:+ stale=$SNAP_STALE}"
+# 末班结论：本次抓取【之后】再核验（Codex 033：告警不能打在最后一次抓取之前）
+if (( IS_LAST_SLOT )) && [[ ! -f "$LAST_SLOT_SENT" ]]; then
+    STILL=$(python3 scripts/daily_stage.py snapshots "$ET_DATE" | sed -n 's/^MISSING //p')
+    if [[ -n "${STILL// /}" ]]; then
+        : > "$LAST_SLOT_SENT"
+        alert "🚨 末班抓取后仍缺当日快照" "仍缺:${STILL}（本次 overall=$SNAP_OVERALL）。截止后另有只读缺口检查归因（未发布/抓取失败/错过窗口）。"
+    fi
+fi
 
 # 降级成功【也要】出声：数据是补上了，但 Greeks 是本地 BS 自算的
 # （主翼 |Δ| 最大偏差 0.22，足以把一条腿踢出/拉进方向判定的主翼区间）。
@@ -206,6 +254,7 @@ if (( SNAP_SAVED == 0 )); then
     echo "[跳过] 本次运行未落盘任何新快照——等下一时点重试"
     exit 0
 fi
+fi   # ! RESUME
 
 # 品种分两类：
 #   交易品种 —— gold silver qqq tqqq（有实盘或计划仓位）
@@ -410,7 +459,8 @@ PUB=$(publish_dirs "每日自动更新 $(TZ=America/New_York date +%F)：期权�
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" data/snapshots data/history data/reports); PUB_RC=$?
 set -e
 case $PUB_RC in
-  0) echo "[完成] 已提交并推送（或无变更）" ;;
+  0) echo "[完成] 已提交并推送（或无变更）"
+     python3 scripts/daily_stage.py mark-done "$ET_DATE" || echo "[提示] 快照不全或损坏，不标记当日完成（下次继续）" ;;
   3) echo "[暂停发布] $PUB"
      alert "⚠️ 每日数据未提交（ET $ET_NOW）" "索引里有他人暂存的文件，已停止自动提交；数据已落盘，下次运行再发" ;;
   5) echo "[暂停发布] $PUB"      # 与 3 分开报：2026-09-30 实为发布冲突，却报成「他人暂存」，查错方向

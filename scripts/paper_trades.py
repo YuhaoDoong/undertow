@@ -129,6 +129,10 @@ def validate_spec(p: dict) -> str | None:
             return "user-debit-atm-v1 只用于借记价差（structure=debit），借记价差也只能用它"
         if p["strike_rule"] == "user-debit-atm-v1" and not (_finite(p.get("target_width")) and p["target_width"] > 0):
             return "user-debit-atm-v1 需要正的 target_width"
+        ec = p.get("expiry_candidates")
+        if ec is not None and not (isinstance(ec, list) and ec and ec[0] == p.get("expiry") and all(
+                isinstance(x, str) and len(x) == 10 for x in ec) and ec == sorted(ec)):
+            return "expiry_candidates 须为按时间排序的 ISO 日期列表，且第一个等于 expiry"
         if p["strike_rule"] == "user-sell-fixed-v1" and not (_finite(p.get("k_sell"), p.get("target_width"))
                                                               and p["target_width"] > 0):
             return "user-sell-fixed-v1 需要 k_sell 与正的 target_width"
@@ -382,17 +386,43 @@ def _user_sell_select(p: dict, now: datetime) -> dict:
     f = session_index(st, root).get(today) or session_index(st, root).get(max(d for d in session_index(st, root) if d <= today))
     snap = snapshot_from_payload(st.load("options", root, f), key, root)
     ks, tw, up = float(p["k_sell"]), float(p["target_width"]), p["side"] == "C"
-    listed = sorted({c.strike for c in snap.contracts if c.expiry.isoformat() == p["expiry"] and c.kind == p["side"]})
-    cands = [k for k in listed if (k > ks if up else k < ks) and tw - 1 <= abs(k - ks) <= tw + 1]
-    syms = {k: option_symbol(root, p["expiry"], p["side"], k) for k in [ks] + cands}
-    d = _depth(list(syms.values()))
-    quotes = {k: d[v] for k, v in syms.items()}
     sq = fetch_stock_quotes([p["underlying"]])[p["underlying"]]
-    base = {"rule": "user-sell-fixed-v1", "sell": ks, "nearest_wall": None,
-            "inputs": {"spot": sq.last, "spot_fetched_at": datetime.now(timezone.utc).isoformat(),
-                       "quotes": {str(k): v for k, v in quotes.items()}, "symbols": {str(k): v for k, v in syms.items()},
-                       "oi_snapshot": str(st.path_of("options", root, f)), "params_hash": f"target_width={tw}"}}
-    return {**base, **pick_protective(p["side"], ks, tw, cands, quotes, p["qty"], p["fee_round_trip"])}
+
+    def one(expiry: str) -> dict:
+        listed = sorted({c.strike for c in snap.contracts if c.expiry.isoformat() == expiry and c.kind == p["side"]})
+        cands = [k for k in listed if (k > ks if up else k < ks) and tw - 1 <= abs(k - ks) <= tw + 1]
+        syms = {k: option_symbol(root, expiry, p["side"], k) for k in [ks] + cands}
+        d = _depth(list(syms.values()))
+        quotes = {k: d[v] for k, v in syms.items()}
+        base = {"rule": "user-sell-fixed-v1", "sell": ks, "nearest_wall": None, "expiry": expiry,
+                "inputs": {"spot": sq.last, "spot_fetched_at": datetime.now(timezone.utc).isoformat(),
+                           "quotes": {str(k): v for k, v in quotes.items()}, "symbols": {str(k): v for k, v in syms.items()},
+                           "oi_snapshot": str(st.path_of("options", root, f)), "params_hash": f"target_width={tw}"}}
+        return {**base, **pick_protective(p["side"], ks, tw, cands, quotes, p["qty"], p["fee_round_trip"])}
+    return choose_expiry(p, one)
+
+
+FEE_TYPE_REJECTS = ("fee_exceeds_credit", "credit_outside_0_width")
+
+
+def choose_expiry(p: dict, one) -> dict:
+    """到期日备选（用户 2026-10-09：「黄金卖 370 put，9 号到期。白银卖 52，9 号到期。如果低于手续费，则改为 12 号到期」）：
+    按 expiry_candidates 顺序试；只有前一个到期的全部保护腿候选都因「权利金扣费后不赚钱」被拒（fee_exceeds_credit /
+    credit_outside_0_width）才改用下一个；报价缺失、卖腿无买价等数据原因 → 不改到期，窗口内继续重试同一到期。
+    没有 expiry_candidates → 只用 p["expiry"]（原行为）。"""
+    exps = p.get("expiry_candidates") or [p["expiry"]]
+    tried = []
+    for i, e in enumerate(exps):
+        r = one(e)
+        tried.append({"expiry": e, "ok": r.get("ok"), "reason": r.get("reason"),
+                      "rejects": [t.get("reject") for t in r.get("tried") or []]})
+        if r.get("ok"):
+            return {**r, "expiry_tried": tried}
+        rej = [t.get("reject") for t in r.get("tried") or []]
+        fee_only = bool(rej) and all(x in FEE_TYPE_REJECTS for x in rej)
+        if not fee_only or i == len(exps) - 1:
+            return {**r, "expiry_tried": tried}
+    return {"ok": False, "reason": "no_expiry", "expiry_tried": tried}
 
 
 def pick_protective(side: str, ks: float, tw: float, cands: list, quotes: dict, qty: int, fee: float) -> dict:
@@ -825,6 +855,8 @@ def _step_dynamic(p: dict, now: datetime, selector) -> str | None:
         return "retry"
     syms = (sel.get("inputs") or {}).get("symbols") or {}
     qs = (sel.get("inputs") or {}).get("quotes") or {}
+    if sel.get("expiry") and sel["expiry"] != p["expiry"]:     # 到期备选：按事前规则改到下一个到期（记原到期）
+        p.update(expiry_planned=p["expiry"], expiry=sel["expiry"])
     p.update(sell=syms.get(str(sel["sell"])), buy=syms.get(str(sel["buy"])), k_sell=float(sel["sell"]), k_buy=float(sel["buy"]))
     q = {p["sell"]: qs.get(str(sel["sell"])), p["buy"]: qs.get(str(sel["buy"]))}
     econ = sel["economics"]

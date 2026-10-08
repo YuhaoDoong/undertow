@@ -730,3 +730,30 @@ def test_early_exit_records_hold_to_expiry_counterfactual():
     assert h["early_exit_effect_usd"] == round(actual - h["pnl_usd"], 2) and p["state"] == "closed_time"   # 实际状态不变
     assert pt.hold_to_expiry(p, datetime(2026, 10, 6, 10, 0, tzinfo=ET), session_close=sc) is None       # 只记一次
     s = _p(); assert pt.hold_to_expiry(s, datetime(2026, 10, 6, 10, 0, tzinfo=ET), session_close=sc) is None  # 未提前了结的不记
+
+
+def test_expiry_fallback_only_when_credit_below_fee():
+    """用户 2026-10-09：9 号到期的权利金低于手续费 → 改 12 号；报价缺失不改到期。"""
+    p = _dyn(strike_rule="user-sell-fixed-v1", side="P", k_sell=370.0, target_width=5.0, expiry="2026-10-09",
+             expiry_candidates=["2026-10-09", "2026-10-12"], batch="user_subjective", min_credit_ratio=0.0)
+    assert pt.validate_spec(p) is None
+    feelow = {"ok": False, "reason": "no_protective_leg", "tried": [{"buy": 365.0, "credit": 0.02, "reject": "fee_exceeds_credit"}]}
+    good = {"ok": True, "sell": 370.0, "buy": 365.0, "credit": 0.35}
+    r = pt.choose_expiry(p, lambda e: {**(feelow if e == "2026-10-09" else good), "expiry": e})
+    assert r["ok"] and r["expiry"] == "2026-10-12" and [t["expiry"] for t in r["expiry_tried"]] == ["2026-10-09", "2026-10-12"]
+    nodata = {"ok": False, "reason": "sell_no_bid_or_crossed（370）", "tried": []}
+    r = pt.choose_expiry(p, lambda e: {**(nodata if e == "2026-10-09" else good), "expiry": e})
+    assert not r["ok"] and len(r["expiry_tried"]) == 1                                  # 数据原因 → 不改到期，继续重试
+    assert pt.validate_spec({**p, "expiry_candidates": ["2026-10-12", "2026-10-09"]})       # 第一个须等于 expiry 且有序
+
+
+def test_dynamic_entry_switches_expiry_and_records_planned():
+    p = _dyn(strike_rule="user-sell-fixed-v1", side="P", k_sell=370.0, target_width=5.0, expiry="2026-10-09",
+             expiry_candidates=["2026-10-09", "2026-10-12"], batch="user_subjective", min_credit_ratio=0.0,
+             entry_date="2026-10-09")
+    sel = {"ok": True, "rule": "user-sell-fixed-v1", "sell": 370.0, "buy": 365.0, "credit": 0.35, "expiry": "2026-10-12",
+           "economics": pt.economics("P", 370.0, 365.0, 0.35, 1, 3.2), "nearest_wall": None,
+           "inputs": {"params_hash": "x", "symbols": {"370.0": "GLD261012P370000.US", "365.0": "GLD261012P365000.US"},
+                      "quotes": {"370.0": {"bid": 0.5, "ask": 0.55}, "365.0": {"bid": 0.1, "ask": 0.15}}}}
+    assert pt.step(p, datetime(2026, 10, 9, 10, 1, tzinfo=ET), selector=lambda p, n: sel) == "enter"
+    assert p["expiry"] == "2026-10-12" and p["expiry_planned"] == "2026-10-09" and p["sell"].startswith("GLD261012")

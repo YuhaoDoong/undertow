@@ -727,6 +727,71 @@ def tri_class(claim: str, result: str) -> str:
     return "undecided"
 
 
+# —— v5：带容差带的支撑/阻力计分（用户 2026-10-08：「你衡量统计的时候，不应该严格按照数字，前后应该允许误差」）——
+# 与 v4 并列、不替代：v4 的「触及」只允许 0.1%，对看图画线的作者过窄。容差带对称：同一宽度既放宽「触及」，也同样放宽「跌破」的门槛，
+# 不只朝有利方向放。全部作者、全部支撑/阻力一起用同一套参数。
+# ⚠️ 设定时点：用户在看到外部作者二 4053 支撑「差约 0.3% 未触及即反弹」之后提出 → 该条在 v5 下的结果不是独立前瞻证据（单列 decided_after_seen）。
+VERSION_V5 = "author-levels-v5-tolerance-20261008"
+TOL_PCT, TOL_ATR = 0.003, 0.25       # 未校准：带宽 = max(0.3%·L, 0.25·ATR14)；ATR 取发布前最后 14 根日线
+FOLLOW_N, WINDOW_N = 6, 20
+SEEN_BEFORE_V5 = {("外部作者二", "2026-09-29T08:57:00+08:00", 4053.0)}
+
+
+def _atr14(bars, upto: date):
+    b = [x for x in bars if x[0] < upto][-15:]
+    if len(b) < 15:
+        return None
+    tr = [max(h, pc) - min(lo, pc) for (_, _, h, lo, _), (_, _, _, _, pc) in zip(b[1:], b[:-1])]
+    return sum(tr) / len(tr)
+
+
+def score_tol(r: dict, daily, asof: datetime, hourly=None) -> dict:
+    """纯函数：support / resistance 的容差带判定。触及用小时线（日线可能缺根：Yahoo GC=F 10/07 日线缺失而小时线有当日低点），
+    无小时线时退回日线；跌破/守住用触及之后的日线收盘。其它类型 → not_applicable。"""
+    c = r.get("claim")
+    if c not in ("support", "resistance"):
+        return {"result": "not_applicable", "version": VERSION_V5}
+    L = float((r.get("params") or {}).get("level", r.get("level")))
+    post = datetime.fromisoformat(r["posted_at"]).astimezone(timezone.utc)
+    pday = post.astimezone(ZoneInfo("America/New_York")).date()
+    atr = _atr14(daily, pday)
+    band = max(TOL_PCT * L, TOL_ATR * atr) if atr else TOL_PCT * L
+    base = {"version": VERSION_V5, "band": round(band, 4), "atr14": round(atr, 4) if atr else None,
+            "decided_after_seen": (r.get("author"), r.get("posted_at"), L) in SEEN_BEFORE_V5}
+    after = [x for x in daily if x[0] > pday and x[0] <= asof.date()]
+    prior = [x for x in daily if x[0] <= pday]
+    sup = c == "support"
+    if prior:
+        pc = prior[-1][4]
+        if (sup and pc < L - band) or (not sup and pc > L + band):
+            return {**base, "result": "already_through", "close_at_post": pc}
+    win = after[:WINDOW_N]
+    end = datetime.combine(win[-1][0], datetime.max.time(), tzinfo=timezone.utc) if len(win) >= WINDOW_N else asof
+    hb = [x for x in (hourly or []) if post <= x[0] and x[0] + timedelta(hours=1) <= min(end, asof)]
+    if hb:
+        th = next((x for x in hb if (x[3] <= L + band if sup else x[2] >= L - band)), None)
+        tday = th[0].astimezone(ZoneInfo("America/New_York")).date() if th else None
+        closest = (min(x[3] for x in hb) if sup else max(x[2] for x in hb))
+    else:
+        th = next((x for x in win if (x[3] <= L + band if sup else x[2] >= L - band)), None)
+        tday = th[0] if th else None
+        closest = (min(x[3] for x in win) if sup else max(x[2] for x in win)) if win else None
+    if th is None:
+        return {**base, "result": "untouched" if len(win) >= WINDOW_N else "pending",
+                "closest": round(closest, 2) if closest is not None else None}
+    base["touch_low_or_high"] = round(th[3] if sup else th[2], 2)
+    fol = [x for x in after if x[0] >= tday][:FOLLOW_N]
+    extreme = (min(x[3] for x in fol) if sup else max(x[2] for x in fol)) if fol else (th[3] if sup else th[2])
+    tstr = str(tday)
+    for x in fol:
+        if (sup and x[4] < L - band) or (not sup and x[4] > L + band):
+            return {**base, "result": "broken", "touch": tstr, "break": str(x[0]), "extreme": round(extreme, 2)}
+    bounced = any((x[4] >= L + band) if sup else (x[4] <= L - band) for x in fol)
+    if len(fol) < FOLLOW_N:
+        return {**base, "result": "held_so_far" if bounced else "pending", "touch": tstr, "follow_seen": len(fol)}
+    return {**base, "result": "held" if bounced else "ambiguous_stuck", "touch": tstr, "extreme": round(extreme, 2)}
+
+
 def _preserve_v1() -> None:
     """v1 结果只保存一次、标需复核，不静默覆盖历史（Codex 025-3）。"""
     if OUT.exists() and not OUT_V1.exists():
@@ -763,9 +828,10 @@ def main():
         else:
             out.append({**r, "score": {"result": "no_price_source"}}); continue
         v4 = {**score_v4(r, d, h, spec4, asof), "price_basis": spec4["basis"], "tol": spec4["tol"]}
+        v5 = score_tol(r, d, asof, hourly=h)
         v3 = {**score_v3(r, d, h, spec, asof), "tol": spec["tol"]}
         v2 = {**score(r, d, h, tol_v2, asof), "tol": tol_v2}
-        out.append({**r, "score": v4, "score_v3": v3, "score_v2": v2})
+        out.append({**r, "score": v4, "score_v3": v3, "score_v2": v2, "score_v5_tolerance": v5})
     _preserve_v1()
     tmp = OUT.with_suffix(".tmp")
     tmp.write_text(json.dumps({"version": VERSION_V4, "asof": asof.isoformat(),

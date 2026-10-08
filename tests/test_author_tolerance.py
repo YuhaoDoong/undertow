@@ -44,3 +44,10 @@ def test_far_miss_untouched_and_other_claims_not_applicable():
     d = PRE + bars(date(2026, 9, 1), [4100] * 20)
     assert a.score_tol(R, d, datetime(2026, 10, 30, tzinfo=timezone.utc))["result"] == "untouched"
     assert a.score_tol({**R, "claim": "no_support"}, d, datetime(2026, 10, 30, tzinfo=timezone.utc))["result"] == "not_applicable"
+
+
+def test_silver_specs_exist_for_v4_and_v5():
+    """2026-10-08：白银价位此前全是 no_price_source；XAG（现货口径，SI=F 近似、容差更宽）与 SI（期货）分开。"""
+    for k in ("silver_fut", "silver_proxy"):
+        assert k in a.SPECS and k in a.SPECS_V4 and a.SPECS_V4[k]["settle_tz"] == "America/New_York"
+    assert a.SPECS["silver_proxy"]["tol"] > a.SPECS["silver_fut"]["tol"]

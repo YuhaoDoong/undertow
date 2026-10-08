@@ -247,6 +247,11 @@ SESSION_END_H = 17
 SPECS = {                          # 结算时刻来自交易所公开惯例（未逐日核实）；tick = 最小报价单位
     "gold_proxy": {"settle": (13, 30), "tick": None, "tol": 0.005, "basis": "proxy_unverified（GC=F 持有成本折算）"},
     "BZZ26": {"settle": (14, 30), "tick": "0.01", "tol": 0.0, "basis": "contract_direct（BZZ26）"},
+    # 2026-10-08 补白银价格源（此前外部作者二的白银价位全是 no_price_source）
+    "silver_fut": {"settle": (13, 25), "tick": None, "tol": 0.003,
+                   "basis": "contract_rolling（SI=F 连续主力，换月未建模）"},
+    "silver_proxy": {"settle": (13, 25), "tick": None, "tol": 0.008,
+                     "basis": "proxy_unverified（伦敦银现货口径，用 SI=F 未换算近似，期现差约 0.2–0.5 美元）"},
 }
 
 
@@ -493,6 +498,10 @@ FOLLOW_SETTLES = FOLLOW_DAYS + 1   # 支撑/阻力：触及时刻【之后】的
 SPECS_V4 = {
     "gold_proxy": {**SPECS["gold_proxy"], "settle_tz": "America/New_York",
                    "settle_src": "CME 黄金活跃月结算窗口 13:29–13:30 ET（Codex 027 查 CME 页面）；Yahoo close=结算价 为数值比对推断"},
+    "silver_fut": {**SPECS["silver_fut"], "settle_tz": "America/New_York",
+                   "settle_src": "COMEX 白银结算窗口 13:24–13:25 ET（惯例，未逐日核实）"},
+    "silver_proxy": {**SPECS["silver_proxy"], "settle_tz": "America/New_York",
+                     "settle_src": "同 silver_fut；现货口径为近似"},
     "BZZ26": {**SPECS["BZZ26"], "settle_tz": "Europe/London", "settle": (19, 30),
               "settle_src": "ICE Brent 结算窗口伦敦 19:28–19:30（Codex 027 查 ICE 页面）；BZZ26.NYM 是否跟随、Yahoo close 映射未核实（推断）"},
 }
@@ -820,6 +829,12 @@ def main():
                 gold = (to_spot(yahoo_daily("GC=F", "2y")), to_spot_h(yahoo_hourly("GC=F")))
             (d, h), spec, spec4 = gold, SPECS["gold_proxy"], SPECS_V4["gold_proxy"]
             tol_v2 = 0.005
+        elif inst.startswith(("XAG", "SI")):
+            k = "silver_proxy" if inst.startswith("XAG") else "silver_fut"
+            if "SI" not in cache:
+                cache["SI"] = (yahoo_daily("SI=F", "2y"), yahoo_hourly("SI=F"))
+            (d, h), spec, spec4 = cache["SI"], SPECS[k], SPECS_V4[k]
+            tol_v2 = spec["tol"]
         elif "BZZ26" in inst:
             if "BZZ26" not in cache:
                 cache["BZZ26"] = (yahoo_daily("BZZ26.NYM", "6mo"), yahoo_hourly("BZZ26.NYM"))

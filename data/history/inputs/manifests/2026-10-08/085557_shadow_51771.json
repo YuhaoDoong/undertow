@@ -1,0 +1,46 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 51771,
+ "started_at": "2026-10-08T08:55:42.049042+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/QQQ/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/QQQ/2026-10-08.json.gz",
+   "sha256": "a04e6276e292b12faadc08f5f315a3e59a14ebe5bf2f89cd4be145a3457bb30b",
+   "captured_at": 1791449426.505457,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SPY/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SPY/2026-10-08.json.gz",
+   "sha256": "1c3c5e0dca0f5f53a3c798e1735ae716fb860399627e85c75aa5ac6595754d8c",
+   "captured_at": 1791449430.320158,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/IWM/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/IWM/2026-10-08.json.gz",
+   "sha256": "6bbd613ae05cf38cf7be32e2d379e42e2310e02d4c7506f75975e1c3bed03276",
+   "captured_at": 1791449432.0340219,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 2
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-08T08:55:57.756378+00:00",
+ "rc": 0,
+ "git_head": "ee9b13265724617b7c9eec2d20d1202afbc17b8a"
+}

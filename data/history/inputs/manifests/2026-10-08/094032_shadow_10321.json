@@ -1,0 +1,136 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 10321,
+ "started_at": "2026-10-08T09:40:17.861656+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-10-08.json.gz",
+   "sha256": "3a0903e8a45af79675a6dc08e519a5622d07f1ea9033610418575536c28362f6",
+   "captured_at": 1791452133.2352571,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/USO/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/USO/2026-10-08.json.gz",
+   "sha256": "73df3a8fdd676c721cc582a6cc04adc27ac796e93071a8b586d0de231fcb4249",
+   "captured_at": 1791452135.982763,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/QQQ/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/QQQ/2026-10-08.json.gz",
+   "sha256": "a04e6276e292b12faadc08f5f315a3e59a14ebe5bf2f89cd4be145a3457bb30b",
+   "captured_at": 1791449426.505457,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 2
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/TLT/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/TLT/2026-10-08.json.gz",
+   "sha256": "fa91f3e941b437fc3e98c6ee2e7402e8c9b9d3e44d7238f69ef03d538cb0ded4",
+   "captured_at": 1791452139.936513,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 3
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SPY/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SPY/2026-10-08.json.gz",
+   "sha256": "1c3c5e0dca0f5f53a3c798e1735ae716fb860399627e85c75aa5ac6595754d8c",
+   "captured_at": 1791449430.320158,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 4
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/IWM/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/IWM/2026-10-08.json.gz",
+   "sha256": "6bbd613ae05cf38cf7be32e2d379e42e2310e02d4c7506f75975e1c3bed03276",
+   "captured_at": 1791449432.0340219,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 5
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/GOOGL/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-10-08.json.gz",
+   "sha256": "24d352d18d964b70a475d075948bf984543a2e89126c88f5377d7c97339d1045",
+   "captured_at": 1791452144.213973,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 6
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/NVDA/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/NVDA/2026-10-08.json.gz",
+   "sha256": "9791a0136627f547db8d08341e52ea1310168ec2cff0ef099cd5e93abf7e75b4",
+   "captured_at": 1791452146.924886,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 7
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/INTC/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/INTC/2026-10-08.json.gz",
+   "sha256": "763babba00aaf86887cb46a9998dd074f2245e8d9329923cf646731194a3680d",
+   "captured_at": 1791452148.357944,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 8
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/AMD/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/AMD/2026-10-08.json.gz",
+   "sha256": "6b3f2b3e8458827662002059f8a753f38772a130fe02b48c6eea36ba8e895e65",
+   "captured_at": 1791452149.6562119,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 9
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/MSFT/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/MSFT/2026-10-08.json.gz",
+   "sha256": "fe35ea530601848fef42ba084b17a050e0194a616f73e02edfd170f3f1d904b7",
+   "captured_at": 1791452151.0313,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 10
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/AAPL/2026-10-08",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/AAPL/2026-10-08.json.gz",
+   "sha256": "86c8b1470b66c612456d51aac7d2196b19b40837c24794699fff75a2f96ca8ee",
+   "captured_at": 1791452152.35476,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 11
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-08T09:40:32.836679+00:00",
+ "rc": 0,
+ "git_head": "ee9b13265724617b7c9eec2d20d1202afbc17b8a"
+}

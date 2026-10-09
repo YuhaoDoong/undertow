@@ -2,30 +2,30 @@
   "schema": 2,
   "kind": "latest_cache",
   "not_for_asof_backtest": true,
-  "computed_at": "2026-10-08T11:35:24.463555+00:00",
+  "computed_at": "2026-10-09T08:24:40.985372+00:00",
   "inputs": {
     "iv": {
-      "n": 4295,
+      "n": 4296,
       "first": "2009-09-14",
-      "last": "2026-10-07",
-      "sha": "63ddb807e5df2ebb"
+      "last": "2026-10-08",
+      "sha": "af3b118b62f5c4df"
     },
     "px": {
-      "n": 4189,
+      "n": 4190,
       "first": "2010-02-11",
-      "last": "2026-10-06",
-      "sha": "1d00b0cc1dbf95ab"
+      "last": "2026-10-07",
+      "sha": "6d005d7ab7e690d5"
     }
   },
   "code_sha": "4acaedb9d45f5139",
   "result": {
     "index_name": "VXN",
     "window": 21,
-    "n_pairs": 4167,
+    "n_pairs": 4168,
     "start": "2010-02-11",
-    "end": "2026-09-04",
-    "mean_vrp": -35.67047309546832,
-    "median_vrp": -27.51818726020597,
+    "end": "2026-09-08",
+    "mean_vrp": -35.667160477397445,
+    "median_vrp": -27.516112515895273,
     "positive_share": 0.0,
     "year_stats": [
       {
@@ -158,16 +158,16 @@
       },
       {
         "year": 2026,
-        "n": 170,
-        "mean_vrp": -34.40297946285769,
-        "median_vrp": -31.615767406364466,
+        "n": 171,
+        "mean_vrp": -34.32964906235009,
+        "median_vrp": -31.458337638522693,
         "positive_share": 0.0,
-        "underlying_return": 60.9360076408787
+        "underlying_return": 59.73256924546324
       }
     ],
-    "corr_with_direction": 0.42257741601387777,
+    "corr_with_direction": 0.42246347891749136,
     "caveats": [
-      "重叠窗口：4167 个配对样本里独立的约 198 个，显著性远低于表面",
+      "重叠窗口：4168 个配对样本里独立的约 198 个，显著性远低于表面",
       "VRP 为毛溢价 —— 实际拿到手须对冲 delta，对冲成本会吃掉相当一部分",
       "收益分布左偏：多数日子赚小钱，少数日子巨亏；均值为正≠扛得住那几天"
     ]

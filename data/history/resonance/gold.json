@@ -534,5 +534,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-10-08T08:50:57.188227+00:00"
+ },
+ {
+  "instrument": "gold",
+  "date": "2026-10-09",
+  "spot": 4217.4,
+  "state": "仅结构",
+  "struct_bias": "偏空(弱)",
+  "band": "偏超卖",
+  "regime": "熊",
+  "stretch": -1.7287459791343671,
+  "stretch_pctile": 0.148,
+  "drawdown": -8.6985237460403,
+  "dd_pctile": 0.228,
+  "combo_pctile": 0.188,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-10-09T08:01:03.893397+00:00"
  }
 ]

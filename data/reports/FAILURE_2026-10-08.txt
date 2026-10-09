@@ -1,0 +1,18 @@
+2026-10-08 16:57 +08 | ET 2026-10-08 04:50 | ⚠️ 每日数据未提交（ET 2026-10-08 04:50）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/shadow/shadow-v5-20260926/aapl.jsonl data/history/shadow/shadow-v5-20260926/amd.jsonl data/history/shadow/shadow-v5-20260926/gold.jsonl data/histor），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-08 17:19 +08 | ET 2026-10-08 05:13 | ⚠️ 每日数据未提交（ET 2026-10-08 05:13）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/direction_ledger/skew-reading-v1-20260928/attempts/gold.jsonl data/history/direction_ledger/skew-reading-v1-20260928/attempts/silver.jsonl ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-08 17:43 +08 | ET 2026-10-08 05:35 | ⚠️ 每日数据未提交（ET 2026-10-08 05:35）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/shadow/shadow-v5-20260926/aapl.jsonl data/history/shadow/shadow-v5-20260926/amd.jsonl data/history/shadow/shadow-v5-20260926/gold.jsonl data/histor），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-08 18:05 +08 | ET 2026-10-08 05:59 | ⚠️ 每日数据未提交（ET 2026-10-08 05:59）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/resonance/wti.json.revisions.jsonl data/history/vrp/qqq.json data/history/vrp/silver.json data/history/vrp/wti.json ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-08 18:28 +08 | ET 2026-10-08 06:21 | ⚠️ 每日数据未提交（ET 2026-10-08 06:21）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/ratio_watch.json.revisions.jsonl data/history/shadow/shadow-v5-20260926/silver.jsonl data/history/shadow/shadow-v5-20260926/tqqq.jsonl data/history），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-08 18:52 +08 | ET 2026-10-08 06:45 | ⚠️ 每日数据未提交（ET 2026-10-08 06:45）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/flow_side/v1/2026-10-07_gold.json data/history/flow_side/v1/2026-10-07_silver.json ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-08 19:17 +08 | ET 2026-10-08 07:08 | ⚠️ 每日数据未提交（ET 2026-10-08 07:08）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl data/history/resonance/gold.json.revisions.jsonl data/history/vrp/gold.json data/history/vrp/silver.json ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-08 19:41 +08 | ET 2026-10-08 07:33 | ⚠️ 每日数据未提交（ET 2026-10-08 07:33）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl data/history/ratio_watch.json.revisions.jsonl data/history/resonance/tlt.json.revisions.jsonl data/history/vrp/），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-08 19:59 +08 | ET 2026-10-08 07:59 | ⚠️ daily 下游阶段反复未完成（ET 2026-10-08 07:59）
+  快照已齐，但研报/台账/发布已续跑 3 次仍未完成（常见原因：发布冲突）；需人工核对

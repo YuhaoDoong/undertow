@@ -1,0 +1,26 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 73895,
+ "started_at": "2026-10-09T08:04:33.426866+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-10-09",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-10-09.json.gz",
+   "sha256": "2400e8081c5604a6e06f8e74d88cec83b65f5f1928c95169a9ea171bb57389d2",
+   "captured_at": 1791532828.940767,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-09T08:04:44.893706+00:00",
+ "rc": 0,
+ "git_head": "4f6866d67ae506637785ddbdd3ff8848153f557f"
+}

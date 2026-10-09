@@ -534,5 +534,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-10-08T08:52:33.407370+00:00"
+ },
+ {
+  "instrument": "tqqq",
+  "date": "2026-10-09",
+  "spot": 31221.0,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "中性",
+  "regime": "牛",
+  "stretch": 1.0336679501283434,
+  "stretch_pctile": 0.7,
+  "drawdown": -1.6332049871653795,
+  "dd_pctile": 0.724,
+  "combo_pctile": 0.712,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-10-09T08:02:33.970686+00:00"
  }
 ]

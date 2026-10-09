@@ -1,0 +1,2 @@
+2026-10-09 16:06 +08 | ET 2026-10-09 04:00 | ⚠️ 每日数据未提交（ET 2026-10-09 04:00）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/shadow/shadow-v5-20260926/aapl.jsonl data/history/shadow/shadow-v5-20260926/amd.jsonl data/history/shadow/shadow-v5-20260926/gold.jsonl data/histor），已停止自动提交；数据已落盘，需人工核对后提交

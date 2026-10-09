@@ -757,3 +757,14 @@ def test_dynamic_entry_switches_expiry_and_records_planned():
                       "quotes": {"370.0": {"bid": 0.5, "ask": 0.55}, "365.0": {"bid": 0.1, "ask": 0.15}}}}
     assert pt.step(p, datetime(2026, 10, 9, 10, 1, tzinfo=ET), selector=lambda p, n: sel) == "enter"
     assert p["expiry"] == "2026-10-12" and p["expiry_planned"] == "2026-10-09" and p["sell"].startswith("GLD261012")
+
+
+def test_tranche_is_separate_slot_and_old_keys_unchanged(tmp_path, monkeypatch):
+    """用户 2026-10-09 加仓：同批次同标的同到期同方向的第 2 笔用 tranche 区分；旧仓位槽位键不变、成交锁仍按槽位。"""
+    a = _th("A", "user_subjective"); a["paper"].update(entered_at="t", state="entered")
+    b = _th("B", "user_subjective", tranche=2)
+    assert pt.slot_key(a) == ("user_subjective", "GLD.US", "2026-09-30", "P")
+    assert pt.slot_key(b) == pt.slot_key(a) + ("tranche2",)
+    _env(tmp_path, monkeypatch, [a])
+    assert pt.register_revision(b)["ok"]                                   # 第 2 笔不被第 1 笔的成交锁挡住
+    assert not pt.register_revision(_th("C", "user_subjective"))["ok"]     # 不带 tranche 的重复仍被挡

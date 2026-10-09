@@ -1004,7 +1004,10 @@ def slot_key(t: dict) -> tuple:
     同一判断下不同到期是不同仓位，互不阻挡；修订只能改同一槽位里尚未入场的候选。"""
     p = t.get("paper") or {}
     k = (p.get("batch", "legacy"), p.get("underlying"), p.get("expiry"), p.get("side"))
-    return k + ("debit",) if _debit(p) else k               # 借记与贷记是不同仓位；贷记的槽位键保持原样
+    k = k + ("debit",) if _debit(p) else k                   # 借记与贷记是不同仓位；贷记的槽位键保持原样
+    # 加仓（用户 2026-10-09：「给我模拟仓加卖 16 号的 380c，白银同步」）：tranche ≥ 2 是同一槽位上的又一笔独立仓位，
+    # 各自锁定、各自结算；不写 tranche 的旧仓位槽位键不变
+    return k + (f"tranche{p['tranche']}",) if isinstance(p.get("tranche"), int) and p["tranche"] >= 2 else k
 
 
 def entered_in_slot(j: dict, slot: tuple, exclude: str | None = None) -> str | None:

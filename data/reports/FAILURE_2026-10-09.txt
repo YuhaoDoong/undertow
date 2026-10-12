@@ -1,2 +1,20 @@
 2026-10-09 16:06 +08 | ET 2026-10-09 04:00 | ⚠️ 每日数据未提交（ET 2026-10-09 04:00）
   发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/shadow/shadow-v5-20260926/aapl.jsonl data/history/shadow/shadow-v5-20260926/amd.jsonl data/history/shadow/shadow-v5-20260926/gold.jsonl data/histor），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-09 16:50 +08 | ET 2026-10-09 04:44 | ⚠️ 每日数据未提交（ET 2026-10-09 04:44）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl data/history/shadow/shadow-v5-20260926/spy.jsonl ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-09 17:09 +08 | ET 2026-10-09 05:05 | ⚠️ 每日数据未提交（ET 2026-10-09 05:05）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-09 17:31 +08 | ET 2026-10-09 05:25 | ⚠️ 每日数据未提交（ET 2026-10-09 05:25）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl data/history/shadow/shadow-v5-20260926/aapl.jsonl data/history/shadow/shadow-v5-20260926/amd.jsonl data/history），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-09 17:52 +08 | ET 2026-10-09 05:46 | ⚠️ 每日数据未提交（ET 2026-10-09 05:46）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl data/history/vrp/iwm.json ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-09 18:14 +08 | ET 2026-10-09 06:07 | ⚠️ 每日数据未提交（ET 2026-10-09 06:07）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl data/history/shadow/shadow-v5-20260926/googl.jsonl data/history/shadow/shadow-v5-20260926/iwm.jsonl data/histor），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-09 18:36 +08 | ET 2026-10-09 06:30 | ⚠️ 每日数据未提交（ET 2026-10-09 06:30）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-09 18:59 +08 | ET 2026-10-09 06:52 | ⚠️ 每日数据未提交（ET 2026-10-09 06:52）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl data/history/resonance/wti.json.revisions.jsonl data/history/vrp/silver.json data/history/vrp/wti.json ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-09 19:22 +08 | ET 2026-10-09 07:15 | ⚠️ 每日数据未提交（ET 2026-10-09 07:15）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl data/history/ratio_watch.json.revisions.jsonl ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-09 19:38 +08 | ET 2026-10-09 07:38 | ⚠️ daily 下游阶段反复未完成（ET 2026-10-09 07:38）
+  快照已齐，但研报/台账/发布已续跑 3 次仍未完成（常见原因：发布冲突）；需人工核对

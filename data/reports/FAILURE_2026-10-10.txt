@@ -1,0 +1,4 @@
+2026-10-10 20:52 +08 | ET 2026-10-10 08:52 | ⚠️ 末班预警：仍缺当日快照，再抓一次
+  仍缺:GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL（ET 08:45 只是运营预警时点，不代表 OI 已发布完毕）
+2026-10-10 20:52 +08 | ET 2026-10-10 08:52 | 🚨 末班抓取后仍缺当日快照
+  仍缺:GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL（本次 overall=unchanged）。截止后另有只读缺口检查归因（未发布/抓取失败/错过窗口）。

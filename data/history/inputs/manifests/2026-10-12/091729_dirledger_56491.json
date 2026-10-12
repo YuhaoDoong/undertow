@@ -1,0 +1,40 @@
+{
+ "schema": 1,
+ "command": "dirledger",
+ "argv": [
+  "dirledger",
+  "score"
+ ],
+ "pid": 56491,
+ "started_at": "2026-10-12T09:17:28.456344+00:00",
+ "items": [
+  {
+   "kind": "longbridge_kline",
+   "key": "GLD.US|day|400",
+   "status": "fresh_fetch",
+   "size": 78225,
+   "sha256": "98a06c0dfcaaac895f42221b2116eb9d75fda2baa45bf83c610d7ddeabd33163",
+   "fetched_at": "2026-10-12T09:17:29.271250+00:00",
+   "age_s": null,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 0
+  },
+  {
+   "kind": "longbridge_kline",
+   "key": "SLV.US|day|400",
+   "status": "fresh_fetch",
+   "size": 76663,
+   "sha256": "5e1ac26eecf974b3706ab330742a794eb858387b7807880f27ddbdc9cad88496",
+   "fetched_at": "2026-10-12T09:17:29.810602+00:00",
+   "age_s": null,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 1
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-12T09:17:29.868893+00:00",
+ "rc": 0,
+ "git_head": "367816395b95a41995d824cacd3d0f32e01c10f3"
+}

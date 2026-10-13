@@ -1,0 +1,11 @@
+{
+ "run_id": "run1",
+ "command": "scripts/ps_trigger_v2.py --run-id run1",
+ "generated_at": "2026-10-13T11:35:59.592358+00:00",
+ "git_head": "5e106f15e6d108738d3f912782b8f81d92da3c16",
+ "config_sha256": "faa9ec697895cdc9650017e5d772afe043fb728fffbd3562df574cce077bd3d3",
+ "code_sha256": {
+  "undertow/analyze/price_structure.py": "b113a4b9ef80945176b5c67207ec95fe26f0859a30e7629224f4a5ee7ffafe1e",
+  "scripts/ps_trigger_v2.py": "194a0b9d481b5c3623362b9a648cc6425bf93fb989c911f881551c174b7a7496"
+ }
+}

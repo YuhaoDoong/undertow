@@ -1,0 +1,108 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>逐根回放标注</title>
+<style>
+:root{--bg:#fff;--fg:#1d1d1f;--mut:#6e6e73;--up:#2a9d4b;--dn:#d1495b;--hi:#1f6feb;--lo:#e36209;--key:#8a3ffc;--act:#0e8a7e;--stop:#d1495b;--line:#d0d0d5;--sel:#fde68a;--fut:rgba(128,128,128,.06)}
+@media (prefers-color-scheme:dark){:root{--bg:#161618;--fg:#f2f2f2;--mut:#a0a0a6;--line:#3a3a3e;--sel:#5b4b12;--fut:rgba(255,255,255,.04)}}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,"PingFang SC",sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px 40px}
+.bar{position:sticky;top:0;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--line);z-index:5}
+.row{display:flex;flex-wrap:wrap;gap:6px 10px;margin:6px 0;align-items:center}
+button{padding:6px 11px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
+button.on{background:var(--sel)} button.big{font-weight:600}
+select{padding:5px;border-radius:8px;background:transparent;color:var(--fg);border:1px solid var(--line)}
+svg{width:100%;height:auto;display:block;cursor:crosshair}
+.mut{color:var(--mut)} .tip{font-variant-numeric:tabular-nums;min-height:20px}
+textarea{width:100%;min-height:40px;background:transparent;color:var(--fg);border:1px solid var(--line);border-radius:6px;box-sizing:border-box}
+.log{max-height:160px;overflow:auto;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:6px}
+</style></head><body><div class="wrap">
+<div class="bar">
+  <div class="row"><b>逐根回放标注</b>
+    <select id="seg"></select><span id="pos" class="mut"></span>
+    <button id="next" class="big">下一根 →</button><button id="next5">+5 根</button><button id="prev">← 撤回一根</button>
+    <button id="exp">导出 JSON</button></div>
+  <div class="row" id="tools"></div>
+  <div class="mut">按 → 键或「下一根」推进；每一步像实盘一样只看得到当前及之前的 K 线。
+  选类型再点 K 线：高点类贴最高价、低点类贴最低价；「入场做多 / 入场做空 / 离场」记在<b>当前这一根</b>（意思是：这根收盘后我决定下一根开盘执行）；「止损」按点的高度画线。
+  每个标记都会记下你是在第几根时标的。「删除」也会留记录。「撤回一根」只是往回看，不会删掉你已做的标记。<b>请不要翻看页面源码</b>（后面的走势在里面）。<br>为免凭记忆认出行情，日期已隐去：横轴是相对根数（0 = 起点，负数是背景），价格按起点收盘 = 100 换算；回放结束后可在 manifest 里对回真实日期。</div>
+</div>
+<div class="tip mut" id="tip">鼠标移到 K 线上看第几根与价格</div>
+<div id="chart"></div>
+<div class="row"><b>这段的备注（你在想什么、为什么这样标）</b></div><textarea id="note"></textarea>
+<details><summary>本段操作记录</summary><div class="log" id="log"></div></details>
+</div>
+<script>
+const DATA = __DATA__;
+const KEY = "structure_replay_v1";
+const TYPES = [["HH","hi","var(--hi)"],["HL","lo","var(--lo)"],["LH","hi","var(--hi)"],["LL","lo","var(--lo)"],["关键前高","hi","var(--key)"],["关键前低","lo","var(--key)"],
+               ["入场做多","now","var(--act)"],["入场做空","now","var(--act)"],["离场","now","var(--act)"],["止损","click","var(--stop)"]];
+let S = {}; try { S = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { S = {}; }
+let cur = DATA[0].id, mode = "HH", unsure = false;
+const st = id => S[id] || (S[id] = {cursor: DATA.find(d => d.id === id).left - 1, max_cursor: DATA.find(d => d.id === id).left - 1, events: [], note: ""});
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+const W = 1100, H = 460, PL = 8, PR = 70, PT = 14, PB = 34;
+function live(s){ const m = new Map(); s.events.forEach(e => { const k = e.type + "@" + e.i; if (e.action === "add") m.set(k, e); else m.delete(k); }); return [...m.values()]; }
+function geom(d, s){
+  const n = d.bars.length, vis = d.bars.slice(0, s.cursor + 1);
+  let lo = Math.min(...vis.map(x => x[3])), hi = Math.max(...vis.map(x => x[2])); const pad = (hi - lo) * 0.1; lo -= pad; hi += pad;
+  const bw = (W - PL - PR) / n;
+  return {n, lo, hi, bw, x: i => PL + (i + 0.5) * bw, y: v => PT + (hi - v) * (H - PT - PB) / (hi - lo), py: Y => hi - (Y - PT) * (hi - lo) / (H - PT - PB)};
+}
+function draw(){
+  const d = DATA.find(x => x.id === cur), s = st(cur), g = geom(d, s), cw = g.bw * 0.62;
+  let h = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  h += `<rect x="${g.x(s.cursor) + g.bw / 2}" y="${PT}" width="${W - PR - g.x(s.cursor) - g.bw / 2}" height="${H - PT - PB}" fill="var(--fut)"/>`;
+  for (let k = 0; k <= 4; k++) { const v = g.lo + (g.hi - g.lo) * k / 4, yy = g.y(v);
+    h += `<line x1="${PL}" x2="${W - PR}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-dasharray="2,4"/><text x="${W - PR + 6}" y="${yy + 4}" font-size="11" fill="var(--mut)">${v.toFixed(v > 100 ? 1 : 2)}</text>`; }
+  for (let i = 0; i <= s.cursor; i++) { const [dt, o, hi, lo, c] = d.bars[i], col = c >= o ? "var(--up)" : "var(--dn)";
+    h += `<line x1="${g.x(i)}" x2="${g.x(i)}" y1="${g.y(hi)}" y2="${g.y(lo)}" stroke="${col}"/><rect x="${g.x(i) - cw / 2}" y="${g.y(Math.max(o, c))}" width="${cw}" height="${Math.max(1, Math.abs(g.y(o) - g.y(c)))}" fill="${col}"/>`;
+    if (dt % 25 === 0) h += `<text x="${g.x(i)}" y="${H - 14}" font-size="10" text-anchor="middle" fill="var(--mut)">${dt}</text>`; }
+  h += `<line x1="${g.x(d.left - 1) + g.bw / 2}" x2="${g.x(d.left - 1) + g.bw / 2}" y1="${PT}" y2="${H - PB}" stroke="var(--mut)" stroke-dasharray="4,4"/>`;
+  live(s).forEach(e => { if (e.i > s.cursor) return; const ty = TYPES.find(t => t[0] === e.type), X = g.x(e.i), Y = g.y(e.price), op = e.uncertain ? .55 : 1, txt = e.type + (e.uncertain ? "?" : "");
+    if (ty[1] === "click") h += `<line x1="${X}" x2="${W - PR}" y1="${Y}" y2="${Y}" stroke="${ty[2]}" stroke-dasharray="6,4" opacity="${op}"/><text x="${X + 3}" y="${Y - 4}" font-size="11" fill="${ty[2]}">${txt}</text>`;
+    else if (ty[1] === "now") h += `<line x1="${X}" x2="${X}" y1="${PT}" y2="${H - PB}" stroke="${ty[2]}" stroke-width="1.5" opacity="${op}"/><text x="${X + 3}" y="${PT + 12}" font-size="11" fill="${ty[2]}">${txt}</text>`;
+    else h += `<text x="${X}" y="${ty[1] === "hi" ? Y - 7 : Y + 15}" font-size="11" font-weight="600" text-anchor="middle" fill="${ty[2]}" opacity="${op}">${txt}</text>`; });
+  h += `<line id="cx" x1="0" x2="0" y1="${PT}" y2="${H - PB}" stroke="var(--mut)" stroke-dasharray="3,3" visibility="hidden"/></svg>`;
+  document.getElementById("chart").innerHTML = h;
+  document.getElementById("pos").textContent = `${d.symbol} 日线 · 已推进 ${s.cursor - d.left + 1}/${d.bars.length - d.left} 根 · 当前第 ${d.bars[s.cursor][0]} 根`;
+  document.getElementById("log").innerHTML = s.events.map(e => `推进到第 ${e.as_of_bar} 根时${e.as_of_i < e.seen_max ? "（回看）" : ""}：${e.action === "add" ? "标" : "删"} ${e.type}${e.uncertain ? "?" : ""} @ 第 ${e.bar} 根 ${(+e.price).toFixed(2)}`).join("<br>") || "（无）";
+  bind();
+}
+function locate(ev){ const d = DATA.find(x => x.id === cur), s = st(cur), svg = document.querySelector("#chart svg"), r = svg.getBoundingClientRect(), g = geom(d, s);
+  const X = (ev.clientX - r.left) * W / r.width, Y = (ev.clientY - r.top) * H / r.height;
+  return {i: Math.min(s.cursor, Math.max(0, Math.floor((X - PL) / g.bw))), price: g.py(Y), g}; }
+function bind(){
+  const svg = document.querySelector("#chart svg"), d = DATA.find(x => x.id === cur), s = st(cur);
+  svg.addEventListener("mousemove", ev => { const p = locate(ev), b = d.bars[p.i], cx = svg.querySelector("#cx");
+    cx.setAttribute("x1", p.g.x(p.i)); cx.setAttribute("x2", p.g.x(p.i)); cx.setAttribute("visibility", "visible");
+    document.getElementById("tip").textContent = `第 ${b[0]} 根  开 ${b[1]}  高 ${b[2]}  低 ${b[3]}  收 ${b[4]}`; });
+  svg.addEventListener("click", ev => {
+    const p = locate(ev), asof = s.cursor, b = d.bars[p.i];
+    const base = {as_of_i: asof, as_of_bar: d.bars[asof][0], seen_max: s.max_cursor, logged_at: new Date().toISOString()};
+    if (mode === "删除") { live(s).filter(e => e.i === p.i).forEach(e => s.events.push({...base, action: "delete", type: e.type, i: e.i, bar: e.bar, price: e.price})); }
+    else { const ty = TYPES.find(t => t[0] === mode);
+      const i = ty[1] === "now" ? asof : p.i, bb = d.bars[i];
+      const price = ty[1] === "hi" ? bb[2] : ty[1] === "lo" ? bb[3] : ty[1] === "now" ? bb[4] : +p.price.toFixed(4);
+      s.events.push({...base, action: "add", type: mode, i, bar: bb[0], price, uncertain: unsure}); }
+    save(); draw();
+  });
+}
+function step(k){ const d = DATA.find(x => x.id === cur), s = st(cur); s.cursor = Math.max(d.left - 1, Math.min(d.bars.length - 1, s.cursor + k));
+  s.max_cursor = Math.max(s.max_cursor, s.cursor); save(); draw(); }
+function tools(){ const t = document.getElementById("tools");
+  t.innerHTML = TYPES.map(([n]) => `<button data-m="${n}" class="${mode === n ? "on" : ""}">${n}</button>`).join("") +
+    `<button data-m="删除" class="${mode === "删除" ? "on" : ""}">删除</button><button id="uns" class="${unsure ? "on" : ""}">不确定：${unsure ? "开" : "关"}</button>`;
+  t.querySelectorAll("button[data-m]").forEach(b => b.onclick = () => { mode = b.dataset.m; tools(); });
+  document.getElementById("uns").onclick = () => { unsure = !unsure; tools(); }; }
+function segs(){ const sel = document.getElementById("seg");
+  sel.innerHTML = DATA.map(d => { const s = st(d.id), done = s.max_cursor >= d.bars.length - 1; return `<option value="${d.id}" ${d.id === cur ? "selected" : ""}>第 ${d.id} 段${done ? " ✓" : ""}</option>`; }).join("");
+  sel.onchange = () => { cur = +sel.value; document.getElementById("note").value = st(cur).note || ""; draw(); }; }
+document.getElementById("next").onclick = () => { step(1); segs(); };
+document.getElementById("next5").onclick = () => { step(5); segs(); };
+document.getElementById("prev").onclick = () => step(-1);
+document.addEventListener("keydown", e => { if (e.target.tagName === "TEXTAREA") return; if (e.key === "ArrowRight") { step(1); segs(); } if (e.key === "ArrowLeft") step(-1); });
+document.getElementById("note").addEventListener("input", e => { st(cur).note = e.target.value; save(); });
+document.getElementById("exp").onclick = () => {
+  const out = {version: "structure-replay-v1", exported_at: new Date().toISOString(), segments: DATA.map(d => ({id: d.id, symbol: d.symbol, left: d.left, n: d.bars.length})), state: S};
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], {type: "application/json"})); a.download = "structure_replay_v1.json"; a.click(); };
+tools(); segs(); document.getElementById("note").value = st(cur).note || ""; draw();
+</script></body></html>

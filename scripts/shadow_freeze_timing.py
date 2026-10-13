@@ -4,10 +4,13 @@
 
 每行三个原始时刻：snapshot_available_at（identity.captured_at，快照首次可得）、candidate_first_frozen_at（recorded_at，候选首次冻结）、
 certified_at（identity.certified_at，认证完成）；计划截止 = 当日 ET 09:30（原协议硬截止）。派生：
-- delay_vs_plan_min：候选冻结相对「计划冻结时刻」的延迟（计划时刻取 ET 06:45，即 daily 正常末段；只作描述，不是新门槛）；
-- late_frozen_before_cutoff：晚于计划时刻但早于 09:30 截止 —— 按原协议仍在主集，另做时间分层/敏感性分析；
+- delay_vs_reference_min：候选冻结相对「描述参考时点」ET 06:45 的延迟。06:45 是事后选的描述参考（daily 正常末段），
+  不是每个历史会话事先都有的计划，也不是门槛（Codex 034 §7）；
+- late_frozen_before_cutoff：晚于参考时点但早于 09:30 截止 —— 按原协议仍在主集，另做时间分层/敏感性分析；
 - frozen_after_cutoff：候选在截止后才首次生成 —— 不得回填为盘前样本（原协议本就排除）；
-- certified_after_cutoff_only：候选盘前已冻结、只是认证晚于截止 —— 与 late_frozen 分开，不混为晚冻结。
+- certified_after_cutoff_only：候选盘前已冻结、只是认证晚于截止 —— 与 late_frozen 分开，不混为晚冻结；
+  认证时刻缺失 → None（未知不是 False）；
+- timestamp_order_ok：快照可得 ≤ 候选冻结 ≤ 认证 是否成立（任一缺失 → None；False 列出供核对，不改原始行）。
 不追加 06:xx 硬门槛去事后剔除样本。
 """
 from __future__ import annotations
@@ -21,8 +24,8 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 ET = ZoneInfo("America/New_York")
-VERSION = "freeze-timing-v1-20261007"
-PLAN_ET, CUTOFF_ET = time(6, 45), time(9, 30)
+VERSION = "freeze-timing-v2-20261013"
+REFERENCE_ET, CUTOFF_ET = time(6, 45), time(9, 30)
 
 
 def _t(x):
@@ -39,20 +42,22 @@ def derive(row: dict) -> dict:
     s = row["session"]
     snap, frozen, cert = _t(idt.get("captured_at")), _t(row.get("recorded_at")), _t(idt.get("certified_at"))
     d = datetime.fromisoformat(s).date()
-    plan = datetime.combine(d, PLAN_ET, tzinfo=ET)
+    ref = datetime.combine(d, REFERENCE_ET, tzinfo=ET)
     cutoff = datetime.combine(d, CUTOFF_ET, tzinfo=ET)
     out = {"key": row.get("key") or f"{row.get('instrument')}|{s}", "session": s, "instrument": row.get("instrument"),
            "derivation_version": VERSION, "snapshot_available_at": idt.get("captured_at"),
            "candidate_first_frozen_at": row.get("recorded_at"), "certified_at": idt.get("certified_at"),
-           "plan_et": PLAN_ET.strftime("%H:%M"), "cutoff_et": CUTOFF_ET.strftime("%H:%M"),
+           "reference_time_et": REFERENCE_ET.strftime("%H:%M"), "cutoff_et": CUTOFF_ET.strftime("%H:%M"),
            "identity_status": idt.get("status"), "mode": idt.get("mode")}
     if frozen is None:
-        out.update(delay_vs_plan_min=None, late_frozen_before_cutoff=None, frozen_after_cutoff=None, certified_after_cutoff_only=None)
+        out.update(delay_vs_reference_min=None, late_frozen_before_cutoff=None, frozen_after_cutoff=None,
+                   certified_after_cutoff_only=None, timestamp_order_ok=None)
         return out
-    out["delay_vs_plan_min"] = round((frozen - plan).total_seconds() / 60, 1)
+    out["delay_vs_reference_min"] = round((frozen - ref).total_seconds() / 60, 1)
     out["frozen_after_cutoff"] = frozen >= cutoff
-    out["late_frozen_before_cutoff"] = plan < frozen < cutoff
-    out["certified_after_cutoff_only"] = (frozen < cutoff and cert is not None and cert >= cutoff)
+    out["late_frozen_before_cutoff"] = ref < frozen < cutoff
+    out["certified_after_cutoff_only"] = None if cert is None else (frozen < cutoff and cert >= cutoff)
+    out["timestamp_order_ok"] = None if (snap is None or cert is None) else (snap <= frozen <= cert)
     return out
 
 
@@ -78,7 +83,10 @@ def main() -> int:
     late = sum(1 for r in rows if r["late_frozen_before_cutoff"])
     after = sum(1 for r in rows if r["frozen_after_cutoff"])
     cert = sum(1 for r in rows if r["certified_after_cutoff_only"])
-    print(f"前瞻行 {n}：晚于计划但截止前冻结 {late}、截止后才冻结 {after}、仅认证晚于截止 {cert} → {out.relative_to(ROOT)}")
+    unk = sum(1 for r in rows if r["certified_after_cutoff_only"] is None)
+    bad = sum(1 for r in rows if r["timestamp_order_ok"] is False)
+    print(f"前瞻行 {n}：晚于参考时点但截止前冻结 {late}、截止后才冻结 {after}、仅认证晚于截止 {cert}、"
+          f"认证时刻未知 {unk}、三时刻顺序异常 {bad} → {out.relative_to(ROOT)}")
     return 0
 
 

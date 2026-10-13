@@ -230,3 +230,21 @@ def test_armed_lh_exit_waits_for_new_hh_after_entry():
     assert r2["exit_i"] == 29 and r2["audit"]["struct_point"]["ref_price"] == 108.0          # 参照随 HH 抬高
     r3 = ps.simulate_policy(bars, piv[:2], 5, 95.0, "long", ps.POLICIES["U5"], last_i=79)
     assert r3["exit_reason"] == "time_exit"                                                    # 没有新 HH：不上膛、只靠 LL 止损
+
+
+def test_local_swings_confirm_methods_and_prefix():
+    hl = [(10, 9), (10.2, 9.5), (9.8, 8.6), (9.4, 8.5), (9.9, 8.9), (10.6, 9.6), (11, 10), (10.4, 9.7), (10.0, 9.2), (10.5, 9.5)]
+    bars = [(date(2001, 1, 1) + timedelta(days=i), (h + l) / 2, h, l, (h + l) / 2 if i != 5 else 10.5) for i, (h, l) in enumerate(hl)]
+    atr = [1.0] * len(bars)
+    bar = ps.local_swings(bars, atr, "bar")
+    assert bar[0].kind == "L" and bar[0].idx == 3 and bar[0].conf == 5          # 第 5 根收盘 10.5 > 第 3 根最高 9.4
+    two = ps.local_swings(bars, atr, "two")
+    assert two[0].idx == 3 and two[0].conf == 5                                   # 第 4、5 根最低都高于 8.5
+    for m in ("bar", "two", "atr"):
+        full = ps.local_swings(bars, atr, m)
+        for cut in range(2, len(bars) + 1):
+            assert [(p.kind, p.idx, p.conf) for p in ps.local_swings(bars[:cut], atr[:cut], m)] == [(p.kind, p.idx, p.conf) for p in full if p.conf < cut]
+
+
+def test_tolerance_helper():
+    assert ps._tol("0.5", 100, 2.0) == 1.0 and abs(ps._tol("0.5%", 100, 2.0) - 0.5) < 1e-12

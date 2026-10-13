@@ -436,3 +436,131 @@ def _done_p(entry, stop, r, px, why, i, k, s, eff_stop, be_at, audit):
     return {"status": "entered", "entry": entry, "stop": stop, "risk": r, "exit_price": px, "exit_reason": why, "exit_i": i,
             "days_held": k + 1, "r_mult": round(s * (px - entry) / r, 6), "final_stop": eff_stop, "breakeven_from_i": be_at,
             "audit": audit}
+
+
+# ================= ps-trigger-v1：更早的入场/离场确认（用户复核「入场和离场时机一塌糊涂，全面太晚」，2026-10-14） =================
+# 结构（关键前高、LL、突破）仍用 2ATR 收盘之字形（用户：「高点低点我觉得还行」）；入场与离场的「确认」改用更快的局部确认，四种都试：
+#   bar   ：低点那根之后，有一根收盘高于它的最高价（做空镜像）
+#   two   ：低点之后连续 2 根最低价都高于它
+#   atr   ：从低点反弹 0.75·ATR（收盘），用户说的 0.5–1 倍取中值，未校准
+#   limit ：突破后回踩到关键前高价位挂单买入（无确认；离场用 bar 确认）
+# 「相同点位」门槛 tol（HL 须高于 LL ≥ tol 才算结构；LH 须低于最新 HH ≥ tol 才算；新 HH 须高出 ≥ tol 才上膛）：0.25 / 0.5 / 1 ATR、0.5%。全部未校准。
+TRIGGER_ATR = 0.75
+
+
+def local_swings(bars: list, atr: list, method: str) -> list:
+    """交替的局部摆动点（影线价），按指定确认方式流式确认；每个点含 idx（极值根）与 conf（确认根，收盘后可知）。"""
+    out: list[Pivot] = []
+    look = "L"                       # 先找低点
+    cand = None
+    n = len(bars)
+    for t in range(1, n):
+        h, l, c = bars[t][2], bars[t][3], bars[t][4]
+        if cand is None:
+            cand = t
+            continue
+        if look == "L":
+            if l < bars[cand][3]:
+                cand = t
+                continue
+            ok = False
+            if method in ("bar", "limit"):
+                ok = c > bars[cand][2]
+            elif method == "two":
+                ok = t - cand >= 2 and all(bars[j][3] > bars[cand][3] for j in range(cand + 1, t + 1))
+            elif method == "atr":
+                a = atr[t - 1]
+                ok = a is not None and c >= bars[cand][3] + TRIGGER_ATR * a
+            if ok:
+                out.append(Pivot("L", cand, t, bars[cand][3])); look = "H"
+                cand = max(range(cand + 1, t + 1), key=lambda i: (bars[i][2], -i))
+        else:
+            if h > bars[cand][2]:
+                cand = t
+                continue
+            ok = False
+            if method in ("bar", "limit"):
+                ok = c < bars[cand][3]
+            elif method == "two":
+                ok = t - cand >= 2 and all(bars[j][2] < bars[cand][2] for j in range(cand + 1, t + 1))
+            elif method == "atr":
+                a = atr[t - 1]
+                ok = a is not None and c <= bars[cand][2] - TRIGGER_ATR * a
+            if ok:
+                out.append(Pivot("H", cand, t, bars[cand][2])); look = "L"
+                cand = min(range(cand + 1, t + 1), key=lambda i: (bars[i][3], i))
+    return out
+
+
+def _tol(t: str, price: float, a: float) -> float:
+    return price * float(t[:-1]) / 100 if t.endswith("%") else float(t) * a
+
+
+def trigger_trade(bars: list, atr: list, ep, loc: list, method: str, tol: str, *, last_i: int, hold: int = 250,
+                  wait: int = WAIT_MAX) -> dict:
+    """一个 A 型突破（ep：break_at、key、extreme）上的入场 + 离场。做多：突破后，第一个【极值在突破之后】、确认在突破之后、
+    低点高于 LL + tol 的局部低点 → 确认根下一根开盘入场（limit：突破后 low ≤ 关键前高 且 > LL + tol 的第一根，按关键前高成交，跳空低开按开盘）。
+    收盘跌破 LL → 失效；突破后 wait 根内没入场 → timeout。止损 = LL − 0.1·ATR[入场前一根]。
+    离场（上膛式）：入场前最新局部高点为参照；入场后确认的局部高点高出参照 ≥ tol → 上膛并抬高参照；上膛后确认的局部高点低于参照 ≥ tol → 下一根开盘离场。
+    同根顺序：开盘（离场意图 / 跳空止损）→ 盘中止损 → 收盘确认新点。"""
+    d = ep.direction
+    s = _sign(d)
+    want_l, want_h = ("L", "H") if d == "long" else ("H", "L")
+    b0, ll = ep.break_at, ep.extreme.price
+    entry_i = entry_px = None
+    for t in range(b0 + 1, min(last_i, b0 + wait) + 1):
+        A = atr[t - 1]
+        if A is None:
+            continue
+        if s * bars[t][4] < s * ll:
+            return {"status": "invalidated_close_beyond_extreme"}
+        if method == "limit":
+            lvl = ep.key.price
+            adv = bars[t][3] if d == "long" else bars[t][2]
+            if s * adv <= s * lvl and s * (adv - ll) >= _tol(tol, lvl, A):
+                entry_i, entry_px = t, (min(bars[t][1], lvl) if d == "long" else max(bars[t][1], lvl))
+                break
+            continue
+        hit = [p for p in loc if p.conf == t and p.kind == want_l and p.idx > b0]
+        if hit and s * (hit[0].price - ll) >= _tol(tol, hit[0].price, A):
+            if t + 1 <= last_i:
+                entry_i, entry_px = t + 1, bars[t + 1][1]
+            break
+    if entry_i is None:
+        return {"status": "timeout_no_entry"}
+    stop = ll - s * STOP_BUF * atr[entry_i - 1]
+    if s * (entry_px - stop) <= 0:
+        return {"status": "open_beyond_stop"}
+    if entry_i + hold - 1 > last_i:
+        return {"status": "boundary_excluded"}
+    pre = [p for p in loc if p.kind == want_h and p.conf < entry_i]
+    ref = pre[-1].price if pre else None
+    armed, pending, sig = False, None, {}
+    for k in range(hold):
+        i = entry_i + k
+        _, op, hi, lo, cl = bars[i]
+        if k > 0:
+            gap = s * op <= s * stop
+            if pending is not None or gap:
+                return _tdone(entry_i, entry_px, stop, op, "struct_exit" if pending is not None and not gap else ("gap_stop" if pending is None else "struct_exit+gap_stop"), i, s, sig)
+        if s * (lo if d == "long" else hi) <= s * stop:
+            return _tdone(entry_i, entry_px, stop, stop, "stop", i, s, sig)
+        for p in loc:
+            if p.conf != i or p.kind != want_h or p.idx < entry_i:
+                continue
+            A = atr[i - 1] or atr[i]
+            if ref is None or s * (p.price - ref) >= _tol(tol, p.price, A):
+                if not armed:
+                    sig["armed"] = {"idx": p.idx, "conf": p.conf, "price": p.price, "ref": ref}
+                armed, ref = True, p.price
+            elif armed and s * (ref - p.price) >= _tol(tol, p.price, A) and pending is None:
+                pending = i
+                sig["lh"] = {"idx": p.idx, "conf": p.conf, "price": p.price, "ref": ref}
+    i = entry_i + hold - 1
+    return _tdone(entry_i, entry_px, stop, bars[i][4], "admin_cap", i, s, sig)
+
+
+def _tdone(ei, ep_, stop, px, why, i, s, sig):
+    r = s * (ep_ - stop)
+    return {"status": "entered", "entry_i": ei, "entry": ep_, "stop": stop, "exit_i": i, "exit_price": px, "exit_reason": why,
+            "days_held": i - ei + 1, "r_mult": round(s * (px - ep_) / r, 6), "signals": sig}

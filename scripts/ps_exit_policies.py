@@ -25,7 +25,8 @@ BASE = ROOT / "data/backtest/ps-exit-v1"
 CFG = BASE / "config.json"
 GROUPS = {"ETF": ("GLD", "SLV", "USO", "QQQ", "SPY"), "个股": ("GOOGL", "AAPL", "MSFT", "NVDA", "AMD", "INTC", "TSLA"), "连续期货": ("GC=F", "SI=F")}
 CONT_BARS, CONT_ATR = 20, 2.0
-STOP_BASIS = "close"                                       # --stop-basis wick → v1.1（配置 config_v1.1.json）
+STOP_BASIS = "close"
+POLSET = ("P0", "P1", "P2", "P3", "P4")                                       # --stop-basis wick → v1.1（配置 config_v1.1.json）
 
 
 def trades_for(sym: str, ref_dates: list) -> list:
@@ -59,7 +60,8 @@ def trades_for(sym: str, ref_dates: list) -> list:
             row = {"id": f"{sym}-{si}-{e.direction}-{e.start}", "symbol": sym, "direction": e.direction,
                    "entry_date": str(bars[ei][0]), "entry": bars[ei][1], "atr_entry": atr[ei - 1], "stop_extreme": stop0, "stop_pullback": stop1,
                    "risk_p0": p0["risk"], "policies": {}}
-            for name, pol in ps.POLICIES.items():
+            for name in POLSET:
+                pol = ps.POLICIES[name]
                 stp = stop0 if pol["stop"] == "extreme" else stop1
                 r = ps.simulate_policy(bars, piv, ei, stp, e.direction, pol, last_i=last_i)
                 if r["status"] == "entered":
@@ -107,18 +109,20 @@ def summarize(rows: list) -> dict:
     for g, syms in list(GROUPS.items()) + [("全部", tuple(GROUPS["ETF"] + GROUPS["个股"] + GROUPS["连续期货"]))]:
         for d in ("long", "short"):
             rs = [r for r in rows if r["symbol"] in syms and r["direction"] == d]
-            c60 = [r for r in rs if all(r["policies"][p]["status"] in ("entered", "open_beyond_stop") for p in ("P0", "P1", "P2", "P3"))]
-            c250 = [r for r in rs if all(r["policies"][p]["status"] in ("entered", "open_beyond_stop") for p in ("P3", "P4"))]
-            both60 = [r for r in c60 if all(r["policies"][p]["status"] == "entered" for p in ("P0", "P1", "P2", "P3"))]
+            g60 = [p for p in POLSET if ps.POLICIES[p]["hold"] == 60]
+            g250 = [p for p in POLSET if ps.POLICIES[p]["hold"] == 250]
+            c60 = [r for r in rs if all(r["policies"][p]["status"] in ("entered", "open_beyond_stop") for p in g60)]
+            c250 = [r for r in rs if all(r["policies"][p]["status"] in ("entered", "open_beyond_stop") for p in g250)]
+            both60 = [r for r in c60 if all(r["policies"][p]["status"] == "entered" for p in g60)]
             paired = {p: _r(st.mean([r["policies"][p]["atr_units"] - r["policies"]["P0"]["atr_units"] for r in both60])) if both60 else None
-                      for p in ("P1", "P2", "P3")}
-            both250 = [r for r in c250 if all(r["policies"][p]["status"] == "entered" for p in ("P3", "P4"))]
+                      for p in g60 if p != "P0"}
+            both250 = [r for r in c250 if all(r["policies"][p]["status"] == "entered" for p in g250)]
             out[f"{g}|{d}"] = {"queue": len(rs), "cohort60": len(c60), "cohort250": len(c250),
-                               "P0_P3_on_cohort60": {p: agg(c60, p) for p in ("P0", "P1", "P2", "P3")},
+                               "P0_P3_on_cohort60": {p: agg(c60, p) for p in g60},
                                "paired_diff_atr_vs_P0_all_entered": paired, "paired_n": len(both60),
-                               "P3_P4_on_cohort250": {p: agg(c250, p) for p in ("P3", "P4")},
-                               "paired_diff_atr_P4_minus_P3": _r(st.mean([r["policies"]["P4"]["atr_units"] - r["policies"]["P3"]["atr_units"]
-                                                                          for r in both250])) if both250 else None}
+                               "P3_P4_on_cohort250": {p: agg(c250, p) for p in g250},
+                               "paired_diff_atr_P4_minus_P3": (_r(st.mean([r["policies"][g250[-1]]["atr_units"] - r["policies"][g250[0]]["atr_units"]
+                                                                           for r in both250])) if both250 and len(g250) == 2 else None)}
     return out
 
 
@@ -148,8 +152,9 @@ def report(summ: dict, meta: dict) -> str:
             L.append(f"| {p} | {x['n']} | {x['atr_mean']} | {x['atr_median']} | {pct} | {x['win_rate_pct_gt0']} | {x['worst_atr']} | {x['days_median']} | "
                      f"{x['r_own_mean']} | {x['r_p0risk_mean']} | {x['breakeven_triggered']} | {x['gap_loss_r_lt_minus1']} | {x['stopped_then_continued']} | "
                      f"{', '.join(f'{k} {n}' for k, n in sorted(x['exit_reasons'].items()))} |")
-        L.append(f"\n逐笔配对（四政策都入场的 {v['paired_n']} 笔，ATR 单位，相对 P0）：P1 {v['paired_diff_atr_vs_P0_all_entered']['P1']}，"
-                 f"P2 {v['paired_diff_atr_vs_P0_all_entered']['P2']}，P3 {v['paired_diff_atr_vs_P0_all_entered']['P3']}；P4 − P3（250 队列）{v['paired_diff_atr_P4_minus_P3']}")
+        L.append(f"\n逐笔配对（60 根各政策都入场的 {v['paired_n']} 笔，ATR 单位，相对 P0）："
+                 + "，".join(f"{p} {x}" for p, x in v['paired_diff_atr_vs_P0_all_entered'].items())
+                 + f"；250 根组内后者 − 前者 {v['paired_diff_atr_P4_minus_P3']}")
     return "\n".join(L) + "\n"
 
 
@@ -157,11 +162,16 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-id", required=True)
     ap.add_argument("--stop-basis", choices=("close", "wick"), default="close")
+    ap.add_argument("--policy-set", choices=("v1", "v2"), default="v1")
     a = ap.parse_args()
     global STOP_BASIS, CFG
     STOP_BASIS = a.stop_basis
     if STOP_BASIS == "wick":
         CFG = BASE / "config_v1.1.json"
+    global POLSET
+    POLSET = ("P0", "U1", "U2", "U3", "U4") if a.policy_set == "v2" else ("P0", "P1", "P2", "P3", "P4")
+    if a.policy_set == "v2":
+        CFG = BASE / "config_v2.json"
     out = BASE / a.run_id
     if out.exists():
         raise SystemExit(f"{out} 已存在：不覆盖")

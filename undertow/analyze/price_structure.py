@@ -337,6 +337,11 @@ POLICIES = {
     "P2": {"stop": "pullback", "target": False, "struct_exit": True, "breakeven": False, "hold": 60},
     "P3": {"stop": "pullback", "target": False, "struct_exit": True, "breakeven": True, "hold": 60},
     "P4": {"stop": "pullback", "target": False, "struct_exit": True, "breakeven": True, "hold": 250},
+    # ps-exit-v2（用户 2026-10-14 澄清：做多止损放在 LL 附近、做空放在 HH 附近；离场看 LH / HL；移成本「只是提议，可以测试」）
+    "U1": {"stop": "extreme", "target": False, "struct_exit": True, "breakeven": False, "hold": 60},
+    "U2": {"stop": "extreme", "target": False, "struct_exit": True, "breakeven": True, "hold": 60},
+    "U3": {"stop": "extreme", "target": False, "struct_exit": True, "breakeven": False, "hold": 250},
+    "U4": {"stop": "extreme", "target": False, "struct_exit": True, "breakeven": True, "hold": 250},
 }
 
 

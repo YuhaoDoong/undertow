@@ -537,8 +537,8 @@ def test_fixed_entry_returned_after_window_is_skipped(monkeypatch):
 def test_exit_returned_after_close_only_marks(monkeypatch):
     p = _entered(); p.update(mark_slots_et=["15:45"], expiry="2026-10-16")
     monkeypatch.setattr(pt, "_clock", lambda: datetime(2026, 9, 29, 16, 1, tzinfo=ET))   # 15:59 请求、16:01 取回
-    assert pt.step(p, at(29, 15, 59), depth=q(1.5, 1.7, 0.7, 0.8)) == "mark"             # 已到止损线也不执行
-    assert p["state"] == "entered" and p["events"][-1]["action"] == "mark_offhours"
+    assert pt.step(p, at(29, 15, 59), depth=q(1.5, 1.7, 0.7, 0.8)) == "retry"            # 已到止损线也不执行
+    assert p["state"] == "entered" and p["events"][-1]["action"] == "mark_late_return"      # 16:01 已过 [15:45,16:01) 窗口
 
 
 def test_close_request_kept_when_quote_fails_or_returns_after_close(monkeypatch):
@@ -812,3 +812,29 @@ def test_deferred_close_request_has_same_labels_as_immediate():
     e = p["events"][-1]
     assert e["human_intervention"] is True and e["deferred_request"] is True and "execution_flags" in e
     assert e["execution_eligibility_unknown"] == ["size", "same_quote_time"]
+
+
+def test_quote_returned_after_slot_window_never_exits(monkeypatch):
+    """Codex 036 §5 探针：09:45 窗口、10:00 请求、10:02 返回（窗口 10:01 结束）→ 不记 mark、不止损；该时点记 late_return 欠账。"""
+    monkeypatch.setattr(pt, "SLOT_AUDIT_FROM", date(2026, 9, 1))
+    p = _entered(); p.update(mark_slots_et=["09:45"], expiry="2026-10-16")
+    monkeypatch.setattr(pt, "_clock", lambda: datetime(2026, 9, 30, 10, 2, tzinfo=ET))
+    assert pt.step(p, at(30, 10, 0), depth=q(1.5, 1.7, 0.7, 0.8)) == "retry"
+    assert p["state"] == "entered" and not any(e["action"] in ("mark", "stop") for e in p["events"])
+    e = p["events"][-1]
+    assert e["action"] == "mark_late_return" and e["window_end"].startswith("2026-09-30T10:01")
+    monkeypatch.setattr(pt, "_clock", lambda: datetime(2000, 1, 1, tzinfo=ET))
+    assert pt.step(p, at(30, 10, 5), depth=q(1.5, 1.7, 0.7, 0.8)) == "exit_unresolved"
+    u = [x for x in p["events"] if x["action"] == "exit_unresolved"][-1]
+    assert u["category"].startswith("late_return") and u["attempts"] == 1
+
+
+def test_slot_debt_recorded_before_settlement(monkeypatch):
+    """结算会提前 return：到期日之前已过窗、无成功估值的时点要先补记欠账（Codex 036 §5）。"""
+    monkeypatch.setattr(pt, "SLOT_AUDIT_FROM", date(2026, 9, 1))
+    p = _entered(); p.update(mark_slots_et=["09:45"], expiry="2026-09-30")
+    sc = lambda u, d: {"close": 376.0, "source": "t"}
+    assert pt.step(p, at(30, 16, 25), depth=q(1.5, 1.7, 0.7, 0.8), session_close=sc) == "settle"
+    acts = [x["action"] for x in p["events"]]
+    assert acts.index("exit_unresolved") < acts.index("settle")
+    assert [x for x in p["events"] if x["action"] == "exit_unresolved"][0]["category"].startswith("missed_wake")

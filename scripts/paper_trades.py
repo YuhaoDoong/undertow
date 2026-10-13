@@ -584,6 +584,8 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
         return "enter"
     # —— entered ——
     exp = date.fromisoformat(p["expiry"])
+    # 结算 / 延期人工平仓会在下面提前 return：先把此刻之前已过窗的时点欠账补齐（Codex 036 §5），只审计到当前时刻（仍在场）
+    pre_aud = slot_audit(p, now, ev)
     if today > exp or (today == exp and et.time() >= time(16, 20)):
         c = session_close(p["underlying"], exp)
         if c is None:
@@ -624,7 +626,7 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
     done = {e.get("slot") for e in ev if e.get("action") in ("mark", "mark_offhours")}
     # 预期盯市时点的统一账（Codex 034 §4）：每个已过窗口的预期时点最终必须是「成功 / 无报价 / 不可信报价 /
     # 取数失败 / 错过唤醒」之一；不成功的各升级一次。不再 return —— 前一窗口的欠账不能挡住本窗口取价。
-    aud = slot_audit(p, now, ev, done)
+    aud = pre_aud + slot_audit(p, now, ev, done)
     for slot in p["mark_slots_et"]:
         key = f"{today.isoformat()} {slot}"
         t0 = _hm(slot)
@@ -632,6 +634,13 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             continue
         q = depth([p["sell"], p["buy"]])
         back = max(now, _clock())                  # 报价取回时刻：执行资格按取回时判断（032 R1：15:59 请求、16:01 取回不得当盘内执行）
+        w_end = datetime.combine(today, t0, tzinfo=ET) + _td(minutes=SLOT_WINDOW_MIN)
+        if back >= w_end or back.astimezone(ET).date() != today:
+            # Codex 036 §5 探针：09:45 窗口、10:00 请求、10:02 返回，旧代码照样记 mark 并止损。返回已过窗 → 只留旁路记录，
+            # 不占本时点、不执行任何退出、不当作下一窗口的第一份报价；该时点由 slot_audit 记欠账（late_return）。
+            ev.append({"at": back.isoformat(), "action": "mark_late_return", "slot": key, "quotes": q,
+                       "requested_at": now.isoformat(), "returned_at": back.isoformat(), "window_end": w_end.isoformat()})
+            return "retry"
         v = close_value(q, p)
         if v is None:
             ev.append({"at": back.isoformat(), "action": "mark_retry", "slot": key, "quotes": q})
@@ -690,7 +699,15 @@ def slot_audit(p: dict, now: datetime, ev: list, done: set | None = None) -> lis
     d, last_day = max(t_in.astimezone(ET).date(), SLOT_AUDIT_FROM), min(now.astimezone(ET).date(), date.fromisoformat(p["expiry"]))
     out = []
     while d <= last_day:
-        if mc.is_trading_day(d):
+        td = mc.is_trading_day(d)
+        if td is None:                                   # 日历未覆盖：显式记未知（每天一次），不当作非交易日跳过
+            k0 = f"{d.isoformat()} *"
+            if k0 not in reported:
+                e = {"at": now.isoformat(), "action": "exit_unresolved", "slot": k0, "category": "calendar_unknown（交易日历未覆盖）",
+                     "attempts": 0, "indicative_value": None, "indicative_crosses_stop": None,
+                     "open_exposure_usd": (p.get("economics") or {}).get("max_loss_usd")}
+                ev.append(e); out.append(e)
+        if td:
             for sl in p.get("mark_slots_et") or []:
                 st = datetime.combine(d, _hm(sl), tzinfo=ET)
                 k = f"{d.isoformat()} {sl}"
@@ -698,19 +715,22 @@ def slot_audit(p: dict, now: datetime, ev: list, done: set | None = None) -> lis
                     continue
                 inc = [x for x in ev if x.get("slot") == k and x.get("action") == "mark_incomplete"]
                 rty = [x for x in ev if x.get("slot") == k and x.get("action") == "mark_retry"]
+                late = [x for x in ev if x.get("slot") == k and x.get("action") == "mark_late_return"]
                 errs = [x for x in ev if x.get("action") == "error" and st <= (_parse(x.get("at")) or st - _td(1)) < st + _td(minutes=SLOT_WINDOW_MIN)]
                 if inc:
                     cat, last = "quote_untrustworthy（有报价但估值体检不通过）", inc[-1]
                 elif rty:
                     cat, last = "no_quote（两腿报价缺失，无法估值）", rty[-1]
+                elif late:
+                    cat, last = "late_return（报价返回时已过窗口）", late[-1]
                 elif errs:
                     cat, last = "fetch_failed（取数抛异常）", errs[-1]
                 else:
                     cat, last = "missed_wake（窗口内没有任何取价尝试：调度未唤醒/被占用）", {}
                 val, sv = last.get("value"), p.get("stop_value")
                 e = {"at": now.isoformat(), "action": "exit_unresolved", "slot": k, "category": cat,
-                     "attempts": len(inc) + len(rty) + len(errs),
-                     "first_attempt_at": min((x["at"] for x in inc + rty + errs), default=None),
+                     "attempts": len(inc) + len(rty) + len(errs) + len(late),
+                     "first_attempt_at": min((x["at"] for x in inc + rty + errs + late), default=None),
                      "last_why": last.get("why") or last.get("error"), "indicative_value": val if _finite(val) else None,
                      "indicative_crosses_stop": (val >= sv) if (sv is not None and _finite(val)) else None,
                      "open_exposure_usd": (p.get("economics") or {}).get("max_loss_usd"),

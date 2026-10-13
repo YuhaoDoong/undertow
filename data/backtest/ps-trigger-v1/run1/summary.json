@@ -1,0 +1,2696 @@
+{
+ "ETF|long|bar|0.25": {
+  "candidates": 36,
+  "n": 34,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 1,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 0.247,
+  "atr_median": 0.23,
+  "win": 0.529,
+  "days_median": 22.5,
+  "entry_from_low_atr_median": 1.631,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "stop": 5,
+   "struct_exit": 29
+  },
+  "minus_hold_mean": -4.454,
+  "hold_mean": 4.701
+ },
+ "ETF|long|bar|0.5": {
+  "candidates": 35,
+  "n": 33,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 1,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 0.403,
+  "atr_median": 0.246,
+  "win": 0.545,
+  "days_median": 23,
+  "entry_from_low_atr_median": 1.651,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "stop": 5,
+   "struct_exit": 28
+  },
+  "minus_hold_mean": -4.556,
+  "hold_mean": 4.959
+ },
+ "ETF|long|bar|1": {
+  "candidates": 34,
+  "n": 32,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 1,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 0.104,
+  "atr_median": 0.447,
+  "win": 0.594,
+  "days_median": 35.5,
+  "entry_from_low_atr_median": 1.631,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 6,
+   "struct_exit": 25
+  },
+  "minus_hold_mean": -4.098,
+  "hold_mean": 4.202
+ },
+ "ETF|long|bar|0.5%": {
+  "candidates": 36,
+  "n": 34,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 1,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 0.445,
+  "atr_median": 0.23,
+  "win": 0.529,
+  "days_median": 22.5,
+  "entry_from_low_atr_median": 1.631,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "stop": 5,
+   "struct_exit": 29
+  },
+  "minus_hold_mean": -4.255,
+  "hold_mean": 4.701
+ },
+ "ETF|long|two|0.25": {
+  "candidates": 36,
+  "n": 21,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6,
+   "timeout_no_entry": 8,
+   "boundary_excluded": 1
+  },
+  "atr_mean": -0.266,
+  "atr_median": -0.404,
+  "win": 0.476,
+  "days_median": 20,
+  "entry_from_low_atr_median": 1.431,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "stop": 3,
+   "struct_exit": 18
+  },
+  "minus_hold_mean": -6.933,
+  "hold_mean": 6.667
+ },
+ "ETF|long|two|0.5": {
+  "candidates": 36,
+  "n": 21,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6,
+   "timeout_no_entry": 8,
+   "boundary_excluded": 1
+  },
+  "atr_mean": -0.23,
+  "atr_median": -0.404,
+  "win": 0.476,
+  "days_median": 20,
+  "entry_from_low_atr_median": 1.431,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "stop": 3,
+   "struct_exit": 18
+  },
+  "minus_hold_mean": -6.897,
+  "hold_mean": 6.667
+ },
+ "ETF|long|two|1": {
+  "candidates": 36,
+  "n": 21,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6,
+   "timeout_no_entry": 8,
+   "boundary_excluded": 1
+  },
+  "atr_mean": -0.32,
+  "atr_median": 0.083,
+  "win": 0.524,
+  "days_median": 29,
+  "entry_from_low_atr_median": 1.431,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "stop": 4,
+   "struct_exit": 17
+  },
+  "minus_hold_mean": -6.987,
+  "hold_mean": 6.667
+ },
+ "ETF|long|two|0.5%": {
+  "candidates": 36,
+  "n": 21,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6,
+   "timeout_no_entry": 8,
+   "boundary_excluded": 1
+  },
+  "atr_mean": -0.266,
+  "atr_median": -0.404,
+  "win": 0.476,
+  "days_median": 20,
+  "entry_from_low_atr_median": 1.431,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "stop": 3,
+   "struct_exit": 18
+  },
+  "minus_hold_mean": -6.933,
+  "hold_mean": 6.667
+ },
+ "ETF|long|atr|0.25": {
+  "candidates": 35,
+  "n": 32,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 0.121,
+  "atr_median": 0.425,
+  "win": 0.531,
+  "days_median": 21.5,
+  "entry_from_low_atr_median": 1.358,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "stop": 4,
+   "struct_exit": 28
+  },
+  "minus_hold_mean": -5.328,
+  "hold_mean": 5.448
+ },
+ "ETF|long|atr|0.5": {
+  "candidates": 35,
+  "n": 32,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 0.008,
+  "atr_median": 0.425,
+  "win": 0.531,
+  "days_median": 21.5,
+  "entry_from_low_atr_median": 1.358,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "stop": 4,
+   "struct_exit": 28
+  },
+  "minus_hold_mean": -5.44,
+  "hold_mean": 5.448
+ },
+ "ETF|long|atr|1": {
+  "candidates": 34,
+  "n": 31,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": -0.097,
+  "atr_median": 0.602,
+  "win": 0.581,
+  "days_median": 33,
+  "entry_from_low_atr_median": 1.341,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 5,
+   "struct_exit": 25
+  },
+  "minus_hold_mean": -4.779,
+  "hold_mean": 4.683
+ },
+ "ETF|long|atr|0.5%": {
+  "candidates": 35,
+  "n": 32,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 0.054,
+  "atr_median": 0.425,
+  "win": 0.531,
+  "days_median": 21.5,
+  "entry_from_low_atr_median": 1.358,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "stop": 4,
+   "struct_exit": 28
+  },
+  "minus_hold_mean": -5.395,
+  "hold_mean": 5.448
+ },
+ "ETF|long|limit|0.25": {
+  "candidates": 34,
+  "n": 31,
+  "not_entered": {
+   "timeout_no_entry": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 0.155,
+  "atr_median": 0.666,
+  "win": 0.548,
+  "days_median": 26,
+  "entry_from_low_atr_median": -1.17,
+  "entry_bars_after_low_median": 9,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 8,
+   "struct_exit": 21
+  },
+  "minus_hold_mean": -2.533,
+  "hold_mean": 2.688
+ },
+ "ETF|long|limit|0.5": {
+  "candidates": 34,
+  "n": 31,
+  "not_entered": {
+   "timeout_no_entry": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 0.606,
+  "atr_median": 0.666,
+  "win": 0.516,
+  "days_median": 26,
+  "entry_from_low_atr_median": -1.17,
+  "entry_bars_after_low_median": 9,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 8,
+   "struct_exit": 21
+  },
+  "minus_hold_mean": -2.082,
+  "hold_mean": 2.688
+ },
+ "ETF|long|limit|1": {
+  "candidates": 33,
+  "n": 30,
+  "not_entered": {
+   "timeout_no_entry": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 0.166,
+  "atr_median": 0.27,
+  "win": 0.5,
+  "days_median": 28.5,
+  "entry_from_low_atr_median": -0.847,
+  "entry_bars_after_low_median": 7.0,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 8,
+   "struct_exit": 20
+  },
+  "minus_hold_mean": -1.733,
+  "hold_mean": 1.898
+ },
+ "ETF|long|limit|0.5%": {
+  "candidates": 34,
+  "n": 31,
+  "not_entered": {
+   "timeout_no_entry": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 0.343,
+  "atr_median": 0.666,
+  "win": 0.548,
+  "days_median": 26,
+  "entry_from_low_atr_median": -1.17,
+  "entry_bars_after_low_median": 9,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 8,
+   "struct_exit": 21
+  },
+  "minus_hold_mean": -2.346,
+  "hold_mean": 2.688
+ },
+ "ETF|short|bar|0.25": {
+  "candidates": 30,
+  "n": 24,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 4,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -1.948,
+  "atr_median": -2.075,
+  "win": 0.25,
+  "days_median": 20.0,
+  "entry_from_low_atr_median": 1.323,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 3,
+   "stop": 8,
+   "struct_exit": 12
+  },
+  "minus_hold_mean": 0.094,
+  "hold_mean": -2.042
+ },
+ "ETF|short|bar|0.5": {
+  "candidates": 30,
+  "n": 24,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 4,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -1.537,
+  "atr_median": -2.624,
+  "win": 0.25,
+  "days_median": 23.0,
+  "entry_from_low_atr_median": 1.323,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 3,
+   "stop": 9,
+   "struct_exit": 11
+  },
+  "minus_hold_mean": 0.567,
+  "hold_mean": -2.104
+ },
+ "ETF|short|bar|1": {
+  "candidates": 30,
+  "n": 23,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 5,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -1.885,
+  "atr_median": -2.739,
+  "win": 0.261,
+  "days_median": 34,
+  "entry_from_low_atr_median": 1.349,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 3,
+   "stop": 9,
+   "struct_exit": 10
+  },
+  "minus_hold_mean": 0.222,
+  "hold_mean": -2.107
+ },
+ "ETF|short|bar|0.5%": {
+  "candidates": 30,
+  "n": 24,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 4,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -2.154,
+  "atr_median": -2.438,
+  "win": 0.25,
+  "days_median": 21.5,
+  "entry_from_low_atr_median": 1.323,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 3,
+   "stop": 9,
+   "struct_exit": 11
+  },
+  "minus_hold_mean": -0.05,
+  "hold_mean": -2.104
+ },
+ "ETF|short|two|0.25": {
+  "candidates": 30,
+  "n": 16,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 8,
+   "timeout_no_entry": 4,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -1.495,
+  "atr_median": -1.377,
+  "win": 0.312,
+  "days_median": 22.5,
+  "entry_from_low_atr_median": 1.331,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 1,
+   "stop": 5,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": -0.478,
+  "hold_mean": -1.017
+ },
+ "ETF|short|two|0.5": {
+  "candidates": 30,
+  "n": 16,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 8,
+   "timeout_no_entry": 4,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -1.538,
+  "atr_median": -2.52,
+  "win": 0.375,
+  "days_median": 33.5,
+  "entry_from_low_atr_median": 1.331,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 1,
+   "stop": 5,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": -0.522,
+  "hold_mean": -1.017
+ },
+ "ETF|short|two|1": {
+  "candidates": 30,
+  "n": 15,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 9,
+   "timeout_no_entry": 4,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -1.883,
+  "atr_median": -3.402,
+  "win": 0.4,
+  "days_median": 38,
+  "entry_from_low_atr_median": 1.446,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 1,
+   "stop": 5,
+   "struct_exit": 8
+  },
+  "minus_hold_mean": -0.935,
+  "hold_mean": -0.948
+ },
+ "ETF|short|two|0.5%": {
+  "candidates": 30,
+  "n": 16,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 8,
+   "timeout_no_entry": 4,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -1.495,
+  "atr_median": -1.377,
+  "win": 0.312,
+  "days_median": 22.5,
+  "entry_from_low_atr_median": 1.331,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 1,
+   "stop": 5,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": -0.478,
+  "hold_mean": -1.017
+ },
+ "ETF|short|atr|0.25": {
+  "candidates": 30,
+  "n": 24,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 3,
+   "boundary_excluded": 3
+  },
+  "atr_mean": -1.667,
+  "atr_median": -1.532,
+  "win": 0.25,
+  "days_median": 17.5,
+  "entry_from_low_atr_median": 1.162,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 2,
+   "stop": 8,
+   "struct_exit": 13
+  },
+  "minus_hold_mean": 0.113,
+  "hold_mean": -1.78
+ },
+ "ETF|short|atr|0.5": {
+  "candidates": 30,
+  "n": 24,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 3,
+   "boundary_excluded": 3
+  },
+  "atr_mean": -1.7,
+  "atr_median": -2.275,
+  "win": 0.292,
+  "days_median": 21.5,
+  "entry_from_low_atr_median": 1.162,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 2,
+   "stop": 9,
+   "struct_exit": 12
+  },
+  "minus_hold_mean": 0.143,
+  "hold_mean": -1.843
+ },
+ "ETF|short|atr|1": {
+  "candidates": 30,
+  "n": 23,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 4,
+   "boundary_excluded": 3
+  },
+  "atr_mean": -1.61,
+  "atr_median": -2.692,
+  "win": 0.261,
+  "days_median": 30,
+  "entry_from_low_atr_median": 1.177,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 2,
+   "stop": 9,
+   "struct_exit": 11
+  },
+  "minus_hold_mean": 0.224,
+  "hold_mean": -1.834
+ },
+ "ETF|short|atr|0.5%": {
+  "candidates": 30,
+  "n": 24,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 3,
+   "boundary_excluded": 3
+  },
+  "atr_mean": -1.846,
+  "atr_median": -2.115,
+  "win": 0.25,
+  "days_median": 17.5,
+  "entry_from_low_atr_median": 1.162,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 2,
+   "stop": 9,
+   "struct_exit": 12
+  },
+  "minus_hold_mean": -0.004,
+  "hold_mean": -1.843
+ },
+ "ETF|short|limit|0.25": {
+  "candidates": 30,
+  "n": 26,
+  "not_entered": {
+   "timeout_no_entry": 1,
+   "boundary_excluded": 3
+  },
+  "atr_mean": -0.655,
+  "atr_median": -0.889,
+  "win": 0.423,
+  "days_median": 21.0,
+  "entry_from_low_atr_median": -0.437,
+  "entry_bars_after_low_median": 5.0,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 4,
+   "struct_exit": 18
+  },
+  "minus_hold_mean": 2.319,
+  "hold_mean": -2.974
+ },
+ "ETF|short|limit|0.5": {
+  "candidates": 30,
+  "n": 25,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 1,
+   "timeout_no_entry": 1,
+   "boundary_excluded": 3
+  },
+  "atr_mean": -0.761,
+  "atr_median": -1.236,
+  "win": 0.36,
+  "days_median": 24,
+  "entry_from_low_atr_median": -0.437,
+  "entry_bars_after_low_median": 5.0,
+  "exit_reasons": {
+   "gap_stop": 3,
+   "stop": 5,
+   "struct_exit": 17
+  },
+  "minus_hold_mean": 2.203,
+  "hold_mean": -2.964
+ },
+ "ETF|short|limit|1": {
+  "candidates": 30,
+  "n": 25,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 1,
+   "timeout_no_entry": 1,
+   "boundary_excluded": 3
+  },
+  "atr_mean": -1.285,
+  "atr_median": -1.974,
+  "win": 0.32,
+  "days_median": 24,
+  "entry_from_low_atr_median": -0.437,
+  "entry_bars_after_low_median": 5.0,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 6,
+   "struct_exit": 15
+  },
+  "minus_hold_mean": 1.679,
+  "hold_mean": -2.964
+ },
+ "ETF|short|limit|0.5%": {
+  "candidates": 30,
+  "n": 26,
+  "not_entered": {
+   "timeout_no_entry": 1,
+   "boundary_excluded": 3
+  },
+  "atr_mean": -0.649,
+  "atr_median": -0.871,
+  "win": 0.423,
+  "days_median": 19.0,
+  "entry_from_low_atr_median": -0.437,
+  "entry_bars_after_low_median": 5.0,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 4,
+   "struct_exit": 18
+  },
+  "minus_hold_mean": 2.324,
+  "hold_mean": -2.974
+ },
+ "个股|long|bar|0.25": {
+  "candidates": 49,
+  "n": 41,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2,
+   "boundary_excluded": 6
+  },
+  "atr_mean": 1.79,
+  "atr_median": 0.31,
+  "win": 0.512,
+  "days_median": 34,
+  "entry_from_low_atr_median": 1.449,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 3,
+   "stop": 6,
+   "struct_exit": 32
+  },
+  "minus_hold_mean": -6.357,
+  "hold_mean": 8.147
+ },
+ "个股|long|bar|0.5": {
+  "candidates": 48,
+  "n": 39,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 3,
+   "boundary_excluded": 6
+  },
+  "atr_mean": 2.312,
+  "atr_median": 0.355,
+  "win": 0.538,
+  "days_median": 39,
+  "entry_from_low_atr_median": 1.463,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 6,
+   "struct_exit": 31
+  },
+  "minus_hold_mean": -5.88,
+  "hold_mean": 8.192
+ },
+ "个股|long|bar|1": {
+  "candidates": 48,
+  "n": 38,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 4,
+   "boundary_excluded": 6
+  },
+  "atr_mean": 3.335,
+  "atr_median": 1.641,
+  "win": 0.579,
+  "days_median": 52.5,
+  "entry_from_low_atr_median": 1.471,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 5,
+   "struct_exit": 32
+  },
+  "minus_hold_mean": -4.775,
+  "hold_mean": 8.11
+ },
+ "个股|long|bar|0.5%": {
+  "candidates": 49,
+  "n": 41,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2,
+   "boundary_excluded": 6
+  },
+  "atr_mean": 1.721,
+  "atr_median": 0.0,
+  "win": 0.488,
+  "days_median": 31,
+  "entry_from_low_atr_median": 1.449,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 3,
+   "stop": 6,
+   "struct_exit": 32
+  },
+  "minus_hold_mean": -6.426,
+  "hold_mean": 8.147
+ },
+ "个股|long|two|0.25": {
+  "candidates": 50,
+  "n": 20,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 3,
+   "timeout_no_entry": 24,
+   "open_beyond_stop": 1,
+   "boundary_excluded": 2
+  },
+  "atr_mean": 2.264,
+  "atr_median": 0.331,
+  "win": 0.55,
+  "days_median": 27.0,
+  "entry_from_low_atr_median": 1.355,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 2,
+   "struct_exit": 17
+  },
+  "minus_hold_mean": -3.71,
+  "hold_mean": 5.974
+ },
+ "个股|long|two|0.5": {
+  "candidates": 50,
+  "n": 20,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 4,
+   "timeout_no_entry": 24,
+   "boundary_excluded": 2
+  },
+  "atr_mean": 2.446,
+  "atr_median": 0.331,
+  "win": 0.55,
+  "days_median": 29.0,
+  "entry_from_low_atr_median": 1.355,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 2,
+   "struct_exit": 17
+  },
+  "minus_hold_mean": -3.528,
+  "hold_mean": 5.974
+ },
+ "个股|long|two|1": {
+  "candidates": 50,
+  "n": 20,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 4,
+   "timeout_no_entry": 24,
+   "boundary_excluded": 2
+  },
+  "atr_mean": 3.199,
+  "atr_median": 1.041,
+  "win": 0.55,
+  "days_median": 29.5,
+  "entry_from_low_atr_median": 1.472,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 1,
+   "stop": 2,
+   "struct_exit": 16
+  },
+  "minus_hold_mean": -2.552,
+  "hold_mean": 5.751
+ },
+ "个股|long|two|0.5%": {
+  "candidates": 50,
+  "n": 20,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 3,
+   "timeout_no_entry": 24,
+   "open_beyond_stop": 1,
+   "boundary_excluded": 2
+  },
+  "atr_mean": 2.264,
+  "atr_median": 0.331,
+  "win": 0.55,
+  "days_median": 27.0,
+  "entry_from_low_atr_median": 1.355,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 2,
+   "struct_exit": 17
+  },
+  "minus_hold_mean": -3.71,
+  "hold_mean": 5.974
+ },
+ "个股|long|atr|0.25": {
+  "candidates": 49,
+  "n": 41,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 1,
+   "boundary_excluded": 7
+  },
+  "atr_mean": 1.2,
+  "atr_median": -0.378,
+  "win": 0.439,
+  "days_median": 27,
+  "entry_from_low_atr_median": 1.237,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 5,
+   "struct_exit": 35
+  },
+  "minus_hold_mean": -7.614,
+  "hold_mean": 8.814
+ },
+ "个股|long|atr|0.5": {
+  "candidates": 48,
+  "n": 40,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 1,
+   "boundary_excluded": 7
+  },
+  "atr_mean": 1.51,
+  "atr_median": -0.339,
+  "win": 0.45,
+  "days_median": 28.5,
+  "entry_from_low_atr_median": 1.258,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 5,
+   "struct_exit": 34
+  },
+  "minus_hold_mean": -7.058,
+  "hold_mean": 8.568
+ },
+ "个股|long|atr|1": {
+  "candidates": 48,
+  "n": 39,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2,
+   "boundary_excluded": 7
+  },
+  "atr_mean": 1.798,
+  "atr_median": -0.691,
+  "win": 0.462,
+  "days_median": 30,
+  "entry_from_low_atr_median": 1.303,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 5,
+   "struct_exit": 33
+  },
+  "minus_hold_mean": -6.881,
+  "hold_mean": 8.679
+ },
+ "个股|long|atr|0.5%": {
+  "candidates": 49,
+  "n": 41,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 1,
+   "boundary_excluded": 7
+  },
+  "atr_mean": 1.204,
+  "atr_median": -0.378,
+  "win": 0.439,
+  "days_median": 27,
+  "entry_from_low_atr_median": 1.237,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 5,
+   "struct_exit": 35
+  },
+  "minus_hold_mean": -7.611,
+  "hold_mean": 8.814
+ },
+ "个股|long|limit|0.25": {
+  "candidates": 48,
+  "n": 39,
+  "not_entered": {
+   "timeout_no_entry": 3,
+   "boundary_excluded": 6
+  },
+  "atr_mean": 2.053,
+  "atr_median": 0.0,
+  "win": 0.487,
+  "days_median": 29,
+  "entry_from_low_atr_median": -0.852,
+  "entry_bars_after_low_median": 7.5,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 5,
+   "struct_exit": 32
+  },
+  "minus_hold_mean": -5.876,
+  "hold_mean": 7.929
+ },
+ "个股|long|limit|0.5": {
+  "candidates": 48,
+  "n": 39,
+  "not_entered": {
+   "timeout_no_entry": 3,
+   "boundary_excluded": 6
+  },
+  "atr_mean": 2.217,
+  "atr_median": 0.0,
+  "win": 0.487,
+  "days_median": 30,
+  "entry_from_low_atr_median": -0.852,
+  "entry_bars_after_low_median": 7.5,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 5,
+   "struct_exit": 32
+  },
+  "minus_hold_mean": -5.713,
+  "hold_mean": 7.929
+ },
+ "个股|long|limit|1": {
+  "candidates": 48,
+  "n": 39,
+  "not_entered": {
+   "timeout_no_entry": 3,
+   "boundary_excluded": 6
+  },
+  "atr_mean": 2.704,
+  "atr_median": -0.41,
+  "win": 0.462,
+  "days_median": 40,
+  "entry_from_low_atr_median": -0.852,
+  "entry_bars_after_low_median": 7.5,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 5,
+   "struct_exit": 32
+  },
+  "minus_hold_mean": -5.225,
+  "hold_mean": 7.929
+ },
+ "个股|long|limit|0.5%": {
+  "candidates": 48,
+  "n": 39,
+  "not_entered": {
+   "timeout_no_entry": 3,
+   "boundary_excluded": 6
+  },
+  "atr_mean": 2.053,
+  "atr_median": 0.0,
+  "win": 0.487,
+  "days_median": 29,
+  "entry_from_low_atr_median": -0.852,
+  "entry_bars_after_low_median": 7.5,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 5,
+   "struct_exit": 32
+  },
+  "minus_hold_mean": -5.876,
+  "hold_mean": 7.929
+ },
+ "个股|short|bar|0.25": {
+  "candidates": 54,
+  "n": 47,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 7
+  },
+  "atr_mean": -0.324,
+  "atr_median": -0.712,
+  "win": 0.447,
+  "days_median": 25,
+  "entry_from_low_atr_median": 1.222,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 13,
+   "struct_exit": 32
+  },
+  "minus_hold_mean": 1.345,
+  "hold_mean": -1.669
+ },
+ "个股|short|bar|0.5": {
+  "candidates": 54,
+  "n": 47,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 7
+  },
+  "atr_mean": -0.537,
+  "atr_median": -1.836,
+  "win": 0.447,
+  "days_median": 29,
+  "entry_from_low_atr_median": 1.214,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 3,
+   "stop": 14,
+   "struct_exit": 30
+  },
+  "minus_hold_mean": 1.173,
+  "hold_mean": -1.71
+ },
+ "个股|short|bar|1": {
+  "candidates": 54,
+  "n": 47,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 7
+  },
+  "atr_mean": -0.706,
+  "atr_median": -1.836,
+  "win": 0.426,
+  "days_median": 30,
+  "entry_from_low_atr_median": 1.183,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 16,
+   "struct_exit": 27
+  },
+  "minus_hold_mean": 1.013,
+  "hold_mean": -1.718
+ },
+ "个股|short|bar|0.5%": {
+  "candidates": 54,
+  "n": 47,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 7
+  },
+  "atr_mean": -0.536,
+  "atr_median": -0.712,
+  "win": 0.426,
+  "days_median": 24,
+  "entry_from_low_atr_median": 1.232,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 13,
+   "struct_exit": 32
+  },
+  "minus_hold_mean": 1.114,
+  "hold_mean": -1.65
+ },
+ "个股|short|two|0.25": {
+  "candidates": 55,
+  "n": 12,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 23,
+   "timeout_no_entry": 20
+  },
+  "atr_mean": 2.483,
+  "atr_median": 3.101,
+  "win": 0.667,
+  "days_median": 33.0,
+  "entry_from_low_atr_median": 1.342,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "stop": 1,
+   "struct_exit": 10
+  },
+  "minus_hold_mean": 1.419,
+  "hold_mean": 1.064
+ },
+ "个股|short|two|0.5": {
+  "candidates": 55,
+  "n": 12,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 23,
+   "timeout_no_entry": 20
+  },
+  "atr_mean": 2.078,
+  "atr_median": 3.101,
+  "win": 0.667,
+  "days_median": 33.0,
+  "entry_from_low_atr_median": 1.342,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 1,
+   "stop": 1,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": 1.014,
+  "hold_mean": 1.064
+ },
+ "个股|short|two|1": {
+  "candidates": 55,
+  "n": 12,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 23,
+   "timeout_no_entry": 20
+  },
+  "atr_mean": 2.043,
+  "atr_median": 3.135,
+  "win": 0.667,
+  "days_median": 41.0,
+  "entry_from_low_atr_median": 1.106,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 2,
+   "stop": 1,
+   "struct_exit": 8
+  },
+  "minus_hold_mean": 0.838,
+  "hold_mean": 1.205
+ },
+ "个股|short|two|0.5%": {
+  "candidates": 55,
+  "n": 12,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 23,
+   "timeout_no_entry": 20
+  },
+  "atr_mean": 1.912,
+  "atr_median": 2.864,
+  "win": 0.667,
+  "days_median": 29.5,
+  "entry_from_low_atr_median": 1.342,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "stop": 1,
+   "struct_exit": 10
+  },
+  "minus_hold_mean": 0.848,
+  "hold_mean": 1.064
+ },
+ "个股|short|atr|0.25": {
+  "candidates": 54,
+  "n": 48,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6
+  },
+  "atr_mean": -0.401,
+  "atr_median": -0.885,
+  "win": 0.458,
+  "days_median": 25.0,
+  "entry_from_low_atr_median": 1.161,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "stop": 13,
+   "struct_exit": 35
+  },
+  "minus_hold_mean": 1.324,
+  "hold_mean": -1.726
+ },
+ "个股|short|atr|0.5": {
+  "candidates": 54,
+  "n": 48,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6
+  },
+  "atr_mean": -0.556,
+  "atr_median": -1.229,
+  "win": 0.458,
+  "days_median": 26.5,
+  "entry_from_low_atr_median": 1.161,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 14,
+   "struct_exit": 32
+  },
+  "minus_hold_mean": 1.17,
+  "hold_mean": -1.726
+ },
+ "个股|short|atr|1": {
+  "candidates": 54,
+  "n": 48,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6
+  },
+  "atr_mean": -0.989,
+  "atr_median": -1.899,
+  "win": 0.438,
+  "days_median": 27.0,
+  "entry_from_low_atr_median": 1.193,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 16,
+   "struct_exit": 28
+  },
+  "minus_hold_mean": 0.806,
+  "hold_mean": -1.796
+ },
+ "个股|short|atr|0.5%": {
+  "candidates": 54,
+  "n": 48,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6
+  },
+  "atr_mean": -0.535,
+  "atr_median": -0.885,
+  "win": 0.458,
+  "days_median": 25.0,
+  "entry_from_low_atr_median": 1.163,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "stop": 12,
+   "struct_exit": 36
+  },
+  "minus_hold_mean": 1.152,
+  "hold_mean": -1.687
+ },
+ "个股|short|limit|0.25": {
+  "candidates": 54,
+  "n": 51,
+  "not_entered": {
+   "timeout_no_entry": 3
+  },
+  "atr_mean": -0.211,
+  "atr_median": -0.475,
+  "win": 0.373,
+  "days_median": 24,
+  "entry_from_low_atr_median": -1.439,
+  "entry_bars_after_low_median": 4,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 7,
+   "struct_exit": 40
+  },
+  "minus_hold_mean": 1.769,
+  "hold_mean": -1.98
+ },
+ "个股|short|limit|0.5": {
+  "candidates": 54,
+  "n": 51,
+  "not_entered": {
+   "timeout_no_entry": 3
+  },
+  "atr_mean": -0.329,
+  "atr_median": -1.009,
+  "win": 0.333,
+  "days_median": 26,
+  "entry_from_low_atr_median": -1.439,
+  "entry_bars_after_low_median": 4,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 11,
+   "struct_exit": 36
+  },
+  "minus_hold_mean": 1.645,
+  "hold_mean": -1.975
+ },
+ "个股|short|limit|1": {
+  "candidates": 54,
+  "n": 51,
+  "not_entered": {
+   "timeout_no_entry": 3
+  },
+  "atr_mean": -0.321,
+  "atr_median": -1.424,
+  "win": 0.314,
+  "days_median": 28,
+  "entry_from_low_atr_median": -0.887,
+  "entry_bars_after_low_median": 5.5,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 12,
+   "struct_exit": 35
+  },
+  "minus_hold_mean": 1.663,
+  "hold_mean": -1.984
+ },
+ "个股|short|limit|0.5%": {
+  "candidates": 54,
+  "n": 51,
+  "not_entered": {
+   "timeout_no_entry": 3
+  },
+  "atr_mean": -0.222,
+  "atr_median": -0.651,
+  "win": 0.353,
+  "days_median": 23,
+  "entry_from_low_atr_median": -1.439,
+  "entry_bars_after_low_median": 4,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 8,
+   "struct_exit": 39
+  },
+  "minus_hold_mean": 1.758,
+  "hold_mean": -1.98
+ },
+ "连续期货|long|bar|0.25": {
+  "candidates": 14,
+  "n": 11,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 1.094,
+  "atr_median": -0.339,
+  "win": 0.455,
+  "days_median": 31,
+  "entry_from_low_atr_median": 1.502,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 1,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": -1.554,
+  "hold_mean": 2.647
+ },
+ "连续期货|long|bar|0.5": {
+  "candidates": 14,
+  "n": 11,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 3
+  },
+  "atr_mean": 1.094,
+  "atr_median": -0.339,
+  "win": 0.455,
+  "days_median": 31,
+  "entry_from_low_atr_median": 1.502,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 1,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": -1.554,
+  "hold_mean": 2.647
+ },
+ "连续期货|long|bar|1": {
+  "candidates": 14,
+  "n": 11,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 3
+  },
+  "atr_mean": 1.077,
+  "atr_median": -0.339,
+  "win": 0.455,
+  "days_median": 33,
+  "entry_from_low_atr_median": 1.502,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 1,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": -1.57,
+  "hold_mean": 2.647
+ },
+ "连续期货|long|bar|0.5%": {
+  "candidates": 14,
+  "n": 11,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 3
+  },
+  "atr_mean": 1.077,
+  "atr_median": -0.339,
+  "win": 0.455,
+  "days_median": 33,
+  "entry_from_low_atr_median": 1.502,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 1,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": -1.57,
+  "hold_mean": 2.647
+ },
+ "连续期货|long|two|0.25": {
+  "candidates": 14,
+  "n": 3,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6,
+   "timeout_no_entry": 5
+  },
+  "atr_mean": -3.473,
+  "atr_median": -2.878,
+  "win": 0.0,
+  "days_median": 16,
+  "entry_from_low_atr_median": 2.101,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "stop": 2,
+   "struct_exit": 1
+  },
+  "minus_hold_mean": 0.671,
+  "hold_mean": -4.143
+ },
+ "连续期货|long|two|0.5": {
+  "candidates": 14,
+  "n": 3,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6,
+   "timeout_no_entry": 5
+  },
+  "atr_mean": -3.231,
+  "atr_median": -2.152,
+  "win": 0.0,
+  "days_median": 26,
+  "entry_from_low_atr_median": 2.101,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "stop": 2,
+   "struct_exit": 1
+  },
+  "minus_hold_mean": 0.913,
+  "hold_mean": -4.143
+ },
+ "连续期货|long|two|1": {
+  "candidates": 14,
+  "n": 2,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 7,
+   "timeout_no_entry": 5
+  },
+  "atr_mean": -4.552,
+  "atr_median": -4.552,
+  "win": 0.0,
+  "days_median": 30.0,
+  "entry_from_low_atr_median": 2.14,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "stop": 1,
+   "struct_exit": 1
+  },
+  "minus_hold_mean": 1.369,
+  "hold_mean": -5.921
+ },
+ "连续期货|long|two|0.5%": {
+  "candidates": 14,
+  "n": 3,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6,
+   "timeout_no_entry": 5
+  },
+  "atr_mean": -2.625,
+  "atr_median": -0.588,
+  "win": 0.0,
+  "days_median": 26,
+  "entry_from_low_atr_median": 2.101,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "stop": 2,
+   "struct_exit": 1
+  },
+  "minus_hold_mean": 1.518,
+  "hold_mean": -4.143
+ },
+ "连续期货|long|atr|0.25": {
+  "candidates": 14,
+  "n": 12,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 1,
+   "boundary_excluded": 1
+  },
+  "atr_mean": 0.192,
+  "atr_median": -0.97,
+  "win": 0.417,
+  "days_median": 23.0,
+  "entry_from_low_atr_median": 1.648,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "stop": 3,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": -2.01,
+  "hold_mean": 2.202
+ },
+ "连续期货|long|atr|0.5": {
+  "candidates": 14,
+  "n": 12,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2
+  },
+  "atr_mean": 1.033,
+  "atr_median": -0.97,
+  "win": 0.417,
+  "days_median": 23.0,
+  "entry_from_low_atr_median": 1.648,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "stop": 3,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": -1.168,
+  "hold_mean": 2.202
+ },
+ "连续期货|long|atr|1": {
+  "candidates": 14,
+  "n": 12,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2
+  },
+  "atr_mean": 1.056,
+  "atr_median": -0.97,
+  "win": 0.417,
+  "days_median": 30.0,
+  "entry_from_low_atr_median": 1.648,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "stop": 3,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": -1.146,
+  "hold_mean": 2.202
+ },
+ "连续期货|long|atr|0.5%": {
+  "candidates": 14,
+  "n": 12,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2
+  },
+  "atr_mean": 0.567,
+  "atr_median": 0.361,
+  "win": 0.5,
+  "days_median": 28.5,
+  "entry_from_low_atr_median": 1.648,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "stop": 3,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": -1.635,
+  "hold_mean": 2.202
+ },
+ "连续期货|long|limit|0.25": {
+  "candidates": 14,
+  "n": 11,
+  "not_entered": {
+   "timeout_no_entry": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": -0.506,
+  "atr_median": -1.417,
+  "win": 0.455,
+  "days_median": 16,
+  "entry_from_low_atr_median": -1.704,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "stop": 3,
+   "struct_exit": 8
+  },
+  "minus_hold_mean": -1.864,
+  "hold_mean": 1.358
+ },
+ "连续期货|long|limit|0.5": {
+  "candidates": 14,
+  "n": 11,
+  "not_entered": {
+   "timeout_no_entry": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": -0.506,
+  "atr_median": -1.417,
+  "win": 0.455,
+  "days_median": 16,
+  "entry_from_low_atr_median": -1.704,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "stop": 3,
+   "struct_exit": 8
+  },
+  "minus_hold_mean": -1.864,
+  "hold_mean": 1.358
+ },
+ "连续期货|long|limit|1": {
+  "candidates": 14,
+  "n": 11,
+  "not_entered": {
+   "timeout_no_entry": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": -0.78,
+  "atr_median": -1.639,
+  "win": 0.364,
+  "days_median": 19,
+  "entry_from_low_atr_median": -1.704,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "stop": 3,
+   "struct_exit": 8
+  },
+  "minus_hold_mean": -2.137,
+  "hold_mean": 1.358
+ },
+ "连续期货|long|limit|0.5%": {
+  "candidates": 14,
+  "n": 11,
+  "not_entered": {
+   "timeout_no_entry": 2,
+   "boundary_excluded": 1
+  },
+  "atr_mean": -0.506,
+  "atr_median": -1.417,
+  "win": 0.455,
+  "days_median": 16,
+  "entry_from_low_atr_median": -1.704,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "stop": 3,
+   "struct_exit": 8
+  },
+  "minus_hold_mean": -1.864,
+  "hold_mean": 1.358
+ },
+ "连续期货|short|bar|0.25": {
+  "candidates": 22,
+  "n": 16,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 4,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -1.848,
+  "atr_median": -1.657,
+  "win": 0.25,
+  "days_median": 19.5,
+  "entry_from_low_atr_median": 1.055,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "gap_stop": 3,
+   "stop": 4,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": 2.658,
+  "hold_mean": -4.505
+ },
+ "连续期货|short|bar|0.5": {
+  "candidates": 22,
+  "n": 16,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 4,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -2.283,
+  "atr_median": -2.022,
+  "win": 0.25,
+  "days_median": 24.0,
+  "entry_from_low_atr_median": 0.934,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 4,
+   "struct_exit": 8
+  },
+  "minus_hold_mean": 2.17,
+  "hold_mean": -4.453
+ },
+ "连续期货|short|bar|1": {
+  "candidates": 22,
+  "n": 15,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 5,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -2.743,
+  "atr_median": -2.683,
+  "win": 0.2,
+  "days_median": 30,
+  "entry_from_low_atr_median": 0.956,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 5,
+   "stop": 3,
+   "struct_exit": 7
+  },
+  "minus_hold_mean": 1.956,
+  "hold_mean": -4.699
+ },
+ "连续期货|short|bar|0.5%": {
+  "candidates": 22,
+  "n": 16,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 4,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -1.789,
+  "atr_median": -1.629,
+  "win": 0.25,
+  "days_median": 20.5,
+  "entry_from_low_atr_median": 0.934,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "gap_stop": 3,
+   "stop": 4,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": 2.664,
+  "hold_mean": -4.453
+ },
+ "连续期货|short|two|0.25": {
+  "candidates": 22,
+  "n": 1,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 13,
+   "timeout_no_entry": 8
+  },
+  "atr_mean": -6.039,
+  "atr_median": -6.039,
+  "win": 0.0,
+  "days_median": 26,
+  "entry_from_low_atr_median": -0.358,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "gap_stop": 1
+  },
+  "minus_hold_mean": 0.0,
+  "hold_mean": -6.039
+ },
+ "连续期货|short|two|0.5": {
+  "candidates": 22,
+  "n": 1,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 13,
+   "timeout_no_entry": 8
+  },
+  "atr_mean": -6.039,
+  "atr_median": -6.039,
+  "win": 0.0,
+  "days_median": 26,
+  "entry_from_low_atr_median": -0.358,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "gap_stop": 1
+  },
+  "minus_hold_mean": 0.0,
+  "hold_mean": -6.039
+ },
+ "连续期货|short|two|1": {
+  "candidates": 22,
+  "n": 1,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 13,
+   "timeout_no_entry": 8
+  },
+  "atr_mean": -6.039,
+  "atr_median": -6.039,
+  "win": 0.0,
+  "days_median": 26,
+  "entry_from_low_atr_median": -0.358,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "gap_stop": 1
+  },
+  "minus_hold_mean": 0.0,
+  "hold_mean": -6.039
+ },
+ "连续期货|short|two|0.5%": {
+  "candidates": 22,
+  "n": 1,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 13,
+   "timeout_no_entry": 8
+  },
+  "atr_mean": -6.039,
+  "atr_median": -6.039,
+  "win": 0.0,
+  "days_median": 26,
+  "entry_from_low_atr_median": -0.358,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "gap_stop": 1
+  },
+  "minus_hold_mean": 0.0,
+  "hold_mean": -6.039
+ },
+ "连续期货|short|atr|0.25": {
+  "candidates": 19,
+  "n": 15,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -2.63,
+  "atr_median": -3.681,
+  "win": 0.2,
+  "days_median": 20,
+  "entry_from_low_atr_median": 1.334,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 2,
+   "stop": 5,
+   "struct_exit": 7
+  },
+  "minus_hold_mean": 1.578,
+  "hold_mean": -4.208
+ },
+ "连续期货|short|atr|0.5": {
+  "candidates": 19,
+  "n": 15,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -2.691,
+  "atr_median": -3.681,
+  "win": 0.2,
+  "days_median": 20,
+  "entry_from_low_atr_median": 1.176,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 2,
+   "stop": 5,
+   "struct_exit": 7
+  },
+  "minus_hold_mean": 1.578,
+  "hold_mean": -4.269
+ },
+ "连续期货|short|atr|1": {
+  "candidates": 19,
+  "n": 14,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 3,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -3.379,
+  "atr_median": -4.363,
+  "win": 0.143,
+  "days_median": 25.5,
+  "entry_from_low_atr_median": 1.255,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 3,
+   "stop": 5,
+   "struct_exit": 5
+  },
+  "minus_hold_mean": 1.14,
+  "hold_mean": -4.519
+ },
+ "连续期货|short|atr|0.5%": {
+  "candidates": 19,
+  "n": 15,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 2,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -2.5,
+  "atr_median": -3.309,
+  "win": 0.2,
+  "days_median": 20,
+  "entry_from_low_atr_median": 1.176,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 2,
+   "stop": 5,
+   "struct_exit": 7
+  },
+  "minus_hold_mean": 1.77,
+  "hold_mean": -4.269
+ },
+ "连续期货|short|limit|0.25": {
+  "candidates": 22,
+  "n": 20,
+  "not_entered": {
+   "boundary_excluded": 2
+  },
+  "atr_mean": -1.461,
+  "atr_median": -1.309,
+  "win": 0.4,
+  "days_median": 16.5,
+  "entry_from_low_atr_median": -0.926,
+  "entry_bars_after_low_median": 5.5,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 5,
+   "struct_exit": 11
+  },
+  "minus_hold_mean": 3.049,
+  "hold_mean": -4.509
+ },
+ "连续期货|short|limit|0.5": {
+  "candidates": 22,
+  "n": 20,
+  "not_entered": {
+   "boundary_excluded": 2
+  },
+  "atr_mean": -1.754,
+  "atr_median": -2.145,
+  "win": 0.4,
+  "days_median": 18.0,
+  "entry_from_low_atr_median": -0.926,
+  "entry_bars_after_low_median": 5.5,
+  "exit_reasons": {
+   "gap_stop": 5,
+   "stop": 5,
+   "struct_exit": 10
+  },
+  "minus_hold_mean": 2.756,
+  "hold_mean": -4.509
+ },
+ "连续期货|short|limit|1": {
+  "candidates": 22,
+  "n": 20,
+  "not_entered": {
+   "boundary_excluded": 2
+  },
+  "atr_mean": -2.09,
+  "atr_median": -2.145,
+  "win": 0.3,
+  "days_median": 19.5,
+  "entry_from_low_atr_median": -0.926,
+  "entry_bars_after_low_median": 5.5,
+  "exit_reasons": {
+   "gap_stop": 6,
+   "stop": 5,
+   "struct_exit": 9
+  },
+  "minus_hold_mean": 2.33,
+  "hold_mean": -4.42
+ },
+ "连续期货|short|limit|0.5%": {
+  "candidates": 22,
+  "n": 20,
+  "not_entered": {
+   "boundary_excluded": 2
+  },
+  "atr_mean": -1.461,
+  "atr_median": -1.309,
+  "win": 0.4,
+  "days_median": 16.5,
+  "entry_from_low_atr_median": -0.926,
+  "entry_bars_after_low_median": 5.5,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 5,
+   "struct_exit": 11
+  },
+  "minus_hold_mean": 3.049,
+  "hold_mean": -4.509
+ },
+ "全部|long|bar|0.25": {
+  "candidates": 99,
+  "n": 86,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 5,
+   "boundary_excluded": 8
+  },
+  "atr_mean": 1.091,
+  "atr_median": 0.23,
+  "win": 0.512,
+  "days_median": 27.0,
+  "entry_from_low_atr_median": 1.474,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 12,
+   "struct_exit": 70
+  },
+  "minus_hold_mean": -4.99,
+  "hold_mean": 6.081
+ },
+ "全部|long|bar|0.5": {
+  "candidates": 97,
+  "n": 83,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 7,
+   "boundary_excluded": 7
+  },
+  "atr_mean": 1.391,
+  "atr_median": 0.31,
+  "win": 0.53,
+  "days_median": 29,
+  "entry_from_low_atr_median": 1.5,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 3,
+   "stop": 12,
+   "struct_exit": 68
+  },
+  "minus_hold_mean": -4.78,
+  "hold_mean": 6.172
+ },
+ "全部|long|bar|1": {
+  "candidates": 96,
+  "n": 81,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 8,
+   "boundary_excluded": 7
+  },
+  "atr_mean": 1.752,
+  "atr_median": 0.618,
+  "win": 0.568,
+  "days_median": 40,
+  "entry_from_low_atr_median": 1.5,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 3,
+   "stop": 12,
+   "struct_exit": 66
+  },
+  "minus_hold_mean": -4.072,
+  "hold_mean": 5.824
+ },
+ "全部|long|bar|0.5%": {
+  "candidates": 99,
+  "n": 86,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6,
+   "boundary_excluded": 7
+  },
+  "atr_mean": 1.134,
+  "atr_median": 0.107,
+  "win": 0.5,
+  "days_median": 27.5,
+  "entry_from_low_atr_median": 1.474,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 12,
+   "struct_exit": 70
+  },
+  "minus_hold_mean": -4.947,
+  "hold_mean": 6.081
+ },
+ "全部|long|two|0.25": {
+  "candidates": 100,
+  "n": 44,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 15,
+   "timeout_no_entry": 37,
+   "open_beyond_stop": 1,
+   "boundary_excluded": 3
+  },
+  "atr_mean": 0.665,
+  "atr_median": -0.271,
+  "win": 0.477,
+  "days_median": 23.5,
+  "entry_from_low_atr_median": 1.44,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 7,
+   "struct_exit": 36
+  },
+  "minus_hold_mean": -4.95,
+  "hold_mean": 5.615
+ },
+ "全部|long|two|0.5": {
+  "candidates": 100,
+  "n": 44,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 16,
+   "timeout_no_entry": 37,
+   "boundary_excluded": 3
+  },
+  "atr_mean": 0.782,
+  "atr_median": -0.271,
+  "win": 0.477,
+  "days_median": 25.0,
+  "entry_from_low_atr_median": 1.44,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 7,
+   "struct_exit": 36
+  },
+  "minus_hold_mean": -4.833,
+  "hold_mean": 5.615
+ },
+ "全部|long|two|1": {
+  "candidates": 100,
+  "n": 43,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 17,
+   "timeout_no_entry": 37,
+   "boundary_excluded": 3
+  },
+  "atr_mean": 1.12,
+  "atr_median": 0.083,
+  "win": 0.512,
+  "days_median": 29,
+  "entry_from_low_atr_median": 1.456,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 1,
+   "stop": 7,
+   "struct_exit": 34
+  },
+  "minus_hold_mean": -4.536,
+  "hold_mean": 5.655
+ },
+ "全部|long|two|0.5%": {
+  "candidates": 100,
+  "n": 44,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 15,
+   "timeout_no_entry": 37,
+   "open_beyond_stop": 1,
+   "boundary_excluded": 3
+  },
+  "atr_mean": 0.723,
+  "atr_median": -0.237,
+  "win": 0.477,
+  "days_median": 25.0,
+  "entry_from_low_atr_median": 1.44,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 7,
+   "struct_exit": 36
+  },
+  "minus_hold_mean": -4.892,
+  "hold_mean": 5.615
+ },
+ "全部|long|atr|0.25": {
+  "candidates": 98,
+  "n": 85,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 4,
+   "boundary_excluded": 9
+  },
+  "atr_mean": 0.651,
+  "atr_median": -0.24,
+  "win": 0.471,
+  "days_median": 26,
+  "entry_from_low_atr_median": 1.323,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 12,
+   "struct_exit": 72
+  },
+  "minus_hold_mean": -5.962,
+  "hold_mean": 6.614
+ },
+ "全部|long|atr|0.5": {
+  "candidates": 97,
+  "n": 84,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 5,
+   "boundary_excluded": 8
+  },
+  "atr_mean": 0.87,
+  "atr_median": -0.259,
+  "win": 0.476,
+  "days_median": 27.0,
+  "entry_from_low_atr_median": 1.332,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 12,
+   "struct_exit": 71
+  },
+  "minus_hold_mean": -5.6,
+  "hold_mean": 6.47
+ },
+ "全部|long|atr|1": {
+  "candidates": 96,
+  "n": 82,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 6,
+   "boundary_excluded": 8
+  },
+  "atr_mean": 0.973,
+  "atr_median": 0.04,
+  "win": 0.5,
+  "days_median": 30.5,
+  "entry_from_low_atr_median": 1.35,
+  "entry_bars_after_low_median": 2.0,
+  "exit_reasons": {
+   "gap_stop": 2,
+   "stop": 13,
+   "struct_exit": 67
+  },
+  "minus_hold_mean": -5.247,
+  "hold_mean": 6.22
+ },
+ "全部|long|atr|0.5%": {
+  "candidates": 98,
+  "n": 85,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 5,
+   "boundary_excluded": 8
+  },
+  "atr_mean": 0.681,
+  "atr_median": -0.218,
+  "win": 0.482,
+  "days_median": 26,
+  "entry_from_low_atr_median": 1.323,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "gap_stop": 1,
+   "stop": 12,
+   "struct_exit": 72
+  },
+  "minus_hold_mean": -5.933,
+  "hold_mean": 6.614
+ },
+ "全部|long|limit|0.25": {
+  "candidates": 96,
+  "n": 81,
+  "not_entered": {
+   "timeout_no_entry": 7,
+   "boundary_excluded": 8
+  },
+  "atr_mean": 0.979,
+  "atr_median": 0.035,
+  "win": 0.506,
+  "days_median": 26,
+  "entry_from_low_atr_median": -1.275,
+  "entry_bars_after_low_median": 7.0,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 16,
+   "struct_exit": 61
+  },
+  "minus_hold_mean": -4.052,
+  "hold_mean": 5.031
+ },
+ "全部|long|limit|0.5": {
+  "candidates": 96,
+  "n": 81,
+  "not_entered": {
+   "timeout_no_entry": 7,
+   "boundary_excluded": 8
+  },
+  "atr_mean": 1.23,
+  "atr_median": 0.0,
+  "win": 0.494,
+  "days_median": 26,
+  "entry_from_low_atr_median": -1.275,
+  "entry_bars_after_low_median": 7.0,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 16,
+   "struct_exit": 61
+  },
+  "minus_hold_mean": -3.801,
+  "hold_mean": 5.031
+ },
+ "全部|long|limit|1": {
+  "candidates": 95,
+  "n": 80,
+  "not_entered": {
+   "timeout_no_entry": 7,
+   "boundary_excluded": 8
+  },
+  "atr_mean": 1.273,
+  "atr_median": -0.286,
+  "win": 0.463,
+  "days_median": 30.0,
+  "entry_from_low_atr_median": -1.17,
+  "entry_bars_after_low_median": 5,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 16,
+   "struct_exit": 60
+  },
+  "minus_hold_mean": -3.491,
+  "hold_mean": 4.764
+ },
+ "全部|long|limit|0.5%": {
+  "candidates": 96,
+  "n": 81,
+  "not_entered": {
+   "timeout_no_entry": 7,
+   "boundary_excluded": 8
+  },
+  "atr_mean": 1.051,
+  "atr_median": 0.035,
+  "win": 0.506,
+  "days_median": 26,
+  "entry_from_low_atr_median": -1.275,
+  "entry_bars_after_low_median": 7.0,
+  "exit_reasons": {
+   "gap_stop": 4,
+   "stop": 16,
+   "struct_exit": 61
+  },
+  "minus_hold_mean": -3.98,
+  "hold_mean": 5.031
+ },
+ "全部|short|bar|0.25": {
+  "candidates": 106,
+  "n": 87,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 15,
+   "boundary_excluded": 4
+  },
+  "atr_mean": -1.052,
+  "atr_median": -1.414,
+  "win": 0.356,
+  "days_median": 23,
+  "entry_from_low_atr_median": 1.232,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 8,
+   "stop": 25,
+   "struct_exit": 53
+  },
+  "minus_hold_mean": 1.241,
+  "hold_mean": -2.293
+ },
+ "全部|short|bar|0.5": {
+  "candidates": 106,
+  "n": 87,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 15,
+   "boundary_excluded": 4
+  },
+  "atr_mean": -1.134,
+  "atr_median": -2.075,
+  "win": 0.356,
+  "days_median": 25,
+  "entry_from_low_atr_median": 1.214,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 10,
+   "stop": 27,
+   "struct_exit": 49
+  },
+  "minus_hold_mean": 1.189,
+  "hold_mean": -2.323
+ },
+ "全部|short|bar|1": {
+  "candidates": 106,
+  "n": 85,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 17,
+   "boundary_excluded": 4
+  },
+  "atr_mean": -1.384,
+  "atr_median": -2.104,
+  "win": 0.341,
+  "days_median": 30,
+  "entry_from_low_atr_median": 1.196,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 12,
+   "stop": 28,
+   "struct_exit": 44
+  },
+  "minus_hold_mean": 0.965,
+  "hold_mean": -2.349
+ },
+ "全部|short|bar|0.5%": {
+  "candidates": 106,
+  "n": 87,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 15,
+   "boundary_excluded": 4
+  },
+  "atr_mean": -1.213,
+  "atr_median": -1.915,
+  "win": 0.345,
+  "days_median": 23,
+  "entry_from_low_atr_median": 1.232,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 1,
+   "gap_stop": 8,
+   "stop": 26,
+   "struct_exit": 52
+  },
+  "minus_hold_mean": 1.078,
+  "hold_mean": -2.291
+ },
+ "全部|short|two|0.25": {
+  "candidates": 107,
+  "n": 29,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 44,
+   "timeout_no_entry": 32,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -0.005,
+  "atr_median": -0.233,
+  "win": 0.448,
+  "days_median": 27,
+  "entry_from_low_atr_median": 1.247,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "admin_cap": 2,
+   "gap_stop": 2,
+   "stop": 6,
+   "struct_exit": 19
+  },
+  "minus_hold_mean": 0.323,
+  "hold_mean": -0.329
+ },
+ "全部|short|two|0.5": {
+  "candidates": 107,
+  "n": 29,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 44,
+   "timeout_no_entry": 32,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -0.197,
+  "atr_median": -0.233,
+  "win": 0.483,
+  "days_median": 32,
+  "entry_from_low_atr_median": 1.247,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "admin_cap": 2,
+   "gap_stop": 3,
+   "stop": 6,
+   "struct_exit": 18
+  },
+  "minus_hold_mean": 0.132,
+  "hold_mean": -0.329
+ },
+ "全部|short|two|1": {
+  "candidates": 107,
+  "n": 28,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 45,
+   "timeout_no_entry": 32,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -0.349,
+  "atr_median": -0.036,
+  "win": 0.5,
+  "days_median": 37.5,
+  "entry_from_low_atr_median": 1.232,
+  "entry_bars_after_low_median": 3.0,
+  "exit_reasons": {
+   "admin_cap": 2,
+   "gap_stop": 4,
+   "stop": 6,
+   "struct_exit": 16
+  },
+  "minus_hold_mean": -0.142,
+  "hold_mean": -0.207
+ },
+ "全部|short|two|0.5%": {
+  "candidates": 107,
+  "n": 29,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 44,
+   "timeout_no_entry": 32,
+   "boundary_excluded": 2
+  },
+  "atr_mean": -0.242,
+  "atr_median": -0.233,
+  "win": 0.448,
+  "days_median": 27,
+  "entry_from_low_atr_median": 1.247,
+  "entry_bars_after_low_median": 3,
+  "exit_reasons": {
+   "admin_cap": 2,
+   "gap_stop": 2,
+   "stop": 6,
+   "struct_exit": 19
+  },
+  "minus_hold_mean": 0.087,
+  "hold_mean": -0.329
+ },
+ "全部|short|atr|0.25": {
+  "candidates": 103,
+  "n": 87,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 11,
+   "boundary_excluded": 5
+  },
+  "atr_mean": -1.135,
+  "atr_median": -1.533,
+  "win": 0.356,
+  "days_median": 21,
+  "entry_from_low_atr_median": 1.177,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 2,
+   "gap_stop": 4,
+   "stop": 26,
+   "struct_exit": 55
+  },
+  "minus_hold_mean": 1.034,
+  "hold_mean": -2.169
+ },
+ "全部|short|atr|0.5": {
+  "candidates": 103,
+  "n": 87,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 11,
+   "boundary_excluded": 5
+  },
+  "atr_mean": -1.24,
+  "atr_median": -1.786,
+  "win": 0.368,
+  "days_median": 25,
+  "entry_from_low_atr_median": 1.176,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 2,
+   "gap_stop": 6,
+   "stop": 28,
+   "struct_exit": 51
+  },
+  "minus_hold_mean": 0.957,
+  "hold_mean": -2.196
+ },
+ "全部|short|atr|1": {
+  "candidates": 103,
+  "n": 85,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 13,
+   "boundary_excluded": 5
+  },
+  "atr_mean": -1.551,
+  "atr_median": -2.59,
+  "win": 0.341,
+  "days_median": 27,
+  "entry_from_low_atr_median": 1.191,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 2,
+   "gap_stop": 9,
+   "stop": 30,
+   "struct_exit": 44
+  },
+  "minus_hold_mean": 0.704,
+  "hold_mean": -2.254
+ },
+ "全部|short|atr|0.5%": {
+  "candidates": 103,
+  "n": 87,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 11,
+   "boundary_excluded": 5
+  },
+  "atr_mean": -1.235,
+  "atr_median": -1.628,
+  "win": 0.356,
+  "days_median": 21,
+  "entry_from_low_atr_median": 1.176,
+  "entry_bars_after_low_median": 2,
+  "exit_reasons": {
+   "admin_cap": 2,
+   "gap_stop": 4,
+   "stop": 26,
+   "struct_exit": 55
+  },
+  "minus_hold_mean": 0.94,
+  "hold_mean": -2.175
+ },
+ "全部|short|limit|0.25": {
+  "candidates": 106,
+  "n": 97,
+  "not_entered": {
+   "timeout_no_entry": 4,
+   "boundary_excluded": 5
+  },
+  "atr_mean": -0.588,
+  "atr_median": -0.584,
+  "win": 0.392,
+  "days_median": 21,
+  "entry_from_low_atr_median": -0.861,
+  "entry_bars_after_low_median": 4,
+  "exit_reasons": {
+   "gap_stop": 12,
+   "stop": 16,
+   "struct_exit": 69
+  },
+  "minus_hold_mean": 2.18,
+  "hold_mean": -2.768
+ },
+ "全部|short|limit|0.5": {
+  "candidates": 106,
+  "n": 96,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 1,
+   "timeout_no_entry": 4,
+   "boundary_excluded": 5
+  },
+  "atr_mean": -0.738,
+  "atr_median": -1.181,
+  "win": 0.354,
+  "days_median": 23.5,
+  "entry_from_low_atr_median": -0.861,
+  "entry_bars_after_low_median": 4,
+  "exit_reasons": {
+   "gap_stop": 12,
+   "stop": 21,
+   "struct_exit": 63
+  },
+  "minus_hold_mean": 2.022,
+  "hold_mean": -2.76
+ },
+ "全部|short|limit|1": {
+  "candidates": 106,
+  "n": 96,
+  "not_entered": {
+   "invalidated_close_beyond_extreme": 1,
+   "timeout_no_entry": 4,
+   "boundary_excluded": 5
+  },
+  "atr_mean": -0.94,
+  "atr_median": -1.734,
+  "win": 0.312,
+  "days_median": 25.5,
+  "entry_from_low_atr_median": -0.758,
+  "entry_bars_after_low_median": 5.5,
+  "exit_reasons": {
+   "gap_stop": 14,
+   "stop": 23,
+   "struct_exit": 59
+  },
+  "minus_hold_mean": 1.806,
+  "hold_mean": -2.747
+ },
+ "全部|short|limit|0.5%": {
+  "candidates": 106,
+  "n": 97,
+  "not_entered": {
+   "timeout_no_entry": 4,
+   "boundary_excluded": 5
+  },
+  "atr_mean": -0.592,
+  "atr_median": -0.651,
+  "win": 0.381,
+  "days_median": 20,
+  "entry_from_low_atr_median": -0.861,
+  "entry_bars_after_low_median": 4,
+  "exit_reasons": {
+   "gap_stop": 12,
+   "stop": 17,
+   "struct_exit": 68
+  },
+  "minus_hold_mean": 2.176,
+  "hold_mean": -2.768
+ }
+}

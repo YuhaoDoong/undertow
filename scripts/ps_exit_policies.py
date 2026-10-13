@@ -25,6 +25,7 @@ BASE = ROOT / "data/backtest/ps-exit-v1"
 CFG = BASE / "config.json"
 GROUPS = {"ETF": ("GLD", "SLV", "USO", "QQQ", "SPY"), "个股": ("GOOGL", "AAPL", "MSFT", "NVDA", "AMD", "INTC", "TSLA"), "连续期货": ("GC=F", "SI=F")}
 CONT_BARS, CONT_ATR = 20, 2.0
+STOP_BASIS = "close"                                       # --stop-basis wick → v1.1（配置 config_v1.1.json）
 
 
 def trades_for(sym: str, ref_dates: list) -> list:
@@ -50,7 +51,11 @@ def trades_for(sym: str, ref_dates: list) -> list:
             if p0["status"] != "entered" or ei <= busy[e.direction]:
                 continue                                   # 入场队列 = P0 下实际入场且未被占用（与 ps-explore 一致）
             busy[e.direction] = p0["exit_i"]
-            stop1 = e.hl1.price - s * ps.STOP_BUF * a_ref
+            if STOP_BASIS == "wick":                       # v1.1：回踩点那根的影线价（用户做法）
+                hb = bars[e.hl1.idx]
+                stop1 = (hb[3] if e.direction == "long" else hb[2]) - s * ps.STOP_BUF * a_ref
+            else:                                          # v1：回踩点的收盘价（之字形按收盘认点）
+                stop1 = e.hl1.price - s * ps.STOP_BUF * a_ref
             row = {"id": f"{sym}-{si}-{e.direction}-{e.start}", "symbol": sym, "direction": e.direction,
                    "entry_date": str(bars[ei][0]), "entry": bars[ei][1], "atr_entry": atr[ei - 1], "stop_extreme": stop0, "stop_pullback": stop1,
                    "risk_p0": p0["risk"], "policies": {}}
@@ -151,7 +156,12 @@ def report(summ: dict, meta: dict) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-id", required=True)
+    ap.add_argument("--stop-basis", choices=("close", "wick"), default="close")
     a = ap.parse_args()
+    global STOP_BASIS, CFG
+    STOP_BASIS = a.stop_basis
+    if STOP_BASIS == "wick":
+        CFG = BASE / "config_v1.1.json"
     out = BASE / a.run_id
     if out.exists():
         raise SystemExit(f"{out} 已存在：不覆盖")
@@ -165,7 +175,7 @@ def main() -> int:
     out.mkdir(parents=True)
     meta = {"run_id": a.run_id, "command": " ".join(sys.argv), "generated_at": datetime.now(timezone.utc).isoformat(),
             "git_head": subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ROOT).stdout.strip(),
-            "config_sha256": hashlib.sha256(CFG.read_bytes()).hexdigest(),
+            "config_sha256": hashlib.sha256(CFG.read_bytes()).hexdigest(), "config_file": CFG.name, "stop_basis": STOP_BASIS,
             "code_sha256": {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in
                             ("undertow/analyze/price_structure.py", "scripts/ps_exit_policies.py", "scripts/ps_explore.py")},
             "inputs_sha256": json.loads((ROOT / "data/backtest/ps-explore-v0.3/inputs_sha256.json").read_text("utf-8")), "n_trades": len(rows)}

@@ -1,0 +1,206 @@
+{
+ "seed": 20261016,
+ "per_stratum": 3,
+ "source": "data/backtest/ps-exit-v1/run5_v4/trades.jsonl",
+ "policy": "U5",
+ "trades": [
+  {
+   "id": 1,
+   "trade_id": "USO-0-short-1648",
+   "group": "时间到期",
+   "direction": "short",
+   "symbol": "USO",
+   "entry_date": "2012-12-11",
+   "exit_date": "2013-03-08",
+   "exit_reason": "time_exit",
+   "result_atr": -2.76
+  },
+  {
+   "id": 2,
+   "trade_id": "SI=F-0-long-1949",
+   "group": "止损",
+   "direction": "long",
+   "symbol": "SI=F",
+   "entry_date": "2008-06-27",
+   "exit_date": "2008-08-07",
+   "exit_reason": "stop",
+   "result_atr": -2.36
+  },
+  {
+   "id": 3,
+   "trade_id": "SPY-0-long-1800",
+   "group": "时间到期",
+   "direction": "long",
+   "symbol": "SPY",
+   "entry_date": "2000-04-26",
+   "exit_date": "2000-07-20",
+   "exit_reason": "time_exit",
+   "result_atr": 0.64
+  },
+  {
+   "id": 4,
+   "trade_id": "SI=F-0-long-246",
+   "group": "LH 离场",
+   "direction": "long",
+   "symbol": "SI=F",
+   "entry_date": "2001-09-17",
+   "exit_date": "2001-10-10",
+   "exit_reason": "struct_exit",
+   "result_atr": 4.72
+  },
+  {
+   "id": 5,
+   "trade_id": "AAPL-0-short-3655",
+   "group": "止损",
+   "direction": "short",
+   "symbol": "AAPL",
+   "entry_date": "2007-09-10",
+   "exit_date": "2007-09-24",
+   "exit_reason": "gap_stop",
+   "result_atr": -1.7
+  },
+  {
+   "id": 6,
+   "trade_id": "SPY-0-long-830",
+   "group": "止损",
+   "direction": "long",
+   "symbol": "SPY",
+   "entry_date": "1996-07-02",
+   "exit_date": "1996-07-15",
+   "exit_reason": "stop",
+   "result_atr": -7.25
+  },
+  {
+   "id": 7,
+   "trade_id": "SI=F-0-short-2682",
+   "group": "时间到期",
+   "direction": "short",
+   "symbol": "SI=F",
+   "entry_date": "2011-06-14",
+   "exit_date": "2011-09-07",
+   "exit_reason": "time_exit",
+   "result_atr": -4.28
+  },
+  {
+   "id": 8,
+   "trade_id": "AMD-0-long-1661",
+   "group": "时间到期",
+   "direction": "long",
+   "symbol": "AMD",
+   "entry_date": "1999-10-22",
+   "exit_date": "2000-01-18",
+   "exit_reason": "time_exit",
+   "result_atr": 18.41
+  },
+  {
+   "id": 9,
+   "trade_id": "AAPL-0-short-2723",
+   "group": "止损",
+   "direction": "short",
+   "symbol": "AAPL",
+   "entry_date": "2004-01-23",
+   "exit_date": "2004-03-04",
+   "exit_reason": "stop",
+   "result_atr": -3.18
+  },
+  {
+   "id": 10,
+   "trade_id": "NVDA-0-short-620",
+   "group": "止损",
+   "direction": "short",
+   "symbol": "NVDA",
+   "entry_date": "2001-09-05",
+   "exit_date": "2001-10-25",
+   "exit_reason": "stop",
+   "result_atr": -4.66
+  },
+  {
+   "id": 11,
+   "trade_id": "GC=F-0-short-1135",
+   "group": "LH 离场",
+   "direction": "short",
+   "symbol": "GC=F",
+   "entry_date": "2005-05-03",
+   "exit_date": "2005-07-22",
+   "exit_reason": "struct_exit",
+   "result_atr": 0.39
+  },
+  {
+   "id": 12,
+   "trade_id": "GLD-0-short-936",
+   "group": "LH 离场",
+   "direction": "short",
+   "symbol": "GLD",
+   "entry_date": "2008-09-05",
+   "exit_date": "2008-10-09",
+   "exit_reason": "struct_exit",
+   "result_atr": -3.87
+  },
+  {
+   "id": 13,
+   "trade_id": "GLD-0-long-146",
+   "group": "时间到期",
+   "direction": "long",
+   "symbol": "GLD",
+   "entry_date": "2005-07-29",
+   "exit_date": "2005-10-21",
+   "exit_reason": "time_exit",
+   "result_atr": 11.19
+  },
+  {
+   "id": 14,
+   "trade_id": "GLD-0-short-845",
+   "group": "LH 离场",
+   "direction": "short",
+   "symbol": "GLD",
+   "entry_date": "2008-04-24",
+   "exit_date": "2008-06-23",
+   "exit_reason": "struct_exit",
+   "result_atr": 0.69
+  },
+  {
+   "id": 15,
+   "trade_id": "INTC-0-long-1263",
+   "group": "止损",
+   "direction": "long",
+   "symbol": "INTC",
+   "entry_date": "1998-04-22",
+   "exit_date": "1998-06-01",
+   "exit_reason": "stop",
+   "result_atr": -4.69
+  },
+  {
+   "id": 16,
+   "trade_id": "USO-0-short-571",
+   "group": "时间到期",
+   "direction": "short",
+   "symbol": "USO",
+   "entry_date": "2008-09-03",
+   "exit_date": "2008-11-25",
+   "exit_reason": "time_exit",
+   "result_atr": 12.7
+  },
+  {
+   "id": 17,
+   "trade_id": "INTC-0-long-1386",
+   "group": "LH 离场",
+   "direction": "long",
+   "symbol": "INTC",
+   "entry_date": "1998-08-18",
+   "exit_date": "1998-10-06",
+   "exit_reason": "struct_exit",
+   "result_atr": -2.42
+  },
+  {
+   "id": 18,
+   "trade_id": "SI=F-0-long-1761",
+   "group": "LH 离场",
+   "direction": "long",
+   "symbol": "SI=F",
+   "entry_date": "2007-10-12",
+   "exit_date": "2007-11-16",
+   "exit_reason": "struct_exit",
+   "result_atr": 3.7
+  }
+ ]
+}

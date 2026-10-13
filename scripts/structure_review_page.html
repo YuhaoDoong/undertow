@@ -1,0 +1,139 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>算法标注复核</title>
+<style>
+:root{--bg:#fff;--fg:#1d1d1f;--mut:#6e6e73;--up:#2a9d4b;--dn:#d1495b;--hi:#1f6feb;--lo:#e36209;--ev:#8a3ffc;--ok:#1a7f37;--bad:#cf222e;--unk:#9a6700;--line:#d0d0d5;--sel:#fde68a;--hold:rgba(31,111,235,.07)}
+@media (prefers-color-scheme:dark){:root{--bg:#161618;--fg:#f2f2f2;--mut:#a0a0a6;--line:#3a3a3e;--sel:#5b4b12;--hold:rgba(80,140,255,.12)}}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,"PingFang SC",sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px 40px}
+.bar{position:sticky;top:0;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--line);z-index:5}
+.card{border:1px solid var(--line);border-radius:10px;padding:12px;margin:14px 0}
+svg{width:100%;height:auto;display:block;cursor:crosshair}
+.row{display:flex;flex-wrap:wrap;gap:6px 12px;margin:6px 0;align-items:center}
+.row b{min-width:96px}
+label{white-space:nowrap}
+button{padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
+button.on{background:var(--sel)}
+.mut{color:var(--mut)} .tip{font-variant-numeric:tabular-nums;min-height:20px}
+textarea{width:100%;min-height:36px;background:transparent;color:var(--fg);border:1px solid var(--line);border-radius:6px;box-sizing:border-box}
+.am{cursor:pointer}
+</style></head><body><div class="wrap">
+<div class="bar">
+  <div class="row"><b>算法标注复核</b><span id="cnt" class="mut"></span><button id="exp">导出复核 JSON</button></div>
+  <div class="row" id="tools"></div>
+  <div class="mut">① 点图上<b>算法的标记</b>（字）给它打分：一次 = ✓对，两次 = ✗错，三次 = ?不确定，四次 = 取消。
+  ② 选上面的类型再点<b>空白处的 K 线</b>，标出你自己认的点 / 你会怎么入场、离场、放止损。「删除」模式点 K 线删掉你在那根上的标记。
+  浅蓝底 = 算法持仓期间；虚线 = 算法的初始止损。图里包含入场后的走势（这是复核，不是盲标）。</div>
+</div>
+<details><summary>算法的规则（点开）</summary><div class="mut">
+  认点：收盘价之字形，价格从极值反向走 2 倍 ATR 才确认一个高 / 低点（所以标签贴在收盘价上，不是影线）；HH/HL/LH/LL 按与前一个同类点比较。<br>
+  做多：两高两低依次下降进入下降结构 → 收盘突破关键前高 → 突破后第一个更高低点 HL₁ 被确认 → 下一根开盘入场；止损 = LL 下方 0.1 倍 ATR；
+  入场后先出一个高于旧高的新 HH（上膛），之后出现低于最新 HH 的高点（LH）→ 下一根开盘离场；最多拿 60 根。做空反过来。<br>
+  例子按「方向 × 出场类型（LH 离场 / 止损 / 时间到期）」各抽 3 笔，固定随机种子，不按盈亏挑。
+</div></details>
+<div id="list"></div></div>
+<script>
+const DATA = __DATA__;
+const KEY = "structure_review_v1";
+const UT = [["HH","hi"],["HL","lo"],["LH","hi"],["LL","lo"],["我会入场","close"],["我会离场","close"],["我的止损","click"]];
+const Q = [
+  ["pivots", "算法认点", ["对", "部分对", "不对"]],
+  ["entry", "入场位置", ["合理", "太晚", "太早", "不该入场"]],
+  ["stop", "止损位置", ["合理", "太近", "太远"]],
+  ["exit", "离场位置", ["合理", "太早", "太晚", "不该离场"]]
+];
+let L = {}; try { L = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (e) { L = {}; }
+let mode = "HH";
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(L)); } catch (e) {} count(); };
+function count(){ const n = DATA.filter(d => L[d.id] && L[d.id].pivots).length; document.getElementById("cnt").textContent = `已答 ${n}/${DATA.length}`; }
+function tools(){
+  const t = document.getElementById("tools");
+  t.innerHTML = UT.map(([n]) => `<button data-m="${n}" class="${mode === n ? "on" : ""}">${n}</button>`).join("") +
+    `<button data-m="删除" class="${mode === "删除" ? "on" : ""}">删除</button>`;
+  t.querySelectorAll("button").forEach(b => b.onclick = () => { mode = b.dataset.m; tools(); });
+}
+const W = 1100, H = 440, PL = 8, PR = 70, PT = 14, PB = 34;
+function view(d){ const n = d.bars.length, lab = L[d.id]; return lab.zoom ? [Math.max(0, d.entry_i - 40), Math.min(n, d.exit_i + 20)] : [0, n]; }
+function geom(d){
+  const [a, b] = view(d), bs = d.bars.slice(a, b), n = bs.length;
+  let lo = Math.min(...bs.map(x => x[3]), d.stop), hi = Math.max(...bs.map(x => x[2]), d.stop); const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const bw = (W - PL - PR) / n;
+  return {a, b, n, lo, hi, bw, x: i => PL + (i - a + 0.5) * bw, y: v => PT + (hi - v) * (H - PT - PB) / (hi - lo), py: Y => hi - (Y - PT) * (hi - lo) / (H - PT - PB)};
+}
+const REV = ["", "✓", "✗", "?"], RCOL = ["", "var(--ok)", "var(--bad)", "var(--unk)"];
+function draw(d){
+  const g = geom(d), lab = L[d.id], cw = g.bw * 0.62, rv = lab.review || {};
+  let s = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  s += `<rect x="${g.x(d.entry_i) - g.bw / 2}" y="${PT}" width="${(d.exit_i - d.entry_i + 1) * g.bw}" height="${H - PT - PB}" fill="var(--hold)"/>`;
+  for (let k = 0; k <= 4; k++) { const v = g.lo + (g.hi - g.lo) * k / 4, yy = g.y(v);
+    s += `<line x1="${PL}" x2="${W - PR}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-dasharray="2,4"/><text x="${W - PR + 6}" y="${yy + 4}" font-size="11" fill="var(--mut)">${v.toFixed(v > 100 ? 1 : 2)}</text>`; }
+  const step = Math.max(1, Math.round(g.n / 8));
+  for (let i = g.a; i < g.b; i++) { const [dt, o, h, l, c] = d.bars[i], col = c >= o ? "var(--up)" : "var(--dn)";
+    s += `<line x1="${g.x(i)}" x2="${g.x(i)}" y1="${g.y(h)}" y2="${g.y(l)}" stroke="${col}"/><rect x="${g.x(i) - cw / 2}" y="${g.y(Math.max(o, c))}" width="${cw}" height="${Math.max(1, Math.abs(g.y(o) - g.y(c)))}" fill="${col}"/>`;
+    if ((i - g.a) % step === 0) s += `<text x="${g.x(i)}" y="${H - 14}" font-size="10" text-anchor="middle" fill="var(--mut)">${dt.slice(0, 10)}</text>`; }
+  s += `<line x1="${g.x(Math.max(g.a, d.entry_i))}" x2="${g.x(Math.min(g.b - 1, d.exit_i))}" y1="${g.y(d.stop)}" y2="${g.y(d.stop)}" stroke="var(--dn)" stroke-dasharray="6,4"/>`;
+  if (!lab.hideAlgo) d.marks.forEach((m, k) => {
+    if (m.i < g.a || m.i >= g.b) return;
+    const X = g.x(m.i), Y = g.y(m.price), r = rv[k] || 0;
+    if (m.g === "pivot") {
+      const above = m.kind === "H", col = above ? "var(--hi)" : "var(--lo)", ty = above ? Y - 8 : Y + 16;
+      if (m.conf >= g.a && m.conf < g.b) s += `<line x1="${g.x(m.conf)}" x2="${g.x(m.conf)}" y1="${H - PB - 8}" y2="${H - PB}" stroke="${col}"/>`;
+      s += `<g class="am" data-k="${k}"><circle cx="${X}" cy="${Y}" r="3" fill="${col}"/><text x="${X}" y="${ty}" font-size="11" font-weight="600" text-anchor="middle" fill="${col}">${m.label}${r ? " " + REV[r] : ""}</text></g>`;
+    } else {
+      const ty = Y - 22 - (k % 3) * 12;
+      s += `<g class="am" data-k="${k}"><line x1="${X}" x2="${X}" y1="${Y}" y2="${ty + 3}" stroke="var(--ev)" stroke-dasharray="2,2"/><circle cx="${X}" cy="${Y}" r="3.5" fill="none" stroke="var(--ev)" stroke-width="2"/>` +
+           `<text x="${X}" y="${ty}" font-size="11" text-anchor="middle" fill="${r ? RCOL[r] : "var(--ev)"}">${m.label}${r ? " " + REV[r] : ""}</text></g>`;
+    }
+  });
+  (lab.marks || []).forEach(m => { if (m.i < g.a || m.i >= g.b) return; const ty = UT.find(t => t[0] === m.type), X = g.x(m.i), Y = g.y(m.price);
+    if (ty[1] === "click") s += `<line x1="${X}" x2="${W - PR}" y1="${Y}" y2="${Y}" stroke="var(--unk)" stroke-width="2"/><text x="${X + 3}" y="${Y - 4}" font-size="11" fill="var(--unk)">${m.type}</text>`;
+    else s += `<rect x="${X - 18}" y="${(ty[1] === "lo" ? Y + 22 : Y - 40)}" width="36" height="15" rx="3" fill="var(--unk)" opacity=".9"/><text x="${X}" y="${(ty[1] === "lo" ? Y + 33 : Y - 29)}" font-size="10" text-anchor="middle" fill="#fff">${m.type}</text>`; });
+  return s + `<line class="cx" x1="0" x2="0" y1="${PT}" y2="${H - PB}" stroke="var(--mut)" stroke-dasharray="3,3" visibility="hidden"/></svg>`;
+}
+function locate(d, svg, ev){ const r = svg.getBoundingClientRect(), X = (ev.clientX - r.left) * W / r.width, Y = (ev.clientY - r.top) * H / r.height, g = geom(d);
+  return {i: Math.min(g.b - 1, Math.max(g.a, Math.floor((X - PL) / g.bw) + g.a)), price: g.py(Y), g}; }
+function radios(d, key, title, vals){ const v = L[d.id][key];
+  return `<div class="row"><b>${title}</b>` + vals.map(x => `<label><input type="radio" name="${key}-${d.id}" value="${x}" ${v === x ? "checked" : ""}> ${x}</label>`).join("") + "</div>"; }
+function render(){
+  const list = document.getElementById("list"); list.innerHTML = "";
+  DATA.forEach(d => {
+    const lab = L[d.id] || (L[d.id] = {marks: [], review: {}}); lab.marks = lab.marks || []; lab.review = lab.review || {};
+    const c = document.createElement("div"); c.className = "card";
+    c.innerHTML = `<div class="row"><b>#${d.id}</b><span>${d.symbol} · ${d.direction === "long" ? "做多" : "做空"} · 出场：${d.group} · 结果 ${d.result_atr > 0 ? "+" : ""}${d.result_atr} 倍 ATR</span>
+      <button class="zoom">${lab.zoom ? "显示全部" : "放大持仓前后"}</button><button class="hide">${lab.hideAlgo ? "显示算法标注" : "隐藏算法标注"}</button></div>
+      <div class="tip mut">鼠标移到 K 线上看日期与价格</div><div class="chart">${draw(d)}</div>` +
+      Q.map(q => radios(d, q[0], q[1], q[2])).join("") + `<div class="row"><b>你会怎么做 / 哪里不对</b></div><textarea>${lab.note || ""}</textarea>`;
+    const chart = c.querySelector(".chart"), tip = c.querySelector(".tip");
+    const redraw = () => { chart.innerHTML = draw(d); bind(); };
+    function bind(){
+      const svg = chart.querySelector("svg");
+      svg.addEventListener("mousemove", ev => { const p = locate(d, svg, ev), b = d.bars[p.i], cx = svg.querySelector(".cx");
+        cx.setAttribute("x1", p.g.x(p.i)); cx.setAttribute("x2", p.g.x(p.i)); cx.setAttribute("visibility", "visible");
+        tip.textContent = `${b[0]}  开 ${b[1]}  高 ${b[2]}  低 ${b[3]}  收 ${b[4]}`; });
+      svg.addEventListener("click", ev => {
+        const am = ev.target.closest(".am");
+        if (am) { const k = am.dataset.k; lab.review[k] = ((lab.review[k] || 0) + 1) % 4; if (!lab.review[k]) delete lab.review[k]; save(); redraw(); return; }
+        const p = locate(d, svg, ev), b = d.bars[p.i];
+        if (mode === "删除") lab.marks = lab.marks.filter(m => m.i !== p.i);
+        else { const ty = UT.find(t => t[0] === mode);
+          lab.marks.push({i: p.i, date: b[0], type: mode, price: ty[1] === "hi" ? b[2] : ty[1] === "lo" ? b[3] : ty[1] === "close" ? b[4] : +p.price.toFixed(4)}); }
+        save(); redraw();
+      });
+    }
+    bind();
+    c.querySelector(".zoom").onclick = () => { lab.zoom = !lab.zoom; save(); render(); };
+    c.querySelector(".hide").onclick = () => { lab.hideAlgo = !lab.hideAlgo; save(); render(); };
+    c.querySelectorAll("input[type=radio]").forEach(el => el.addEventListener("change", () => { lab[el.name.split("-")[0]] = el.value; save(); }));
+    c.querySelector("textarea").addEventListener("input", e => { lab.note = e.target.value; save(); });
+    list.appendChild(c);
+  });
+  count();
+}
+document.getElementById("exp").onclick = () => {
+  const out = {version: "structure-review-v1", exported_at: new Date().toISOString(),
+    trades: DATA.map(d => ({id: d.id, symbol: d.symbol, direction: d.direction, group: d.group,
+      algo_marks: d.marks.map((m, k) => ({k, label: m.label, date: d.bars[m.i][0], price: m.price}))})), labels: L};
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], {type: "application/json"}));
+  a.download = "structure_review_v1.json"; a.click();
+};
+tools(); render();
+</script></body></html>

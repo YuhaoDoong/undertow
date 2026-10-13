@@ -328,3 +328,79 @@ def alternating(piv: list) -> list:
             continue
         seq.append(p)
     return seq
+
+
+# ================= 出场政策 P0–P4（ps-exit-v1，Codex 040；用户「甲」：做多出现已确认 LH 即离场，做空出现 HL 即离场） =================
+POLICIES = {
+    "P0": {"stop": "extreme", "target": True, "struct_exit": False, "breakeven": False, "hold": 60},
+    "P1": {"stop": "pullback", "target": True, "struct_exit": False, "breakeven": False, "hold": 60},
+    "P2": {"stop": "pullback", "target": False, "struct_exit": True, "breakeven": False, "hold": 60},
+    "P3": {"stop": "pullback", "target": False, "struct_exit": True, "breakeven": True, "hold": 60},
+    "P4": {"stop": "pullback", "target": False, "struct_exit": True, "breakeven": True, "hold": 250},
+}
+
+
+def simulate_policy(bars: list, piv: list, entry_i: int, stop: float, direction: str, pol: dict, *, last_i: int,
+                    target_r: float = TARGET_R) -> dict:
+    """entry_i 开盘入场。逐根顺序（固定）：
+      ① 开盘：上一根收盘生成的结构离场意图 → 按开盘成交；开盘已越过有效止损 → 跳空止损按开盘（两者同时触发记两者、只成交一次）；
+      ② 盘中：触及有效止损 → 按止损价（与目标同根触及记止损）；触及 2R 目标（若有）→ 按目标价；
+      ③ 收盘：本根确认、且极值在入场根或之后的摆动点 ——
+         做多：高点低于前一个已确认高点（LH）→ 生成离场意图（下一根开盘执行）；高点高于前一个（HH）→ 下一根起止损 = max(止损, 入场价)；
+         做空镜像（HL 离场、LL 移成本）。「前一个同类点」可在入场前，记审计引用；入场前形成、入场后才确认的点不触发。
+      ④ 第 hold 根收盘仍在场 → 时间出场。窗口超出 last_i → boundary_excluded。"""
+    s = _sign(direction)
+    if entry_i > last_i:
+        return {"status": "no_entry_bar"}
+    o = bars[entry_i][1]
+    r = s * (o - stop)
+    if r <= 0:
+        return {"status": "open_beyond_stop", "entry": o, "stop": stop}
+    if entry_i + pol["hold"] - 1 > last_i:
+        return {"status": "boundary_excluded", "entry": o, "stop": stop}
+    tgt = o + s * target_r * r if pol["target"] else None
+    want, opp = ("H", "L") if direction == "long" else ("L", "H")
+    by_conf: dict[int, list] = {}
+    for p in piv:
+        by_conf.setdefault(p.conf, []).append(p)
+    eff_stop, pending, be_at, audit = stop, None, None, {}
+    for k in range(pol["hold"]):
+        i = entry_i + k
+        _, op, hi, lo, cl = bars[i]
+        if k > 0:
+            gap = s * op <= s * eff_stop
+            if pending is not None or gap:
+                gs = "breakeven_gap_stop" if be_at is not None else "gap_stop"
+                why = f"struct_exit+{gs}" if (pending is not None and gap) else ("struct_exit" if pending is not None else gs)
+                return _done_p(o, stop, r, op, why, i, k, s, eff_stop, be_at, audit)
+        adverse, favor = (lo, hi) if direction == "long" else (hi, lo)
+        if s * adverse <= s * eff_stop:
+            hit_t = tgt is not None and s * favor >= s * tgt
+            why = ("breakeven_stop" if be_at is not None else "stop") + ("_both_touched" if hit_t else "")
+            return _done_p(o, stop, r, eff_stop, why, i, k, s, eff_stop, be_at, audit)
+        if tgt is not None and s * favor >= s * tgt:
+            return _done_p(o, stop, r, tgt, "target", i, k, s, eff_stop, be_at, audit)
+        for p in by_conf.get(i, []):
+            if p.kind != want or p.idx < entry_i:
+                continue
+            prev = [q for q in piv if q.kind == want and q.conf < p.conf and q.idx < p.idx]
+            if not prev:
+                continue
+            ref = prev[-1]
+            weaker = s * p.price < s * ref.price            # 做多：更低的高点（LH）；做空：更高的低点（HL）
+            if weaker and pol["struct_exit"] and pending is None:
+                pending = i
+                audit["struct_point"] = {"idx": p.idx, "conf": p.conf, "price": p.price, "ref_idx": ref.idx, "ref_price": ref.price}
+            elif not weaker and s * p.price > s * ref.price and pol["breakeven"] and be_at is None:
+                be_at = i + 1
+                audit["breakeven_point"] = {"idx": p.idx, "conf": p.conf, "price": p.price, "ref_idx": ref.idx}
+        if be_at is not None and i + 1 >= be_at:
+            eff_stop = max(eff_stop, o) if direction == "long" else min(eff_stop, o)
+    i = entry_i + pol["hold"] - 1
+    return _done_p(o, stop, r, bars[i][4], "time_exit", i, pol["hold"] - 1, s, eff_stop, be_at, audit)
+
+
+def _done_p(entry, stop, r, px, why, i, k, s, eff_stop, be_at, audit):
+    return {"status": "entered", "entry": entry, "stop": stop, "risk": r, "exit_price": px, "exit_reason": why, "exit_i": i,
+            "days_held": k + 1, "r_mult": round(s * (px - entry) / r, 6), "final_stop": eff_stop, "breakeven_from_i": be_at,
+            "audit": audit}

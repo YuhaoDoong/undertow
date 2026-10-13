@@ -139,3 +139,65 @@ def test_fractal_same_bar_high_and_low_is_ambiguous():
     piv = ps.fractal_pivots(bars)
     assert {(p.kind, p.idx, p.ambiguous_order) for p in piv} == {("H", 2, True), ("L", 2, True)}
     assert ps.alternating(piv) == []
+
+
+# ---------------- 出场政策 P0–P4（ps-exit-v1，Codex 040 合成验收） ----------------
+P = ps.Pivot
+
+
+def flat(n, px=100.0):
+    return [B(px, px + 0.5, px - 0.5, px, date(2001, 1, 1) + timedelta(days=k)) for k in range(n)]
+
+
+def test_old_point_confirmed_after_entry_does_not_trigger_exit():
+    bars = flat(80)
+    piv = [P("H", 2, 3, 105.0), P("H", 4, 12, 103.0)]          # 第二个高点极值在入场(5)之前，入场后才确认
+    r = ps.simulate_policy(bars, piv, 5, 98.0, "long", ps.POLICIES["P2"], last_i=79)
+    assert r["exit_reason"] == "time_exit" or r["exit_i"] != 13
+
+
+def test_lh_confirmation_exits_next_open_and_stop_wins_same_bar():
+    bars = flat(80)
+    piv = [P("H", 2, 3, 105.0), P("H", 8, 10, 103.0)]          # 入场后形成、第 10 根确认的 LH
+    r = ps.simulate_policy(bars, piv, 5, 98.0, "long", ps.POLICIES["P2"], last_i=79)
+    assert r["exit_reason"] == "struct_exit" and r["exit_i"] == 11 and r["exit_price"] == bars[11][1]
+    assert r["audit"]["struct_point"]["ref_idx"] == 2              # 前一个同类点在入场前，有审计引用
+    bars2 = list(bars); bars2[10] = B(100, 100.5, 97.0, 99, bars[10][0])   # 确认当根先触及止损
+    r2 = ps.simulate_policy(bars2, piv, 5, 98.0, "long", ps.POLICIES["P2"], last_i=79)
+    assert r2["exit_reason"] == "stop" and r2["exit_i"] == 10
+
+
+def test_hh_breakeven_takes_effect_next_bar_not_same_bar():
+    bars = flat(80)
+    piv = [P("H", 2, 3, 99.0), P("H", 8, 10, 101.0)]           # HH 第 10 根确认 → 第 11 根起止损 = 入场价
+    bars[10] = B(100, 100.5, 99.6, 100, bars[10][0])              # 确认当根低点 99.6 < 入场 100：当根不得按成本止损
+    r = ps.simulate_policy(bars, piv, 5, 98.0, "long", ps.POLICIES["P3"], last_i=79)
+    # 第 10 根（确认当根）低点 99.6 < 入场价不触发；第 11 根起成本止损生效，平盘低点 99.5 → 第 11 根按成本价出
+    assert r["exit_i"] == 11 and r["exit_reason"] in ("breakeven_stop", "breakeven_gap_stop") and r["exit_price"] == 100.0
+    assert r["breakeven_from_i"] == 11
+
+
+def test_gap_open_struct_and_stop_single_fill_and_reject_and_boundary():
+    bars = flat(80)
+    piv = [P("H", 2, 3, 105.0), P("H", 8, 10, 103.0)]
+    bars[11] = B(96, 96.5, 95.5, 96, bars[11][0])                 # 结构离场意图 + 开盘跳空穿止损
+    r = ps.simulate_policy(bars, piv, 5, 98.0, "long", ps.POLICIES["P2"], last_i=79)
+    assert r["exit_reason"] == "struct_exit+gap_stop" and r["exit_price"] == 96 and r["r_mult"] < -1
+    assert ps.simulate_policy(bars, piv, 5, 100.5, "long", ps.POLICIES["P2"], last_i=79)["status"] == "open_beyond_stop"
+    assert ps.simulate_policy(bars, piv, 5, 98.0, "long", ps.POLICIES["P4"], last_i=79)["status"] == "boundary_excluded"
+
+
+def test_p0_matches_original_simulate():
+    import random
+    rng = random.Random(7)
+    px, bars = 100.0, []
+    for k in range(200):
+        o = px; px *= 1 + rng.gauss(0, 0.01)
+        bars.append(B(o, max(o, px) * 1.003, min(o, px) * 0.997, px, date(2001, 1, 1) + timedelta(days=k)))
+    atr = ps.wilder_atr(bars)
+    piv = ps.zigzag(bars, atr)
+    for e in range(30, 120, 7):
+        stop = bars[e][1] * 0.97
+        a = ps.simulate(bars, e, stop, "long", last_i=199)
+        b = ps.simulate_policy(bars, piv, e, stop, "long", ps.POLICIES["P0"], last_i=199)
+        assert (a["exit_i"], a["exit_reason"], a["r_mult"]) == (b["exit_i"], b["exit_reason"], b["r_mult"])

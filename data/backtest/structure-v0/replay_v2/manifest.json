@@ -1,0 +1,186 @@
+{
+ "seed": 20261018,
+ "left": 300,
+ "right": 150,
+ "symbols": [
+  "GLD",
+  "SLV",
+  "SPY",
+  "QQQ",
+  "USO",
+  "TLT",
+  "IWM"
+ ],
+ "per_symbol_cap": 3,
+ "scenarios": {
+  "down_cont": "下跌延续",
+  "down_bounce": "下跌后反弹（潜在反转）",
+  "up_cont": "上涨延续",
+  "up_pullback": "上涨后回落（潜在反转）"
+ },
+ "design_end": "2015-12-31（整个窗口）",
+ "non_overlap_with": [
+  "labeling_v3 日线窗口",
+  "review_v1 交易图窗",
+  "replay_v1 窗口",
+  "彼此"
+ ],
+ "samples": [
+  {
+   "symbol": "TLT",
+   "start_index": 2875,
+   "start_date": "2013-12-30",
+   "scenario": "down_cont",
+   "window": [
+    "2012-10-18",
+    "2014-08-05"
+   ],
+   "id": 1,
+   "price_scale": 0.9755145636140481,
+   "volume_scale": 1.4939309056956116e-07
+  },
+  {
+   "symbol": "IWM",
+   "start_index": 3365,
+   "start_date": "2013-10-14",
+   "scenario": "down_bounce",
+   "window": [
+    "2012-08-03",
+    "2014-05-20"
+   ],
+   "id": 2,
+   "price_scale": 0.9240436044355672,
+   "volume_scale": 2.9060517073780295e-08
+  },
+  {
+   "symbol": "SPY",
+   "start_index": 5130,
+   "start_date": "2013-06-13",
+   "scenario": "up_pullback",
+   "window": [
+    "2012-04-03",
+    "2014-01-16"
+   ],
+   "id": 3,
+   "price_scale": 0.6089762859229895,
+   "volume_scale": 7.50726233790413e-09
+  },
+  {
+   "symbol": "SPY",
+   "start_index": 450,
+   "start_date": "1994-11-09",
+   "scenario": "down_bounce",
+   "window": [
+    "1993-09-03",
+    "1995-06-15"
+   ],
+   "id": 4,
+   "price_scale": 2.1319120586275817,
+   "volume_scale": 3.650967506389193e-06
+  },
+  {
+   "symbol": "USO",
+   "start_index": 1295,
+   "start_date": "2011-06-01",
+   "scenario": "up_pullback",
+   "window": [
+    "2010-03-25",
+    "2012-01-04"
+   ],
+   "id": 5,
+   "price_scale": 0.3162955428950251,
+   "volume_scale": 7.826636862833493e-07
+  },
+  {
+   "symbol": "IWM",
+   "start_index": 2865,
+   "start_date": "2011-10-17",
+   "scenario": "down_bounce",
+   "window": [
+    "2010-08-11",
+    "2012-05-22"
+   ],
+   "id": 6,
+   "price_scale": 1.449695493381683,
+   "volume_scale": 1.677056028764865e-08
+  },
+  {
+   "symbol": "SPY",
+   "start_index": 3505,
+   "start_date": "2006-12-27",
+   "scenario": "up_cont",
+   "window": [
+    "2005-10-19",
+    "2007-08-03"
+   ],
+   "id": 7,
+   "price_scale": 0.7017051705464994,
+   "volume_scale": 1.551748083009212e-08
+  },
+  {
+   "symbol": "TLT",
+   "start_index": 525,
+   "start_date": "2004-08-30",
+   "scenario": "up_cont",
+   "window": [
+    "2003-06-23",
+    "2005-04-05"
+   ],
+   "id": 8,
+   "price_scale": 1.1463945449000303,
+   "volume_scale": 1.4083515245405252e-06
+  },
+  {
+   "symbol": "IWM",
+   "start_index": 1545,
+   "start_date": "2006-07-21",
+   "scenario": "down_cont",
+   "window": [
+    "2005-05-13",
+    "2007-02-27"
+   ],
+   "id": 9,
+   "price_scale": 1.4981273408239701,
+   "volume_scale": 3.453450082969138e-08
+  },
+  {
+   "symbol": "GLD",
+   "start_index": 2465,
+   "start_date": "2014-09-05",
+   "scenario": "down_cont",
+   "window": [
+    "2013-06-28",
+    "2015-04-13"
+   ],
+   "id": 10,
+   "price_scale": 0.8192692282497871,
+   "volume_scale": 1.423376105785312e-07
+  },
+  {
+   "symbol": "TLT",
+   "start_index": 2305,
+   "start_date": "2011-09-22",
+   "scenario": "up_cont",
+   "window": [
+    "2010-07-19",
+    "2012-04-27"
+   ],
+   "id": 11,
+   "price_scale": 0.8122157063773793,
+   "volume_scale": 1.1265511200734511e-07
+  },
+  {
+   "symbol": "QQQ",
+   "start_index": 1145,
+   "start_date": "2003-09-29",
+   "scenario": "up_pullback",
+   "window": [
+    "2002-07-23",
+    "2004-05-04"
+   ],
+   "id": 12,
+   "price_scale": 3.01750156432519,
+   "volume_scale": 1.2651997940254735e-08
+  }
+ ]
+}

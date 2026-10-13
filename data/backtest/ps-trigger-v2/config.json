@@ -1,0 +1,12 @@
+{
+ "version": "ps-trigger-v2-20261014",
+ "status": "运行真实数据前提交；未校准",
+ "user_words": ["入场离场可以分开来"],
+ "design": "入场用 ps-trigger-v1 的快确认（四种都报：bar / two / atr / limit），离场用慢确认：2ATR 收盘之字形的上膛式 LH（ps-exit-v4 U6：入场后先确认高于旧高的新 HH，之后低于最新 HH 的已确认高点 → 下一根开盘离场），250 根行政上限、无时间出场",
+ "tolerance": "入场相同点位门槛固定 0.5 ATR（v1 网格里用户问题列出的第一档；v1 中 1 ATR 表现更好，但那是看过结果后才知道的，不据此改选）；慢离场沿用 U6，无门槛",
+ "stop": "LL − 0.1·ATR[入场前一根]",
+ "comparisons": ["hold：同入场、同止损、无结构离场、250 根", "fast：v1 同确认方式、门槛 0.5 的快离场", "old：ps-exit-v4 U6（2ATR 慢入场 + 慢离场）"],
+ "occupancy": "每种入场方式、每个方向同时只持一笔（按慢离场的出场根）",
+ "groups": {"ETF": ["GLD", "SLV", "USO", "QQQ", "SPY"], "个股": ["GOOGL", "AAPL", "MSFT", "NVDA", "AMD", "INTC", "TSLA"], "连续期货": ["GC=F", "SI=F"]},
+ "partition": "≤2015-12-31 设计集（已多次查看）"
+}

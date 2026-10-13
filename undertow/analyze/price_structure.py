@@ -353,7 +353,7 @@ POLICIES = {
 
 
 def simulate_policy(bars: list, piv: list, entry_i: int, stop: float, direction: str, pol: dict, *, last_i: int,
-                    target_r: float = TARGET_R) -> dict:
+                    target_r: float = TARGET_R, entry_price: float | None = None) -> dict:
     """entry_i 开盘入场。逐根顺序（固定）：
       ① 开盘：上一根收盘生成的结构离场意图 → 按开盘成交；开盘已越过有效止损 → 跳空止损按开盘（两者同时触发记两者、只成交一次）；
       ② 盘中：触及有效止损 → 按止损价（与目标同根触及记止损）；触及 2R 目标（若有）→ 按目标价；
@@ -364,7 +364,7 @@ def simulate_policy(bars: list, piv: list, entry_i: int, stop: float, direction:
     s = _sign(direction)
     if entry_i > last_i:
         return {"status": "no_entry_bar"}
-    o = bars[entry_i][1]
+    o = bars[entry_i][1] if entry_price is None else entry_price      # entry_price：盘中挂单成交价（ps-trigger-v2 的 limit 入场）
     if o is None:
         return {"status": "no_open"}
     r = s * (o - stop)
@@ -505,7 +505,25 @@ def trigger_trade(bars: list, atr: list, ep, loc: list, method: str, tol: str, *
     同根顺序：开盘（离场意图 / 跳空止损）→ 盘中止损 → 收盘确认新点。"""
     d = ep.direction
     s = _sign(d)
-    want_l, want_h = ("L", "H") if d == "long" else ("H", "L")
+    want_h = "H" if d == "long" else "L"
+    ll = ep.extreme.price
+    fe = fast_entry(bars, atr, ep, loc, method, tol, last_i=last_i, wait=wait)
+    if fe["status"] != "entered":
+        return fe
+    entry_i, entry_px = fe["entry_i"], fe["entry"]
+    stop = ll - s * STOP_BUF * atr[entry_i - 1]
+    if s * (entry_px - stop) <= 0:
+        return {"status": "open_beyond_stop"}
+    if entry_i + hold - 1 > last_i:
+        return {"status": "boundary_excluded"}
+    return _fast_exit(bars, atr, loc, entry_i, entry_px, stop, d, tol, hold=hold)
+
+
+def fast_entry(bars: list, atr: list, ep, loc: list, method: str, tol: str, *, last_i: int, wait: int = WAIT_MAX) -> dict:
+    """ps-trigger 入场部分（见 trigger_trade 文档）：返回 {"status": "entered", "entry_i", "entry"} 或未入场原因。"""
+    d = ep.direction
+    s = _sign(d)
+    want_l = "L" if d == "long" else "H"
     b0, ll = ep.break_at, ep.extreme.price
     entry_i = entry_px = None
     for t in range(b0 + 1, min(last_i, b0 + wait) + 1):
@@ -528,11 +546,12 @@ def trigger_trade(bars: list, atr: list, ep, loc: list, method: str, tol: str, *
             break
     if entry_i is None:
         return {"status": "timeout_no_entry"}
-    stop = ll - s * STOP_BUF * atr[entry_i - 1]
-    if s * (entry_px - stop) <= 0:
-        return {"status": "open_beyond_stop"}
-    if entry_i + hold - 1 > last_i:
-        return {"status": "boundary_excluded"}
+    return {"status": "entered", "entry_i": entry_i, "entry": entry_px}
+
+
+def _fast_exit(bars, atr, loc, entry_i, entry_px, stop, d, tol, *, hold):
+    s = _sign(d)
+    want_h = "H" if d == "long" else "L"
     pre = [p for p in loc if p.kind == want_h and p.conf < entry_i]
     ref = pre[-1].price if pre else None
     armed, pending, sig = False, None, {}

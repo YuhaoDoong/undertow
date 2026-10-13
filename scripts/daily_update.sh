@@ -26,17 +26,33 @@ alert() {  # $1=标题 $2=正文
   /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Basso\"" 2>/dev/null || true
 }
 notify() { alert "$@"; }   # 兼容旧调用名
+# Codex 034 §3.1：阶段状态按【当前快照身份】记在 data/logs/.daily_stages_<日>.json；已 ok 的阶段续跑时跳过（不重算、
+# 也不再触发「首份已冻结」冲突），未 ok 的才重试；只有必需阶段全部 ok 且发布成功才 mark-done。
+stage_done() { python3 scripts/daily_stage.py stage-ok "$ET_DATE" "$1" >/dev/null 2>&1; }
+stage_mark() {   # $1=阶段 $2=ok|partial|failed|pending $3=rc；写不进去要出声（否则下次会误以为没跑）
+  local r; python3 scripts/daily_stage.py stage-set "$ET_DATE" "$1" "$2" "${3:-0}" >/dev/null 2>&1; r=$?
+  (( r == 3 )) && return 0                     # 快照未齐、没有身份：本轮本就不算完成，不记也不报
+  (( r != 0 )) && echo "[警告] 阶段状态写入失败：$1=$2（rc=$r）"
+  return 0
+}
+rc_status() { case "$1" in 0) echo ok ;; 3) echo "${2:-pending}" ;; *) echo failed ;; esac; }   # $2 = rc 3 的含义
+rec_status() {   # 记录类阶段：以「当日所有注册品种都已落冻结行」判完成，退出码只作告警依据（$1=阶段）
+  if python3 scripts/daily_stage.py record-complete "$ET_DATE" "$1" >/dev/null 2>&1; then echo ok; else echo partial; fi
+}
 
 # 15 分钟轮询下，窗口外的唤醒只 touch 心跳（mtime = 上次被唤醒），不往日志里灌行（一天约 60 次）。
 # 例外（Codex 033 A2）：ET 09:00–11:59 首次唤醒做一次【只读】缺口检查——08:40 睡眠、09:05 醒来，或前轮超时占住末段，
 # 都不能让当天的缺口一声不吭；不再制造盘前快照。
+# Codex 034 §3.2（改）：不再限 ET 9–12 点、也不再「首次唤醒查一次就封账」。窗口外任何一次唤醒，只要有截止（ET 09:30，
+# 盘前补齐 09:25 收工之后）已过、尚未检查的交易日，就补查（持久水位，最多 5 天/次）；检查失败不推进水位，下次重试。
 MODE_GAPCHECK=0
-if (( ET_HOUR >= 9 && ET_HOUR < 12 )) && [[ ! -f "data/logs/.daily_gapcheck_${ET_DATE}" ]] \
-   && (( $(TZ=America/New_York date +%u) <= 5 )); then
-    MODE_GAPCHECK=1
-elif (( ET_HOUR < 1 || ET_HOUR >= 9 )); then
+if (( ET_HOUR < 1 || ET_HOUR >= 9 )); then
     mkdir -p data/logs; : > data/logs/.daily_alive
-    exit 0
+    if python3 scripts/daily_stage.py gapcheck-pending >/dev/null 2>&1; then
+        MODE_GAPCHECK=1
+    else
+        exit 0
+    fi
 fi
 
 # —— 运行日志归档进仓库 ——
@@ -63,15 +79,19 @@ if (( MODE_GAPCHECK )); then
     # 截止后只读缺口检查：按数据集（盘前快照 / 影子账 / 方向台账）记缺口与原因（源未发布 / 抓取失败 / 错过窗口 / 损坏），
     # 写 data/history/coverage_gaps/（随下次 daily 发布）；有缺口当场告警。哨兵只代表本日已检查并留痕，不代表数据已齐。
     set +e
-    GC_OUT=$(python3 scripts/daily_stage.py gapcheck "$ET_DATE" 2>&1); GC_RC=$?
+    GC_OUT=$(python3 scripts/daily_stage.py gapcheck-due 2>&1); GC_RC=$?
     set -e
     echo "$GC_OUT"
     if (( GC_RC == 2 )); then
-        alert "🚨 当日数据缺口（ET $ET_NOW，截止后检查）" "$(printf '%s' "$GC_OUT" | tail -1)；明细见 data/history/coverage_gaps/"
-    elif (( GC_RC != 0 && GC_RC != 3 )); then
-        alert "⚠️ 当日缺口检查失败（ET $ET_NOW）" "rc=$GC_RC $(printf '%s' "$GC_OUT" | tail -1 | cut -c1-100)"
+        alert "🚨 数据缺口（ET $ET_NOW，截止后检查）" "$(printf '%s\n' "$GC_OUT" | grep '缺口 [0-9]' | tr '\n' ' ' | cut -c1-160)；明细见 data/history/coverage_gaps/"
+    elif (( GC_RC != 0 )); then
+        # 检查失败 / 日历未覆盖：水位不推进，15 分钟后重试；同一 ET 日只推送一次，免得刷屏
+        GC_MK="data/logs/.gapcheck_fail_alerted_${ET_DATE}"
+        if [[ ! -e "$GC_MK" ]]; then
+            : > "$GC_MK"
+            alert "⚠️ 缺口检查未完成（ET $ET_NOW）" "rc=$GC_RC $(printf '%s' "$GC_OUT" | tail -1 | cut -c1-120)（未推进检查水位，下次唤醒重试）"
+        fi
     fi
-    : > "data/logs/.daily_gapcheck_${ET_DATE}"
     exit 0
 fi
 # 非交易日（周末/休市）不期望新的 OI 结算：直接跳过并留痕。2026-10-10/11 周末每次唤醒都去抓、末班还发「🚨 仍缺当日快照」——
@@ -274,7 +294,8 @@ fi   # ! RESUME
 #     tlt/spy 的价值不在价格（SPY 与 QQQ 日收益相关 0.95），在【持仓层与偏斜】：
 #     实测投机资金在标普长期净空、纳指长期净多，周变化相关仅 -0.07 —— 信息完全独立。
 RPT_ST="data/logs/.status_report_${ET_DATE}.json"
-rm -f "$RPT_ST"
+SKIP_RPT=0; stage_done report && SKIP_RPT=1
+(( SKIP_RPT )) || rm -f "$RPT_ST"
 set +e
 # ⚠️ 这里是【显式列出】而非跑全部品种，有意为之：
 # 综合研判的方向票里 COT 是一层，而个股（googl）结构性地没有 CFTC 持仓报告
@@ -282,14 +303,20 @@ set +e
 # 个股走 walls / gamma / flow（墙位层），不出综合研判。
 # 快照层相反：EXPECTED 从 config 派生，个股会自动纳入每日抓取，
 # 这样 ΔOI 与买卖方向才攒得起来。
-REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq tlt spy iwm \
-             --no-snapshot --status-file "$RPT_ST" 2>&1)
-RPT_RC=$?
+if (( SKIP_RPT )); then
+  REPORT_OUT="[续跑] 研报已在当前快照身份下完成，跳过"; RPT_RC=0
+else
+  REPORT_OUT=$(python3 -m undertow report gold silver wti qqq tqqq tlt spy iwm \
+               --no-snapshot --status-file "$RPT_ST" 2>&1)
+  RPT_RC=$?
+fi
 # 新研报体系 v2（用户 2026-09-30：「新建个研报体系……先只放期权墙……之前的研报也照常出」）：只放已证实内容，
 # 目前只有期权墙总览；只读已落盘快照。失败只告警，不影响旧研报与后续步骤。
-V2_OUT=$(python3 -m undertow report-v2 2>&1); V2_RC=$?
+if stage_done report_v2; then V2_OUT="[续跑] 研报 v2 已完成，跳过"; V2_RC=0
+else V2_OUT=$(python3 -m undertow report-v2 2>&1); V2_RC=$?; stage_mark report_v2 "$(rc_status $V2_RC pending)" $V2_RC; fi
 # 模拟仓台账报告（私有输出 data/paper/reports/，不入库）：每天盘前一份；失败只告警（放在 set -e 之前，失败不中断 daily）
-PB_OUT=$(python3 scripts/paper_book.py 2>&1); PB_RC=$?
+if stage_done paper_book; then PB_OUT=""; PB_RC=0
+else PB_OUT=$(python3 scripts/paper_book.py 2>&1); PB_RC=$?; stage_mark paper_book "$(rc_status $PB_RC partial)" $PB_RC; fi
 set -e
 echo "$REPORT_OUT"
 printf '%s\n' "$V2_OUT" | tail -1
@@ -305,14 +332,23 @@ try:
     d = json.load(open(sys.argv[1], encoding="utf-8"))
     if d.get("schema") != 1:
         raise ValueError("schema")
-    li = ";".join(f"{i.get('instrument')}:{i.get('error','')[:80]}" for i in d.get("ledger_issues", []))
-    print(f"{d.get('overall','crashed')}|{','.join(d.get('failed', []))}|{li}")
+    iss = d.get("ledger_issues", [])
+    li = ";".join(f"{i.get('instrument')}:{i.get('error','')[:80]}" for i in iss)
+    # 「首份已冻结、新输入不同」= 原记录在、未改写（冻结保护在工作）；其它台账错误才算本阶段未完成
+    hard = "1" if any("LedgerConflictError" not in str(i.get("error", "")) for i in iss) else "0"
+    print(f"{d.get('overall','crashed')}|{','.join(d.get('failed', []))}|{hard}|{li}")
 except Exception:
-    print("crashed||")
+    print("crashed||0|")
 PYEOF
 )
+if (( SKIP_RPT )); then RPT_JSON="complete||0|"; fi
 RPT_OVERALL="${RPT_JSON%%|*}"; _R="${RPT_JSON#*|}"
-RPT_BAD="${_R%%|*}"; RPT_LEDGER="${_R#*|}"
+RPT_BAD="${_R%%|*}"; _R="${_R#*|}"; RPT_LEDGER_HARD="${_R%%|*}"; RPT_LEDGER="${_R#*|}"
+if (( ! SKIP_RPT )); then
+  if [[ "$RPT_OVERALL" == complete && "$RPT_LEDGER_HARD" == 0 ]]; then stage_mark report ok $RPT_RC
+  elif [[ "$RPT_OVERALL" == complete || "$RPT_OVERALL" == partial ]]; then stage_mark report partial $RPT_RC
+  else stage_mark report failed $RPT_RC; fi
+fi
 # W02（Codex A02/A10）：前瞻台账写入失败/同日冲突不影响研报生成，但必须出声 ——
 # 台账是不可再生的事前记录，缺一天就是永久缺一天。只写 stderr 在无人值守时等于没人知道。
 if [[ -n "$RPT_LEDGER" ]]; then
@@ -357,8 +393,8 @@ fi
 # 本来就填不了，填的是前几天那些已经到期的格子；结果随 data/history 一并提交。
 # 价格源是外部依赖，失败只告警不阻断（快照和报告已经成功，不该因回填丢掉提交）。
 set +e
-BF_OUT=$(python3 -m undertow signals --backfill 2>&1)
-BF_RC=$?
+if stage_done signals_backfill; then BF_OUT=""; BF_RC=0
+else BF_OUT=$(python3 -m undertow signals --backfill 2>&1); BF_RC=$?; stage_mark signals_backfill "$(rc_status $BF_RC failed)" $BF_RC; fi
 set -e
 if (( BF_RC == 0 )); then
     printf '%s\n' "$BF_OUT" | grep -E '回填|警告' || true
@@ -372,8 +408,10 @@ fi
 # report 归为 late_record、不进主样本（prospective_ok 按 recorded_at < 09:30 ET 判）。
 set +e
 SH_ST="data/logs/.status_shadow_${ET_DATE}.json"
-SH_OUT=$(python3 -m undertow shadow capture --status-file "$SH_ST" 2>&1); SH_RC=$?
-SH_OUT2=$(python3 -m undertow shadow settle 2>&1); SH_RC2=$?
+if stage_done shadow_capture; then SH_OUT=""; SH_RC=0
+else SH_OUT=$(python3 -m undertow shadow capture --status-file "$SH_ST" 2>&1); SH_RC=$?; stage_mark shadow_capture "$(rec_status shadow_capture)" $SH_RC; fi
+if stage_done shadow_settle; then SH_OUT2=""; SH_RC2=0
+else SH_OUT2=$(python3 -m undertow shadow settle 2>&1); SH_RC2=$?; stage_mark shadow_settle "$(rc_status $SH_RC2 failed)" $SH_RC2; fi
 set -e
 printf '%s\n%s\n' "$SH_OUT" "$SH_OUT2" | grep -E "候选腿|更新|⚠️" | head -20 || true
 if (( SH_RC != 0 || SH_RC2 != 0 )); then
@@ -384,24 +422,30 @@ fi
 # 方向判断台账（用户 2026-09-28；预登记 skew-reading-v1）：快照已落盘 → 开盘前记录金银偏度读数（首份冻结），
 # 再回填已成熟的 1/5/10 日走势。只读；读数是未验证的 T3，不进研报结论。失败告警，不阻断提交。
 set +e
-DL_OUT=$(python3 -m undertow dirledger record 2>&1); DL_RC=$?
-DS_OUT=$(python3 -m undertow dirledger score 2>&1); DS_RC=$?
+if stage_done dirledger_record; then DL_OUT=""; DL_RC=0
+else DL_OUT=$(python3 -m undertow dirledger record 2>&1); DL_RC=$?; stage_mark dirledger_record "$(rec_status dirledger_record)" $DL_RC; fi
+if stage_done dirledger_score; then DS_OUT=""; DS_RC=0
+else DS_OUT=$(python3 -m undertow dirledger score 2>&1); DS_RC=$?; stage_mark dirledger_score "$(rc_status $DS_RC failed)" $DS_RC; fi
 # 期权多层同向（Codex 022 冻结：conviction-h1-v1-20260928，正式起点 2026-09-29；积累期 T3，不参与决策）
-CV_OUT=$(python3 -m undertow dirledger conviction-record 2>&1); CV_RC=$?
+if stage_done conviction_record; then CV_OUT=""; CV_RC=0
+else CV_OUT=$(python3 -m undertow dirledger conviction-record 2>&1); CV_RC=$?; stage_mark conviction_record "$(rec_status conviction_record)" $CV_RC; fi
 # 外部作者价位类判断计分（私有：只读写 data/soul/；用户 2026-09-29「多记录多测试」）；失败不阻断
 if [[ -f data/soul/author_levels.jsonl ]]; then
   AL_OUT=$(python3 scripts/author_levels_score.py 2>&1); AL_RC=$?
+  stage_mark author_levels "$(rc_status $AL_RC failed)" $AL_RC
   (( AL_RC != 0 )) && alert "⚠️ 作者价位计分失败（ET $ET_NOW）" "$(printf '%s' "$AL_OUT" | tail -1 | cut -c1-120)"
 fi
 # 资金流买卖方推断验证（协议 docs/prereg/2026-09-29_flow_side_check_v0.md）：对前一交易日 X 对照（需今天盘前快照 = X 的结算）；失败不阻断
 FS_DAY=$(python3 -c 'from undertow.core import market_calendar as mc; from undertow.core.clock import market_today; print(mc.prev_trading_day(market_today()))' 2>/dev/null)
 if [[ -n "$FS_DAY" ]]; then
   FS_OUT=$(python3 scripts/flow_side_check.py "$FS_DAY" gold silver 2>&1); FS_RC=$?
+  stage_mark flow_side "$(rc_status $FS_RC pending)" $FS_RC
   # rc=3 = 输入未齐（快照/逐分钟未到）→ pending，不告警、不覆盖已有结果；其它非零才告警
   if (( FS_RC != 0 && FS_RC != 3 )); then alert "⚠️ 资金流代理对照失败（ET $ET_NOW）" "$(printf '%s' "$FS_OUT" | tail -1 | cut -c1-120)"; fi
 fi
 # 逐到期持仓画像（用户 2026-09-29：到期日类型 Q/M/W 与磁吸研究）：开盘前首份冻结，只记录不产生信号
-EP_OUT=$(python3 -m undertow shadow expiry-profile 2>&1); EP_RC=$?
+if stage_done expiry_profile; then EP_OUT=""; EP_RC=0
+else EP_OUT=$(python3 -m undertow shadow expiry-profile 2>&1); EP_RC=$?; stage_mark expiry_profile "$(rec_status expiry_profile)" $EP_RC; fi
 set -e
 printf '%s\n' "$DL_OUT" | head -3
 printf '%s\n' "$CV_OUT" | head -9
@@ -413,7 +457,9 @@ fi
 # 研报输入存档（用户 2026-09-28：「数据永远是最主要的」）：价格/波动率/FRED/COT 原始下载只在 data/cache
 # （gitignore、被覆盖、无版本）。研报刚跑完、缓存最新 → 存每日尾部 + 每月全量到 data/history/inputs/，随下方提交入库。
 set +e
-AI_OUT=$(python3 -m undertow archive-inputs --status-file "data/logs/.status_inputs_${ET_DATE}.json" 2>&1); AI_RC=$?
+if stage_done inputs_archive; then AI_OUT=""; AI_RC=0
+else AI_OUT=$(python3 -m undertow archive-inputs --status-file "data/logs/.status_inputs_${ET_DATE}.json" 2>&1); AI_RC=$?
+     stage_mark inputs_archive "$(rc_status $AI_RC failed)" $AI_RC; fi
 set -e
 printf '%s\n' "$AI_OUT" | head -3
 if (( AI_RC != 0 )); then
@@ -425,6 +471,7 @@ set +e
 PREV_TD=$(python3 -c 'from undertow.core import market_calendar as mc; from undertow.core.clock import market_today as t; d=mc.prev_trading_day(t()); print(d or "")')
 if [[ -n "$PREV_TD" ]]; then
     SCK_OUT=$(python3 -m undertow shadow sample --check "$PREV_TD" 2>&1); SCK_RC=$?
+    stage_mark sample_check "$(rc_status $SCK_RC failed)" $SCK_RC
     printf '%s\n' "$SCK_OUT" | head -6
     SCK_MK="data/logs/.sample_alerted_check_${PREV_TD}"          # 一天跑四次：同一交易日只告警一次
     if (( SCK_RC != 0 )) && [[ ! -e "$SCK_MK" ]]; then
@@ -441,6 +488,7 @@ set +e
 # --all（2026-09-28 起）：当天的逐分钟已由 session ⑩ intraday 存下、不再占历史配额 → 月配额（10/1 起补满 400）
 # 只花在真正缺的旧日子上，覆盖全部品种与规则。只抓缺的，已存/已记查不到的不重抓。
 BARS_OUT=$(python3 -m undertow shadow bars --all --status-file "data/logs/.status_bars_${ET_DATE}.json" 2>&1); BARS_RC=$?
+stage_mark option_bars "$(rc_status $BARS_RC pending)" $BARS_RC
 set -e
 printf '%s\n' "$BARS_OUT" | grep -E "逐分钟|⚠️" | head -5 || true
 if (( BARS_RC == 3 )); then
@@ -467,9 +515,12 @@ PUB=$(publish_dirs "每日自动更新 $(TZ=America/New_York date +%F)：期权�
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" data/snapshots data/history data/reports); PUB_RC=$?
 set -e
+(( PUB_RC != 0 )) && stage_mark publish failed $PUB_RC
 case $PUB_RC in
   0) echo "[完成] 已提交并推送（或无变更）"
-     python3 scripts/daily_stage.py mark-done "$ET_DATE" || echo "[提示] 快照不全或损坏，不标记当日完成（下次继续）" ;;
+     stage_mark publish ok 0
+     # mark-done 自己核对必需阶段；未全部 ok → 不记完成，下次续跑只重试未完成的阶段
+     python3 scripts/daily_stage.py mark-done "$ET_DATE" || echo "[未完成] 必需阶段未全部 ok，不标记当日完成（下次续跑未完成阶段）" ;;
   3) echo "[暂停发布] $PUB"
      alert "⚠️ 每日数据未提交（ET $ET_NOW）" "索引里有他人暂存的文件，已停止自动提交；数据已落盘，下次运行再发" ;;
   5) echo "[暂停发布] $PUB"      # 与 3 分开报：2026-09-30 实为发布冲突，却报成「他人暂存」，查错方向

@@ -30,8 +30,22 @@ def test_corrupt_snapshot_is_not_complete_and_identity_only_when_all_valid(tmp_p
 
 
 def test_done_requires_same_snapshot_identity(tmp_path):
-    (tmp_path / f".daily_done_{DAY}.json").write_text(json.dumps({"identity": "aaa"}))
+    ok = {n: {"status": "ok"} for n in ds.REQUIRED_STAGES}
+    (tmp_path / f".daily_done_{DAY}.json").write_text(json.dumps({"schema": 2, "identity": "aaa", "stages": ok}))
     assert ds.done_match(DAY, "aaa", tmp_path) and not ds.done_match(DAY, "bbb", tmp_path) and not ds.done_match(DAY, "", tmp_path)
+
+
+def test_legacy_or_incomplete_done_is_not_accepted(tmp_path):
+    """Codex 036 §4 探针：旧格式只有 identity 的完成文件、或必需阶段缺失的凭证，都不能 done-match。"""
+    f = tmp_path / f".daily_done_{DAY}.json"
+    f.write_text(json.dumps({"identity": "aaa"}))
+    assert not ds.done_match(DAY, "aaa", tmp_path)
+    st = {n: {"status": "ok"} for n in ds.REQUIRED_STAGES}; st["report"] = {"status": "partial"}
+    f.write_text(json.dumps({"schema": 2, "identity": "aaa", "stages": st}))
+    assert not ds.done_match(DAY, "aaa", tmp_path)
+    st["report"] = {"status": "ok"}; st["dirledger_record"] = {"status": "ok_ineligible"}
+    f.write_text(json.dumps({"schema": 2, "identity": "aaa", "stages": st}))
+    assert ds.done_match(DAY, "aaa", tmp_path)                       # 终态行有不合格 = 完成（质量缺口另报）
 
 
 def test_classify_missing_reasons():
@@ -130,28 +144,47 @@ def test_due_sessions_watermark_cutoff_and_unknown_calendar(tmp_path):
     assert days == [] and unk is None                                       # 09:05 只能预检，不出最终缺口
     days, _ = ds.due_sessions(at("2026-10-07T09:31:00-04:00"), tmp_path, start="2026-10-07", is_trading=cal)
     assert days == [("2026-10-07", True)]
-    days, _ = ds.due_sessions(at("2026-10-13T15:00:00-04:00"), tmp_path, start="2026-10-07", is_trading=cal)
-    assert [d for d, _ in days] == ["2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11"]  # 有界积压
-    ds.set_watermark("2026-10-11", tmp_path)
-    days, _ = ds.due_sessions(at("2026-10-13T15:00:00-04:00"), tmp_path, start="2026-10-07", is_trading=cal)
-    assert [d for d, _ in days] == ["2026-10-12", "2026-10-13"]
+    days, _ = ds.due_sessions(at("2026-10-15T15:00:00-04:00"), tmp_path, start="2026-10-07", is_trading=cal)
+    assert [d for d, t in days if t] == ["2026-10-07", "2026-10-08", "2026-10-09", "2026-10-12", "2026-10-13"]  # 5 个交易日，周末不占名额
+    ds.set_watermark("2026-10-13", tmp_path)
+    days, _ = ds.due_sessions(at("2026-10-15T15:00:00-04:00"), tmp_path, start="2026-10-07", is_trading=cal)
+    assert [d for d, _ in days] == ["2026-10-14", "2026-10-15"]
     ds.set_watermark("2026-10-19", tmp_path)
     days, unk = ds.due_sessions(at("2026-10-21T15:00:00-04:00"), tmp_path, start="2026-10-07", is_trading=cal)
     assert days == [] and unk == "2026-10-20"                               # 日历未覆盖 → 不默认是交易日
 
 
-def test_gapcheck_due_failure_does_not_advance_and_resolved_is_recorded(tmp_path, monkeypatch):
-    now = datetime.fromisoformat("2026-10-08T15:00:00-04:00")
-    monkeypatch.setattr(ds, "due_sessions", lambda n, logs: ([("2026-10-07", True), ("2026-10-08", True)], None))
+def test_gapcheck_due_requeues_failures_and_open_gaps(tmp_path, monkeypatch):
+    """Codex 036 §3 探针：有缺口或检查失败时，旧版推进水位后再也不查。现：水位照推进（不挡新日期），失败下次唤醒重试，
+    开放缺口 24 小时后复查；补齐出队；新日期照常首次检查。"""
+    from datetime import timedelta
+    t0 = datetime.fromisoformat("2026-10-13T10:00:00-04:00")
+    days = {"v": [("2026-10-13", True)]}
+    monkeypatch.setattr(ds, "due_sessions", lambda n, logs: (days.pop("v", []), None))
+    res = {"2026-10-13": {"gaps": [{"dataset": "x", "instrument": "gold", "reason": "no_row"}], "resolved": [],
+                          "open_keys": ["k"], "check_failed": []}}
     calls = []
-    def boom(day, logs):
+    def chk(day):
         calls.append(day)
-        if day == "2026-10-08":
+        r = res[day]
+        if r == "boom":
             raise RuntimeError("x")
-        return {"gaps": [], "resolved": []}
-    monkeypatch.setattr(ds, "gapcheck", boom)
-    assert ds.gapcheck_due(now, tmp_path) == 1
-    assert json.loads((tmp_path / ".gapcheck_watermark.json").read_text())["last_checked"] == "2026-10-07"
+        return r
+    assert ds.gapcheck_due(t0, tmp_path, check=chk) == 2
+    assert json.loads((tmp_path / ".gapcheck_watermark.json").read_text())["last_checked"] == "2026-10-13"
+    assert ds.gapcheck_due(t0 + timedelta(hours=1), tmp_path, check=chk) == 0 and calls == ["2026-10-13"]   # 未到复查时刻
+    res["2026-10-13"] = {"gaps": [], "resolved": [{"base_key": "k"}], "open_keys": [], "check_failed": []}
+    ds.gapcheck_due(t0 + timedelta(hours=25), tmp_path, check=chk)
+    assert calls == ["2026-10-13", "2026-10-13"]                                   # 24 小时后复查
+    assert json.loads((tmp_path / ".gapcheck_queue.json").read_text()) == {}         # 已补齐 → 出队
+    days["v"] = [("2026-10-14", True)]
+    res["2026-10-14"] = {"gaps": [], "resolved": [], "open_keys": [], "check_failed": ["check_failed：KeyError"]}
+    assert ds.gapcheck_due(t0 + timedelta(days=1, hours=1), tmp_path, check=chk) == 1   # 部分检查失败（机器字段）→ 入队
+    res["2026-10-14"] = "boom"
+    assert ds.gapcheck_due(t0 + timedelta(days=1, hours=2), tmp_path, check=chk) == 1   # 失败下一次唤醒就重试
+    assert calls[-2:] == ["2026-10-14", "2026-10-14"]
+    q = json.loads((tmp_path / ".gapcheck_queue.json").read_text())
+    assert q["2026-10-14"]["why"] == "check_failed" and q["2026-10-14"]["attempts"] == 2
 
 
 def test_gapcheck_late_fill_appends_resolved(tmp_path, monkeypatch):
@@ -169,6 +202,12 @@ def test_gapcheck_late_fill_appends_resolved(tmp_path, monkeypatch):
     assert [x["status"] for x in rows] == ["open", "resolved"]                 # 原记录保留、追加 resolved
     ds.gapcheck(DAY, **kw)
     assert len((gaps / "2026-10.jsonl").read_text().splitlines()) == 2       # 不重复追加
+    state["g"] = [{"dataset": "shadow:v", "instrument": "gold", "missing_stage": "capture", "reason": "no_row"}]
+    r = ds.gapcheck(DAY, **kw)                                                # 补齐后又缺 → reopened（不被永久 key 去重吞掉）
+    assert r["reopened"] and r["reopened"][0]["status"] == "reopened"
+    state["g"] = [{"dataset": "shadow", "instrument": "*", "missing_stage": "check", "check_failed": True, "reason": "check_failed：X"}]
+    r = ds.gapcheck(DAY, **kw)                                                # 检查失败：不记数据缺口、也不判已补齐
+    assert r["check_failed"] and not r["resolved"] and not r["gaps"]
 
 
 def test_ledger_gaps_registry_reports_missing_directory(tmp_path):
@@ -194,3 +233,17 @@ def test_record_stage_judged_by_rows_not_exit_code(tmp_path):
     src = (ROOT / "scripts/daily_update.sh").read_text("utf-8")
     for st in ("shadow_capture", "dirledger_record", "conviction_record", "expiry_profile"):
         assert f'stage_mark {st} "$(rec_status {st})"' in src
+
+
+def test_record_status_separates_terminal_from_eligible(tmp_path):
+    """Codex 036 §4 探针：before_open=False / identity_ok=False 的行不能报合格完成；缺失、损坏、冲突分开。"""
+    d = tmp_path / "led"; d.mkdir()
+    (d / "a.jsonl").write_text(json.dumps({"session": DAY, "before_open": True, "identity_ok": True}) + "\n")
+    (d / "b.jsonl").write_text(json.dumps({"session": DAY, "before_open": False, "identity_ok": False}) + "\n")
+    (d / "c.jsonl").write_text(json.dumps({"session": DAY, "before_open": True, "identity_ok": None}) + "\n")
+    (d / "e.jsonl").write_text("{坏\n")
+    (d / "f.jsonl").write_text(json.dumps({"session": DAY, "x": 1}) + "\n" + json.dumps({"session": DAY, "x": 2}) + "\n")
+    st = ds.record_status("dirledger_record", DAY, registry=(d, ("a", "b", "c", "g", "e", "f")))
+    assert {k: v["state"] for k, v in st.items()} == {
+        "a": "completed_eligible", "b": "completed_ineligible", "c": "completed_ineligible",
+        "g": "missing", "e": "corrupt", "f": "identity_conflict"}

@@ -36,8 +36,10 @@ stage_mark() {   # $1=阶段 $2=ok|partial|failed|pending $3=rc；写不进去�
   return 0
 }
 rc_status() { case "$1" in 0) echo ok ;; 3) echo "${2:-pending}" ;; *) echo failed ;; esac; }   # $2 = rc 3 的含义
-rec_status() {   # 记录类阶段：以「当日所有注册品种都已落冻结行」判完成，退出码只作告警依据（$1=阶段）
-  if python3 scripts/daily_stage.py record-complete "$ET_DATE" "$1" >/dev/null 2>&1; then echo ok; else echo partial; fi
+rec_status() {   # 记录类阶段：看台账产物不看 CLI 退出码（$1=阶段）。0 全部合格终态行 → ok；4 全有终态行但有不合格 →
+  # ok_ineligible（冻结行不重写，阶段算完成，质量缺口由缺口检查另报）；其它（缺失/损坏/冲突）→ partial，续跑重试
+  local r; python3 scripts/daily_stage.py record-complete "$ET_DATE" "$1" >/dev/null 2>&1; r=$?
+  case $r in 0) echo ok ;; 4) echo ok_ineligible ;; *) echo partial ;; esac
 }
 
 # 15 分钟轮询下，窗口外的唤醒只 touch 心跳（mtime = 上次被唤醒），不往日志里灌行（一天约 60 次）。
@@ -520,7 +522,14 @@ case $PUB_RC in
   0) echo "[完成] 已提交并推送（或无变更）"
      stage_mark publish ok 0
      # mark-done 自己核对必需阶段；未全部 ok → 不记完成，下次续跑只重试未完成的阶段
-     python3 scripts/daily_stage.py mark-done "$ET_DATE" || echo "[未完成] 必需阶段未全部 ok，不标记当日完成（下次续跑未完成阶段）" ;;
+     MD_OUT=$(python3 scripts/daily_stage.py mark-done "$ET_DATE" 2>&1); MD_RC=$?
+     echo "$MD_OUT"
+     if (( MD_RC != 0 )); then
+       echo "[未完成] 必需阶段未全部完成，不标记当日完成（下次续跑未完成阶段）"
+     elif [[ "$MD_OUT" == *OPTIONAL_INCOMPLETE* ]]; then
+       # 可选阶段（私有台账报告、研报 v2、回填等）当日封账后不再重试 → 明确的终态，告警一次（Codex 036 §4）
+       alert "ℹ️ daily 已封账，可选阶段未完成（ET $ET_NOW）" "${MD_OUT##*OPTIONAL_INCOMPLETE }：当日不再自动重试，次日 daily 会重新执行"
+     fi ;;
   3) echo "[暂停发布] $PUB"
      alert "⚠️ 每日数据未提交（ET $ET_NOW）" "索引里有他人暂存的文件，已停止自动提交；数据已落盘，下次运行再发" ;;
   5) echo "[暂停发布] $PUB"      # 与 3 分开报：2026-09-30 实为发布冲突，却报成「他人暂存」，查错方向

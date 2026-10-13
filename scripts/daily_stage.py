@@ -83,7 +83,10 @@ REQUIRED_STAGES = ("report", "shadow_capture", "dirledger_record", "conviction_r
                    "inputs_archive", "publish")
 OPTIONAL_STAGES = ("report_v2", "paper_book", "signals_backfill", "shadow_settle", "dirledger_score",
                    "author_levels", "flow_side", "sample_check", "option_bars")
-STAGE_STATUSES = ("ok", "partial", "failed", "pending", "skipped")
+STAGE_STATUSES = ("ok", "ok_ineligible", "partial", "failed", "pending", "skipped")
+# ok_ineligible：记录类阶段所有注册品种都已落【终态】行，但有行不合格（晚于开盘、身份有问题或未知）。
+# 冻结行不能重写来「补合格」，所以算阶段完成（政策：不可再生数据先封账），同时由缺口检查报质量缺口。
+COMPLETE_STATUSES = ("ok", "ok_ineligible")
 
 
 def _stages_path(day: str, logs: Path = LOGS) -> Path:
@@ -124,19 +127,32 @@ def stage_ok(day: str, identity: str, name: str, logs: Path = LOGS) -> bool:
 
 def missing_required(day: str, identity: str, logs: Path = LOGS) -> list:
     st = load_stages(day, identity, logs)
-    return [n for n in REQUIRED_STAGES if (st.get(n) or {}).get("status") != "ok"]
+    return [n for n in REQUIRED_STAGES if (st.get(n) or {}).get("status") not in COMPLETE_STATUSES]
+
+
+def optional_incomplete(day: str, identity: str, logs: Path = LOGS) -> list:
+    st = load_stages(day, identity, logs)
+    return [n for n in OPTIONAL_STAGES if n in st and st[n].get("status") not in COMPLETE_STATUSES]
 
 
 def _done_path(day: str, logs: Path = LOGS) -> Path:
     return logs / f".daily_done_{day}.json"
 
 
+DONE_SCHEMA = 2
+
+
 def done_match(day: str, identity: str, logs: Path = LOGS) -> bool:
+    """完成凭证必须是当前 schema、同一快照身份，且凭证里记的必需阶段全部完成（Codex 036 §4：旧格式只有 identity
+    的完成文件不再被接受 —— 降级为待核验，下次续跑只补未完成阶段）。"""
     try:
         d = json.loads(_done_path(day, logs).read_text("utf-8"))
     except (OSError, ValueError):
         return False
-    return bool(identity) and d.get("identity") == identity
+    if not identity or d.get("schema") != DONE_SCHEMA or d.get("identity") != identity:
+        return False
+    st = d.get("stages") or {}
+    return all((st.get(n) or {}).get("status") in COMPLETE_STATUSES for n in REQUIRED_STAGES)
 
 
 def sym_to_key() -> dict:
@@ -192,12 +208,13 @@ def due_sessions(now: datetime, logs: Path = LOGS, *, start: str = MONITOR_START
         d = date.fromisoformat(wm) + timedelta(days=1)
     except (OSError, ValueError, KeyError):
         d = date.fromisoformat(start)
-    out, unknown = [], None
-    while len(out) < MAX_SESSIONS_PER_RUN and _cutoff_dt(d.isoformat()) <= now:
+    out, unknown, n_trading = [], None, 0
+    while n_trading < MAX_SESSIONS_PER_RUN and _cutoff_dt(d.isoformat()) <= now:   # 只按交易日计名额，周末不占
         t = is_trading(d)
         if t is None:
             unknown = d.isoformat(); break
         out.append((d.isoformat(), bool(t)))
+        n_trading += bool(t)
         d += timedelta(days=1)
     return out, unknown
 
@@ -234,22 +251,38 @@ def gapcheck(day: str, *, root: Path = ROOT, logs: Path = LOGS, gaps_dir: Path =
     for s in st["corrupt"]:
         gaps.append({"dataset": "options_snapshot_premarket", "instrument": s, "missing_stage": "collect",
                      "reason": "corrupt_file（gz/JSON 无法解析）"})
-    gaps += _ledger_gaps(day, root)
-    rec = []
-    for g in gaps:
-        rec.append({"key": f"{day}|{g['dataset']}|{g['instrument']}", "session": day, **g, "status": "open", "expected": True,
-                    "first_detected_at": now.isoformat(), "cutoff_et": CUTOFF_ET, "protocol_version": PROTOCOL,
-                    "last_daily_run_et": last_run})
+    lg = _ledger_gaps(day, root)
+    failed = [g for g in lg if g.get("check_failed")]                 # 机器字段，不 grep 原因文案
+    gaps += [g for g in lg if not g.get("check_failed")]
     f = gaps_dir / f"{day[:7]}.jsonl"
-    current = {r["key"] for r in rec}
-    resolved = []
-    for old in _read_gaps(f):                       # 以前记为缺口、现在已不缺 → 追加 resolved（不删原记录）
-        if old.get("session") == day and old.get("status", "open") == "open" and old["key"] not in current:
-            resolved.append({"key": old["key"] + "|resolved", "session": day, "dataset": old.get("dataset"),
-                             "instrument": old.get("instrument"), "status": "resolved", "resolves": old["key"],
-                             "resolved_detected_at": now.isoformat(), "protocol_version": PROTOCOL})
-    _append_new(f, rec + resolved)
-    return {"day": day, "holiday": False, "gaps": rec, "resolved": resolved}
+    old_rows = [r for r in _read_gaps(f) if r.get("session") == day]
+    state, count = {}, {}
+    for r in old_rows:                                                # 每个缺口的最新状态：open / resolved / reopened
+        b = r.get("resolves") or r.get("base_key") or r["key"]
+        count[b] = count.get(b, 0) + 1
+        state[b] = "closed" if r.get("status") == "resolved" else "open"
+    new_rows, opened, resolved, reopened = [], [], [], []
+    current = {}
+    for g in gaps:
+        b = f"{day}|{g['dataset']}|{g['instrument']}"
+        current[b] = g
+        base = {"session": day, **g, "base_key": b, "expected": True, "cutoff_et": CUTOFF_ET,
+                "protocol_version": PROTOCOL, "last_daily_run_et": last_run}
+        if b not in state:
+            r = {"key": b, **base, "status": "open", "first_detected_at": now.isoformat()}
+            new_rows.append(r); opened.append(r)
+        elif state[b] == "closed":
+            r = {"key": f"{b}|reopened|{count[b] + 1}", **base, "status": "reopened", "detected_at": now.isoformat()}
+            new_rows.append(r); reopened.append(r)
+    for b, stt in state.items():
+        if stt == "open" and b not in current and not failed:          # 检查失败时不判「已补齐」
+            r = {"key": f"{b}|resolved|{count[b] + 1}", "session": day, "base_key": b, "resolves": b, "status": "resolved",
+                 "resolved_detected_at": now.isoformat(), "protocol_version": PROTOCOL}
+            new_rows.append(r); resolved.append(r)
+    _append_new(f, new_rows)
+    still_open = [b for b in current]                                 # 本次检查时仍缺（含新开、重开、原本就开）
+    return {"day": day, "holiday": False, "gaps": opened + reopened, "resolved": resolved, "reopened": reopened,
+            "open_keys": still_open, "check_failed": [g["reason"] for g in failed]}
 
 
 def _read_gaps(f: Path) -> list:
@@ -288,11 +321,13 @@ def _ledger_gaps(day: str, root: Path, registry: list | None = None) -> list:
                     out.append({"dataset": ds_, "instrument": k, "missing_stage": "capture",
                                 "reason": "late_row（冻结时刻缺失或晚于截止，不算盘前样本）"})
     except Exception as e:                                  # 研究配置读不到：如实报告，不当作无缺口
-        out.append({"dataset": "shadow", "instrument": "*", "missing_stage": "check", "reason": f"check_failed：{type(e).__name__}"})
+        out.append({"dataset": "shadow", "instrument": "*", "missing_stage": "check", "check_failed": True,
+                    "reason": f"check_failed：{type(e).__name__}"})
     try:
         reg = registry if registry is not None else _registry()
     except Exception as e:
-        return out + [{"dataset": "dirledger", "instrument": "*", "missing_stage": "check", "reason": f"check_failed：{type(e).__name__}"}]
+        return out + [{"dataset": "dirledger", "instrument": "*", "missing_stage": "check", "check_failed": True,
+                       "reason": f"check_failed：{type(e).__name__}"}]
     for ds_, rel, insts in reg:
         for k in insts:
             f = root / rel / f"{k}.jsonl"
@@ -307,6 +342,8 @@ def _ledger_gaps(day: str, root: Path, registry: list | None = None) -> list:
             elif row.get("identity_ok") is False:
                 out.append({"dataset": ds_, "instrument": k, "missing_stage": "record",
                             "reason": "identity_problem：" + ",".join(row.get("identity_problems") or [])})
+            elif row.get("identity_ok") is None:          # 该 schema 有此字段却没给值：未知，不当作通过
+                out.append({"dataset": ds_, "instrument": k, "missing_stage": "record", "reason": "identity_unknown"})
     return out
 
 
@@ -328,15 +365,53 @@ def record_stage_registry(stage: str) -> tuple[Path, tuple]:
     raise ValueError(f"不是记录类阶段：{stage}")
 
 
-def record_missing(stage: str, day: str, registry: tuple[Path, tuple] | None = None) -> list:
+RECORD_STATES = ("completed_eligible", "completed_ineligible", "missing", "corrupt", "identity_conflict")
+
+
+def _row_eligible(stage: str, row: dict, day: str) -> tuple[bool, str]:
+    """终态行是否为合格的盘前样本。不重写冻结行；只分类（Codex 036 §4）。"""
+    if stage == "shadow_capture":
+        idt = row.get("identity") or {}
+        t = _parse_dt(row.get("recorded_at"))
+        if t is None or t >= _cutoff_dt(day):
+            return False, "recorded_after_cutoff_or_unknown"
+        if idt.get("status") != "certified":
+            return False, f"identity_status={idt.get('status')}"
+        return True, ""
+    if row.get("before_open") is not True:
+        return False, f"before_open={row.get('before_open')}"
+    if stage in ("dirledger_record", "conviction_record"):
+        io = row.get("identity_ok")
+        if io is not True:                       # None = 未知（schema 有此字段却没给值），False = 有问题；都不算合格
+            return False, f"identity_ok={io}"
+    return True, ""
+
+
+def record_status(stage: str, day: str, registry: tuple[Path, tuple] | None = None) -> dict:
+    """每个注册品种当日的终态：completed_eligible / completed_ineligible / missing / corrupt / identity_conflict。"""
     d, insts = registry or record_stage_registry(stage)
-    out = []
+    out = {}
     for k in insts:
         f = d / f"{k}.jsonl"
-        rows = [json.loads(x) for x in f.read_text("utf-8").splitlines() if x.strip()] if f.exists() else []
-        if not any(r.get("session") == day for r in rows):
-            out.append(k)
+        if not f.exists():
+            out[k] = {"state": "missing", "why": "file_missing"}; continue
+        try:
+            rows = [json.loads(x) for x in f.read_text("utf-8").splitlines() if x.strip()]
+        except ValueError:
+            out[k] = {"state": "corrupt", "why": "jsonl_unparseable"}; continue
+        mine = [r for r in rows if r.get("session") == day]
+        if not mine:
+            out[k] = {"state": "missing", "why": "no_row"}
+        elif len(mine) > 1 and any(json.dumps(m, sort_keys=True) != json.dumps(mine[0], sort_keys=True) for m in mine[1:]):
+            out[k] = {"state": "identity_conflict", "why": f"{len(mine)} 行同一会话且内容不同"}
+        else:
+            ok, why = _row_eligible(stage, mine[0], day)
+            out[k] = {"state": "completed_eligible" if ok else "completed_ineligible", "why": why}
     return out
+
+
+def record_missing(stage: str, day: str, registry: tuple[Path, tuple] | None = None) -> list:
+    return [k for k, v in record_status(stage, day, registry).items() if v["state"] == "missing"]
 
 
 def _parse_dt(x):
@@ -358,30 +433,91 @@ def _append_new(path: Path, rows: list) -> None:
             f.flush(); os.fsync(f.fileno())
 
 
-def gapcheck_due(now: datetime | None = None, logs: Path = LOGS) -> int:
-    """检查所有截止已过、未检查的交易日（水位推进；最多 5 个）。rc：0 无缺口 / 2 有缺口 / 4 日历未覆盖 / 1 检查失败。
-    检查失败或日历未知 → 水位停在那一天之前，下次唤醒重试。无待查 → 不输出（窗口外每 15 分钟调一次，不刷屏）。"""
+QUEUE_FILE = ".gapcheck_queue.json"
+RECHECK_EVERY_H = 24        # 开放缺口按固定节奏复查（未校准的运营节奏）
+MAX_RECHECKS = 10           # 开放缺口最多复查 10 次，之后标 stale（记录仍开放，不再自动复查）
+MAX_RECHECK_PER_RUN = 5
+
+
+def _load_queue(logs: Path) -> dict:
+    f = logs / QUEUE_FILE
+    try:
+        return json.loads(f.read_text("utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError):
+        try:
+            f.replace(f.with_name(f.name + f".corrupt-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}"))
+        except OSError:
+            pass
+        return {}
+
+
+def _enqueue(q: dict, day: str, why: str, now: datetime, prev: dict | None = None) -> None:
+    from datetime import timedelta
+    n = (prev or {}).get("attempts", 0) + 1
+    if why == "open_gaps" and n > MAX_RECHECKS:
+        q[day] = {**(prev or {}), "why": why, "attempts": n - 1, "stale": True, "stale_at": now.isoformat()}
+        return
+    nxt = now if why == "check_failed" else now + timedelta(hours=RECHECK_EVERY_H)
+    q[day] = {"why": why, "attempts": n, "next_at": nxt.isoformat(), "first_queued_at": (prev or {}).get("first_queued_at", now.isoformat())}
+
+
+def gapcheck_due(now: datetime | None = None, logs: Path = LOGS, *, check=None) -> int:
+    """首次检查（水位，最多 5 个交易日 / 次）+ 待重查队列（检查失败下次唤醒重试；开放缺口每 24 小时复查，记 resolved/reopened）。
+    rc：0 正常 / 2 新发现或重开缺口 / 4 日历未覆盖 / 1 有检查失败（已入队重试）。无事可做 → 不输出。（Codex 036 §3）"""
     now = now or datetime.now(timezone.utc)
-    days, unknown = due_sessions(now, logs)
+    check = check or (lambda d: gapcheck(d, logs=logs))
+    q = _load_queue(logs)
     rc = 0
+
+    def run_one(day: str, prev: dict | None) -> None:
+        nonlocal rc
+        try:
+            r = check(day)
+        except Exception as e:
+            print(f"{day} 缺口检查失败：{type(e).__name__}: {e}"); _enqueue(q, day, "check_failed", now, prev); rc = rc or 1
+            return
+        for g in r.get("gaps", []):
+            print(f"缺口 {day} {g['dataset']} {g['instrument']}：{g['reason']}" + ("（重开）" if g.get("status") == "reopened" else ""))
+        for g in r.get("resolved", []):
+            print(f"已补齐 {day} {g['base_key']}")
+        if r.get("check_failed"):
+            print(f"{day} 部分检查失败：{'；'.join(r['check_failed'])}（入队重试）")
+            _enqueue(q, day, "check_failed", now, prev); rc = 1
+        elif r.get("open_keys"):
+            _enqueue(q, day, "open_gaps", now, prev)
+        else:
+            q.pop(day, None)
+        print(f"{day} 新缺口 {len(r.get('gaps', []))} 项，仍开放 {len(r.get('open_keys', []))} 项，本次补齐 {len(r.get('resolved', []))} 项")
+        if r.get("gaps") and rc == 0:
+            rc = 2
+
+    days, unknown = due_sessions(now, logs)
     for day, trading in days:
         if trading:
-            try:
-                r = gapcheck(day, logs=logs)
-            except Exception as e:
-                print(f"{day} 缺口检查失败：{type(e).__name__}: {e}"); return 1
-            for g in r["gaps"]:
-                print(f"缺口 {day} {g['dataset']} {g['instrument']}：{g['reason']}")
-            for g in r["resolved"]:
-                print(f"已补齐 {day} {g['dataset']} {g['instrument']}")
-            print(f"{day} 缺口 {len(r['gaps'])} 项" + (f"，此前缺口已补齐 {len(r['resolved'])} 项" if r["resolved"] else ""))
-            if r["gaps"]:
-                rc = 2
-        set_watermark(day, logs)
+            run_one(day, None)
+        set_watermark(day, logs)                     # 首次检查完成即推进；失败与开放缺口由队列负责重查，不阻塞新日期
+    n = 0
+    for day in sorted(q):
+        e = q[day]
+        if n >= MAX_RECHECK_PER_RUN or e.get("stale") or day in {d for d, _ in days}:
+            continue
+        if _parse_dt(e.get("next_at")) and _parse_dt(e["next_at"]) <= now:
+            run_one(day, e); n += 1
+    _atomic(logs / QUEUE_FILE, json.dumps(q, ensure_ascii=False, indent=1))
     if unknown:
-        print(f"{unknown} 日历未覆盖：无法判定是否交易日，缺口检查停在此日之前（需更新 market_calendar）")
+        print(f"{unknown} 日历未覆盖：无法判定是否交易日，首次检查停在此日之前（需更新 market_calendar）")
         return 4 if rc == 0 else rc
     return rc
+
+
+def gapcheck_pending(now: datetime, logs: Path = LOGS) -> bool:
+    days, unknown = due_sessions(now, logs)
+    if days or unknown:
+        return True
+    return any(not e.get("stale") and _parse_dt(e.get("next_at")) and _parse_dt(e["next_at"]) <= now
+               for e in _load_queue(logs).values())
 
 
 def main() -> int:
@@ -401,14 +537,22 @@ def main() -> int:
         miss = missing_required(day, st["identity"])
         if miss:                                            # 发布成功不能替代分析成功（Codex 034 §3.1）
             print("必需阶段未完成，不标记完成：" + " ".join(miss)); return 1
-        _atomic(_done_path(day), json.dumps({"identity": st["identity"], "at": datetime.now(timezone.utc).isoformat(),
-                                             "stages": load_stages(day, st["identity"])}, ensure_ascii=False))
+        opt = optional_incomplete(day, st["identity"])
+        _atomic(_done_path(day), json.dumps({"schema": DONE_SCHEMA, "identity": st["identity"],
+                                             "at": datetime.now(timezone.utc).isoformat(),
+                                             "stages": load_stages(day, st["identity"]),
+                                             # 可选阶段未完成 = 明确的终态（当日封账后不再重试），由 shell 告警一次
+                                             "optional_terminal_incomplete": opt}, ensure_ascii=False))
+        if opt:
+            print("OPTIONAL_INCOMPLETE " + " ".join(opt))
         return 0
-    if cmd == "record-complete":                         # rc 0 = 该记录类阶段当日所有注册品种都已有行；1 = 有缺（列出）
-        miss = record_missing(sys.argv[3], day)
-        if miss:
-            print("当日未落行：" + " ".join(miss)); return 1
-        return 0
+    if cmd == "record-complete":     # rc 0 全部合格终态行 / 4 全部有终态行但有不合格 / 1 有缺失、损坏或冲突（逐品种 JSON 输出）
+        st = record_status(sys.argv[3], day)
+        print(json.dumps(st, ensure_ascii=False))
+        states = {v["state"] for v in st.values()}
+        if states & {"missing", "corrupt", "identity_conflict"}:
+            return 1
+        return 4 if "completed_ineligible" in states else 0
     if cmd in ("stage-set", "stage-ok"):
         ident = snapshot_state(day, expected_symbols())["identity"]
         if cmd == "stage-ok":
@@ -422,9 +566,8 @@ def main() -> int:
     if cmd == "lastrun":
         _atomic(LOGS / f".daily_lastrun_{day}", datetime.now(ET).strftime("%H:%M"))
         return 0
-    if cmd == "gapcheck-pending":                         # rc 0 = 有截止已过、未检查的交易日（或日历未知需报告）
-        days, unknown = due_sessions(datetime.now(timezone.utc))
-        return 0 if (days or unknown) else 1
+    if cmd == "gapcheck-pending":                         # rc 0 = 有待首次检查的交易日、到期的重查，或日历未知需报告
+        return 0 if gapcheck_pending(datetime.now(timezone.utc)) else 1
     if cmd == "gapcheck-due":
         return gapcheck_due()
     if cmd == "gapcheck":

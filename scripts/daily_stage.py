@@ -3,6 +3,7 @@
   python3 scripts/daily_stage.py snapshots <ET日>        # 输出 MISSING / CORRUPT / IDENTITY 三行
   python3 scripts/daily_stage.py done-match <ET日>       # rc 0 = 当日下游阶段已在【同一快照身份】下完成
   python3 scripts/daily_stage.py mark-done <ET日>        # 发布成功后调用：记下完成时的快照身份
+  python3 scripts/daily_stage.py trading-day <ET日>      # rc 0 交易日（或日历未覆盖）/ 3 确定非交易日
   python3 scripts/daily_stage.py lastrun <ET日>          # 窗口内每次运行调用：记最后一次运行的 ET 时刻
   python3 scripts/daily_stage.py gapcheck <ET日>         # 截止后只读缺口检查：rc 0 无缺口 / 2 有缺口 / 3 非交易日
 
@@ -62,6 +63,15 @@ def snapshot_state(day: str, syms: list, root: Path = ROOT) -> dict:
     return {"missing": missing, "corrupt": corrupt, "identity": ident}
 
 
+def is_non_trading(day: str) -> bool:
+    """只有日历明确判为非交易日才返回 True；日历未覆盖或读不到 → False（未知不当作休市，不压告警）。"""
+    try:
+        from undertow.core import market_calendar as mc
+        return mc.is_trading_day(date.fromisoformat(day)) is False
+    except Exception:
+        return False
+
+
 def _done_path(day: str, logs: Path = LOGS) -> Path:
     return logs / f".daily_done_{day}.json"
 
@@ -98,11 +108,7 @@ def gapcheck(day: str, *, root: Path = ROOT, logs: Path = LOGS, gaps_dir: Path =
     now = now or datetime.now(timezone.utc)
     syms = syms if syms is not None else expected_symbols()
     if holiday is None:
-        try:
-            from undertow.core import market_calendar as mc
-            holiday = mc.is_trading_day(date.fromisoformat(day)) is False
-        except Exception:
-            holiday = False
+        holiday = is_non_trading(day)
     if holiday:
         return {"day": day, "holiday": True, "gaps": []}
     st = snapshot_state(day, syms, root)
@@ -187,6 +193,8 @@ def main() -> int:
             print("快照不全或损坏，不标记完成"); return 1
         _atomic(_done_path(day), json.dumps({"identity": st["identity"], "at": datetime.now(timezone.utc).isoformat()}))
         return 0
+    if cmd == "trading-day":                              # rc 0 交易日或日历未覆盖（未知按交易日处理，宁可多跑）/ 3 确定非交易日
+        return 3 if is_non_trading(day) else 0
     if cmd == "lastrun":
         _atomic(LOGS / f".daily_lastrun_{day}", datetime.now(ET).strftime("%H:%M"))
         return 0

@@ -68,3 +68,14 @@ def test_daily_script_stage_flow():
     i_snap = src.index("python3 -m undertow snapshot --status-file")
     assert src.index("末班抓取后仍缺当日快照") > i_snap                                     # 末班结论在抓取之后
     assert "mark-done" in src[src.index("case $PUB_RC in"):]                                 # 发布成功才标完成
+
+
+def test_non_trading_day_gate():
+    """周末确定休市 → 跳过（10/10、10/11 曾每次唤醒都抓、末班误报「仍缺当日快照」）；日历未覆盖 → 不当作休市。"""
+    assert ds.is_non_trading("2026-10-10") and ds.is_non_trading("2026-10-11")
+    assert not ds.is_non_trading("2026-10-12")
+    assert not ds.is_non_trading("2099-01-03")                        # 未覆盖 → 未知，按交易日跑
+    src = (ROOT / "scripts/daily_update.sh").read_text("utf-8")
+    gate = src.index('daily_stage.py trading-day "$ET_DATE"')
+    assert src.index("if (( MODE_GAPCHECK )); then") < gate < src.index('daily_stage.py lastrun "$ET_DATE"')
+    assert gate < src.index("末班预警") and gate < src.index("🚨 末班抓取后仍缺当日快照")

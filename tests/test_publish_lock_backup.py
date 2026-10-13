@@ -61,3 +61,38 @@ def test_session_hook_close_backup_wiring():
     body = src[src.index("close_backup() {"):src.index("then close_backup; fi")]
     assert "publish_dirs" in body and "data/history data/snapshots" in body and "git add" not in body   # 不全仓 add
     assert src.index("source scripts/lib_publish.sh") < src.index("close_backup() {")
+
+
+def test_concurrent_auto_writers_do_not_wedge_publish(tmp_path):
+    """2026-10-08~12 daily 连续冲突：A 启动时文件=已登记 h0；B 写 h1 并登记；A 再写 h2。
+    旧判据只比最后登记的 h1 → A 判冲突且不登记 h2 → 此后永久冲突。现：pre 命中任一登记哈希即本任务产物。"""
+    _repo(tmp_path)
+    (tmp_path / "data/history/a.txt").write_text("base\n"); _git(tmp_path, "add", "-A"); _git(tmp_path, "commit", "-qm", "b")
+    script = """
+source scripts/lib_publish.sh
+export PUBLISH_PENDING=data/pending; : > $PUBLISH_PENDING
+echo h0 > data/history/a.txt; printf 'data/history/a.txt\\t%s\\n' "$(git hash-object data/history/a.txt)" >> $PUBLISH_PENDING
+publish_begin data/history                                  # A 启动：h0（已登记）
+echo h1 > data/history/a.txt; printf 'data/history/a.txt\\t%s\\n' "$(git hash-object data/history/a.txt)" >> $PUBLISH_PENDING   # B 写并登记
+echo h2 > data/history/a.txt                                # A 再写
+PUBLISH_NO_PUSH=1 PUBLISH_LOCK_WAIT=2 publish_dirs "t" data/history; echo "RC=$?"
+"""
+    out = subprocess.run(["zsh", "-c", script], cwd=tmp_path, capture_output=True, text=True).stdout
+    assert "RC=0" in out and "PUBLISH_CONFLICT" not in out
+    assert _git(tmp_path, "show", "HEAD:data/history/a.txt").stdout == "h2\n"
+
+
+def test_unregistered_foreign_edit_still_conflicts(tmp_path):
+    """真正的他人改动（运行前内容从未被自动任务登记）运行中又被写 → 仍判冲突、不发布。"""
+    _repo(tmp_path)
+    (tmp_path / "data/history/a.txt").write_text("base\n"); _git(tmp_path, "add", "-A"); _git(tmp_path, "commit", "-qm", "b")
+    script = """
+source scripts/lib_publish.sh
+export PUBLISH_PENDING=data/pending; printf 'data/history/a.txt\\tdeadbeef\\n' > $PUBLISH_PENDING
+echo manual > data/history/a.txt
+publish_begin data/history
+echo auto > data/history/a.txt
+PUBLISH_NO_PUSH=1 PUBLISH_LOCK_WAIT=2 publish_dirs "t" data/history; echo "RC=$?"
+"""
+    out = subprocess.run(["zsh", "-c", script], cwd=tmp_path, capture_output=True, text=True).stdout
+    assert "RC=5" in out and "PUBLISH_CONFLICT" in out

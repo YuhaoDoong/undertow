@@ -26,15 +26,20 @@ _publish_hash() {    # 路径的内容哈希；已删除记 DELETED
 }
 
 _publish_classify() {   # 每行输出 OURS\t路径 / CONFLICT\t路径 / FOREIGN\t路径
-  local p pre_h pend_h PEND="${PUBLISH_PENDING:-}"
+  # 运行前内容只要等于待发布记录里【任何一次】登记过的哈希，就是自动任务自己的产物。
+  # 原错（2026-10-08 起 daily 连续 4 个交易日 PUBLISH_CONFLICT、影子账 10/8–10/12 未入库）：只比「最后一次」登记的哈希。
+  # 并发的两个自动进程 A、B：A 启动时文件为已登记的 h0；B 写 h1 并登记；A 再写 h2 → A 看到 pre=h0 ≠ 最后登记 h1 → 判冲突、
+  # 且冲突路径不登记 → h2 永远没人认领，此后每次运行都冲突，卡死。
+  local p pre_h pend_hit PEND="${PUBLISH_PENDING:-}"
   while IFS= read -r p; do
     [[ -z "$p" ]] && continue
     pre_h=$(awk -F'\t' -v k="$p" '$1 == k {print $2; exit}' "$PUBLISH_PRE")
-    pend_h=""
-    [[ -n "$PEND" && -f "$PEND" ]] && pend_h=$(awk -F'\t' -v k="$p" '$1 == k {h=$2} END {print h}' "$PEND")
+    pend_hit=""
+    [[ -n "$pre_h" && -n "$PEND" && -f "$PEND" ]] && \
+      pend_hit=$(awk -F'\t' -v k="$p" -v h="$pre_h" '$1 == k && $2 == h {print "y"; exit}' "$PEND")
     if [[ -z "$pre_h" ]]; then
       printf 'OURS\t%s\n' "$p"
-    elif [[ -n "$pend_h" && "$pend_h" == "$pre_h" ]]; then
+    elif [[ -n "$pend_hit" ]]; then
       printf 'OURS\t%s\n' "$p"
     elif [[ "$(_publish_hash "$p")" != "$pre_h" ]]; then
       printf 'CONFLICT\t%s\n' "$p"

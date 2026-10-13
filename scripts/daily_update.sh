@@ -74,6 +74,15 @@ if (( MODE_GAPCHECK )); then
     : > "data/logs/.daily_gapcheck_${ET_DATE}"
     exit 0
 fi
+# 非交易日（周末/休市）不期望新的 OI 结算：直接跳过并留痕。2026-10-10/11 周末每次唤醒都去抓、末班还发「🚨 仍缺当日快照」——
+# 误报会把真告警淹掉（AGENTS 静默失败第 3 条：正常的「没数据」不得告警）。日历未覆盖 → 按交易日跑，不压告警。
+set +e
+python3 scripts/daily_stage.py trading-day "$ET_DATE"; TD_RC=$?
+set -e
+if (( TD_RC == 3 )); then
+    echo "[非交易日] ET $ET_DATE 休市，不期望新快照，跳过"
+    exit 0
+fi
 python3 scripts/daily_stage.py lastrun "$ET_DATE" || true   # 记窗口内最后一次运行的 ET 时刻（缺口归因用；失败不影响主流程）
 
 # —— 末班车兜底：最后一个重试点（ET08:45）跑完若仍缺当日快照，必须当场告警 ——

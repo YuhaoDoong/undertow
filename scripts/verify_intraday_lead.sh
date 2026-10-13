@@ -1,4 +1,7 @@
 #!/bin/zsh
+# ⛔ 已停用（2026-10-13，用户同意）：launchd 任务 com.yuhaodoong.undertow.lbintraday 已卸载，plist 移到 scripts/launchd/retired/。
+# 停用原因：9/25 改写 longbridge_options 后 quotes()/total_volume() 已不存在，此后每次运行都 AttributeError（无告警，约 2.5 周）；
+# 固定探针合约 9/18 已到期。要回答的问题（长桥何时更新 OI）8/31 已测出。脚本保留作历史记录，不再调度。
 # 验证长桥期权数据的【时效】—— 两个问题，一次测完。
 #
 # 用户 2026-08-30：

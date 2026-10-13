@@ -342,6 +342,9 @@ POLICIES = {
     "U2": {"stop": "extreme", "target": False, "struct_exit": True, "breakeven": True, "hold": 60},
     "U3": {"stop": "extreme", "target": False, "struct_exit": True, "breakeven": False, "hold": 250},
     "U4": {"stop": "extreme", "target": False, "struct_exit": True, "breakeven": True, "hold": 250},
+    # ps-exit-v3 基准（Codex 041）：同初止损、无目标、无结构离场、无移成本 —— 把「取消 2R」与「加 LH 离场」分开
+    "N60": {"stop": "extreme", "target": False, "struct_exit": False, "breakeven": False, "hold": 60},
+    "N250": {"stop": "extreme", "target": False, "struct_exit": False, "breakeven": False, "hold": 250},
 }
 
 
@@ -358,6 +361,8 @@ def simulate_policy(bars: list, piv: list, entry_i: int, stop: float, direction:
     if entry_i > last_i:
         return {"status": "no_entry_bar"}
     o = bars[entry_i][1]
+    if o is None:
+        return {"status": "no_open"}
     r = s * (o - stop)
     if r <= 0:
         return {"status": "open_beyond_stop", "entry": o, "stop": stop}
@@ -395,10 +400,12 @@ def simulate_policy(bars: list, piv: list, entry_i: int, stop: float, direction:
             weaker = s * p.price < s * ref.price            # 做多：更低的高点（LH）；做空：更高的低点（HL）
             if weaker and pol["struct_exit"] and pending is None:
                 pending = i
-                audit["struct_point"] = {"idx": p.idx, "conf": p.conf, "price": p.price, "ref_idx": ref.idx, "ref_price": ref.price}
+                audit["struct_point"] = {"idx": p.idx, "conf": p.conf, "price": p.price, "ref_idx": ref.idx, "ref_conf": ref.conf,
+                                         "ref_price": ref.price, "decided_at": i, "execute_at": i + 1}
             elif not weaker and s * p.price > s * ref.price and pol["breakeven"] and be_at is None:
                 be_at = i + 1
-                audit["breakeven_point"] = {"idx": p.idx, "conf": p.conf, "price": p.price, "ref_idx": ref.idx}
+                audit["breakeven_point"] = {"idx": p.idx, "conf": p.conf, "price": p.price, "ref_idx": ref.idx, "ref_conf": ref.conf,
+                                            "ref_price": ref.price, "decided_at": i, "effective_at": i + 1}
         if be_at is not None and i + 1 >= be_at:
             eff_stop = max(eff_stop, o) if direction == "long" else min(eff_stop, o)
     i = entry_i + pol["hold"] - 1

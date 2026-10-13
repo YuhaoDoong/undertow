@@ -58,6 +58,10 @@ def trades_for(sym: str, ref_dates: list) -> list:
             else:                                          # v1：回踩点的收盘价（之字形按收盘认点）
                 stop1 = e.hl1.price - s * ps.STOP_BUF * a_ref
             row = {"id": f"{sym}-{si}-{e.direction}-{e.start}", "symbol": sym, "direction": e.direction,
+                   "initial_stop_pivot": {"kind": e.extreme.kind, "price_close": e.extreme.price, "idx_date": str(bars[e.extreme.idx][0]),
+                                          "conf_date": str(bars[e.extreme.conf][0]), "basis": "收盘之字形极值（不是影线）"},
+                   "hl1": {"price_close": e.hl1.price, "idx_date": str(bars[e.hl1.idx][0]), "conf_date": str(bars[e.hl1.conf][0])},
+                   "key": {"price_close": e.key.price, "idx_date": str(bars[e.key.idx][0])},
                    "entry_date": str(bars[ei][0]), "entry": bars[ei][1], "atr_entry": atr[ei - 1], "stop_extreme": stop0, "stop_pullback": stop1,
                    "risk_p0": p0["risk"], "policies": {}}
             for name in POLSET:
@@ -78,7 +82,12 @@ def trades_for(sym: str, ref_dates: list) -> list:
                                                      if len(win) == CONT_BARS else None)
                     p0x = p0["exit_i"]
                     r["move_to_p0_exit_atr"] = s * (bars[p0x][4] - r["exit_price"]) / atr[ei - 1] if p0x > x else None
-                r.pop("audit", None)
+                au = r.pop("audit", None) or {}
+                dt = lambda i: str(bars[i][0]) if i is not None and 0 <= i < len(bars) else None
+                for k_, v_ in au.items():                       # 审计保留（Codex 041）：根序号同时换成日期
+                    for f_ in [x for x in v_ if x in ("idx", "conf", "ref_idx", "ref_conf", "decided_at", "execute_at", "effective_at")]:
+                        v_[f_ + "_date"] = dt(v_[f_])
+                r["audit"] = au
                 row["policies"][name] = r
             out.append(row)
     return out

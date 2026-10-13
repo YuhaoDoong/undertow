@@ -201,3 +201,17 @@ def test_p0_matches_original_simulate():
         a = ps.simulate(bars, e, stop, "long", last_i=199)
         b = ps.simulate_policy(bars, piv, e, stop, "long", ps.POLICIES["P0"], last_i=199)
         assert (a["exit_i"], a["exit_reason"], a["r_mult"]) == (b["exit_i"], b["exit_reason"], b["r_mult"])
+
+
+def test_policy_no_open_and_short_mirror_struct_exit():
+    """Codex 041：缺开盘价显式 no_open；做空镜像：持仓后新形成并确认的更高低点（HL）→ 下一根开盘离场；审计保留参照点。"""
+    bars = flat(80)
+    bars[5] = (bars[5][0], None, 100.5, 99.5, 100)
+    assert ps.simulate_policy(bars, [], 5, 103.0, "short", ps.POLICIES["U1"], last_i=79)["status"] == "no_open"
+    bars = flat(80)
+    piv = [P("L", 2, 3, 95.0), P("L", 8, 10, 97.0)]              # 第二个低点更高 = HL（做空离场信号）
+    r = ps.simulate_policy(bars, piv, 5, 103.0, "short", ps.POLICIES["U1"], last_i=79)
+    assert r["exit_reason"] == "struct_exit" and r["exit_i"] == 11
+    a = r["audit"]["struct_point"]
+    assert (a["ref_idx"], a["decided_at"], a["execute_at"]) == (2, 10, 11)
+    assert ps.simulate_policy(bars, piv, 5, 103.0, "short", ps.POLICIES["N60"], last_i=79)["exit_reason"] == "time_exit"

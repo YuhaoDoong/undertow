@@ -1,0 +1,30 @@
+{
+ "version": "structure-v0-patterns-20261013",
+ "status": "探索配置；全部阈值未校准；在运行任何真实数据之前提交（Codex 039：初版阈值/去重/确认时点在见新结果前保存）",
+ "user_words": ["头肩结构，M结构 我觉得其实就是道氏结构的一种", "可以，做起来"],
+ "local_pivots": {"method": "fractal", "k": 2, "price_basis": "high/low（影线）", "confirm": "极值 i 在 i+2 收盘后可知",
+                  "plateau": "相等取最早", "same_bar_high_low": "ambiguous_order，不进交替投影"},
+ "projection": "按确认顺序流式交替；同类相邻更极端者取代前者；第 t 根收盘时只用 conf ≤ t 的点",
+ "background": {"method": "2ATR 收盘之字形（ps-explore 既有识别器）", "state": "截至 t 已确认的最近两高两低：都上升=up、都下降=down、否则 none"},
+ "ordinary_break": {
+  "bearish": "第 t 根收盘时投影最后一点是高点 H、其前是低点 L，收盘 < L.price → 事件（每个 L 只算一次）",
+  "bullish": "镜像：最后一点是低点 L、其前是高点 H，收盘 > H.price",
+  "reversal_condition": "主分析只取逆背景的突破：看跌突破要求背景 up、看涨突破要求背景 down（as-of t）；其余背景记录但不进主比较",
+  "late_confirmation": "若该 H（或 L）恰在第 t 根才确认，标 late_confirmation，并记录投影中第一次收盘越过 L 的根（审计用）；入场仍是 t+1"
+ },
+ "double_top": {"skeleton": "H1 → L1 → H2（投影最后三点），突破 = 收盘 < L1（即普通突破的子集）",
+                "eps_tops_atr": 0.5, "depth_min_atr": 1.0, "max_bars_h1_h2": 60,
+                "atr_for_geometry": "ATR[t−1]（识别当时上一根），随事件冻结",
+                "double_bottom": "镜像 L1 → H1 → L2"},
+ "head_shoulders": {"mode": "只记连续特征，不作分组门槛（Codex 039）",
+                    "features": ["head_prominence_atr=(H2−max(H1,H3))/A", "shoulder_diff_atr=|H1−H3|/A", "neckline_slope_atr_per_bar",
+                                 "left_right_bars_ratio", "close_vs_sloped_neckline_atr"]},
+ "outcome": {"entry": "t+1 开盘", "barrier_atr_k": [2.0, 1.0, 3.0], "barrier_main": 2.0, "barrier_days": 10,
+             "barrier_rule": "入场开盘向不利方向 k×ATR[入场前一根]；10 根内任一收盘越过 = 越界",
+             "mae_mfe": "10 根内最大不利 / 有利（high/low）相对入场开盘，单位 ATR[入场前一根]；先后顺序不明，不模拟成交"},
+ "comparison": {"main": "同方向、同逆背景条件下：双顶（双底）突破 vs 不满足双顶几何的普通突破",
+                "also": ["全部普通突破", "同年随机日同距离屏障（参考）"],
+                "report_groups": {"ETF": ["GLD", "SLV", "USO", "QQQ", "SPY"], "个股": ["GOOGL", "AAPL", "MSFT", "NVDA", "AMD", "INTC", "TSLA"],
+                                  "连续期货": ["GC=F", "SI=F"]}},
+ "partition": "≤2015-12-31（与 ps-explore 同一设计集；不是新的未见样本）；2016 起不取数"
+}

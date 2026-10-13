@@ -2,3 +2,19 @@
   发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/shadow/shadow-v5-20260926/aapl.jsonl data/history/shadow/shadow-v5-20260926/amd.jsonl data/history/shadow/shadow-v5-20260926/gold.jsonl data/histor），已停止自动提交；数据已落盘，需人工核对后提交
 2026-10-12 15:53 +08 | ET 2026-10-12 03:46 | ⚠️ 每日数据未提交（ET 2026-10-12 03:46）
   发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/signals/iwm.json.revisions.jsonl data/history/vrp/iwm.json ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-12 17:40 +08 | ET 2026-10-12 05:34 | ⚠️ 每日数据未提交（ET 2026-10-12 05:34）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl data/history/shadow/shadow-v5-20260926/aapl.jsonl data/history/shadow/shadow-v5-20260926/amd.jsonl data/history），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-12 18:02 +08 | ET 2026-10-12 05:55 | ⚠️ 每日数据未提交（ET 2026-10-12 05:55）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-12 18:24 +08 | ET 2026-10-12 06:18 | ⚠️ 方向判断台账失败（ET 2026-10-12 06:18）
+  record rc=0 score rc=1 conviction rc=0 expiry-profile rc=0：  ⚠️ gold 取日线失败：KlineUnavailable: longbridge kline GLD.US 失败：Error: connect timeout 
+2026-10-12 18:26 +08 | ET 2026-10-12 06:18 | ⚠️ 每日数据未提交（ET 2026-10-12 06:18）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl data/history/shadow/shadow-v5-20260926/iwm.jsonl data/history/shadow/shadow-v5-20260926/silver.jsonl data/histo），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-12 18:48 +08 | ET 2026-10-12 06:42 | ⚠️ 每日数据未提交（ET 2026-10-12 06:42）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/direction_ledger/skew-reading-v1-20260928/attempts/gold.jsonl data/history/direction_ledger/skew-reading-v1-20260928/attempts/silver.jsonl data/his），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-12 19:11 +08 | ET 2026-10-12 07:04 | ⚠️ 每日数据未提交（ET 2026-10-12 07:04）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-12 19:34 +08 | ET 2026-10-12 07:27 | ⚠️ 每日数据未提交（ET 2026-10-12 07:27）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl data/history/resonance/silver.json.revisions.jsonl data/history/vrp/silver.json data/history/vrp/wti.json ），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-12 19:51 +08 | ET 2026-10-12 07:50 | ⚠️ daily 下游阶段反复未完成（ET 2026-10-12 07:50）
+  快照已齐，但研报/台账/发布已续跑 3 次仍未完成（常见原因：发布冲突）；需人工核对

@@ -3027,3 +3027,1474 @@ To https://github.com/YuhaoDoong/undertow.git
 To https://github.com/YuhaoDoong/undertow.git
    6ceb8f4..68f12b9  main -> main
 [完成] 已提交并推送
+==== 2026-09-25 17:00 +08 | ET 2026-09-25 05:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT IWM GOOGL TSLA NVDA INTC MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[去重] spy 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] nvda 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[去重] amd 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[提示] msft 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+已落盘 2026-09-25 期权链快照（原始全字段，纳入 git 永久留存）:
+  spy     SPY: 13,632 合约（9,637 有OI）  → 已累计 21 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-25.json.gz
+  amd     AMD: 6,628 合约（5,357 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/AMD/2026-09-25.json.gz
+[状态] snapshot overall=complete saved=2 failed=0 rc=0
+  📐 金银比 67.20　墙隐含 65.0~69.1（区间内）
+已生成综合研判报告 · 数据日 2026-09-23（文件名）· 可交易日 2026-09-25:
+  gold    近偏多(弱)    中偏空       (可信度中)  · 不做空 · 别追·等回调 · 短线止盈/收紧 · 长线减  → /Users/yhdong/Trading/data/reports/gold_2026-09-23.html
+  silver  近中性       中偏空       (可信度中)  · 不做空 · 别追·等回调 · 短线止盈/收紧 · 长线减  → /Users/yhdong/Trading/data/reports/silver_2026-09-23.html
+  wti     近偏空(弱)    中中性       (可信度中)  · 轻仓短空 · 反抽卖·不追 · 短线等反抽 · 长线维持  → /Users/yhdong/Trading/data/reports/wti_2026-09-23.html
+  qqq     近偏空(弱)    中偏空       (可信度高)  · 可空 · 反抽卖·不追 · 短线等反抽 · 长线减  → /Users/yhdong/Trading/data/reports/qqq_2026-09-23.html
+  tqqq    近偏空(弱)    中偏空       (可信度高)  · 可空 · 反抽卖·不追 · 短线等反抽 · 长线减  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-23.html
+  tlt     近偏多(弱)    中偏空(弱)    (可信度低)  · 不做空 · 追势无依据 · 短线观望 · 长线减  → /Users/yhdong/Trading/data/reports/tlt_2026-09-23.html
+  spy     近偏空(弱)    中偏空       (可信度高)  · 可空 · 追势无依据 · 短线观望 · 长线减  → /Users/yhdong/Trading/data/reports/spy_2026-09-23.html
+  iwm     近偏多(弱)    中分歧(双向)   (可信度中)  · 不做空 · 追势无依据 · 短线观望 · 长线维持  → /Users/yhdong/Trading/data/reports/iwm_2026-09-23.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-23.html
+
+📅 ⚠️ 各品种数据不同龄：2026-09-24, 2026-09-25 —— 混龄比较需谨慎。
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-23.html'）
+[状态] report overall=complete rc=0
+  gold     回填 0 行，仍有 17 个前瞻格未到期
+  silver   回填 0 行，仍有 17 个前瞻格未到期
+  wti      回填 0 行，仍有 17 个前瞻格未到期
+  qqq      回填 0 行，仍有 17 个前瞻格未到期
+  tqqq     回填 0 行，仍有 17 个前瞻格未到期
+  tlt      回填 0 行，仍有 17 个前瞻格未到期
+  spy      回填 0 行，仍有 22 个前瞻格未到期
+  iwm      回填 0 行，仍有 17 个前瞻格未到期
+  googl    回填 0 行，仍有 0 个前瞻格未到期
+  tsla     回填 0 行，仍有 0 个前瞻格未到期
+  nvda     回填 0 行，仍有 0 个前瞻格未到期
+  intc     回填 0 行，仍有 0 个前瞻格未到期
+  amd      回填 0 行，仍有 0 个前瞻格未到期
+  msft     回填 0 行，仍有 0 个前瞻格未到期
+  aapl     回填 0 行，仍有 0 个前瞻格未到期
+[main f747954] 每日自动更新 2026-09-25：期权链快照+台账（launchd 定时任务）
+ 8 files changed, 8 insertions(+), 8 deletions(-)
+To https://github.com/YuhaoDoong/undertow.git
+   344aa78..f747954  main -> main
+[完成] 已提交并推送
+==== 2026-09-25 18:00 +08 | ET 2026-09-25 06:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT IWM GOOGL TSLA NVDA INTC MSFT AAPL
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[去重] spy 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] amd 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+已落盘 2026-09-25 期权链快照（原始全字段，纳入 git 永久留存）:
+  gold    GLD: 8,484 合约（5,581 有OI）  → 已累计 66 天  ·  /Users/yhdong/Trading/data/snapshots/options/GLD/2026-09-25.json.gz
+  silver  SLV: 4,656 合约（3,786 有OI）  → 已累计 63 天  ·  /Users/yhdong/Trading/data/snapshots/options/SLV/2026-09-25.json.gz
+  qqq     QQQ: 12,060 合约（8,979 有OI）  → 已累计 42 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-25.json.gz
+  tlt     TLT: 2,598 合约（2,000 有OI）  → 已累计 21 天  ·  /Users/yhdong/Trading/data/snapshots/options/TLT/2026-09-25.json.gz
+  spy     SPY: 13,632 合约（9,637 有OI）  → 已累计 21 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-25.json.gz
+  iwm     IWM: 5,962 合约（3,748 有OI）  → 已累计 21 天  ·  /Users/yhdong/Trading/data/snapshots/options/IWM/2026-09-25.json.gz
+  googl   GOOGL: 4,914 合约（3,639 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-09-25.json.gz
+  tsla    TSLA: 5,142 合约（3,851 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/TSLA/2026-09-25.json.gz
+  nvda    NVDA: 3,940 合约（3,126 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/NVDA/2026-09-25.json.gz
+  intc    INTC: 2,968 合约（2,490 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/INTC/2026-09-25.json.gz
+  amd     AMD: 6,628 合约（5,357 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/AMD/2026-09-25.json.gz
+  msft    MSFT: 3,706 合约（3,051 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/MSFT/2026-09-25.json.gz
+  aapl    AAPL: 3,636 合约（2,772 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/AAPL/2026-09-25.json.gz
+[状态] snapshot overall=complete saved=13 failed=0 rc=0
+  📐 金银比 67.20　墙隐含 65.0~69.1（区间内）
+已生成综合研判报告 · 数据日 2026-09-24（文件名）· 可交易日 2026-09-25:
+  gold    近偏多(弱)    中偏空       (可信度中)  ·强看涨(低置信)  · 不做空 · 别追·等回调 · 短线止盈/收紧 · 长线减  → /Users/yhdong/Trading/data/reports/gold_2026-09-24.html
+  silver  近中性       中偏空       (可信度中)  ⚡强看涨  · 不做空 · 别追·等回调 · 短线止盈/收紧 · 长线减  → /Users/yhdong/Trading/data/reports/silver_2026-09-24.html
+  wti     近偏空(弱)    中中性       (可信度中)  · 轻仓短空 · 反抽卖·不追 · 短线等反抽 · 长线维持  → /Users/yhdong/Trading/data/reports/wti_2026-09-23.html
+  qqq     近中性       中偏空       (可信度中)  ⚡强看涨  · 不做空 · 反抽卖·不追 · 短线等反抽 · 长线减  → /Users/yhdong/Trading/data/reports/qqq_2026-09-24.html
+  tqqq    近偏空(弱)    中偏空       (可信度高)  · 可空 · 反抽卖·不追 · 短线等反抽 · 长线减  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-23.html
+  tlt     近偏空(弱)    中偏空(弱)    (可信度中)  · 可空 · 追势无依据 · 短线观望 · 长线减  → /Users/yhdong/Trading/data/reports/tlt_2026-09-23.html
+  spy     近偏空(弱)    中偏空       (可信度高)  · 可空 · 追势无依据 · 短线观望 · 长线减  → /Users/yhdong/Trading/data/reports/spy_2026-09-23.html
+  iwm     近偏多(弱)    中分歧(双向)   (可信度中)  ⚡强看涨  · 不做空 · 追势无依据 · 短线观望 · 长线维持  → /Users/yhdong/Trading/data/reports/iwm_2026-09-23.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-24.html
+
+📅 ⚠️ 各品种数据不同龄：2026-09-24, 2026-09-25 —— 混龄比较需谨慎。
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-24.html'）
+[状态] report overall=complete rc=0
+[强信号] silver ⚡强看涨�qqq ⚡强看涨�iwm ⚡强看涨
+  gold     回填 0 行，仍有 22 个前瞻格未到期
+  silver   回填 0 行，仍有 22 个前瞻格未到期
+  wti      回填 0 行，仍有 17 个前瞻格未到期
+  qqq      回填 0 行，仍有 22 个前瞻格未到期
+  tqqq     回填 0 行，仍有 17 个前瞻格未到期
+  tlt      回填 0 行，仍有 22 个前瞻格未到期
+  spy      回填 0 行，仍有 22 个前瞻格未到期
+  iwm      回填 0 行，仍有 22 个前瞻格未到期
+  googl    回填 0 行，仍有 0 个前瞻格未到期
+  tsla     回填 0 行，仍有 0 个前瞻格未到期
+  nvda     回填 0 行，仍有 0 个前瞻格未到期
+  intc     回填 0 行，仍有 0 个前瞻格未到期
+  amd      回填 0 行，仍有 0 个前瞻格未到期
+  msft     回填 0 行，仍有 0 个前瞻格未到期
+  aapl     回填 0 行，仍有 0 个前瞻格未到期
+[main 2bea63e] 每日自动更新 2026-09-25：期权链快照+台账（launchd 定时任务）
+ 27 files changed, 504 insertions(+), 13 deletions(-)
+ create mode 100644 data/reports/ALERT_2026-09-25.txt
+ create mode 100644 data/snapshots/options/AAPL/2026-09-25.json.gz
+ create mode 100644 data/snapshots/options/GLD/2026-09-25.json.gz
+ create mode 100644 data/snapshots/options/GOOGL/2026-09-25.json.gz
+ create mode 100644 data/snapshots/options/INTC/2026-09-25.json.gz
+ create mode 100644 data/snapshots/options/IWM/2026-09-25.json.gz
+ create mode 100644 data/snapshots/options/MSFT/2026-09-25.json.gz
+ create mode 100644 data/snapshots/options/NVDA/2026-09-25.json.gz
+ create mode 100644 data/snapshots/options/QQQ/2026-09-25.json.gz
+ create mode 100644 data/snapshots/options/SLV/2026-09-25.json.gz
+ create mode 100644 data/snapshots/options/TLT/2026-09-25.json.gz
+ create mode 100644 data/snapshots/options/TSLA/2026-09-25.json.gz
+To https://github.com/YuhaoDoong/undertow.git
+   f747954..2bea63e  main -> main
+[完成] 已提交并推送
+==== 2026-09-25 18:45 +08 | ET 2026-09-25 06:45 ====
+[待补] 尚缺当日快照： USO TQQQ
+[去重] gold 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] silver 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[跳过] dxy 未配置期权数据源
+[去重] qqq 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] tlt 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] spy 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] iwm 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] googl 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] tsla 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] nvda 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] intc 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] amd 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] msft 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] aapl 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+已落盘 2026-09-25 期权链快照（原始全字段，纳入 git 永久留存）:
+  gold    GLD: 8,484 合约（5,581 有OI）  → 已累计 66 天  ·  /Users/yhdong/Trading/data/snapshots/options/GLD/2026-09-25.json.gz
+  silver  SLV: 4,656 合约（3,786 有OI）  → 已累计 63 天  ·  /Users/yhdong/Trading/data/snapshots/options/SLV/2026-09-25.json.gz
+  wti     USO: 5,458 合约（4,291 有OI）  → 已累计 66 天  ·  /Users/yhdong/Trading/data/snapshots/options/USO/2026-09-25.json.gz
+  qqq     QQQ: 12,060 合约（8,979 有OI）  → 已累计 42 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-25.json.gz
+  tqqq    TQQQ: 1,808 合约（1,547 有OI）  → 已累计 21 天  ·  /Users/yhdong/Trading/data/snapshots/options/TQQQ/2026-09-25.json.gz
+  tlt     TLT: 2,598 合约（2,000 有OI）  → 已累计 21 天  ·  /Users/yhdong/Trading/data/snapshots/options/TLT/2026-09-25.json.gz
+  spy     SPY: 13,632 合约（9,637 有OI）  → 已累计 21 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-25.json.gz
+  iwm     IWM: 5,962 合约（3,748 有OI）  → 已累计 21 天  ·  /Users/yhdong/Trading/data/snapshots/options/IWM/2026-09-25.json.gz
+  googl   GOOGL: 4,914 合约（3,639 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-09-25.json.gz
+  tsla    TSLA: 5,142 合约（3,851 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/TSLA/2026-09-25.json.gz
+  nvda    NVDA: 3,940 合约（3,126 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/NVDA/2026-09-25.json.gz
+  intc    INTC: 2,968 合约（2,490 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/INTC/2026-09-25.json.gz
+  amd     AMD: 6,628 合约（5,357 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/AMD/2026-09-25.json.gz
+  msft    MSFT: 3,706 合约（3,051 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/MSFT/2026-09-25.json.gz
+  aapl    AAPL: 3,636 合约（2,772 有OI）  → 已累计 2 天  ·  /Users/yhdong/Trading/data/snapshots/options/AAPL/2026-09-25.json.gz
+[状态] snapshot overall=complete saved=15 failed=0 rc=0
+  📐 金银比 67.20　墙隐含 65.0~69.1（区间内）
+已生成综合研判报告 · 数据日 2026-09-24（文件名）· 可交易日 2026-09-25:
+  gold    近偏多(弱)    中偏空       (可信度中)  ·强看涨(低置信)  · 不做空 · 别追·等回调 · 短线止盈/收紧 · 长线减  → /Users/yhdong/Trading/data/reports/gold_2026-09-24.html
+  silver  近中性       中偏空       (可信度中)  ⚡强看涨  · 不做空 · 别追·等回调 · 短线止盈/收紧 · 长线减  → /Users/yhdong/Trading/data/reports/silver_2026-09-24.html
+  wti     近偏空(弱)    中中性       (可信度低)  ⚡强看跌  · 可空 · 反抽卖·不追 · 短线跟空 · 长线维持  → /Users/yhdong/Trading/data/reports/wti_2026-09-24.html
+  qqq     近中性       中偏空       (可信度中)  ⚡强看涨  · 不做空 · 反抽卖·不追 · 短线等反抽 · 长线减  → /Users/yhdong/Trading/data/reports/qqq_2026-09-24.html
+  tqqq    近偏空(弱)    中偏空       (可信度高)  · 可空 · 反抽卖·不追 · 短线等反抽 · 长线减  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-24.html
+  tlt     近偏空(弱)    中偏空(弱)    (可信度中)  · 可空 · 追势无依据 · 短线观望 · 长线减  → /Users/yhdong/Trading/data/reports/tlt_2026-09-23.html
+  spy     近偏空(弱)    中偏空       (可信度高)  · 可空 · 追势无依据 · 短线观望 · 长线减  → /Users/yhdong/Trading/data/reports/spy_2026-09-23.html
+  iwm     近偏多(弱)    中分歧(双向)   (可信度中)  ⚡强看涨  · 不做空 · 追势无依据 · 短线观望 · 长线维持  → /Users/yhdong/Trading/data/reports/iwm_2026-09-23.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-24.html
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-24.html'）
+[状态] report overall=complete rc=0
+[强信号] silver ⚡强看涨�wti ⚡强看跌�qqq ⚡强看涨�iwm ⚡强看涨
+  gold     回填 0 行，仍有 22 个前瞻格未到期
+  silver   回填 0 行，仍有 22 个前瞻格未到期
+  wti      回填 0 行，仍有 22 个前瞻格未到期
+  qqq      回填 0 行，仍有 22 个前瞻格未到期
+  tqqq     回填 0 行，仍有 22 个前瞻格未到期
+  tlt      回填 0 行，仍有 22 个前瞻格未到期
+  spy      回填 0 行，仍有 22 个前瞻格未到期
+  iwm      回填 0 行，仍有 22 个前瞻格未到期
+  googl    回填 0 行，仍有 0 个前瞻格未到期
+  tsla     回填 0 行，仍有 0 个前瞻格未到期
+  nvda     回填 0 行，仍有 0 个前瞻格未到期
+  intc     回填 0 行，仍有 0 个前瞻格未到期
+  amd      回填 0 行，仍有 0 个前瞻格未到期
+  msft     回填 0 行，仍有 0 个前瞻格未到期
+  aapl     回填 0 行，仍有 0 个前瞻格未到期
+[main 810afcb] 每日自动更新 2026-09-25：期权链快照+台账（launchd 定时任务）
+ 8 files changed, 198 insertions(+), 2 deletions(-)
+ create mode 100644 data/snapshots/options/TQQQ/2026-09-25.json.gz
+ create mode 100644 data/snapshots/options/USO/2026-09-25.json.gz
+To https://github.com/YuhaoDoong/undertow.git
+   2bea63e..810afcb  main -> main
+[完成] 已提交并推送
+==== 2026-09-26 16:00 +08 | ET 2026-09-26 04:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] nvda 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] amd 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] msft 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试（最新快照 2026-09-25，距今 0 个工作日）
+==== 2026-09-26 17:00 +08 | ET 2026-09-26 05:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] nvda 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] amd 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] msft 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试（最新快照 2026-09-25，距今 0 个工作日）
+==== 2026-09-26 18:23 +08 | ET 2026-09-26 06:23 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[警告] gold 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/GLD.json)
+[警告] silver 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/SLV.json)
+[警告] wti 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/USO.json)
+[跳过] dxy 未配置期权数据源
+[警告] qqq 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/QQQ.json)
+[警告] tqqq 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/TQQQ.json)
+[警告] tlt 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/TLT.json)
+[警告] spy 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/SPY.json)
+[警告] iwm 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/IWM.json)
+[警告] googl 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/GOOGL.json)
+[警告] tsla 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/TSLA.json)
+[警告] nvda 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/NVDA.json)
+[警告] intc 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/INTC.json)
+[警告] amd 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/AMD.json)
+[警告] msft 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/MSFT.json)
+[警告] aapl 快照失败: 网络错误: [Errno 8] nodename nor servname provided, or not known (https://cdn.cboe.com/api/global/delayed_quotes/options/AAPL.json)
+没有保存任何快照。
+[状态] snapshot overall=failed saved=0 failed=15 rc=1
+[告警] 🚨 快照全部失败（ET 2026-09-26 06:23） — 15 个品种抓取失败：gold,silver,wti,qqq,tqqq,tlt,spy,iwm,googl,tsla,nvda,intc,amd,msft,aapl。请检查网络/接口。
+==== 2026-09-26 18:45 +08 | ET 2026-09-26 06:45 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] nvda 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] amd 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] msft 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试（最新快照 2026-09-25，距今 0 个工作日）
+==== 2026-09-27 16:17 +08 | ET 2026-09-27 04:17 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] nvda 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] amd 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] msft 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试（最新快照 2026-09-25，距今 0 个工作日）
+==== 2026-09-27 17:00 +08 | ET 2026-09-27 05:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] nvda 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] amd 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] msft 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试（最新快照 2026-09-25，距今 0 个工作日）
+==== 2026-09-27 18:16 +08 | ET 2026-09-27 06:16 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] nvda 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] amd 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] msft 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试（最新快照 2026-09-25，距今 0 个工作日）
+==== 2026-09-27 18:47 +08 | ET 2026-09-27 06:47 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] nvda 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] amd 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] msft 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试（最新快照 2026-09-25，距今 0 个工作日）
+==== 2026-09-28 16:00 +08 | ET 2026-09-28 04:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] amd 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+已落盘 2026-09-28 期权链快照（原始全字段，纳入 git 永久留存）:
+  silver  SLV: 4,592 合约（3,730 有OI）  → 已累计 64 天  ·  /Users/yhdong/Trading/data/snapshots/options/SLV/2026-09-28.json.gz
+  wti     USO: 5,156 合约（4,113 有OI）  → 已累计 67 天  ·  /Users/yhdong/Trading/data/snapshots/options/USO/2026-09-28.json.gz
+  qqq     QQQ: 11,388 合约（8,827 有OI）  → 已累计 43 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-28.json.gz
+  tlt     TLT: 2,654 合约（2,005 有OI）  → 已累计 22 天  ·  /Users/yhdong/Trading/data/snapshots/options/TLT/2026-09-28.json.gz
+  nvda    NVDA: 3,840 合约（3,033 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/NVDA/2026-09-28.json.gz
+  msft    MSFT: 3,582 合约（3,017 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/MSFT/2026-09-28.json.gz
+[状态] snapshot overall=complete saved=6 failed=0 rc=0
+⚠️ gold 价差台账落盘失败：LedgerConflictError: gold 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻样本
+⚠️ tqqq 价差台账落盘失败：LedgerConflictError: tqqq 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻样本
+⚠️ spy 价差台账落盘失败：LedgerConflictError: spy 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻样本
+⚠️ iwm 价差台账落盘失败：LedgerConflictError: iwm 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻样本
+  📐 金银比 68.12　墙隐含 65.0~69.1（区间内）
+已生成综合研判报告 · 数据日 2026-09-25（文件名）· 可交易日 2026-09-28:
+  gold    观察[近偏多(弱) 中偏空 ·强看涨(已过期)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/gold_2026-09-24.html
+  silver  观察[近偏空(弱) 中偏空 ·极强看跌(低置信)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/silver_2026-09-25.html
+  wti     观察[近偏多(弱) 中中性]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/wti_2026-09-25.html
+  qqq     观察[近中性 中偏空 ⚡强看跌]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/qqq_2026-09-25.html
+  tqqq    观察[近偏空(弱) 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-24.html
+  tlt     观察[近中性 中偏空(弱)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tlt_2026-09-24.html
+  spy     观察[近偏空(弱) 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/spy_2026-09-24.html
+  iwm     观察[近偏多(弱) 中偏空(弱) ·强看涨(已过期)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/iwm_2026-09-24.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-25.html
+
+📅 ⚠️ 各品种数据不同龄：2026-09-25, 2026-09-28 —— 混龄比较需谨慎。
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-24.html'）
+[告警] ⚠️ 前瞻台账未写入（ET 2026-09-28 04:00） — gold:LedgerConflictError: gold 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻;tqqq:LedgerConflictError: tqqq 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻;spy:LedgerConflictError: spy 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻样;iwm:LedgerConflictError: iwm 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻样
+[状态] report overall=complete rc=0
+[强信号] qqq ⚡强看跌
+  gold     回填 3 行，仍有 19 个前瞻格未到期
+  gold     价差台账：认证 0、非交易日 0、待认证 0；回填 0 个候选，0 个未到期
+  silver   回填 3 行，仍有 24 个前瞻格未到期
+  silver   价差台账：认证 0、非交易日 0、待认证 1；回填 15 个候选，1 个未到期
+  wti      回填 3 行，仍有 24 个前瞻格未到期
+  wti      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  qqq      回填 3 行，仍有 24 个前瞻格未到期
+  qqq      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  tqqq     回填 3 行，仍有 19 个前瞻格未到期
+  tqqq     价差台账：认证 0、非交易日 0、待认证 0；回填 0 个候选，0 个未到期
+  tlt      回填 3 行，仍有 24 个前瞻格未到期
+  tlt      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  spy      回填 3 行，仍有 19 个前瞻格未到期
+  spy      价差台账：认证 0、非交易日 0、待认证 0；回填 0 个候选，0 个未到期
+  iwm      回填 3 行，仍有 19 个前瞻格未到期
+  iwm      价差台账：认证 0、非交易日 0、待认证 0；回填 0 个候选，0 个未到期
+  googl    回填 0 行，仍有 0 个前瞻格未到期
+  tsla     回填 0 行，仍有 0 个前瞻格未到期
+  nvda     回填 0 行，仍有 0 个前瞻格未到期
+  intc     回填 0 行，仍有 0 个前瞻格未到期
+  amd      回填 0 行，仍有 0 个前瞻格未到期
+  msft     回填 0 行，仍有 0 个前瞻格未到期
+  aapl     回填 0 行，仍有 0 个前瞻格未到期
+  gold    2026-09-25 [provisional] 候选腿 8/6  inserted
+  silver  2026-09-28 [provisional] 候选腿 8/6  inserted
+  wti     2026-09-28 [provisional] 候选腿 8/6  inserted
+  qqq     2026-09-28 [provisional] 候选腿 8/6  inserted
+  tlt     2026-09-28 [provisional] 候选腿 8/6  inserted
+  spy     2026-09-25 [provisional] 候选腿 8/6  inserted
+  iwm     2026-09-25 [provisional] 候选腿 8/6  inserted
+  tqqq    2026-09-25 [provisional] 候选腿 8/6  inserted
+  googl   2026-09-25 [provisional] 候选腿 8/6  inserted
+  tsla    2026-09-25 [provisional] 候选腿 8/6  inserted
+  nvda    2026-09-28 [provisional] 候选腿 8/6  inserted
+  intc    2026-09-25 [provisional] 候选腿 7/6  inserted
+  amd     2026-09-25 [provisional] 候选腿 8/6  inserted
+  msft    2026-09-28 [provisional] 候选腿 8/6  inserted
+  aapl    2026-09-25 [provisional] 候选腿 8/6  inserted
+  gold    更新 1 行
+  gold    (replay) 更新 0 行
+  silver  更新 1 行
+  silver  (replay) 更新 0 行
+  wti     更新 1 行
+  gold   2026-09-28 数据不足（inserted） 认证到当日或前一交易日的快照缺失（不以更早快照顶替）
+  silver 2026-09-28 中性（inserted） Δskew25 +0.48pp，put 更贵档 1/6，skew25 -3.82，到期 2026-11-06
+输入存档 2026-09-28：143 个序列，新版本 143、未变 0、新月度全量 0、未知格式整份 0（跳过期权链 16）
+  ⚠️ shadow sample-check gold: gold 09:45 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:00 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:15 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:30 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:45 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 11:00 missing（成功 0/?）
+[告警] ⚠️ 盘中采样 2026-09-25 有缺失/失败的桶（ET 2026-09-28 04:00） —   ⚠️ shadow sample-check gold: gold 09:45 missing（成功 0/?）   ⚠️ shadow sample-check gold: gold 10:00 missing（成功 0/?）   ⚠️ shadow sample-check gold: gold 10:15 missing（成功 0/?） 
+逐分钟 K 线：长桥历史 K 线配额用尽（Error: WebSocket error (status=7, code=301607): history candlestick symbol count out of limit, requested:400/limit:400）；本次新抓 26（有数据 0），未完成的下次自动续补。配额重置周期未查证。
+[告警] ℹ️ 期权分钟线：长桥配额用尽（ET 2026-09-28 04:00） — 未补完的下次自动续补；到期约一周后合约会查不到
+[完成] 已提交并推送（或无变更）
+==== 2026-09-28 17:00 +08 | ET 2026-09-28 05:00 ====
+[待补] 尚缺当日快照： GLD TQQQ SPY IWM GOOGL TSLA INTC AMD AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[去重] silver 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] wti 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[跳过] dxy 未配置期权数据源
+[去重] qqq 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[去重] tlt 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[去重] nvda 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[去重] msft 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+已落盘 2026-09-28 期权链快照（原始全字段，纳入 git 永久留存）:
+  silver  SLV: 4,592 合约（3,730 有OI）  → 已累计 64 天  ·  /Users/yhdong/Trading/data/snapshots/options/SLV/2026-09-28.json.gz
+  wti     USO: 5,156 合约（4,113 有OI）  → 已累计 67 天  ·  /Users/yhdong/Trading/data/snapshots/options/USO/2026-09-28.json.gz
+  qqq     QQQ: 11,388 合约（8,827 有OI）  → 已累计 43 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-28.json.gz
+  tlt     TLT: 2,654 合约（2,005 有OI）  → 已累计 22 天  ·  /Users/yhdong/Trading/data/snapshots/options/TLT/2026-09-28.json.gz
+  spy     SPY: 13,294 合约（9,652 有OI）  → 已累计 22 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-28.json.gz
+  googl   GOOGL: 4,754 合约（3,502 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-09-28.json.gz
+  nvda    NVDA: 3,840 合约（3,033 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/NVDA/2026-09-28.json.gz
+  amd     AMD: 6,234 合约（5,150 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/AMD/2026-09-28.json.gz
+  msft    MSFT: 3,582 合约（3,017 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/MSFT/2026-09-28.json.gz
+  aapl    AAPL: 3,534 合约（2,689 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/AAPL/2026-09-28.json.gz
+[状态] snapshot overall=complete saved=10 failed=0 rc=0
+⚠️ gold 价差台账落盘失败：LedgerConflictError: gold 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻样本
+⚠️ tqqq 价差台账落盘失败：LedgerConflictError: tqqq 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻样本
+⚠️ iwm 价差台账落盘失败：LedgerConflictError: iwm 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻样本
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-28/090240_report_88348.json
+  📐 金银比 68.12　墙隐含 65.0~69.1（区间内）
+已生成综合研判报告 · 数据日 2026-09-25（文件名）· 可交易日 2026-09-28:
+  gold    观察[近偏多(弱) 中偏空 ·强看涨(已过期)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/gold_2026-09-24.html
+  silver  观察[近偏空(弱) 中偏空 ·极强看跌(低置信)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/silver_2026-09-25.html
+  wti     观察[近偏多(弱) 中中性]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/wti_2026-09-25.html
+  qqq     观察[近中性 中偏空 ⚡强看跌]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/qqq_2026-09-25.html
+  tqqq    观察[近偏空(弱) 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-24.html
+  tlt     观察[近中性 中偏空(弱)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tlt_2026-09-24.html
+  spy     观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/spy_2026-09-24.html
+  iwm     观察[近偏多(弱) 中偏空(弱) ·强看涨(已过期)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/iwm_2026-09-24.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-25.html
+
+📅 ⚠️ 各品种数据不同龄：2026-09-25, 2026-09-28 —— 混龄比较需谨慎。
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-24.html'）
+[告警] ⚠️ 前瞻台账未写入（ET 2026-09-28 05:00） — gold:LedgerConflictError: gold 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻;tqqq:LedgerConflictError: tqqq 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻;iwm:LedgerConflictError: iwm 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻样
+[状态] report overall=complete rc=0
+[强信号] qqq ⚡强看跌
+  gold     回填 0 行，仍有 19 个前瞻格未到期
+  gold     价差台账：认证 0、非交易日 0、待认证 0；回填 0 个候选，0 个未到期
+  silver   回填 0 行，仍有 24 个前瞻格未到期
+  silver   价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，1 个未到期
+  wti      回填 0 行，仍有 24 个前瞻格未到期
+  wti      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  qqq      回填 0 行，仍有 24 个前瞻格未到期
+  qqq      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  tqqq     回填 0 行，仍有 19 个前瞻格未到期
+  tqqq     价差台账：认证 0、非交易日 0、待认证 0；回填 0 个候选，0 个未到期
+  tlt      回填 0 行，仍有 24 个前瞻格未到期
+  tlt      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  spy      回填 0 行，仍有 24 个前瞻格未到期
+  spy      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  iwm      回填 0 行，仍有 19 个前瞻格未到期
+  iwm      价差台账：认证 0、非交易日 0、待认证 0；回填 0 个候选，0 个未到期
+  googl    回填 0 行，仍有 0 个前瞻格未到期
+  tsla     回填 0 行，仍有 0 个前瞻格未到期
+  nvda     回填 0 行，仍有 0 个前瞻格未到期
+  intc     回填 0 行，仍有 0 个前瞻格未到期
+  amd      回填 0 行，仍有 0 个前瞻格未到期
+  msft     回填 0 行，仍有 0 个前瞻格未到期
+  aapl     回填 0 行，仍有 0 个前瞻格未到期
+  gold    2026-09-25 [provisional] 候选腿 8/6  exists
+  silver  2026-09-28 [provisional] 候选腿 8/6  exists
+  wti     2026-09-28 [provisional] 候选腿 8/6  exists
+  qqq     2026-09-28 [provisional] 候选腿 8/6  exists
+  tlt     2026-09-28 [provisional] 候选腿 8/6  exists
+  spy     2026-09-28 [provisional] 候选腿 8/6  inserted
+  iwm     2026-09-25 [provisional] 候选腿 8/6  exists
+  tqqq    2026-09-25 [provisional] 候选腿 8/6  exists
+  googl   2026-09-28 [provisional] 候选腿 8/6  inserted
+  tsla    2026-09-25 [provisional] 候选腿 8/6  exists
+  nvda    2026-09-28 [provisional] 候选腿 8/6  exists
+  intc    2026-09-25 [provisional] 候选腿 7/6  exists
+  amd     2026-09-28 [provisional] 候选腿 8/6  inserted
+  msft    2026-09-28 [provisional] 候选腿 8/6  exists
+  aapl    2026-09-28 [provisional] 候选腿 8/6  inserted
+  gold    更新 0 行
+  gold    (replay) 更新 0 行
+  silver  更新 0 行
+  silver  (replay) 更新 0 行
+  wti     更新 0 行
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-28/090255_dirledger_92303.json
+  gold   2026-09-28 数据不足（not_ready） 认证到当日或前一交易日的快照缺失（不以更早快照顶替）；身份问题：curr_file_missing
+  silver 2026-09-28 中性（exists） Δskew25 +0.48pp，put 更贵档 1/6，skew25 -3.82，到期 2026-11-06
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-28/090305_dirledger_92363.json
+  gold   2026-09-28 数据不足（not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  silver 2026-09-28 多层看跌（exists）S=-1 F=-1 V=0
+  wti    2026-09-28 无（exists）S=-1 F=1 V=-1
+  qqq    2026-09-28 无（exists）S=0 F=0 V=0
+  tqqq   2026-09-28 数据不足（not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  tlt    2026-09-28 无（exists）S=0 F=-1 V=0
+  spy    2026-09-28 无（eligible）S=1 F=-1 V=0
+  iwm    2026-09-28 数据不足（not_ready）S=None F=None V=None；身份问题：curr_file_missing
+输入存档 2026-09-28：143 个序列，新版本 9、未变 134、新月度全量 0、未知格式整份 0（跳过期权链 16）；完整原文 cas 新块 0、新版本 0，核对 197/197 可还原
+  ⚠️ shadow sample-check gold: gold 09:45 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:00 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:15 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:30 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:45 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 11:00 missing（成功 0/?）
+逐分钟 K 线：长桥历史 K 线配额用尽（Error: WebSocket error (status=7, code=301607): history candlestick symbol count out of limit, requested:400/limit:400）；本次新抓 0（有数据 0），未完成的下次自动续补。配额重置周期未查证。
+[完成] 已提交并推送（或无变更）
+==== 2026-09-28 18:00 +08 | ET 2026-09-28 06:00 ====
+[待补] 尚缺当日快照： GLD TQQQ IWM TSLA INTC
+[去重] silver 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] wti 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[跳过] dxy 未配置期权数据源
+[去重] qqq 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[去重] tlt 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] spy 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] googl 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] nvda 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] amd 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] msft 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] aapl 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+已落盘 2026-09-28 期权链快照（原始全字段，纳入 git 永久留存）:
+  gold    GLD: 8,032 合约（5,421 有OI）  → 已累计 67 天  ·  /Users/yhdong/Trading/data/snapshots/options/GLD/2026-09-28.json.gz
+  silver  SLV: 4,592 合约（3,730 有OI）  → 已累计 64 天  ·  /Users/yhdong/Trading/data/snapshots/options/SLV/2026-09-28.json.gz
+  wti     USO: 5,156 合约（4,113 有OI）  → 已累计 67 天  ·  /Users/yhdong/Trading/data/snapshots/options/USO/2026-09-28.json.gz
+  qqq     QQQ: 11,388 合约（8,827 有OI）  → 已累计 43 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-28.json.gz
+  tlt     TLT: 2,654 合约（2,005 有OI）  → 已累计 22 天  ·  /Users/yhdong/Trading/data/snapshots/options/TLT/2026-09-28.json.gz
+  spy     SPY: 13,294 合约（9,652 有OI）  → 已累计 22 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-28.json.gz
+  iwm     IWM: 5,590 合约（3,634 有OI）  → 已累计 22 天  ·  /Users/yhdong/Trading/data/snapshots/options/IWM/2026-09-28.json.gz
+  googl   GOOGL: 4,754 合约（3,502 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-09-28.json.gz
+  tsla    TSLA: 4,950 合约（3,819 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/TSLA/2026-09-28.json.gz
+  nvda    NVDA: 3,840 合约（3,033 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/NVDA/2026-09-28.json.gz
+  intc    INTC: 2,866 合约（2,538 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/INTC/2026-09-28.json.gz
+  amd     AMD: 6,234 合约（5,150 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/AMD/2026-09-28.json.gz
+  msft    MSFT: 3,582 合约（3,017 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/MSFT/2026-09-28.json.gz
+  aapl    AAPL: 3,534 合约（2,689 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/AAPL/2026-09-28.json.gz
+[状态] snapshot overall=complete saved=14 failed=0 rc=0
+⚠️ tqqq 价差台账落盘失败：LedgerConflictError: tqqq 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻样本
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-28/100211_report_15423.json
+  📐 金银比 68.12　墙隐含 64.1~68.1（区间外 +0.0%）
+已生成综合研判报告 · 数据日 2026-09-25（文件名）· 可交易日 2026-09-28:
+  gold    观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/gold_2026-09-25.html
+  silver  观察[近偏空(弱) 中偏空 ·极强看跌(低置信)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/silver_2026-09-25.html
+  wti     观察[近偏多(弱) 中中性]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/wti_2026-09-25.html
+  qqq     观察[近中性 中偏空 ⚡强看跌]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/qqq_2026-09-25.html
+  tqqq    观察[近偏空(弱) 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-24.html
+  tlt     观察[近中性 中偏空(弱)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tlt_2026-09-24.html
+  spy     观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/spy_2026-09-24.html
+  iwm     观察[近中性 中偏空(弱) ·强看跌(低置信)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/iwm_2026-09-24.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-25.html
+
+📅 ⚠️ 各品种数据不同龄：2026-09-25, 2026-09-28 —— 混龄比较需谨慎。
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-25.html'）
+[告警] ⚠️ 前瞻台账未写入（ET 2026-09-28 06:00） — tqqq:LedgerConflictError: tqqq 2026-09-25 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻
+[状态] report overall=complete rc=0
+[强信号] qqq ⚡强看跌
+  gold     回填 0 行，仍有 24 个前瞻格未到期
+  gold     价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  silver   回填 0 行，仍有 24 个前瞻格未到期
+  silver   价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，1 个未到期
+  wti      回填 0 行，仍有 24 个前瞻格未到期
+  wti      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  qqq      回填 0 行，仍有 24 个前瞻格未到期
+  qqq      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  tqqq     回填 0 行，仍有 19 个前瞻格未到期
+  tqqq     价差台账：认证 0、非交易日 0、待认证 0；回填 0 个候选，0 个未到期
+  tlt      回填 0 行，仍有 24 个前瞻格未到期
+  tlt      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  spy      回填 0 行，仍有 24 个前瞻格未到期
+  spy      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  iwm      回填 0 行，仍有 24 个前瞻格未到期
+  iwm      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  googl    回填 0 行，仍有 0 个前瞻格未到期
+  tsla     回填 0 行，仍有 0 个前瞻格未到期
+  nvda     回填 0 行，仍有 0 个前瞻格未到期
+  intc     回填 0 行，仍有 0 个前瞻格未到期
+  amd      回填 0 行，仍有 0 个前瞻格未到期
+  msft     回填 0 行，仍有 0 个前瞻格未到期
+  aapl     回填 0 行，仍有 0 个前瞻格未到期
+  gold    2026-09-28 [provisional] 候选腿 8/6  inserted
+  silver  2026-09-28 [provisional] 候选腿 8/6  exists
+  wti     2026-09-28 [provisional] 候选腿 8/6  exists
+  qqq     2026-09-28 [provisional] 候选腿 8/6  exists
+  tlt     2026-09-28 [provisional] 候选腿 8/6  exists
+  spy     2026-09-28 [provisional] 候选腿 8/6  exists
+  iwm     2026-09-28 [provisional] 候选腿 8/6  inserted
+  tqqq    2026-09-25 [provisional] 候选腿 8/6  exists
+  googl   2026-09-28 [provisional] 候选腿 8/6  exists
+  tsla    2026-09-28 [provisional] 候选腿 8/6  inserted
+  nvda    2026-09-28 [provisional] 候选腿 8/6  exists
+  intc    2026-09-28 [provisional] 候选腿 8/6  inserted
+  amd     2026-09-28 [provisional] 候选腿 8/6  exists
+  msft    2026-09-28 [provisional] 候选腿 8/6  exists
+  aapl    2026-09-28 [provisional] 候选腿 8/6  exists
+  gold    更新 1 行
+  gold    (replay) 更新 0 行
+  silver  更新 0 行
+  silver  (replay) 更新 0 行
+  wti     更新 0 行
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-28/100225_dirledger_15975.json
+  gold   2026-09-28 中性（eligible） Δskew25 -0.15pp，put 更贵档 0/6，skew25 -0.21，到期 2026-11-06
+  silver 2026-09-28 中性（exists） Δskew25 +0.48pp，put 更贵档 1/6，skew25 -3.82，到期 2026-11-06
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-28/100236_dirledger_16034.json
+  gold   2026-09-28 无（eligible；水平 eligible）S=0 F=0 V=-1
+  silver 2026-09-28 多层看跌（exists；水平 exists）S=-1 F=-1 V=0
+  wti    2026-09-28 无（exists；水平 exists）S=-1 F=1 V=-1
+  qqq    2026-09-28 无（exists；水平 exists）S=0 F=0 V=0
+  tqqq   2026-09-28 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  tlt    2026-09-28 无（exists；水平 exists）S=0 F=-1 V=0
+  spy    2026-09-28 无（exists；水平 exists）S=1 F=-1 V=0
+  iwm    2026-09-28 无（eligible；水平 eligible）S=0 F=-1 V=0
+输入存档 2026-09-28：143 个序列，新版本 1、未变 142、新月度全量 0、未知格式整份 0（跳过期权链 16）；完整原文 cas 新块 0、新版本 0，核对 200/200 可还原
+  ⚠️ shadow sample-check gold: gold 09:45 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:00 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:15 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:30 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:45 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 11:00 missing（成功 0/?）
+逐分钟 K 线：长桥历史 K 线配额用尽（Error: WebSocket error (status=7, code=301607): history candlestick symbol count out of limit, requested:400/limit:400）；本次新抓 0（有数据 0），未完成的下次自动续补。配额重置周期未查证。
+[完成] 已提交并推送（或无变更）
+==== 2026-09-28 18:45 +08 | ET 2026-09-28 06:45 ====
+[待补] 尚缺当日快照： TQQQ
+[去重] gold 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] silver 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] wti 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[跳过] dxy 未配置期权数据源
+[去重] qqq 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] tlt 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] spy 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] iwm 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] googl 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] tsla 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] nvda 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] intc 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] amd 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] msft 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] aapl 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+已落盘 2026-09-28 期权链快照（原始全字段，纳入 git 永久留存）:
+  gold    GLD: 8,032 合约（5,421 有OI）  → 已累计 67 天  ·  /Users/yhdong/Trading/data/snapshots/options/GLD/2026-09-28.json.gz
+  silver  SLV: 4,592 合约（3,730 有OI）  → 已累计 64 天  ·  /Users/yhdong/Trading/data/snapshots/options/SLV/2026-09-28.json.gz
+  wti     USO: 5,156 合约（4,113 有OI）  → 已累计 67 天  ·  /Users/yhdong/Trading/data/snapshots/options/USO/2026-09-28.json.gz
+  qqq     QQQ: 11,388 合约（8,827 有OI）  → 已累计 43 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-28.json.gz
+  tqqq    TQQQ: 1,748 合约（1,500 有OI）  → 已累计 22 天  ·  /Users/yhdong/Trading/data/snapshots/options/TQQQ/2026-09-28.json.gz
+  tlt     TLT: 2,654 合约（2,005 有OI）  → 已累计 22 天  ·  /Users/yhdong/Trading/data/snapshots/options/TLT/2026-09-28.json.gz
+  spy     SPY: 13,294 合约（9,652 有OI）  → 已累计 22 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-28.json.gz
+  iwm     IWM: 5,590 合约（3,634 有OI）  → 已累计 22 天  ·  /Users/yhdong/Trading/data/snapshots/options/IWM/2026-09-28.json.gz
+  googl   GOOGL: 4,754 合约（3,502 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-09-28.json.gz
+  tsla    TSLA: 4,950 合约（3,819 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/TSLA/2026-09-28.json.gz
+  nvda    NVDA: 3,840 合约（3,033 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/NVDA/2026-09-28.json.gz
+  intc    INTC: 2,866 合约（2,538 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/INTC/2026-09-28.json.gz
+  amd     AMD: 6,234 合约（5,150 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/AMD/2026-09-28.json.gz
+  msft    MSFT: 3,582 合约（3,017 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/MSFT/2026-09-28.json.gz
+  aapl    AAPL: 3,534 合约（2,689 有OI）  → 已累计 3 天  ·  /Users/yhdong/Trading/data/snapshots/options/AAPL/2026-09-28.json.gz
+[状态] snapshot overall=complete saved=15 failed=0 rc=0
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-28/104716_report_21434.json
+  📐 金银比 68.12　墙隐含 64.1~68.1（区间外 +0.0%）
+已生成综合研判报告 · 数据日 2026-09-25（文件名）· 可交易日 2026-09-28:
+  gold    观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/gold_2026-09-25.html
+  silver  观察[近偏空(弱) 中偏空 ·极强看跌(低置信)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/silver_2026-09-25.html
+  wti     观察[近偏多(弱) 中中性]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/wti_2026-09-25.html
+  qqq     观察[近中性 中偏空 ⚡强看跌]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/qqq_2026-09-25.html
+  tqqq    观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-25.html
+  tlt     观察[近中性 中偏空(弱)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tlt_2026-09-24.html
+  spy     观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/spy_2026-09-24.html
+  iwm     观察[近中性 中偏空(弱) ·强看跌(低置信)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/iwm_2026-09-24.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-25.html
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-25.html'）
+[状态] report overall=complete rc=0
+[强信号] qqq ⚡强看跌
+  gold     回填 0 行，仍有 24 个前瞻格未到期
+  gold     价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  silver   回填 0 行，仍有 24 个前瞻格未到期
+  silver   价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，1 个未到期
+  wti      回填 0 行，仍有 24 个前瞻格未到期
+  wti      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  qqq      回填 0 行，仍有 24 个前瞻格未到期
+  qqq      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  tqqq     回填 0 行，仍有 24 个前瞻格未到期
+  tqqq     价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  tlt      回填 0 行，仍有 24 个前瞻格未到期
+  tlt      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  spy      回填 0 行，仍有 24 个前瞻格未到期
+  spy      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  iwm      回填 0 行，仍有 24 个前瞻格未到期
+  iwm      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  googl    回填 0 行，仍有 0 个前瞻格未到期
+  tsla     回填 0 行，仍有 0 个前瞻格未到期
+  nvda     回填 0 行，仍有 0 个前瞻格未到期
+  intc     回填 0 行，仍有 0 个前瞻格未到期
+  amd      回填 0 行，仍有 0 个前瞻格未到期
+  msft     回填 0 行，仍有 0 个前瞻格未到期
+  aapl     回填 0 行，仍有 0 个前瞻格未到期
+  gold    2026-09-28 [provisional] 候选腿 8/6  exists
+  silver  2026-09-28 [provisional] 候选腿 8/6  exists
+  wti     2026-09-28 [provisional] 候选腿 8/6  exists
+  qqq     2026-09-28 [provisional] 候选腿 8/6  exists
+  tlt     2026-09-28 [provisional] 候选腿 8/6  exists
+  spy     2026-09-28 [provisional] 候选腿 8/6  exists
+  iwm     2026-09-28 [provisional] 候选腿 8/6  exists
+  tqqq    2026-09-28 [provisional] 候选腿 8/6  inserted
+  googl   2026-09-28 [provisional] 候选腿 8/6  exists
+  tsla    2026-09-28 [provisional] 候选腿 8/6  exists
+  nvda    2026-09-28 [provisional] 候选腿 8/6  exists
+  intc    2026-09-28 [provisional] 候选腿 8/6  exists
+  amd     2026-09-28 [provisional] 候选腿 8/6  exists
+  msft    2026-09-28 [provisional] 候选腿 8/6  exists
+  aapl    2026-09-28 [provisional] 候选腿 8/6  exists
+  gold    更新 0 行
+  gold    (replay) 更新 0 行
+  silver  更新 0 行
+  silver  (replay) 更新 0 行
+  wti     更新 0 行
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-28/104730_dirledger_21930.json
+  gold   2026-09-28 中性（exists） Δskew25 -0.15pp，put 更贵档 0/6，skew25 -0.21，到期 2026-11-06
+  silver 2026-09-28 中性（exists） Δskew25 +0.48pp，put 更贵档 1/6，skew25 -3.82，到期 2026-11-06
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-28/104740_dirledger_21983.json
+  gold   2026-09-28 无（exists；水平 exists）S=0 F=0 V=-1
+  silver 2026-09-28 多层看跌（exists；水平 exists）S=-1 F=-1 V=0
+  wti    2026-09-28 无（exists；水平 exists）S=-1 F=1 V=-1
+  qqq    2026-09-28 无（exists；水平 exists）S=0 F=0 V=0
+  tqqq   2026-09-28 无（eligible；水平 eligible）S=1 F=1 V=-1
+  tlt    2026-09-28 无（exists；水平 exists）S=0 F=-1 V=0
+  spy    2026-09-28 无（exists；水平 exists）S=1 F=-1 V=0
+  iwm    2026-09-28 无（exists；水平 exists）S=0 F=-1 V=0
+输入存档 2026-09-28：143 个序列，新版本 0、未变 143、新月度全量 0、未知格式整份 0（跳过期权链 16）；完整原文 cas 新块 0、新版本 0，核对 200/200 可还原
+  ⚠️ shadow sample-check gold: gold 09:45 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:00 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:15 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:30 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 10:45 missing（成功 0/?）
+  ⚠️ shadow sample-check gold: gold 11:00 missing（成功 0/?）
+逐分钟 K 线：长桥历史 K 线配额用尽（Error: WebSocket error (status=7, code=301607): history candlestick symbol count out of limit, requested:400/limit:400）；本次新抓 0（有数据 0），未完成的下次自动续补。配额重置周期未查证。
+[完成] 已提交并推送（或无变更）
+==== 2026-09-29 16:00 +08 | ET 2026-09-29 04:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] nvda 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] amd 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] msft 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试（最新快照 2026-09-28，距今 1 个工作日）
+==== 2026-09-29 17:00 +08 | ET 2026-09-29 05:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] nvda 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] amd 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] msft 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+已落盘 2026-09-29 期权链快照（原始全字段，纳入 git 永久留存）:
+  qqq     QQQ: 11,708 合约（9,012 有OI）  → 已累计 44 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-29.json.gz
+[状态] snapshot overall=complete saved=1 failed=0 rc=0
+⚠️ GLD CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[提示] gold 最新快照对应交易日 2026-09-28 已过去（今日快照未到）：不重写墙位价差前瞻台账
+⚠️ SLV CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[提示] silver 最新快照对应交易日 2026-09-28 已过去（今日快照未到）：不重写墙位价差前瞻台账
+⚠️ USO CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[提示] wti 最新快照对应交易日 2026-09-28 已过去（今日快照未到）：不重写墙位价差前瞻台账
+⚠️ QQQ CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TQQQ CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[提示] tqqq 最新快照对应交易日 2026-09-28 已过去（今日快照未到）：不重写墙位价差前瞻台账
+⚠️ TLT CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[提示] tlt 最新快照对应交易日 2026-09-28 已过去（今日快照未到）：不重写墙位价差前瞻台账
+⚠️ SPY CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[提示] spy 最新快照对应交易日 2026-09-28 已过去（今日快照未到）：不重写墙位价差前瞻台账
+⚠️ IWM CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[提示] iwm 最新快照对应交易日 2026-09-28 已过去（今日快照未到）：不重写墙位价差前瞻台账
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-29/090254_report_19551.json
+  📐 金银比 68.39　墙隐含 64.1~68.1（区间外 +0.4%）
+已生成综合研判报告 · 数据日 2026-09-28（文件名）· 可交易日 2026-09-29:
+  gold    观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/gold_2026-09-25.html
+  silver  观察[近偏空(弱) 中偏空 ·极强看跌(已过期)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/silver_2026-09-25.html
+  wti     观察[近偏多(弱) 中中性]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/wti_2026-09-25.html
+  qqq     观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/qqq_2026-09-28.html
+  tqqq    观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-25.html
+  tlt     观察[近中性 中偏空(弱)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tlt_2026-09-25.html
+  spy     观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/spy_2026-09-25.html
+  iwm     观察[近中性 中偏空(弱) ·强看跌(已过期)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/iwm_2026-09-25.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-28.html
+
+📅 ⚠️ 各品种数据不同龄：2026-09-28, 2026-09-29 —— 混龄比较需谨慎。
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-25.html'）
+[状态] report overall=complete rc=0
+  gold     回填 3 行，仍有 20 个前瞻格未到期
+  gold     价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  silver   回填 3 行，仍有 20 个前瞻格未到期
+  silver   价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，1 个未到期
+  wti      回填 3 行，仍有 20 个前瞻格未到期
+  wti      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  qqq      回填 3 行，仍有 25 个前瞻格未到期
+  qqq      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  tqqq     回填 3 行，仍有 20 个前瞻格未到期
+  tqqq     价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  tlt      回填 3 行，仍有 20 个前瞻格未到期
+  tlt      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  spy      回填 3 行，仍有 20 个前瞻格未到期
+  spy      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  iwm      回填 3 行，仍有 20 个前瞻格未到期
+  iwm      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  googl    回填 0 行，仍有 0 个前瞻格未到期
+  tsla     回填 0 行，仍有 0 个前瞻格未到期
+  nvda     回填 0 行，仍有 0 个前瞻格未到期
+  intc     回填 0 行，仍有 0 个前瞻格未到期
+  amd      回填 0 行，仍有 0 个前瞻格未到期
+  msft     回填 0 行，仍有 0 个前瞻格未到期
+  aapl     回填 0 行，仍有 0 个前瞻格未到期
+⚠️ GLD CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ gold: LedgerConflictError: 2026-09-28|gold 首份事前记录已冻结，新输入不同；未改写
+⚠️ SLV CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ silver: LedgerConflictError: 2026-09-28|silver 首份事前记录已冻结，新输入不同；未改写
+⚠️ USO CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ wti: LedgerConflictError: 2026-09-28|wti 首份事前记录已冻结，新输入不同；未改写
+⚠️ QQQ CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TLT CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ tlt: LedgerConflictError: 2026-09-28|tlt 首份事前记录已冻结，新输入不同；未改写
+⚠️ SPY CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ spy: LedgerConflictError: 2026-09-28|spy 首份事前记录已冻结，新输入不同；未改写
+⚠️ IWM CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ iwm: LedgerConflictError: 2026-09-28|iwm 首份事前记录已冻结，新输入不同；未改写
+⚠️ TQQQ CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ tqqq: LedgerConflictError: 2026-09-28|tqqq 首份事前记录已冻结，新输入不同；未改写
+⚠️ GOOGL CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ googl: LedgerConflictError: 2026-09-28|googl 首份事前记录已冻结，新输入不同；未改写
+⚠️ TSLA CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ tsla: LedgerConflictError: 2026-09-28|tsla 首份事前记录已冻结，新输入不同；未改写
+⚠️ NVDA CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[告警] ⚠️ 影子账采集/结算失败（ET 2026-09-29 05:00） — capture rc=0 settle rc=1：⚠️ GLD CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天   ⚠️ gold: LedgerConflictError: 2026-09-28|gold 首份事前记录已冻结，新输入不同；未改写 
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-29/090344_dirledger_24810.json
+  gold   2026-09-29 数据不足（not_ready） 认证到当日或前一交易日的快照缺失（不以更早快照顶替）；身份问题：curr_file_missing
+  silver 2026-09-29 数据不足（not_ready） 认证到当日或前一交易日的快照缺失（不以更早快照顶替）；身份问题：curr_file_missing
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-29/090354_dirledger_24849.json
+  gold   2026-09-29 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  silver 2026-09-29 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  wti    2026-09-29 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  qqq    2026-09-29 无（eligible；水平 eligible）S=-1 F=0 V=-1
+  tqqq   2026-09-29 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  tlt    2026-09-29 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  spy    2026-09-29 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  iwm    2026-09-29 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  amd    2026-09-29 当日快照未到（未认证到该交易日），下次重试
+  msft   2026-09-29 当日快照未到（未认证到该交易日），下次重试
+  aapl   2026-09-29 当日快照未到（未认证到该交易日），下次重试
+[告警] ⚠️ 方向判断台账失败（ET 2026-09-29 05:00） — record rc=0 score rc=0 conviction rc=0 expiry-profile rc=1：  ⚠️ shadow expiry-profile qqq: ValueError: data/history/expiry_profile/qqq.jsonl 临时文件回读验证失败；原文件未改 
+输入存档 2026-09-29：143 个序列，新版本 143、未变 0、新月度全量 0、未知格式整份 0（跳过期权链 16）；完整原文 cas 新块 0、新版本 0，核对 319/319 可还原；整份快照对象 17/17 完好
+  ⚠️ shadow sample-check iwm: iwm 10:00 partial（成功 24/25）
+盘中采样核对 2026-09-28：195 个（品种, 桶），异常 1
+  ⚠️ iwm 10:00 partial（成功 24/25）
+[告警] ⚠️ 盘中采样 2026-09-28 有缺失/失败的桶（ET 2026-09-29 05:00） —   ⚠️ shadow sample-check iwm: iwm 10:00 partial（成功 24/25）   ⚠️ iwm 10:00 partial（成功 24/25） 
+逐分钟 K 线：长桥历史 K 线配额用尽（Error: WebSocket error (status=7, code=301607): history candlestick symbol count out of limit, requested:400/limit:400）；本次新抓 23（有数据 12），未完成的下次自动续补。配额重置周期未查证。
+[告警] ℹ️ 期权分钟线：长桥配额用尽（ET 2026-09-29 05:00） — 未补完的下次自动续补；到期约一周后合约会查不到
+[完成] 已提交并推送（或无变更）
+==== 2026-09-29 18:00 +08 | ET 2026-09-29 06:00 ====
+[待补] 尚缺当日快照： GLD SLV USO TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[去重] qqq 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+已落盘 2026-09-29 期权链快照（原始全字段，纳入 git 永久留存）:
+  gold    GLD: 8,284 合约（5,692 有OI）  → 已累计 68 天  ·  /Users/yhdong/Trading/data/snapshots/options/GLD/2026-09-29.json.gz
+  qqq     QQQ: 11,708 合约（9,012 有OI）  → 已累计 44 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-29.json.gz
+  tqqq    TQQQ: 1,778 合约（1,562 有OI）  → 已累计 23 天  ·  /Users/yhdong/Trading/data/snapshots/options/TQQQ/2026-09-29.json.gz
+  tlt     TLT: 2,734 合约（2,082 有OI）  → 已累计 23 天  ·  /Users/yhdong/Trading/data/snapshots/options/TLT/2026-09-29.json.gz
+  spy     SPY: 13,596 合约（9,857 有OI）  → 已累计 23 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-29.json.gz
+  googl   GOOGL: 4,874 合约（3,581 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-09-29.json.gz
+  tsla    TSLA: 5,124 合约（3,918 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/TSLA/2026-09-29.json.gz
+  nvda    NVDA: 3,948 合约（3,127 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/NVDA/2026-09-29.json.gz
+  intc    INTC: 3,064 合约（2,601 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/INTC/2026-09-29.json.gz
+  amd     AMD: 6,624 合约（5,297 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/AMD/2026-09-29.json.gz
+  msft    MSFT: 3,738 合约（3,084 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/MSFT/2026-09-29.json.gz
+  aapl    AAPL: 3,640 合约（2,772 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/AAPL/2026-09-29.json.gz
+[状态] snapshot overall=complete saved=12 failed=0 rc=0
+⚠️ GLD CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ SLV CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[提示] silver 最新快照对应交易日 2026-09-28 已过去（今日快照未到）：不重写墙位价差前瞻台账
+⚠️ USO CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[提示] wti 最新快照对应交易日 2026-09-28 已过去（今日快照未到）：不重写墙位价差前瞻台账
+⚠️ QQQ CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TQQQ CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TLT CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ tlt 日线最新只到 2026-09-25，落后于快照日前一交易日 2026-09-28：研报日期改按交易日历取 2026-09-28（价格分析仍缺这几天）
+⚠️ SPY CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ spy 日线最新只到 2026-09-25，落后于快照日前一交易日 2026-09-28：研报日期改按交易日历取 2026-09-28（价格分析仍缺这几天）
+⚠️ IWM CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[提示] iwm 最新快照对应交易日 2026-09-28 已过去（今日快照未到）：不重写墙位价差前瞻台账
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-29/100228_report_34025.json
+  📐 金银比 68.39　墙隐含 64.1~68.1（区间外 +0.4%）
+已生成综合研判报告 · 数据日 2026-09-28（文件名）· 可交易日 2026-09-29:
+  gold    观察[近偏多(弱) 中偏空 ⚡强看涨]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/gold_2026-09-28.html
+  silver  观察[近偏空(弱) 中偏空 ·极强看跌(已过期)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/silver_2026-09-25.html
+  wti     观察[近偏多(弱) 中中性]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/wti_2026-09-25.html
+  qqq     观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/qqq_2026-09-28.html
+  tqqq    观察[近偏空(弱) 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-28.html
+  tlt     观察[近偏多(弱) 中偏空(弱)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tlt_2026-09-28.html
+  spy     观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/spy_2026-09-28.html
+  iwm     观察[近中性 中偏空(弱) ·强看跌(已过期)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/iwm_2026-09-25.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-28.html
+
+📅 ⚠️ 各品种数据不同龄：2026-09-28, 2026-09-29 —— 混龄比较需谨慎。
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-28.html'）
+[状态] report overall=complete rc=0
+[强信号] gold ⚡强看涨
+  gold     回填 0 行，仍有 25 个前瞻格未到期
+  gold     价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  silver   回填 0 行，仍有 20 个前瞻格未到期
+  silver   价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，1 个未到期
+  wti      回填 0 行，仍有 20 个前瞻格未到期
+  wti      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  qqq      回填 0 行，仍有 25 个前瞻格未到期
+  qqq      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  tqqq     回填 0 行，仍有 25 个前瞻格未到期
+  tqqq     价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  tlt      回填 0 行，仍有 25 个前瞻格未到期
+  tlt      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  spy      回填 0 行，仍有 25 个前瞻格未到期
+  spy      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  iwm      回填 0 行，仍有 20 个前瞻格未到期
+  iwm      价差台账：认证 0、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  googl    回填 0 行，仍有 0 个前瞻格未到期
+  tsla     回填 0 行，仍有 0 个前瞻格未到期
+  nvda     回填 0 行，仍有 0 个前瞻格未到期
+  intc     回填 0 行，仍有 0 个前瞻格未到期
+  amd      回填 0 行，仍有 0 个前瞻格未到期
+  msft     回填 0 行，仍有 0 个前瞻格未到期
+  aapl     回填 0 行，仍有 0 个前瞻格未到期
+⚠️ GLD CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ SLV CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ silver: LedgerConflictError: 2026-09-28|silver 首份事前记录已冻结，新输入不同；未改写
+⚠️ USO CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ wti: LedgerConflictError: 2026-09-28|wti 首份事前记录已冻结，新输入不同；未改写
+⚠️ QQQ CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TLT CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ SPY CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ IWM CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ iwm: LedgerConflictError: 2026-09-28|iwm 首份事前记录已冻结，新输入不同；未改写
+⚠️ TQQQ CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ GOOGL CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TSLA CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ NVDA CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ INTC CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ AMD CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ MSFT CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ AAPL CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ shadow capture silver: LedgerConflictError: 2026-09-28|silver 首份事前记录已冻结，新输入不同；未改写
+  ⚠️ shadow capture wti: LedgerConflictError: 2026-09-28|wti 首份事前记录已冻结，新输入不同；未改写
+[告警] ⚠️ 影子账采集/结算失败（ET 2026-09-29 06:00） — capture rc=0 settle rc=1：⚠️ GLD CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天 ⚠️ SLV CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天 
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-29/100321_dirledger_35875.json
+  gold   2026-09-29 防守化（eligible） Δskew25 +0.92pp，put 更贵档 6/6，skew25 +0.70，到期 2026-11-06
+  silver 2026-09-29 数据不足（not_ready） 认证到当日或前一交易日的快照缺失（不以更早快照顶替）；身份问题：curr_file_missing
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-29/100332_dirledger_35921.json
+  gold   2026-09-29 无（eligible；水平 eligible）S=-1 F=1 V=-1
+  silver 2026-09-29 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  wti    2026-09-29 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  qqq    2026-09-29 无（exists；水平 exists）S=-1 F=0 V=-1
+  tqqq   2026-09-29 无（eligible；水平 eligible）S=0 F=-1 V=0
+  tlt    2026-09-29 无（eligible；水平 eligible）S=0 F=1 V=-1
+  spy    2026-09-29 多层看跌（eligible；水平 eligible）S=-1 F=-1 V=-1
+  iwm    2026-09-29 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  silver 2026-09-29 当日快照未到（未认证到该交易日），下次重试
+  wti    2026-09-29 当日快照未到（未认证到该交易日），下次重试
+  iwm    2026-09-29 当日快照未到（未认证到该交易日），下次重试
+[告警] ⚠️ 方向判断台账失败（ET 2026-09-29 06:00） — record rc=0 score rc=0 conviction rc=0 expiry-profile rc=1：  ⚠️ shadow expiry-profile gold: ValueError: data/history/expiry_profile/gold.jsonl 临时文件回读验证失败；原文件未改   ⚠️ shadow expiry-profile qqq: ValueError: data/history/expiry_profile/qqq.jsonl 临时文件回读验证失败；原文件未改 
+输入存档 2026-09-29：143 个序列，新版本 16、未变 127、新月度全量 0、未知格式整份 0（跳过期权链 16）；完整原文 cas 新块 0、新版本 0，核对 363/363 可还原；整份快照对象 21/21 完好
+  ⚠️ shadow sample-check iwm: iwm 10:00 partial（成功 24/25）
+盘中采样核对 2026-09-28：195 个（品种, 桶），异常 1
+  ⚠️ iwm 10:00 partial（成功 24/25）
+逐分钟 K 线：长桥历史 K 线配额用尽（Error: WebSocket error (status=7, code=301607): history candlestick symbol count out of limit, requested:400/limit:400）；本次新抓 0（有数据 0），未完成的下次自动续补。配额重置周期未查证。
+[完成] 已提交并推送（或无变更）
+==== 2026-09-29 18:45 +08 | ET 2026-09-29 06:45 ====
+[待补] 尚缺当日快照： SLV USO IWM
+[去重] gold 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[跳过] dxy 未配置期权数据源
+[去重] qqq 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] tqqq 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] tlt 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] spy 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] googl 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] tsla 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] nvda 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] intc 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] amd 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] msft 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] aapl 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+已落盘 2026-09-29 期权链快照（原始全字段，纳入 git 永久留存）:
+  gold    GLD: 8,284 合约（5,692 有OI）  → 已累计 68 天  ·  /Users/yhdong/Trading/data/snapshots/options/GLD/2026-09-29.json.gz
+  silver  SLV: 4,732 合约（3,770 有OI）  → 已累计 65 天  ·  /Users/yhdong/Trading/data/snapshots/options/SLV/2026-09-29.json.gz
+  wti     USO: 5,494 合约（4,194 有OI）  → 已累计 68 天  ·  /Users/yhdong/Trading/data/snapshots/options/USO/2026-09-29.json.gz
+  qqq     QQQ: 11,708 合约（9,012 有OI）  → 已累计 44 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-29.json.gz
+  tqqq    TQQQ: 1,778 合约（1,562 有OI）  → 已累计 23 天  ·  /Users/yhdong/Trading/data/snapshots/options/TQQQ/2026-09-29.json.gz
+  tlt     TLT: 2,734 合约（2,082 有OI）  → 已累计 23 天  ·  /Users/yhdong/Trading/data/snapshots/options/TLT/2026-09-29.json.gz
+  spy     SPY: 13,596 合约（9,857 有OI）  → 已累计 23 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-29.json.gz
+  iwm     IWM: 5,764 合约（3,751 有OI）  → 已累计 23 天  ·  /Users/yhdong/Trading/data/snapshots/options/IWM/2026-09-29.json.gz
+  googl   GOOGL: 4,874 合约（3,581 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-09-29.json.gz
+  tsla    TSLA: 5,124 合约（3,918 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/TSLA/2026-09-29.json.gz
+  nvda    NVDA: 3,948 合约（3,127 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/NVDA/2026-09-29.json.gz
+  intc    INTC: 3,064 合约（2,601 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/INTC/2026-09-29.json.gz
+  amd     AMD: 6,624 合约（5,297 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/AMD/2026-09-29.json.gz
+  msft    MSFT: 3,738 合约（3,084 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/MSFT/2026-09-29.json.gz
+  aapl    AAPL: 3,640 合约（2,772 有OI）  → 已累计 4 天  ·  /Users/yhdong/Trading/data/snapshots/options/AAPL/2026-09-29.json.gz
+[状态] snapshot overall=complete saved=15 failed=0 rc=0
+⚠️ GLD CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ SLV CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ USO CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ QQQ CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TQQQ CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TLT CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ tlt 日线最新只到 2026-09-25，落后于快照日前一交易日 2026-09-28：研报日期改按交易日历取 2026-09-28（价格分析仍缺这几天）
+⚠️ SPY CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ spy 日线最新只到 2026-09-25，落后于快照日前一交易日 2026-09-28：研报日期改按交易日历取 2026-09-28（价格分析仍缺这几天）
+⚠️ IWM CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ iwm 日线最新只到 2026-09-25，落后于快照日前一交易日 2026-09-28：研报日期改按交易日历取 2026-09-28（价格分析仍缺这几天）
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-29/104805_report_44180.json
+  📐 金银比 68.39　墙隐含 64.1~68.1（区间外 +0.4%）
+已生成综合研判报告 · 数据日 2026-09-28（文件名）· 可交易日 2026-09-29:
+  gold    观察[近偏多(弱) 中偏空 ⚡强看涨]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/gold_2026-09-28.html
+  silver  观察[近偏多(弱) 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/silver_2026-09-28.html
+  wti     观察[近中性 中中性]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/wti_2026-09-28.html
+  qqq     观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/qqq_2026-09-28.html
+  tqqq    观察[近偏空(弱) 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-28.html
+  tlt     观察[近偏多(弱) 中偏空(弱)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tlt_2026-09-28.html
+  spy     观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/spy_2026-09-28.html
+  iwm     观察[近偏多(弱) 中偏空(弱)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/iwm_2026-09-28.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-28.html
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-28.html'）
+[状态] report overall=complete rc=0
+[强信号] gold ⚡强看涨
+  gold     回填 0 行，仍有 25 个前瞻格未到期
+  gold     价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  silver   回填 0 行，仍有 25 个前瞻格未到期
+  silver   价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，3 个未到期
+  wti      回填 0 行，仍有 25 个前瞻格未到期
+  wti      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  qqq      回填 0 行，仍有 25 个前瞻格未到期
+  qqq      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  tqqq     回填 0 行，仍有 25 个前瞻格未到期
+  tqqq     价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  tlt      回填 0 行，仍有 25 个前瞻格未到期
+  tlt      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  spy      回填 0 行，仍有 25 个前瞻格未到期
+  spy      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  iwm      回填 0 行，仍有 25 个前瞻格未到期
+  iwm      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  googl    回填 0 行，仍有 0 个前瞻格未到期
+  tsla     回填 0 行，仍有 0 个前瞻格未到期
+  nvda     回填 0 行，仍有 0 个前瞻格未到期
+  intc     回填 0 行，仍有 0 个前瞻格未到期
+  amd      回填 0 行，仍有 0 个前瞻格未到期
+  msft     回填 0 行，仍有 0 个前瞻格未到期
+  aapl     回填 0 行，仍有 0 个前瞻格未到期
+⚠️ GLD CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ SLV CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ USO CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ QQQ CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TLT CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ SPY CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ IWM CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TQQQ CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ GOOGL CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TSLA CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ NVDA CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ INTC CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ AMD CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ MSFT CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ aapl: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ shadow capture aapl: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  gold    2026-09-29 [provisional] 候选腿 8/6  exists
+  silver  2026-09-29 [provisional] 候选腿 8/6  inserted
+  wti     2026-09-29 [provisional] 候选腿 8/6  inserted
+  qqq     2026-09-29 [provisional] 候选腿 8/6  exists
+[告警] ⚠️ 影子账采集/结算失败（ET 2026-09-29 06:45） — capture rc=0 settle rc=1：⚠️ GLD CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天 ⚠️ SLV CBOE 日线最新只到 2026-09-25，落后于上一交易日 2026-09-28（源端未更新）：依赖日线的日期命名与价格分析会少这几天 
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-29/104851_dirledger_47294.json
+  gold   2026-09-29 防守化（exists） Δskew25 +0.92pp，put 更贵档 6/6，skew25 +0.70，到期 2026-11-06
+  silver 2026-09-29 防守化（eligible） Δskew25 +2.02pp，put 更贵档 6/6，skew25 -1.79，到期 2026-11-06
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-29/104902_dirledger_47619.json
+  gold   2026-09-29 无（exists；水平 exists）S=-1 F=1 V=-1
+  silver 2026-09-29 无（eligible；水平 eligible）S=-1 F=0 V=-1
+  wti    2026-09-29 多层看跌（eligible；水平 eligible）S=-1 F=-1 V=0
+  qqq    2026-09-29 无（exists；水平 exists）S=-1 F=0 V=-1
+  tqqq   2026-09-29 无（exists；水平 exists）S=0 F=-1 V=0
+  tlt    2026-09-29 无（exists；水平 exists）S=0 F=1 V=-1
+  spy    2026-09-29 多层看跌（exists；水平 exists）S=-1 F=-1 V=-1
+  iwm    2026-09-29 无（eligible；水平 eligible）S=0 F=1 V=-1
+  ⚠️ shadow expiry-profile msft: ValueError: data/history/expiry_profile/msft.jsonl 临时文件回读验证失败；原文件未改
+  ⚠️ shadow expiry-profile aapl: ValueError: data/history/expiry_profile/aapl.jsonl 临时文件回读验证失败；原文件未改
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-29/104913_shadow_47853.json
+[告警] ⚠️ 方向判断台账失败（ET 2026-09-29 06:45） — record rc=0 score rc=0 conviction rc=0 expiry-profile rc=1：  ⚠️ shadow expiry-profile gold: ValueError: data/history/expiry_profile/gold.jsonl 临时文件回读验证失败；原文件未改   ⚠️ shadow expiry-profile silver: ValueError: data/history/expiry_profile/silver.jsonl 临时文件回读验证失败；原文件未改 
+输入存档 2026-09-29：143 个序列，新版本 15、未变 128、新月度全量 0、未知格式整份 0（跳过期权链 16）；完整原文 cas 新块 0、新版本 0，核对 400/400 可还原；整份快照对象 24/24 完好
+  ⚠️ shadow sample-check iwm: iwm 10:00 partial（成功 24/25）
+盘中采样核对 2026-09-28：195 个（品种, 桶），异常 1
+  ⚠️ iwm 10:00 partial（成功 24/25）
+逐分钟 K 线：长桥历史 K 线配额用尽（Error: WebSocket error (status=7, code=301607): history candlestick symbol count out of limit, requested:400/limit:400）；本次新抓 0（有数据 0），未完成的下次自动续补。配额重置周期未查证。
+[完成] 已提交并推送（或无变更）
+==== 2026-09-30 16:00 +08 | ET 2026-09-30 04:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] nvda 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] amd 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] msft 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试（最新快照 2026-09-29，距今 1 个工作日）
+==== 2026-09-30 17:00 +08 | ET 2026-09-30 05:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] gold 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+[提示] qqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tqqq 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tlt 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] spy 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] iwm 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] googl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] tsla 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] nvda 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] intc 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] amd 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] msft 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] aapl 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+没有保存任何快照。
+[状态] snapshot overall=unchanged saved=0 failed=0 rc=1
+[跳过] 无新持仓快照（休市/OI未结算/重复）——等下一时点重试（最新快照 2026-09-29，距今 1 个工作日）
+==== 2026-09-30 18:00 +08 | ET 2026-09-30 06:00 ====
+[待补] 尚缺当日快照： GLD SLV USO QQQ TQQQ TLT SPY IWM GOOGL TSLA NVDA INTC AMD MSFT AAPL
+[提示] silver 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[提示] wti 期权数据与上一交易日逐行相同（休市重复），跳过落盘
+[跳过] dxy 未配置期权数据源
+已落盘 2026-09-30 期权链快照（原始全字段，纳入 git 永久留存）:
+  gold    GLD: 8,226 合约（5,719 有OI）  → 已累计 69 天  ·  /Users/yhdong/Trading/data/snapshots/options/GLD/2026-09-30.json.gz
+  qqq     QQQ: 11,650 合约（8,979 有OI）  → 已累计 45 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-30.json.gz
+  tqqq    TQQQ: 1,710 合约（1,536 有OI）  → 已累计 24 天  ·  /Users/yhdong/Trading/data/snapshots/options/TQQQ/2026-09-30.json.gz
+  tlt     TLT: 2,672 合约（2,099 有OI）  → 已累计 24 天  ·  /Users/yhdong/Trading/data/snapshots/options/TLT/2026-09-30.json.gz
+  spy     SPY: 13,584 合约（9,948 有OI）  → 已累计 24 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-30.json.gz
+  iwm     IWM: 5,768 合约（3,745 有OI）  → 已累计 24 天  ·  /Users/yhdong/Trading/data/snapshots/options/IWM/2026-09-30.json.gz
+  googl   GOOGL: 4,810 合约（3,595 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-09-30.json.gz
+  tsla    TSLA: 5,064 合约（3,920 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/TSLA/2026-09-30.json.gz
+  nvda    NVDA: 3,886 合约（3,132 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/NVDA/2026-09-30.json.gz
+  intc    INTC: 3,020 合约（2,540 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/INTC/2026-09-30.json.gz
+  amd     AMD: 6,498 合约（5,276 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/AMD/2026-09-30.json.gz
+  msft    MSFT: 3,668 合约（3,085 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/MSFT/2026-09-30.json.gz
+  aapl    AAPL: 3,578 合约（2,773 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/AAPL/2026-09-30.json.gz
+[状态] snapshot overall=complete saved=13 failed=0 rc=0
+⚠️ GLD CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ SLV CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[提示] silver 最新快照对应交易日 2026-09-29 已过去（今日快照未到）：不重写墙位价差前瞻台账
+⚠️ USO CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+[提示] wti 最新快照对应交易日 2026-09-29 已过去（今日快照未到）：不重写墙位价差前瞻台账
+⚠️ QQQ CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TQQQ CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TLT CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ tlt 日线最新只到 2026-09-28，落后于快照日前一交易日 2026-09-29：研报日期改按交易日历取 2026-09-29（价格分析仍缺这几天）
+⚠️ SPY CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ spy 日线最新只到 2026-09-28，落后于快照日前一交易日 2026-09-29：研报日期改按交易日历取 2026-09-29（价格分析仍缺这几天）
+⚠️ IWM CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ iwm 日线最新只到 2026-09-28，落后于快照日前一交易日 2026-09-29：研报日期改按交易日历取 2026-09-29（价格分析仍缺这几天）
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-30/100249_report_67231.json
+  📐 金银比 68.94　墙隐含 63.9~68.1（区间外 +1.2%）
+已生成综合研判报告 · 数据日 2026-09-29（文件名）· 可交易日 2026-09-30:
+  gold    观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/gold_2026-09-29.html
+  silver  观察[近偏多(弱) 中偏空(弱)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/silver_2026-09-28.html
+  wti     观察[近中性 中中性]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/wti_2026-09-28.html
+  qqq     观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/qqq_2026-09-29.html
+  tqqq    观察[近偏空(弱) 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-29.html
+  tlt     观察[近中性 中分歧(双向) ·强看涨(低置信)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tlt_2026-09-29.html
+  spy     观察[近偏多(弱) 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/spy_2026-09-29.html
+  iwm     观察[近偏多(弱) 中分歧(双向)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/iwm_2026-09-29.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-29.html
+
+📅 ⚠️ 各品种数据不同龄：2026-09-29, 2026-09-30 —— 混龄比较需谨慎。
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-29.html'）
+研报 v2 2026-09-30：6/8 个品种；缺快照 ['白银 Silver (COMEX)', '原油 WTI Crude (NYMEX)'] → /Users/yhdong/Trading/data/reports/v2/v2_2026-09-30.html
+[状态] report overall=complete rc=0
+[警告] amd 价格序列获取失败，跳过回填：DataSourceError HTTP 429 调用失败: https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/AMD.json
+[警告] msft 价格序列获取失败，跳过回填：DataSourceError HTTP 429 调用失败: https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/MSFT.json
+[警告] aapl 价格序列获取失败，跳过回填：DataSourceError HTTP 429 调用失败: https://cdn.cboe.com/api/global/delayed_quotes/charts/historical/AAPL.json
+  gold     回填 4 行，仍有 25 个前瞻格未到期
+  gold     价差台账：认证 1、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  silver   回填 4 行，仍有 20 个前瞻格未到期
+  silver   价差台账：认证 1、非交易日 0、待认证 1；回填 0 个候选，3 个未到期
+  wti      回填 4 行，仍有 20 个前瞻格未到期
+  wti      价差台账：认证 1、非交易日 0、待认证 1；回填 0 个候选，0 个未到期
+  qqq      回填 4 行，仍有 25 个前瞻格未到期
+  qqq      价差台账：认证 1、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  tqqq     回填 4 行，仍有 25 个前瞻格未到期
+  tqqq     价差台账：认证 1、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  tlt      回填 4 行，仍有 25 个前瞻格未到期
+  tlt      价差台账：认证 1、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  spy      回填 4 行，仍有 25 个前瞻格未到期
+  spy      价差台账：认证 1、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  iwm      回填 4 行，仍有 25 个前瞻格未到期
+  iwm      价差台账：认证 1、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  googl    回填 0 行，仍有 0 个前瞻格未到期
+  tsla     回填 0 行，仍有 0 个前瞻格未到期
+  nvda     回填 0 行，仍有 0 个前瞻格未到期
+  intc     回填 0 行，仍有 0 个前瞻格未到期
+  ⚠️ gold: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ silver: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ wti: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ qqq: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ tlt: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ spy: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ iwm: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ tqqq: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ googl: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ tsla: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ nvda: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ intc: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ amd: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ msft: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ aapl: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ shadow capture gold: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ shadow capture silver: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ shadow capture wti: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ shadow capture qqq: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ shadow capture tlt: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+[告警] ⚠️ 影子账采集/结算失败（ET 2026-09-30 06:00） — capture rc=1 settle rc=1：  ⚠️ gold: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）   ⚠️ silver: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError） 
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-30/100410_dirledger_69341.json
+  gold   2026-09-30 进攻化（eligible） Δskew25 -0.53pp，put 更贵档 0/6，skew25 +0.17，到期 2026-11-06
+  silver 2026-09-30 数据不足（not_ready） 认证到当日或前一交易日的快照缺失（不以更早快照顶替）；身份问题：curr_file_missing
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-30/100420_dirledger_69353.json
+  gold   2026-09-30 无（eligible；水平 eligible）S=1 F=0 V=0
+  silver 2026-09-30 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  wti    2026-09-30 数据不足（not_ready；水平 not_ready）S=None F=None V=None；身份问题：curr_file_missing
+  qqq    2026-09-30 无（eligible；水平 eligible）S=0 F=0 V=0
+  tqqq   2026-09-30 无（eligible；水平 eligible）S=-1 F=-1 V=1
+  tlt    2026-09-30 无（eligible；水平 eligible）S=0 F=1 V=-1
+  spy    2026-09-30 无（eligible；水平 eligible）S=0 F=1 V=0
+  iwm    2026-09-30 无（eligible；水平 eligible）S=0 F=-1 V=0
+  amd    2026-09-30 inserted；到期 10 个，其中月度/季度 ['09-30Q', '10-16M']
+  msft   2026-09-30 inserted；到期 10 个，其中月度/季度 ['09-30Q', '10-16M']
+  aapl   2026-09-30 inserted；到期 10 个，其中月度/季度 ['09-30Q', '10-16M']
+输入存档 2026-09-30：143 个序列，新版本 143、未变 0、新月度全量 0、未知格式整份 0（跳过期权链 16）；完整原文 cas 新块 0、新版本 0，核对 544/544 可还原；整份快照对象 30/30 完好
+盘中采样核对 2026-09-29：195 个（品种, 桶），异常 0
+逐分钟 K 线：长桥历史 K 线配额用尽（Error: WebSocket error (status=7, code=301607): history candlestick symbol count out of limit, requested:400/limit:400）；本次新抓 0（有数据 0），未完成的下次自动续补。配额重置周期未查证。
+[告警] ℹ️ 期权分钟线：长桥配额用尽（ET 2026-09-30 06:00） — 未补完的下次自动续补；到期约一周后合约会查不到
+[暂停发布] PUBLISH_CONFLICT 运行前已有他人改动、本次又写了同一路径，停止发布（产物保留）：data/history/vrp/gold.json 
+[告警] ⚠️ 每日数据未提交（ET 2026-09-30 06:00） — 索引里有他人暂存的文件，已停止自动提交；数据已落盘，下次运行再发
+==== 2026-09-30 18:45 +08 | ET 2026-09-30 06:45 ====
+[待补] 尚缺当日快照： SLV USO
+[去重] gold 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[跳过] dxy 未配置期权数据源
+[去重] qqq 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] tqqq 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] tlt 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] spy 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] iwm 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] googl 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] tsla 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] nvda 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] intc 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] amd 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] msft 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+[去重] aapl 与今日已存快照物质内容一致（OI/volume/合约集合全同），跳过重写
+已落盘 2026-09-30 期权链快照（原始全字段，纳入 git 永久留存）:
+  gold    GLD: 8,226 合约（5,719 有OI）  → 已累计 69 天  ·  /Users/yhdong/Trading/data/snapshots/options/GLD/2026-09-30.json.gz
+  silver  SLV: 4,790 合约（3,770 有OI）  → 已累计 66 天  ·  /Users/yhdong/Trading/data/snapshots/options/SLV/2026-09-30.json.gz
+  wti     USO: 5,534 合约（4,294 有OI）  → 已累计 69 天  ·  /Users/yhdong/Trading/data/snapshots/options/USO/2026-09-30.json.gz
+  qqq     QQQ: 11,650 合约（8,979 有OI）  → 已累计 45 天  ·  /Users/yhdong/Trading/data/snapshots/options/QQQ/2026-09-30.json.gz
+  tqqq    TQQQ: 1,710 合约（1,536 有OI）  → 已累计 24 天  ·  /Users/yhdong/Trading/data/snapshots/options/TQQQ/2026-09-30.json.gz
+  tlt     TLT: 2,672 合约（2,099 有OI）  → 已累计 24 天  ·  /Users/yhdong/Trading/data/snapshots/options/TLT/2026-09-30.json.gz
+  spy     SPY: 13,584 合约（9,948 有OI）  → 已累计 24 天  ·  /Users/yhdong/Trading/data/snapshots/options/SPY/2026-09-30.json.gz
+  iwm     IWM: 5,768 合约（3,745 有OI）  → 已累计 24 天  ·  /Users/yhdong/Trading/data/snapshots/options/IWM/2026-09-30.json.gz
+  googl   GOOGL: 4,810 合约（3,595 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-09-30.json.gz
+  tsla    TSLA: 5,064 合约（3,920 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/TSLA/2026-09-30.json.gz
+  nvda    NVDA: 3,886 合约（3,132 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/NVDA/2026-09-30.json.gz
+  intc    INTC: 3,020 合约（2,540 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/INTC/2026-09-30.json.gz
+  amd     AMD: 6,498 合约（5,276 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/AMD/2026-09-30.json.gz
+  msft    MSFT: 3,668 合约（3,085 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/MSFT/2026-09-30.json.gz
+  aapl    AAPL: 3,578 合约（2,773 有OI）  → 已累计 5 天  ·  /Users/yhdong/Trading/data/snapshots/options/AAPL/2026-09-30.json.gz
+[状态] snapshot overall=complete saved=15 failed=0 rc=0
+⚠️ GLD CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ SLV CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ USO CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ QQQ CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TQQQ CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ TLT CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ tlt 日线最新只到 2026-09-28，落后于快照日前一交易日 2026-09-29：研报日期改按交易日历取 2026-09-29（价格分析仍缺这几天）
+⚠️ SPY CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ spy 日线最新只到 2026-09-28，落后于快照日前一交易日 2026-09-29：研报日期改按交易日历取 2026-09-29（价格分析仍缺这几天）
+⚠️ IWM CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ iwm 日线最新只到 2026-09-28，落后于快照日前一交易日 2026-09-29：研报日期改按交易日历取 2026-09-29（价格分析仍缺这几天）
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-30/104725_report_14154.json
+  📐 金银比 68.94　墙隐含 63.9~68.1（区间外 +1.2%）
+已生成综合研判报告 · 数据日 2026-09-29（文件名）· 可交易日 2026-09-30:
+  gold    观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/gold_2026-09-29.html
+  silver  观察[近中性 中偏空(弱)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/silver_2026-09-29.html
+  wti     观察[近偏多(弱) 中中性]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/wti_2026-09-29.html
+  qqq     观察[近中性 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/qqq_2026-09-29.html
+  tqqq    观察[近偏空(弱) 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tqqq_2026-09-29.html
+  tlt     观察[近中性 中分歧(双向) ·强看涨(低置信)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tlt_2026-09-29.html
+  spy     观察[近偏多(弱) 中偏空]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/spy_2026-09-29.html
+  iwm     观察[近偏多(弱) 中分歧(双向)]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/iwm_2026-09-29.html
+  索引页 → /Users/yhdong/Trading/data/reports/index_2026-09-29.html
+
+用浏览器打开即可（macOS: open '/Users/yhdong/Trading/data/reports/gold_2026-09-29.html'）
+研报 v2 2026-09-30：8/8 个品种 → /Users/yhdong/Trading/data/reports/v2/v2_2026-09-30.html
+[状态] report overall=complete rc=0
+  gold     回填 0 行，仍有 25 个前瞻格未到期
+  gold     价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  silver   回填 0 行，仍有 25 个前瞻格未到期
+  silver   价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，3 个未到期
+  wti      回填 0 行，仍有 25 个前瞻格未到期
+  wti      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  qqq      回填 0 行，仍有 25 个前瞻格未到期
+  qqq      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  tqqq     回填 0 行，仍有 25 个前瞻格未到期
+  tqqq     价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  tlt      回填 0 行，仍有 25 个前瞻格未到期
+  tlt      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  spy      回填 0 行，仍有 25 个前瞻格未到期
+  spy      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  iwm      回填 0 行，仍有 25 个前瞻格未到期
+  iwm      价差台账：认证 0、非交易日 0、待认证 2；回填 0 个候选，0 个未到期
+  googl    回填 0 行，仍有 0 个前瞻格未到期
+  tsla     回填 0 行，仍有 0 个前瞻格未到期
+  nvda     回填 0 行，仍有 0 个前瞻格未到期
+  intc     回填 0 行，仍有 0 个前瞻格未到期
+  amd      回填 0 行，仍有 0 个前瞻格未到期
+  msft     回填 0 行，仍有 0 个前瞻格未到期
+  aapl     回填 0 行，仍有 0 个前瞻格未到期
+⚠️ GLD CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ SLV CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ USO CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+⚠️ QQQ CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天
+  ⚠️ tlt: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ spy: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ iwm: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ tqqq: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ googl: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ tsla: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ nvda: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ intc: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ amd: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ msft: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ aapl: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ shadow capture tlt: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ shadow capture spy: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ shadow capture iwm: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ shadow capture tqqq: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+  ⚠️ shadow capture googl: ValueError: session 无法认证（trading_calendar_unavailable: DataSourceError）
+[告警] ⚠️ 影子账采集/结算失败（ET 2026-09-30 06:45） — capture rc=0 settle rc=1：⚠️ GLD CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天 ⚠️ SLV CBOE 日线最新只到 2026-09-28，落后于上一交易日 2026-09-29（源端未更新）：依赖日线的日期命名与价格分析会少这几天 
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-30/104937_dirledger_19010.json
+  gold   2026-09-30 进攻化（exists） Δskew25 -0.53pp，put 更贵档 0/6，skew25 +0.17，到期 2026-11-06
+  silver 2026-09-30 进攻化（eligible） Δskew25 -1.32pp，put 更贵档 0/6，skew25 -3.11，到期 2026-11-06
+[留痕] 输入清单 data/history/inputs/manifests/2026-09-30/104951_dirledger_19025.json
+  gold   2026-09-30 无（exists；水平 exists）S=1 F=0 V=0
+  silver 2026-09-30 无（eligible；水平 eligible）S=1 F=-1 V=0
+  wti    2026-09-30 无（eligible；水平 eligible）S=0 F=1 V=-1
+  qqq    2026-09-30 无（exists；水平 exists）S=0 F=0 V=0
+  tqqq   2026-09-30 无（exists；水平 exists）S=-1 F=-1 V=1
+  tlt    2026-09-30 无（exists；水平 exists）S=0 F=1 V=-1
+  spy    2026-09-30 无（exists；水平 exists）S=0 F=1 V=0
+  iwm    2026-09-30 无（exists；水平 exists）S=0 F=-1 V=0
+  amd    2026-09-30 exists；到期 10 个，其中月度/季度 ['09-30Q', '10-16M']
+  msft   2026-09-30 exists；到期 10 个，其中月度/季度 ['09-30Q', '10-16M']
+  aapl   2026-09-30 exists；到期 10 个，其中月度/季度 ['09-30Q', '10-16M']
+输入存档 2026-09-30：143 个序列，新版本 15、未变 128、新月度全量 0、未知格式整份 0（跳过期权链 16）；完整原文 cas 新块 0、新版本 0，核对 589/589 可还原；整份快照对象 32/32 完好
+盘中采样核对 2026-09-29：195 个（品种, 桶），异常 0
+逐分钟 K 线：长桥历史 K 线配额用尽（Error: WebSocket error (status=7, code=301607): history candlestick symbol count out of limit, requested:400/limit:400）；本次新抓 0（有数据 0），未完成的下次自动续补。配额重置周期未查证。
+[暂停发布] PUBLISH_CONFLICT 运行前已有他人改动、本次又写了同一路径，停止发布（产物保留）：data/history/outlook_scores.json.revisions.jsonl data/history/vrp/gold.json 
+[告警] ⚠️ 每日数据未提交（ET 2026-09-30 06:45） — 索引里有他人暂存的文件，已停止自动提交；数据已落盘，下次运行再发

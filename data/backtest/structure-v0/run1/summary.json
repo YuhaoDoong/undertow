@@ -1,0 +1,1202 @@
+{
+ "groups": {
+  "ETF": {
+   "bearish": {
+    "all_reversal_breaks": {
+     "survive_2atr": "135/206",
+     "survive_2atr_rate": 0.6553,
+     "survive_1atr": "89/206",
+     "survive_1atr_rate": 0.432,
+     "survive_3atr": "173/206",
+     "survive_3atr_rate": 0.8398,
+     "n": 206,
+     "mae_atr_median": 1.5947,
+     "mfe_atr_median": 1.3541,
+     "year_ref_survive_2atr": 0.703,
+     "late_confirmation": 97
+    },
+    "double_pattern": {
+     "survive_2atr": "39/69",
+     "survive_2atr_rate": 0.5652,
+     "survive_1atr": "26/69",
+     "survive_1atr_rate": 0.3768,
+     "survive_3atr": "55/69",
+     "survive_3atr_rate": 0.7971,
+     "n": 69,
+     "mae_atr_median": 2.0594,
+     "mfe_atr_median": 1.088,
+     "year_ref_survive_2atr": 0.6981,
+     "late_confirmation": 30
+    },
+    "non_pattern": {
+     "survive_2atr": "96/137",
+     "survive_2atr_rate": 0.7007,
+     "survive_1atr": "63/137",
+     "survive_1atr_rate": 0.4599,
+     "survive_3atr": "118/137",
+     "survive_3atr_rate": 0.8613,
+     "n": 137,
+     "mae_atr_median": 1.4173,
+     "mfe_atr_median": 1.5159,
+     "year_ref_survive_2atr": 0.7055,
+     "late_confirmation": 67
+    },
+    "diff_survive_2atr_pattern_minus_non": -0.1355,
+    "background_counts": {
+     "none": 258,
+     "up": 206,
+     "down": 160
+    }
+   },
+   "bullish": {
+    "all_reversal_breaks": {
+     "survive_2atr": "178/239",
+     "survive_2atr_rate": 0.7448,
+     "survive_1atr": "118/239",
+     "survive_1atr_rate": 0.4937,
+     "survive_3atr": "214/239",
+     "survive_3atr_rate": 0.8954,
+     "n": 239,
+     "mae_atr_median": 1.415,
+     "mfe_atr_median": 1.1714,
+     "year_ref_survive_2atr": 0.7253,
+     "late_confirmation": 98
+    },
+    "double_pattern": {
+     "survive_2atr": "42/62",
+     "survive_2atr_rate": 0.6774,
+     "survive_1atr": "26/62",
+     "survive_1atr_rate": 0.4194,
+     "survive_3atr": "54/62",
+     "survive_3atr_rate": 0.871,
+     "n": 62,
+     "mae_atr_median": 1.5404,
+     "mfe_atr_median": 0.9596,
+     "year_ref_survive_2atr": 0.7191,
+     "late_confirmation": 19
+    },
+    "non_pattern": {
+     "survive_2atr": "136/177",
+     "survive_2atr_rate": 0.7684,
+     "survive_1atr": "92/177",
+     "survive_1atr_rate": 0.5198,
+     "survive_3atr": "160/177",
+     "survive_3atr_rate": 0.904,
+     "n": 177,
+     "mae_atr_median": 1.2496,
+     "mfe_atr_median": 1.2335,
+     "year_ref_survive_2atr": 0.7275,
+     "late_confirmation": 79
+    },
+    "diff_survive_2atr_pattern_minus_non": -0.091,
+    "background_counts": {
+     "none": 273,
+     "down": 240,
+     "up": 305
+    }
+   }
+  },
+  "个股": {
+   "bearish": {
+    "all_reversal_breaks": {
+     "survive_2atr": "252/358",
+     "survive_2atr_rate": 0.7039,
+     "survive_1atr": "163/358",
+     "survive_1atr_rate": 0.4553,
+     "survive_3atr": "303/358",
+     "survive_3atr_rate": 0.8464,
+     "n": 358,
+     "mae_atr_median": 1.4875,
+     "mfe_atr_median": 1.4105,
+     "year_ref_survive_2atr": 0.6984,
+     "late_confirmation": 150
+    },
+    "double_pattern": {
+     "survive_2atr": "82/116",
+     "survive_2atr_rate": 0.7069,
+     "survive_1atr": "50/116",
+     "survive_1atr_rate": 0.431,
+     "survive_3atr": "100/116",
+     "survive_3atr_rate": 0.8621,
+     "n": 116,
+     "mae_atr_median": 1.5538,
+     "mfe_atr_median": 1.5206,
+     "year_ref_survive_2atr": 0.6913,
+     "late_confirmation": 48
+    },
+    "non_pattern": {
+     "survive_2atr": "170/242",
+     "survive_2atr_rate": 0.7025,
+     "survive_1atr": "113/242",
+     "survive_1atr_rate": 0.4669,
+     "survive_3atr": "203/242",
+     "survive_3atr_rate": 0.8388,
+     "n": 242,
+     "mae_atr_median": 1.4411,
+     "mfe_atr_median": 1.3617,
+     "year_ref_survive_2atr": 0.7018,
+     "late_confirmation": 102
+    },
+    "diff_survive_2atr_pattern_minus_non": 0.0044,
+    "background_counts": {
+     "none": 423,
+     "up": 359,
+     "down": 302
+    }
+   },
+   "bullish": {
+    "all_reversal_breaks": {
+     "survive_2atr": "279/355",
+     "survive_2atr_rate": 0.7859,
+     "survive_1atr": "193/355",
+     "survive_1atr_rate": 0.5437,
+     "survive_3atr": "317/355",
+     "survive_3atr_rate": 0.893,
+     "n": 355,
+     "mae_atr_median": 1.2391,
+     "mfe_atr_median": 1.4037,
+     "year_ref_survive_2atr": 0.7515,
+     "late_confirmation": 149
+    },
+    "double_pattern": {
+     "survive_2atr": "88/106",
+     "survive_2atr_rate": 0.8302,
+     "survive_1atr": "59/106",
+     "survive_1atr_rate": 0.5566,
+     "survive_3atr": "97/106",
+     "survive_3atr_rate": 0.9151,
+     "n": 106,
+     "mae_atr_median": 1.2065,
+     "mfe_atr_median": 1.5005,
+     "year_ref_survive_2atr": 0.7517,
+     "late_confirmation": 37
+    },
+    "non_pattern": {
+     "survive_2atr": "191/249",
+     "survive_2atr_rate": 0.7671,
+     "survive_1atr": "134/249",
+     "survive_1atr_rate": 0.5382,
+     "survive_3atr": "220/249",
+     "survive_3atr_rate": 0.8835,
+     "n": 249,
+     "mae_atr_median": 1.26,
+     "mfe_atr_median": 1.37,
+     "year_ref_survive_2atr": 0.7515,
+     "late_confirmation": 112
+    },
+    "diff_survive_2atr_pattern_minus_non": 0.0631,
+    "background_counts": {
+     "none": 490,
+     "up": 476,
+     "down": 355
+    }
+   }
+  },
+  "连续期货": {
+   "bearish": {
+    "all_reversal_breaks": {
+     "survive_2atr": "78/120",
+     "survive_2atr_rate": 0.65,
+     "survive_1atr": "56/120",
+     "survive_1atr_rate": 0.4667,
+     "survive_3atr": "97/120",
+     "survive_3atr_rate": 0.8083,
+     "n": 120,
+     "mae_atr_median": 1.2919,
+     "mfe_atr_median": 1.5251,
+     "year_ref_survive_2atr": 0.5741,
+     "late_confirmation": 67
+    },
+    "double_pattern": {
+     "survive_2atr": "13/24",
+     "survive_2atr_rate": 0.5417,
+     "survive_1atr": "12/24",
+     "survive_1atr_rate": 0.5,
+     "survive_3atr": "19/24",
+     "survive_3atr_rate": 0.7917,
+     "n": 24,
+     "mae_atr_median": 1.4297,
+     "mfe_atr_median": 1.8097,
+     "year_ref_survive_2atr": 0.5846,
+     "late_confirmation": 11
+    },
+    "non_pattern": {
+     "survive_2atr": "65/96",
+     "survive_2atr_rate": 0.6771,
+     "survive_1atr": "44/96",
+     "survive_1atr_rate": 0.4583,
+     "survive_3atr": "78/96",
+     "survive_3atr_rate": 0.8125,
+     "n": 96,
+     "mae_atr_median": 1.2919,
+     "mfe_atr_median": 1.438,
+     "year_ref_survive_2atr": 0.5714,
+     "late_confirmation": 56
+    },
+    "diff_survive_2atr_pattern_minus_non": -0.1354,
+    "background_counts": {
+     "down": 61,
+     "up": 120,
+     "none": 117
+    }
+   },
+   "bullish": {
+    "all_reversal_breaks": {
+     "survive_2atr": "67/99",
+     "survive_2atr_rate": 0.6768,
+     "survive_1atr": "46/99",
+     "survive_1atr_rate": 0.4646,
+     "survive_3atr": "81/99",
+     "survive_3atr_rate": 0.8182,
+     "n": 99,
+     "mae_atr_median": 1.32,
+     "mfe_atr_median": 1.8992,
+     "year_ref_survive_2atr": 0.664,
+     "late_confirmation": 56
+    },
+    "double_pattern": {
+     "survive_2atr": "8/17",
+     "survive_2atr_rate": 0.4706,
+     "survive_1atr": "6/17",
+     "survive_1atr_rate": 0.3529,
+     "survive_3atr": "9/17",
+     "survive_3atr_rate": 0.5294,
+     "n": 17,
+     "mae_atr_median": 3.051,
+     "mfe_atr_median": 1.0863,
+     "year_ref_survive_2atr": 0.6448,
+     "late_confirmation": 10
+    },
+    "non_pattern": {
+     "survive_2atr": "59/82",
+     "survive_2atr_rate": 0.7195,
+     "survive_1atr": "40/82",
+     "survive_1atr_rate": 0.4878,
+     "survive_3atr": "72/82",
+     "survive_3atr_rate": 0.878,
+     "n": 82,
+     "mae_atr_median": 1.3006,
+     "mfe_atr_median": 2.0762,
+     "year_ref_survive_2atr": 0.668,
+     "late_confirmation": 46
+    },
+    "diff_survive_2atr_pattern_minus_non": -0.2489,
+    "background_counts": {
+     "down": 100,
+     "none": 126,
+     "up": 135
+    }
+   }
+  },
+  "全部": {
+   "bearish": {
+    "all_reversal_breaks": {
+     "survive_2atr": "465/684",
+     "survive_2atr_rate": 0.6798,
+     "survive_1atr": "308/684",
+     "survive_1atr_rate": 0.4503,
+     "survive_3atr": "573/684",
+     "survive_3atr_rate": 0.8377,
+     "n": 684,
+     "mae_atr_median": 1.4875,
+     "mfe_atr_median": 1.4105,
+     "year_ref_survive_2atr": 0.678,
+     "late_confirmation": 314
+    },
+    "double_pattern": {
+     "survive_2atr": "134/209",
+     "survive_2atr_rate": 0.6411,
+     "survive_1atr": "88/209",
+     "survive_1atr_rate": 0.4211,
+     "survive_3atr": "174/209",
+     "survive_3atr_rate": 0.8325,
+     "n": 209,
+     "mae_atr_median": 1.6695,
+     "mfe_atr_median": 1.3738,
+     "year_ref_survive_2atr": 0.6813,
+     "late_confirmation": 89
+    },
+    "non_pattern": {
+     "survive_2atr": "331/475",
+     "survive_2atr_rate": 0.6968,
+     "survive_1atr": "220/475",
+     "survive_1atr_rate": 0.4632,
+     "survive_3atr": "399/475",
+     "survive_3atr_rate": 0.84,
+     "n": 475,
+     "mae_atr_median": 1.4097,
+     "mfe_atr_median": 1.4127,
+     "year_ref_survive_2atr": 0.6765,
+     "late_confirmation": 225
+    },
+    "diff_survive_2atr_pattern_minus_non": -0.0557,
+    "background_counts": {
+     "none": 798,
+     "up": 685,
+     "down": 523
+    }
+   },
+   "bullish": {
+    "all_reversal_breaks": {
+     "survive_2atr": "524/693",
+     "survive_2atr_rate": 0.7561,
+     "survive_1atr": "357/693",
+     "survive_1atr_rate": 0.5152,
+     "survive_3atr": "612/693",
+     "survive_3atr_rate": 0.8831,
+     "n": 693,
+     "mae_atr_median": 1.3221,
+     "mfe_atr_median": 1.366,
+     "year_ref_survive_2atr": 0.73,
+     "late_confirmation": 303
+    },
+    "double_pattern": {
+     "survive_2atr": "138/185",
+     "survive_2atr_rate": 0.7459,
+     "survive_1atr": "91/185",
+     "survive_1atr_rate": 0.4919,
+     "survive_3atr": "160/185",
+     "survive_3atr_rate": 0.8649,
+     "n": 185,
+     "mae_atr_median": 1.4047,
+     "mfe_atr_median": 1.1716,
+     "year_ref_survive_2atr": 0.7309,
+     "late_confirmation": 66
+    },
+    "non_pattern": {
+     "survive_2atr": "386/508",
+     "survive_2atr_rate": 0.7598,
+     "survive_1atr": "266/508",
+     "survive_1atr_rate": 0.5236,
+     "survive_3atr": "452/508",
+     "survive_3atr_rate": 0.8898,
+     "n": 508,
+     "mae_atr_median": 1.26,
+     "mfe_atr_median": 1.3865,
+     "year_ref_survive_2atr": 0.7297,
+     "late_confirmation": 237
+    },
+    "diff_survive_2atr_pattern_minus_non": -0.0139,
+    "background_counts": {
+     "none": 889,
+     "down": 695,
+     "up": 916
+    }
+   }
+  }
+ },
+ "per_symbol": {
+  "AAPL": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "24/30",
+     "survive_2atr_rate": 0.8,
+     "survive_1atr": "15/30",
+     "survive_1atr_rate": 0.5,
+     "survive_3atr": "28/30",
+     "survive_3atr_rate": 0.9333,
+     "n": 30,
+     "mae_atr_median": 1.3845,
+     "mfe_atr_median": 1.7904,
+     "year_ref_survive_2atr": 0.6446,
+     "late_confirmation": 17
+    },
+    "non_pattern": {
+     "survive_2atr": "35/51",
+     "survive_2atr_rate": 0.6863,
+     "survive_1atr": "20/51",
+     "survive_1atr_rate": 0.3922,
+     "survive_3atr": "41/51",
+     "survive_3atr_rate": 0.8039,
+     "n": 51,
+     "mae_atr_median": 1.4995,
+     "mfe_atr_median": 1.1394,
+     "year_ref_survive_2atr": 0.6788,
+     "late_confirmation": 20
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "7/10",
+     "survive_2atr_rate": 0.7,
+     "survive_1atr": "3/10",
+     "survive_1atr_rate": 0.3,
+     "survive_3atr": "9/10",
+     "survive_3atr_rate": 0.9,
+     "n": 10,
+     "mae_atr_median": 1.9025,
+     "mfe_atr_median": 0.6564,
+     "year_ref_survive_2atr": 0.7097,
+     "late_confirmation": 3
+    },
+    "non_pattern": {
+     "survive_2atr": "27/33",
+     "survive_2atr_rate": 0.8182,
+     "survive_1atr": "18/33",
+     "survive_1atr_rate": 0.5455,
+     "survive_3atr": "31/33",
+     "survive_3atr_rate": 0.9394,
+     "n": 33,
+     "mae_atr_median": 1.1829,
+     "mfe_atr_median": 1.8883,
+     "year_ref_survive_2atr": 0.7287,
+     "late_confirmation": 15
+    }
+   }
+  },
+  "AMD": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "12/17",
+     "survive_2atr_rate": 0.7059,
+     "survive_1atr": "6/17",
+     "survive_1atr_rate": 0.3529,
+     "survive_3atr": "16/17",
+     "survive_3atr_rate": 0.9412,
+     "n": 17,
+     "mae_atr_median": 1.7735,
+     "mfe_atr_median": 1.3523,
+     "year_ref_survive_2atr": 0.7318,
+     "late_confirmation": 7
+    },
+    "non_pattern": {
+     "survive_2atr": "27/39",
+     "survive_2atr_rate": 0.6923,
+     "survive_1atr": "23/39",
+     "survive_1atr_rate": 0.5897,
+     "survive_3atr": "32/39",
+     "survive_3atr_rate": 0.8205,
+     "n": 39,
+     "mae_atr_median": 1.2714,
+     "mfe_atr_median": 1.4738,
+     "year_ref_survive_2atr": 0.7358,
+     "late_confirmation": 18
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "20/23",
+     "survive_2atr_rate": 0.8696,
+     "survive_1atr": "13/23",
+     "survive_1atr_rate": 0.5652,
+     "survive_3atr": "21/23",
+     "survive_3atr_rate": 0.913,
+     "n": 23,
+     "mae_atr_median": 1.1632,
+     "mfe_atr_median": 1.6388,
+     "year_ref_survive_2atr": 0.739,
+     "late_confirmation": 7
+    },
+    "non_pattern": {
+     "survive_2atr": "36/48",
+     "survive_2atr_rate": 0.75,
+     "survive_1atr": "26/48",
+     "survive_1atr_rate": 0.5417,
+     "survive_3atr": "42/48",
+     "survive_3atr_rate": 0.875,
+     "n": 48,
+     "mae_atr_median": 1.2584,
+     "mfe_atr_median": 1.7399,
+     "year_ref_survive_2atr": 0.7327,
+     "late_confirmation": 16
+    }
+   }
+  },
+  "GC=F": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "6/12",
+     "survive_2atr_rate": 0.5,
+     "survive_1atr": "5/12",
+     "survive_1atr_rate": 0.4167,
+     "survive_3atr": "8/12",
+     "survive_3atr_rate": 0.6667,
+     "n": 12,
+     "mae_atr_median": 2.4061,
+     "mfe_atr_median": 1.1636,
+     "year_ref_survive_2atr": 0.6123,
+     "late_confirmation": 5
+    },
+    "non_pattern": {
+     "survive_2atr": "35/50",
+     "survive_2atr_rate": 0.7,
+     "survive_1atr": "22/50",
+     "survive_1atr_rate": 0.44,
+     "survive_3atr": "43/50",
+     "survive_3atr_rate": 0.86,
+     "n": 50,
+     "mae_atr_median": 1.3063,
+     "mfe_atr_median": 1.277,
+     "year_ref_survive_2atr": 0.5692,
+     "late_confirmation": 31
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "4/9",
+     "survive_2atr_rate": 0.4444,
+     "survive_1atr": "3/9",
+     "survive_1atr_rate": 0.3333,
+     "survive_3atr": "5/9",
+     "survive_3atr_rate": 0.5556,
+     "n": 9,
+     "mae_atr_median": 3.3086,
+     "mfe_atr_median": 1.0863,
+     "year_ref_survive_2atr": 0.6551,
+     "late_confirmation": 5
+    },
+    "non_pattern": {
+     "survive_2atr": "28/42",
+     "survive_2atr_rate": 0.6667,
+     "survive_1atr": "17/42",
+     "survive_1atr_rate": 0.4048,
+     "survive_3atr": "34/42",
+     "survive_3atr_rate": 0.8095,
+     "n": 42,
+     "mae_atr_median": 1.4718,
+     "mfe_atr_median": 1.6898,
+     "year_ref_survive_2atr": 0.6731,
+     "late_confirmation": 25
+    }
+   }
+  },
+  "GLD": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "3/6",
+     "survive_2atr_rate": 0.5,
+     "survive_1atr": "2/6",
+     "survive_1atr_rate": 0.3333,
+     "survive_3atr": "4/6",
+     "survive_3atr_rate": 0.6667,
+     "n": 6,
+     "mae_atr_median": 2.5541,
+     "mfe_atr_median": 1.1913,
+     "year_ref_survive_2atr": 0.6046,
+     "late_confirmation": 2
+    },
+    "non_pattern": {
+     "survive_2atr": "18/27",
+     "survive_2atr_rate": 0.6667,
+     "survive_1atr": "11/27",
+     "survive_1atr_rate": 0.4074,
+     "survive_3atr": "24/27",
+     "survive_3atr_rate": 0.8889,
+     "n": 27,
+     "mae_atr_median": 1.6694,
+     "mfe_atr_median": 1.2281,
+     "year_ref_survive_2atr": 0.6502,
+     "late_confirmation": 18
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "7/10",
+     "survive_2atr_rate": 0.7,
+     "survive_1atr": "3/10",
+     "survive_1atr_rate": 0.3,
+     "survive_3atr": "7/10",
+     "survive_3atr_rate": 0.7,
+     "n": 10,
+     "mae_atr_median": 1.6215,
+     "mfe_atr_median": 0.7429,
+     "year_ref_survive_2atr": 0.7263,
+     "late_confirmation": 4
+    },
+    "non_pattern": {
+     "survive_2atr": "23/33",
+     "survive_2atr_rate": 0.697,
+     "survive_1atr": "17/33",
+     "survive_1atr_rate": 0.5152,
+     "survive_3atr": "28/33",
+     "survive_3atr_rate": 0.8485,
+     "n": 33,
+     "mae_atr_median": 1.0989,
+     "mfe_atr_median": 1.5796,
+     "year_ref_survive_2atr": 0.7382,
+     "late_confirmation": 17
+    }
+   }
+  },
+  "GOOGL": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "5/7",
+     "survive_2atr_rate": 0.7143,
+     "survive_1atr": "3/7",
+     "survive_1atr_rate": 0.4286,
+     "survive_3atr": "6/7",
+     "survive_3atr_rate": 0.8571,
+     "n": 7,
+     "mae_atr_median": 1.7489,
+     "mfe_atr_median": 1.9295,
+     "year_ref_survive_2atr": 0.665,
+     "late_confirmation": 3
+    },
+    "non_pattern": {
+     "survive_2atr": "18/24",
+     "survive_2atr_rate": 0.75,
+     "survive_1atr": "10/24",
+     "survive_1atr_rate": 0.4167,
+     "survive_3atr": "19/24",
+     "survive_3atr_rate": 0.7917,
+     "n": 24,
+     "mae_atr_median": 1.7667,
+     "mfe_atr_median": 1.5716,
+     "year_ref_survive_2atr": 0.6548,
+     "late_confirmation": 15
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "6/8",
+     "survive_2atr_rate": 0.75,
+     "survive_1atr": "3/8",
+     "survive_1atr_rate": 0.375,
+     "survive_3atr": "6/8",
+     "survive_3atr_rate": 0.75,
+     "n": 8,
+     "mae_atr_median": 1.5365,
+     "mfe_atr_median": 0.9972,
+     "year_ref_survive_2atr": 0.7302,
+     "late_confirmation": 3
+    },
+    "non_pattern": {
+     "survive_2atr": "17/22",
+     "survive_2atr_rate": 0.7727,
+     "survive_1atr": "14/22",
+     "survive_1atr_rate": 0.6364,
+     "survive_3atr": "18/22",
+     "survive_3atr_rate": 0.8182,
+     "n": 22,
+     "mae_atr_median": 1.3523,
+     "mfe_atr_median": 1.4921,
+     "year_ref_survive_2atr": 0.7305,
+     "late_confirmation": 8
+    }
+   }
+  },
+  "INTC": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "11/19",
+     "survive_2atr_rate": 0.5789,
+     "survive_1atr": "6/19",
+     "survive_1atr_rate": 0.3158,
+     "survive_3atr": "14/19",
+     "survive_3atr_rate": 0.7368,
+     "n": 19,
+     "mae_atr_median": 2.0776,
+     "mfe_atr_median": 1.0753,
+     "year_ref_survive_2atr": 0.6812,
+     "late_confirmation": 9
+    },
+    "non_pattern": {
+     "survive_2atr": "23/37",
+     "survive_2atr_rate": 0.6216,
+     "survive_1atr": "16/37",
+     "survive_1atr_rate": 0.4324,
+     "survive_3atr": "31/37",
+     "survive_3atr_rate": 0.8378,
+     "n": 37,
+     "mae_atr_median": 1.5235,
+     "mfe_atr_median": 1.2453,
+     "year_ref_survive_2atr": 0.6939,
+     "late_confirmation": 9
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "22/24",
+     "survive_2atr_rate": 0.9167,
+     "survive_1atr": "16/24",
+     "survive_1atr_rate": 0.6667,
+     "survive_3atr": "23/24",
+     "survive_3atr_rate": 0.9583,
+     "n": 24,
+     "mae_atr_median": 0.8641,
+     "mfe_atr_median": 1.9106,
+     "year_ref_survive_2atr": 0.7742,
+     "late_confirmation": 12
+    },
+    "non_pattern": {
+     "survive_2atr": "37/49",
+     "survive_2atr_rate": 0.7551,
+     "survive_1atr": "28/49",
+     "survive_1atr_rate": 0.5714,
+     "survive_3atr": "44/49",
+     "survive_3atr_rate": 0.898,
+     "n": 49,
+     "mae_atr_median": 1.171,
+     "mfe_atr_median": 1.2957,
+     "year_ref_survive_2atr": 0.7644,
+     "late_confirmation": 25
+    }
+   }
+  },
+  "MSFT": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "18/26",
+     "survive_2atr_rate": 0.6923,
+     "survive_1atr": "12/26",
+     "survive_1atr_rate": 0.4615,
+     "survive_3atr": "21/26",
+     "survive_3atr_rate": 0.8077,
+     "n": 26,
+     "mae_atr_median": 1.5396,
+     "mfe_atr_median": 1.2616,
+     "year_ref_survive_2atr": 0.7193,
+     "late_confirmation": 6
+    },
+    "non_pattern": {
+     "survive_2atr": "30/42",
+     "survive_2atr_rate": 0.7143,
+     "survive_1atr": "21/42",
+     "survive_1atr_rate": 0.5,
+     "survive_3atr": "37/42",
+     "survive_3atr_rate": 0.881,
+     "n": 42,
+     "mae_atr_median": 1.3102,
+     "mfe_atr_median": 1.2181,
+     "year_ref_survive_2atr": 0.7211,
+     "late_confirmation": 16
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "14/18",
+     "survive_2atr_rate": 0.7778,
+     "survive_1atr": "8/18",
+     "survive_1atr_rate": 0.4444,
+     "survive_3atr": "16/18",
+     "survive_3atr_rate": 0.8889,
+     "n": 18,
+     "mae_atr_median": 1.7167,
+     "mfe_atr_median": 1.4037,
+     "year_ref_survive_2atr": 0.7821,
+     "late_confirmation": 2
+    },
+    "non_pattern": {
+     "survive_2atr": "37/47",
+     "survive_2atr_rate": 0.7872,
+     "survive_1atr": "25/47",
+     "survive_1atr_rate": 0.5319,
+     "survive_3atr": "43/47",
+     "survive_3atr_rate": 0.9149,
+     "n": 47,
+     "mae_atr_median": 1.4379,
+     "mfe_atr_median": 1.2509,
+     "year_ref_survive_2atr": 0.7694,
+     "late_confirmation": 22
+    }
+   }
+  },
+  "NVDA": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "12/17",
+     "survive_2atr_rate": 0.7059,
+     "survive_1atr": "8/17",
+     "survive_1atr_rate": 0.4706,
+     "survive_3atr": "15/17",
+     "survive_3atr_rate": 0.8824,
+     "n": 17,
+     "mae_atr_median": 1.335,
+     "mfe_atr_median": 1.4931,
+     "year_ref_survive_2atr": 0.7129,
+     "late_confirmation": 6
+    },
+    "non_pattern": {
+     "survive_2atr": "30/39",
+     "survive_2atr_rate": 0.7692,
+     "survive_1atr": "18/39",
+     "survive_1atr_rate": 0.4615,
+     "survive_3atr": "33/39",
+     "survive_3atr_rate": 0.8462,
+     "n": 39,
+     "mae_atr_median": 1.3135,
+     "mfe_atr_median": 1.2192,
+     "year_ref_survive_2atr": 0.7066,
+     "late_confirmation": 18
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "13/16",
+     "survive_2atr_rate": 0.8125,
+     "survive_1atr": "10/16",
+     "survive_1atr_rate": 0.625,
+     "survive_3atr": "15/16",
+     "survive_3atr_rate": 0.9375,
+     "n": 16,
+     "mae_atr_median": 1.3927,
+     "mfe_atr_median": 2.0782,
+     "year_ref_survive_2atr": 0.7391,
+     "late_confirmation": 7
+    },
+    "non_pattern": {
+     "survive_2atr": "27/38",
+     "survive_2atr_rate": 0.7105,
+     "survive_1atr": "18/38",
+     "survive_1atr_rate": 0.4737,
+     "survive_3atr": "32/38",
+     "survive_3atr_rate": 0.8421,
+     "n": 38,
+     "mae_atr_median": 1.7087,
+     "mfe_atr_median": 1.1443,
+     "year_ref_survive_2atr": 0.763,
+     "late_confirmation": 20
+    }
+   }
+  },
+  "QQQ": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "13/26",
+     "survive_2atr_rate": 0.5,
+     "survive_1atr": "7/26",
+     "survive_1atr_rate": 0.2692,
+     "survive_3atr": "19/26",
+     "survive_3atr_rate": 0.7308,
+     "n": 26,
+     "mae_atr_median": 2.55,
+     "mfe_atr_median": 1.0093,
+     "year_ref_survive_2atr": 0.6884,
+     "late_confirmation": 11
+    },
+    "non_pattern": {
+     "survive_2atr": "30/38",
+     "survive_2atr_rate": 0.7895,
+     "survive_1atr": "20/38",
+     "survive_1atr_rate": 0.5263,
+     "survive_3atr": "33/38",
+     "survive_3atr_rate": 0.8684,
+     "n": 38,
+     "mae_atr_median": 1.2909,
+     "mfe_atr_median": 1.5159,
+     "year_ref_survive_2atr": 0.7122,
+     "late_confirmation": 19
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "13/16",
+     "survive_2atr_rate": 0.8125,
+     "survive_1atr": "8/16",
+     "survive_1atr_rate": 0.5,
+     "survive_3atr": "15/16",
+     "survive_3atr_rate": 0.9375,
+     "n": 16,
+     "mae_atr_median": 1.5201,
+     "mfe_atr_median": 1.3993,
+     "year_ref_survive_2atr": 0.7366,
+     "late_confirmation": 4
+    },
+    "non_pattern": {
+     "survive_2atr": "31/40",
+     "survive_2atr_rate": 0.775,
+     "survive_1atr": "17/40",
+     "survive_1atr_rate": 0.425,
+     "survive_3atr": "39/40",
+     "survive_3atr_rate": 0.975,
+     "n": 40,
+     "mae_atr_median": 1.5418,
+     "mfe_atr_median": 1.1189,
+     "year_ref_survive_2atr": 0.7147,
+     "late_confirmation": 17
+    }
+   }
+  },
+  "SI=F": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "7/12",
+     "survive_2atr_rate": 0.5833,
+     "survive_1atr": "7/12",
+     "survive_1atr_rate": 0.5833,
+     "survive_3atr": "11/12",
+     "survive_3atr_rate": 0.9167,
+     "n": 12,
+     "mae_atr_median": 1.2629,
+     "mfe_atr_median": 2.2651,
+     "year_ref_survive_2atr": 0.5569,
+     "late_confirmation": 6
+    },
+    "non_pattern": {
+     "survive_2atr": "30/46",
+     "survive_2atr_rate": 0.6522,
+     "survive_1atr": "22/46",
+     "survive_1atr_rate": 0.4783,
+     "survive_3atr": "35/46",
+     "survive_3atr_rate": 0.7609,
+     "n": 46,
+     "mae_atr_median": 1.2637,
+     "mfe_atr_median": 1.5263,
+     "year_ref_survive_2atr": 0.5738,
+     "late_confirmation": 25
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "4/8",
+     "survive_2atr_rate": 0.5,
+     "survive_1atr": "3/8",
+     "survive_1atr_rate": 0.375,
+     "survive_3atr": "4/8",
+     "survive_3atr_rate": 0.5,
+     "n": 8,
+     "mae_atr_median": 3.051,
+     "mfe_atr_median": 1.4701,
+     "year_ref_survive_2atr": 0.6332,
+     "late_confirmation": 5
+    },
+    "non_pattern": {
+     "survive_2atr": "31/40",
+     "survive_2atr_rate": 0.775,
+     "survive_1atr": "23/40",
+     "survive_1atr_rate": 0.575,
+     "survive_3atr": "38/40",
+     "survive_3atr_rate": 0.95,
+     "n": 40,
+     "mae_atr_median": 1.2427,
+     "mfe_atr_median": 2.5494,
+     "year_ref_survive_2atr": 0.6627,
+     "late_confirmation": 21
+    }
+   }
+  },
+  "SLV": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "3/7",
+     "survive_2atr_rate": 0.4286,
+     "survive_1atr": "2/7",
+     "survive_1atr_rate": 0.2857,
+     "survive_3atr": "7/7",
+     "survive_3atr_rate": 1.0,
+     "n": 7,
+     "mae_atr_median": 2.5394,
+     "mfe_atr_median": 0.8634,
+     "year_ref_survive_2atr": 0.611,
+     "late_confirmation": 6
+    },
+    "non_pattern": {
+     "survive_2atr": "17/21",
+     "survive_2atr_rate": 0.8095,
+     "survive_1atr": "14/21",
+     "survive_1atr_rate": 0.6667,
+     "survive_3atr": "19/21",
+     "survive_3atr_rate": 0.9048,
+     "n": 21,
+     "mae_atr_median": 0.7462,
+     "mfe_atr_median": 1.9037,
+     "year_ref_survive_2atr": 0.7064,
+     "late_confirmation": 12
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "4/7",
+     "survive_2atr_rate": 0.5714,
+     "survive_1atr": "3/7",
+     "survive_1atr_rate": 0.4286,
+     "survive_3atr": "6/7",
+     "survive_3atr_rate": 0.8571,
+     "n": 7,
+     "mae_atr_median": 2.0487,
+     "mfe_atr_median": 0.6463,
+     "year_ref_survive_2atr": 0.6862,
+     "late_confirmation": 3
+    },
+    "non_pattern": {
+     "survive_2atr": "16/23",
+     "survive_2atr_rate": 0.6957,
+     "survive_1atr": "12/23",
+     "survive_1atr_rate": 0.5217,
+     "survive_3atr": "19/23",
+     "survive_3atr_rate": 0.8261,
+     "n": 23,
+     "mae_atr_median": 1.0091,
+     "mfe_atr_median": 1.2314,
+     "year_ref_survive_2atr": 0.7166,
+     "late_confirmation": 10
+    }
+   }
+  },
+  "SPY": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "14/21",
+     "survive_2atr_rate": 0.6667,
+     "survive_1atr": "10/21",
+     "survive_1atr_rate": 0.4762,
+     "survive_3atr": "18/21",
+     "survive_3atr_rate": 0.8571,
+     "n": 21,
+     "mae_atr_median": 1.3759,
+     "mfe_atr_median": 1.4598,
+     "year_ref_survive_2atr": 0.7474,
+     "late_confirmation": 10
+    },
+    "non_pattern": {
+     "survive_2atr": "18/34",
+     "survive_2atr_rate": 0.5294,
+     "survive_1atr": "12/34",
+     "survive_1atr_rate": 0.3529,
+     "survive_3atr": "27/34",
+     "survive_3atr_rate": 0.7941,
+     "n": 34,
+     "mae_atr_median": 2.1269,
+     "mfe_atr_median": 1.4426,
+     "year_ref_survive_2atr": 0.7328,
+     "late_confirmation": 13
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "15/24",
+     "survive_2atr_rate": 0.625,
+     "survive_1atr": "11/24",
+     "survive_1atr_rate": 0.4583,
+     "survive_3atr": "22/24",
+     "survive_3atr_rate": 0.9167,
+     "n": 24,
+     "mae_atr_median": 1.6138,
+     "mfe_atr_median": 1.091,
+     "year_ref_survive_2atr": 0.7227,
+     "late_confirmation": 7
+    },
+    "non_pattern": {
+     "survive_2atr": "51/64",
+     "survive_2atr_rate": 0.7969,
+     "survive_1atr": "35/64",
+     "survive_1atr_rate": 0.5469,
+     "survive_3atr": "59/64",
+     "survive_3atr_rate": 0.9219,
+     "n": 64,
+     "mae_atr_median": 1.2429,
+     "mfe_atr_median": 1.1075,
+     "year_ref_survive_2atr": 0.7454,
+     "late_confirmation": 30
+    }
+   }
+  },
+  "TSLA": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "0/0",
+     "survive_2atr_rate": null,
+     "survive_1atr": "0/0",
+     "survive_1atr_rate": null,
+     "survive_3atr": "0/0",
+     "survive_3atr_rate": null,
+     "n": 0,
+     "mae_atr_median": null,
+     "mfe_atr_median": null,
+     "year_ref_survive_2atr": null,
+     "late_confirmation": 0
+    },
+    "non_pattern": {
+     "survive_2atr": "7/10",
+     "survive_2atr_rate": 0.7,
+     "survive_1atr": "5/10",
+     "survive_1atr_rate": 0.5,
+     "survive_3atr": "10/10",
+     "survive_3atr_rate": 1.0,
+     "n": 10,
+     "mae_atr_median": 1.7787,
+     "mfe_atr_median": 1.6109,
+     "year_ref_survive_2atr": 0.7287,
+     "late_confirmation": 6
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "6/7",
+     "survive_2atr_rate": 0.8571,
+     "survive_1atr": "6/7",
+     "survive_1atr_rate": 0.8571,
+     "survive_3atr": "7/7",
+     "survive_3atr_rate": 1.0,
+     "n": 7,
+     "mae_atr_median": 1.0647,
+     "mfe_atr_median": 1.8294,
+     "year_ref_survive_2atr": 0.7511,
+     "late_confirmation": 3
+    },
+    "non_pattern": {
+     "survive_2atr": "10/12",
+     "survive_2atr_rate": 0.8333,
+     "survive_1atr": "5/12",
+     "survive_1atr_rate": 0.4167,
+     "survive_3atr": "10/12",
+     "survive_3atr_rate": 0.8333,
+     "n": 12,
+     "mae_atr_median": 2.0767,
+     "mfe_atr_median": 1.6524,
+     "year_ref_survive_2atr": 0.7681,
+     "late_confirmation": 6
+    }
+   }
+  },
+  "USO": {
+   "bearish": {
+    "pattern": {
+     "survive_2atr": "6/9",
+     "survive_2atr_rate": 0.6667,
+     "survive_1atr": "5/9",
+     "survive_1atr_rate": 0.5556,
+     "survive_3atr": "7/9",
+     "survive_3atr_rate": 0.7778,
+     "n": 9,
+     "mae_atr_median": 0.9491,
+     "mfe_atr_median": 1.0236,
+     "year_ref_survive_2atr": 0.7413,
+     "late_confirmation": 1
+    },
+    "non_pattern": {
+     "survive_2atr": "13/17",
+     "survive_2atr_rate": 0.7647,
+     "survive_1atr": "6/17",
+     "survive_1atr_rate": 0.3529,
+     "survive_3atr": "15/17",
+     "survive_3atr_rate": 0.8824,
+     "n": 17,
+     "mae_atr_median": 1.5812,
+     "mfe_atr_median": 1.0172,
+     "year_ref_survive_2atr": 0.7227,
+     "late_confirmation": 5
+    }
+   },
+   "bullish": {
+    "pattern": {
+     "survive_2atr": "3/5",
+     "survive_2atr_rate": 0.6,
+     "survive_1atr": "1/5",
+     "survive_1atr_rate": 0.2,
+     "survive_3atr": "4/5",
+     "survive_3atr_rate": 0.8,
+     "n": 5,
+     "mae_atr_median": 1.9634,
+     "mfe_atr_median": 0.2708,
+     "year_ref_survive_2atr": 0.6773,
+     "late_confirmation": 1
+    },
+    "non_pattern": {
+     "survive_2atr": "15/17",
+     "survive_2atr_rate": 0.8824,
+     "survive_1atr": "11/17",
+     "survive_1atr_rate": 0.6471,
+     "survive_3atr": "15/17",
+     "survive_3atr_rate": 0.8824,
+     "n": 17,
+     "mae_atr_median": 1.072,
+     "mfe_atr_median": 1.6598,
+     "year_ref_survive_2atr": 0.6846,
+     "late_confirmation": 5
+    }
+   }
+  }
+ }
+}

@@ -31,6 +31,10 @@ OUT = None                      # main() 按 --run-id 设定
 BARRIER_KS = (2.0, 1.0, 3.0)    # 2ATR 主描述；1、3ATR 为预先列明的敏感性（Codex 038）
 BARRIER_DAYS = 10
 SYMS = ("GLD", "SLV", "USO", "QQQ", "SPY")
+# run5 起（用户 2026-10-13：「可以用金银期货价格日线……个股应该也能获取很多年的日线？比如谷歌等」）可用 --symbols 扩充：
+# 期货连续合约（GC=F、SI=F）不做换月拼接调整 —— 换月日有机械跳空，可能制造假突破，结果要与 ETF 分开读；
+# 期货交易日与美股不完全相同 → 期货用自身交易日、不以 SPY 日历判缺会话。
+FUTURES = ("GC=F", "SI=F", "CL=F")
 DESIGN_END = date(2015, 12, 31)
 PERIOD2 = int(datetime(2016, 1, 1, tzinfo=timezone.utc).timestamp())   # 请求就截止在设计集之后，不取 2016 起的数据
 KERNEL_SPAN = 250
@@ -40,7 +44,7 @@ V_LOOKBACK = 500
 # ---------------- 数据 ----------------
 def fetch(sym: str) -> tuple[dict, str]:
     from undertow.collect.base import http_get_json
-    f = INPUTS / f"{sym}.json"
+    f = INPUTS / f"{sym.replace('=', '_')}.json"
     if f.exists():
         raw = f.read_bytes()
     else:
@@ -171,7 +175,7 @@ def run_symbol(sym: str, ref_dates: list, log: list, barrier: bool = False) -> d
     sc = split_check(bars_all, actions)
     if any(x["check"] == "UNADJUSTED_UNIT_BREAK" for x in sc):
         return {"symbol": sym, "status": "paused_unit_break", "split_check": sc, "input_sha256": sha}
-    segs, missing = segments(bars_all, ref_dates)
+    segs, missing = segments(bars_all, [b[0] for b in bars_all] if sym in FUTURES else ref_dates)
     log.append(f"{sym}: {len(bars_all)} 根 {bars_all[0][0]}–{bars_all[-1][0]}，缺会话 {len(missing)}，无效行 {len(bad)}，段 {len(segs)}")
     episodes, trades = [], []
     for si, bars in enumerate(segs):
@@ -419,6 +423,7 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-id", required=True)
     ap.add_argument("--barrier", action="store_true")
+    ap.add_argument("--symbols", default=",".join(SYMS), help="逗号分隔；默认五个 ETF")
     a = ap.parse_args()
     OUT = BASE / a.run_id
     if OUT.exists():
@@ -430,7 +435,7 @@ def main() -> int:
     ref_bars, _, _ = parse(ref)
     ref_dates = [b[0] for b in ref_bars]
     results = {}
-    for sym in SYMS:
+    for sym in a.symbols.split(","):
         results[sym] = run_symbol(sym, ref_dates, log, barrier=a.barrier)
         print(log[-1] if log else sym, flush=True)
     files = {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in (

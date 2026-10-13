@@ -1,0 +1,288 @@
+{
+ "seed": 20261014,
+ "window": 120,
+ "symbols": [
+  "GLD",
+  "SLV",
+  "SPY",
+  "QQQ",
+  "GC=F",
+  "SI=F",
+  "AAPL",
+  "MSFT",
+  "GOOGL",
+  "INTC"
+ ],
+ "samples": [
+  {
+   "symbol": "AAPL",
+   "prefix_index": 3140,
+   "prefix_end": "1993-05-14",
+   "background_at_cut": "down",
+   "input_sha256": "34560292b1f8026eab4776bff21d2ad08b11a0a6f5286f8dff671ef764256d04",
+   "id": 1,
+   "role": "讨论"
+  },
+  {
+   "symbol": "SPY",
+   "prefix_index": 3110,
+   "prefix_end": "2005-06-03",
+   "background_at_cut": "down",
+   "input_sha256": "72a5f9e36d839708a8d885c9d6a7e06cf8a167d98ec9f9f66de21c2fe13a035a",
+   "id": 2,
+   "role": "讨论"
+  },
+  {
+   "symbol": "SLV",
+   "prefix_index": 1865,
+   "prefix_end": "2013-09-25",
+   "background_at_cut": "none",
+   "input_sha256": "23b960f8f6c57b86b9eba3f31c7fe0c9f0c7acacd968fba150622db57eab208d",
+   "id": 3,
+   "role": "讨论"
+  },
+  {
+   "symbol": "MSFT",
+   "prefix_index": 5755,
+   "prefix_end": "2009-01-06",
+   "background_at_cut": "none",
+   "input_sha256": "c352a8575cd703023df9a140f4cd3463af5354ec668e1d5d6ede07338bc833c7",
+   "id": 4,
+   "role": "讨论"
+  },
+  {
+   "symbol": "SI=F",
+   "prefix_index": 2385,
+   "prefix_end": "2010-03-15",
+   "background_at_cut": "down",
+   "input_sha256": "a23f42e38629c7d19477d304e15d18c8a8056b2c3aedb55ec13fe4e9d394e4af",
+   "id": 5,
+   "role": "讨论"
+  },
+  {
+   "symbol": "INTC",
+   "prefix_index": 6405,
+   "prefix_end": "2005-08-01",
+   "background_at_cut": "up",
+   "input_sha256": "4d7549ca56ddc4f41fb8b629add83e5f8ea3035d16e6303d62012ac73d13e91c",
+   "id": 6,
+   "role": "讨论"
+  },
+  {
+   "symbol": "SI=F",
+   "prefix_index": 2755,
+   "prefix_end": "2011-08-30",
+   "background_at_cut": "up",
+   "input_sha256": "a23f42e38629c7d19477d304e15d18c8a8056b2c3aedb55ec13fe4e9d394e4af",
+   "id": 7,
+   "role": "讨论"
+  },
+  {
+   "symbol": "SLV",
+   "prefix_index": 1820,
+   "prefix_end": "2013-07-23",
+   "background_at_cut": "down",
+   "input_sha256": "23b960f8f6c57b86b9eba3f31c7fe0c9f0c7acacd968fba150622db57eab208d",
+   "id": 8,
+   "role": "讨论"
+  },
+  {
+   "symbol": "QQQ",
+   "prefix_index": 3665,
+   "prefix_end": "2013-10-02",
+   "background_at_cut": "up",
+   "input_sha256": "c20a8cb527fbfcc64854d63deb6f26699f0d3af2e71966720dfe047ce8c50446",
+   "id": 9,
+   "role": "讨论"
+  },
+  {
+   "symbol": "GOOGL",
+   "prefix_index": 2460,
+   "prefix_end": "2014-05-29",
+   "background_at_cut": "down",
+   "input_sha256": "5a4b7db17a096b55da498c6ef7a6a22ba99bae50984739ab8c759cd4e6630a33",
+   "id": 10,
+   "role": "讨论"
+  },
+  {
+   "symbol": "INTC",
+   "prefix_index": 3585,
+   "prefix_end": "1994-05-20",
+   "background_at_cut": "down",
+   "input_sha256": "4d7549ca56ddc4f41fb8b629add83e5f8ea3035d16e6303d62012ac73d13e91c",
+   "id": 11,
+   "role": "讨论"
+  },
+  {
+   "symbol": "AAPL",
+   "prefix_index": 3915,
+   "prefix_end": "1996-06-07",
+   "background_at_cut": "none",
+   "input_sha256": "34560292b1f8026eab4776bff21d2ad08b11a0a6f5286f8dff671ef764256d04",
+   "id": 12,
+   "role": "讨论"
+  },
+  {
+   "symbol": "GC=F",
+   "prefix_index": 2405,
+   "prefix_end": "2010-04-15",
+   "background_at_cut": "none",
+   "input_sha256": "d69f9babf6be4d3da3bed123d6346d26ce0d53d10cc1b812944e7ddd812049ca",
+   "id": 13,
+   "role": "讨论"
+  },
+  {
+   "symbol": "SI=F",
+   "prefix_index": 2720,
+   "prefix_end": "2011-07-12",
+   "background_at_cut": "none",
+   "input_sha256": "a23f42e38629c7d19477d304e15d18c8a8056b2c3aedb55ec13fe4e9d394e4af",
+   "id": 14,
+   "role": "讨论"
+  },
+  {
+   "symbol": "INTC",
+   "prefix_index": 4805,
+   "prefix_end": "1999-03-22",
+   "background_at_cut": "none",
+   "input_sha256": "4d7549ca56ddc4f41fb8b629add83e5f8ea3035d16e6303d62012ac73d13e91c",
+   "id": 15,
+   "role": "讨论"
+  },
+  {
+   "symbol": "SPY",
+   "prefix_index": 2945,
+   "prefix_end": "2004-10-07",
+   "background_at_cut": "none",
+   "input_sha256": "72a5f9e36d839708a8d885c9d6a7e06cf8a167d98ec9f9f66de21c2fe13a035a",
+   "id": 16,
+   "role": "讨论"
+  },
+  {
+   "symbol": "QQQ",
+   "prefix_index": 3950,
+   "prefix_end": "2014-11-18",
+   "background_at_cut": "none",
+   "input_sha256": "c20a8cb527fbfcc64854d63deb6f26699f0d3af2e71966720dfe047ce8c50446",
+   "id": 17,
+   "role": "讨论"
+  },
+  {
+   "symbol": "GLD",
+   "prefix_index": 1805,
+   "prefix_end": "2012-01-20",
+   "background_at_cut": "down",
+   "input_sha256": "c313f1d34d52e6886309c591255af0ba318f31f681a9626c5d0952f1b5798c19",
+   "id": 18,
+   "role": "讨论"
+  },
+  {
+   "symbol": "GLD",
+   "prefix_index": 1175,
+   "prefix_end": "2009-07-22",
+   "background_at_cut": "up",
+   "input_sha256": "c313f1d34d52e6886309c591255af0ba318f31f681a9626c5d0952f1b5798c19",
+   "id": 19,
+   "role": "讨论"
+  },
+  {
+   "symbol": "MSFT",
+   "prefix_index": 1090,
+   "prefix_end": "1990-07-05",
+   "background_at_cut": "up",
+   "input_sha256": "c352a8575cd703023df9a140f4cd3463af5354ec668e1d5d6ede07338bc833c7",
+   "id": 20,
+   "role": "讨论"
+  },
+  {
+   "symbol": "GC=F",
+   "prefix_index": 1060,
+   "prefix_end": "2004-12-02",
+   "background_at_cut": "up",
+   "input_sha256": "d69f9babf6be4d3da3bed123d6346d26ce0d53d10cc1b812944e7ddd812049ca",
+   "id": 21,
+   "role": "暂留核对"
+  },
+  {
+   "symbol": "SLV",
+   "prefix_index": 1650,
+   "prefix_end": "2012-11-15",
+   "background_at_cut": "up",
+   "input_sha256": "23b960f8f6c57b86b9eba3f31c7fe0c9f0c7acacd968fba150622db57eab208d",
+   "id": 22,
+   "role": "暂留核对"
+  },
+  {
+   "symbol": "GOOGL",
+   "prefix_index": 2440,
+   "prefix_end": "2014-04-30",
+   "background_at_cut": "none",
+   "input_sha256": "5a4b7db17a096b55da498c6ef7a6a22ba99bae50984739ab8c759cd4e6630a33",
+   "id": 23,
+   "role": "暂留核对"
+  },
+  {
+   "symbol": "QQQ",
+   "prefix_index": 2405,
+   "prefix_end": "2008-09-30",
+   "background_at_cut": "down",
+   "input_sha256": "c20a8cb527fbfcc64854d63deb6f26699f0d3af2e71966720dfe047ce8c50446",
+   "id": 24,
+   "role": "暂留核对"
+  },
+  {
+   "symbol": "MSFT",
+   "prefix_index": 5635,
+   "prefix_end": "2008-07-16",
+   "background_at_cut": "down",
+   "input_sha256": "c352a8575cd703023df9a140f4cd3463af5354ec668e1d5d6ede07338bc833c7",
+   "id": 25,
+   "role": "暂留核对"
+  },
+  {
+   "symbol": "GLD",
+   "prefix_index": 2380,
+   "prefix_end": "2014-05-06",
+   "background_at_cut": "none",
+   "input_sha256": "c313f1d34d52e6886309c591255af0ba318f31f681a9626c5d0952f1b5798c19",
+   "id": 26,
+   "role": "暂留核对"
+  },
+  {
+   "symbol": "SPY",
+   "prefix_index": 5555,
+   "prefix_end": "2015-02-20",
+   "background_at_cut": "up",
+   "input_sha256": "72a5f9e36d839708a8d885c9d6a7e06cf8a167d98ec9f9f66de21c2fe13a035a",
+   "id": 27,
+   "role": "暂留核对"
+  },
+  {
+   "symbol": "AAPL",
+   "prefix_index": 6445,
+   "prefix_end": "2006-06-27",
+   "background_at_cut": "up",
+   "input_sha256": "34560292b1f8026eab4776bff21d2ad08b11a0a6f5286f8dff671ef764256d04",
+   "id": 28,
+   "role": "暂留核对"
+  },
+  {
+   "symbol": "GC=F",
+   "prefix_index": 3455,
+   "prefix_end": "2014-06-17",
+   "background_at_cut": "down",
+   "input_sha256": "d69f9babf6be4d3da3bed123d6346d26ce0d53d10cc1b812944e7ddd812049ca",
+   "id": 29,
+   "role": "暂留核对"
+  },
+  {
+   "symbol": "GOOGL",
+   "prefix_index": 1835,
+   "prefix_end": "2011-11-30",
+   "background_at_cut": "up",
+   "input_sha256": "5a4b7db17a096b55da498c6ef7a6a22ba99bae50984739ab8c759cd4e6630a33",
+   "id": 30,
+   "role": "暂留核对"
+  }
+ ]
+}

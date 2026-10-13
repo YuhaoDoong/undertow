@@ -561,7 +561,14 @@ def proof_no_event(hourly, start: datetime, end: datetime, crosses, asof: dateti
     return out
 
 
-def score_v4(r: dict, daily, hourly, spec: dict, asof: datetime) -> dict:
+def _lv(x, tick):
+    from decimal import Decimal
+    return Decimal(str(x)) if tick else x
+
+
+def score_v4(r: dict, daily, hourly, spec: dict, asof: datetime, geom: dict | None = None) -> dict:
+    """geom=None → v4 原口径；geom={"band": b} → 只替换支撑/阻力的几何门槛为对称容差带 L±b（v5，Codex 034 §2），
+    发布/结算时刻、会话、完整覆盖、缺口与日历护栏全部沿用 v4。"""
     posted = datetime.fromisoformat(r["posted_at"]).astimezone(timezone.utc)
     asof = asof.astimezone(timezone.utc)
     tol, tick = spec["tol"], spec["tick"]
@@ -630,24 +637,40 @@ def score_v4(r: dict, daily, hourly, spec: dict, asof: datetime) -> dict:
         S = settles_after(posted, TOUCH_DAYS)
         end = _session_end(S[-1])
         Hw = [h for h in H if h[0] + H1 <= end]
+        bd = (geom or {}).get("band")
+        thr_post = _thr(L, 1, tick) if bd is None else _lv(L - bd if sup else L + bd, tick)
         at_post = None
-        if before:
-            at_post = "already_through" if cross3(before[-1][4], _thr(L, 1, tick), sup, 0, strict=True, tick=tick) == "yes" else "approach"
-        zone = _thr(L, 1.001 if sup else 0.999, tick)
+        if before:                                       # 只用发布前已完成的小时线（不用当天尚未形成的日线收盘）
+            at_post = "already_through" if cross3(before[-1][4], thr_post, sup, 0, strict=True, tick=tick) == "yes" else "approach"
+        zone = _thr(L, 1.001 if sup else 0.999, tick) if bd is None else _lv(L + bd if sup else L - bd, tick)
         touch = lambda h: cross3(h[3] if sup else h[2], zone, sup, tol, strict=False, tick=tick)
         t, touch_maybe = _first(Hw, touch)
         kw0 = {"status_at_post": at_post}
         if t is None:
             if touch_maybe:
                 return res("ambiguous", why="只在代理误差内接近", **kw0)
-            return negative("untouched", posted, end, touch, **kw0)
+            out = negative("untouched", posted, end, touch, **kw0)
+            if bd is not None and out["result"] == "untouched":
+                # 小时线全程否定成立，但已结算日线里有触及 → 两个源冲突，不判 untouched（Codex 034 §2 反例 3 的对偶）
+                # 只看整段会话都在发布之后的日线（发布当天的日线低点可能来自发帖之前）
+                dt = [x for d_, x in settled(S) if x not in (None, "future") and touch(x) != "no"
+                      and datetime(d_.year, d_.month, d_.day, tzinfo=ET) - timedelta(hours=24 - SESSION_OPEN_H) >= posted]
+                if dt:
+                    return res("source_conflict", why="小时线全程未触及、日线有触及", daily_touch=str(dt[0][0]), **kw0)
+            return out
         pf = proof_no_event(hourly, posted, t[0], touch, asof)          # 首次触及的时点要确定
         if not pf["ok"]:
             return res("incomplete_window", why="观测到的首次触及之前有缺口或跨时刻那根已触及，首次触及时点不确定",
                        touch_at=_ts(t), missing=pf["missing"][:10], straddle=pf["straddle"], **kw0)
         fol = settles_after(t[0] + H1, FOLLOW_SETTLES)                  # 触及那一小时内的结算不计（事前固定）
-        thr_b = _thr(L, 0.995, tick) if sup else _thr(L, 1.005, tick)
-        thr_h = _thr(L, 1.01, tick) if sup else _thr(L, 0.99, tick)
+        if bd is None:
+            thr_b = _thr(L, 0.995, tick) if sup else _thr(L, 1.005, tick)
+            thr_h = _thr(L, 1.01, tick) if sup else _thr(L, 0.99, tick)
+        else:                                                            # 对称：同一带宽放宽触及也放宽跌破
+            thr_b = _lv(L - bd if sup else L + bd, tick)
+            thr_h = _lv(L + bd if sup else L - bd, tick)
+            far = _lv(L - bd if sup else L + bd, tick)                   # 整根在带另一侧 = 跳空穿越，不是区间重叠
+            kw0["touch_kind"] = "gap_through" if cross3(t[2] if sup else t[3], far, sup, 0, strict=True, tick=tick) == "yes" else "overlap"
         brk = lambda d: cross3(d[4], thr_b, sup, tol, strict=True, tick=tick)
         b, out = settle_verdict(fol, brk, "broken", "held", touch_at=_ts(t), touch_time_ambiguous=touch_maybe,
                                 follow_settles=[d.isoformat() for d in fol], **kw0)
@@ -737,13 +760,17 @@ def tri_class(claim: str, result: str) -> str:
 
 
 # —— v5：带容差带的支撑/阻力计分（用户 2026-10-08：「你衡量统计的时候，不应该严格按照数字，前后应该允许误差」）——
-# 与 v4 并列、不替代：v4 的「触及」只允许 0.1%，对看图画线的作者过窄。容差带对称：同一宽度既放宽「触及」，也同样放宽「跌破」的门槛，
-# 不只朝有利方向放。全部作者、全部支撑/阻力一起用同一套参数。
-# ⚠️ 设定时点：用户在看到外部作者二 4053 支撑「差约 0.3% 未触及即反弹」之后提出 → 该条在 v5 下的结果不是独立前瞻证据（单列 decided_after_seen）。
-VERSION_V5 = "author-levels-v5-tolerance-20261008"
-TOL_PCT, TOL_ATR = 0.003, 0.25       # 未校准：带宽 = max(0.3%·L, 0.25·ATR14)；ATR 取发布前最后 14 根日线
-FOLLOW_N, WINDOW_N = 6, 20
-SEEN_BEFORE_V5 = {("外部作者二", "2026-09-29T08:57:00+08:00", 4053.0)}
+# 与 v4 并列、不替代，v4 仍是主结果。v5.0（10/08）自己重写了评分路径，丢了 v4 的时序护栏（Codex 034 §2 三个反例：
+# 用发布当天尚未形成的日线收盘判 already_through；拿触及之前的同日结算判跌破；一根稀疏小时线就忽略日线触及判 untouched）。
+# v5.1：评分完全复用 score_v4 的时刻/会话/完整覆盖/缺口/日历框架，只把支撑/阻力的几何门槛换成对称带 L±band。
+# 带宽 = max(0.3%·L, 0.25·ATR14) 是在看到个案之后选的 → 所有历史重放都是事后分析（evaluation_mode），不只给一个个案打标；
+# 规则未冻结，没有前瞻样本。代理换算误差（spec tol）与指标带宽分开记录。
+VERSION_V5 = "author-levels-v5.1-tolerance-20261013"
+V5_STATUS = "sensitivity_unfrozen（v4 主结果不变；v5.1 时序已按 v4 框架修复，待审定冻结；冻结前不用其胜负讨论作者优劣）"
+V5_RULE_DECIDED_AT = "2026-10-08T09:57:00+08:00"   # 用户提出容差带、参数定下的时刻（看过个案之后）
+TOL_PCT, TOL_ATR = 0.003, 0.25       # 未校准：带宽 = max(0.3%·L, 0.25·ATR14)；ATR 取发布日之前最后 14 根完整日线
+FOLLOW_N, WINDOW_N = 6, 20           # 沿用 v4：触及之后 6 次结算、20 个会话窗口
+CASES_SEEN_BEFORE_V5 = {("外部作者二", "2026-09-29T08:57:00+08:00", 4053.0)}   # 提出规则时已看到结果的个案（另记，不是唯一的事后样本）
 
 
 def _atr14(bars, upto: date):
@@ -754,51 +781,23 @@ def _atr14(bars, upto: date):
     return sum(tr) / len(tr)
 
 
-def score_tol(r: dict, daily, asof: datetime, hourly=None) -> dict:
-    """纯函数：support / resistance 的容差带判定。触及用小时线（日线可能缺根：Yahoo GC=F 10/07 日线缺失而小时线有当日低点），
-    无小时线时退回日线；跌破/守住用触及之后的日线收盘。其它类型 → not_applicable。"""
+def score_tol(r: dict, daily, hourly, spec: dict, asof: datetime) -> dict:
+    """support / resistance 的容差带判定（v5.1）。其它类型 → not_applicable。ATR 不足 14 根 → 显式只用百分比带并标出。"""
     c = r.get("claim")
     if c not in ("support", "resistance"):
         return {"result": "not_applicable", "version": VERSION_V5}
     L = float((r.get("params") or {}).get("level", r.get("level")))
-    post = datetime.fromisoformat(r["posted_at"]).astimezone(timezone.utc)
-    pday = post.astimezone(ZoneInfo("America/New_York")).date()
-    atr = _atr14(daily, pday)
+    post = datetime.fromisoformat(r["posted_at"])
+    atr = _atr14(daily, post.astimezone(ET).date())
     band = max(TOL_PCT * L, TOL_ATR * atr) if atr else TOL_PCT * L
-    base = {"version": VERSION_V5, "band": round(band, 4), "atr14": round(atr, 4) if atr else None,
-            "decided_after_seen": (r.get("author"), r.get("posted_at"), L) in SEEN_BEFORE_V5}
-    after = [x for x in daily if x[0] > pday and x[0] <= asof.date()]
-    prior = [x for x in daily if x[0] <= pday]
-    sup = c == "support"
-    if prior:
-        pc = prior[-1][4]
-        if (sup and pc < L - band) or (not sup and pc > L + band):
-            return {**base, "result": "already_through", "close_at_post": pc}
-    win = after[:WINDOW_N]
-    end = datetime.combine(win[-1][0], datetime.max.time(), tzinfo=timezone.utc) if len(win) >= WINDOW_N else asof
-    hb = [x for x in (hourly or []) if post <= x[0] and x[0] + timedelta(hours=1) <= min(end, asof)]
-    if hb:
-        th = next((x for x in hb if (x[3] <= L + band if sup else x[2] >= L - band)), None)
-        tday = th[0].astimezone(ZoneInfo("America/New_York")).date() if th else None
-        closest = (min(x[3] for x in hb) if sup else max(x[2] for x in hb))
-    else:
-        th = next((x for x in win if (x[3] <= L + band if sup else x[2] >= L - band)), None)
-        tday = th[0] if th else None
-        closest = (min(x[3] for x in win) if sup else max(x[2] for x in win)) if win else None
-    if th is None:
-        return {**base, "result": "untouched" if len(win) >= WINDOW_N else "pending",
-                "closest": round(closest, 2) if closest is not None else None}
-    base["touch_low_or_high"] = round(th[3] if sup else th[2], 2)
-    fol = [x for x in after if x[0] >= tday][:FOLLOW_N]
-    extreme = (min(x[3] for x in fol) if sup else max(x[2] for x in fol)) if fol else (th[3] if sup else th[2])
-    tstr = str(tday)
-    for x in fol:
-        if (sup and x[4] < L - band) or (not sup and x[4] > L + band):
-            return {**base, "result": "broken", "touch": tstr, "break": str(x[0]), "extreme": round(extreme, 2)}
-    bounced = any((x[4] >= L + band) if sup else (x[4] <= L - band) for x in fol)
-    if len(fol) < FOLLOW_N:
-        return {**base, "result": "held_so_far" if bounced else "pending", "touch": tstr, "follow_seen": len(fol)}
-    return {**base, "result": "held" if bounced else "ambiguous_stuck", "touch": tstr, "extreme": round(extreme, 2)}
+    out = score_v4(r, daily, hourly, spec, asof, geom={"band": band})
+    rd = datetime.fromisoformat(V5_RULE_DECIDED_AT)
+    return {**out, "version": VERSION_V5, "status": V5_STATUS, "band": round(band, 4),
+            "band_basis": "max(0.3%·L, 0.25·ATR14)" if atr else "pct_only（发布前完整日线不足 15 根，ATR 不可得）",
+            "atr14": round(atr, 4) if atr else None, "proxy_tol": spec["tol"],
+            "rule_decided_at": V5_RULE_DECIDED_AT, "claim_published_at": r["posted_at"],
+            "evaluation_mode": "retrospective_replay" if post < rd else "post_rule_unfrozen（规则未冻结，不算前瞻）",
+            "case_seen_before_rule": (r.get("author"), r.get("posted_at"), L) in CASES_SEEN_BEFORE_V5}
 
 
 def _preserve_v1() -> None:
@@ -843,7 +842,7 @@ def main():
         else:
             out.append({**r, "score": {"result": "no_price_source"}}); continue
         v4 = {**score_v4(r, d, h, spec4, asof), "price_basis": spec4["basis"], "tol": spec4["tol"]}
-        v5 = score_tol(r, d, asof, hourly=h)
+        v5 = score_tol(r, d, h, spec4, asof)
         v3 = {**score_v3(r, d, h, spec, asof), "tol": spec["tol"]}
         v2 = {**score(r, d, h, tol_v2, asof), "tol": tol_v2}
         out.append({**r, "score": v4, "score_v3": v3, "score_v2": v2, "score_v5_tolerance": v5})

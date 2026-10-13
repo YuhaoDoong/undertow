@@ -1,0 +1,1291 @@
+{
+ "ETF|long": {
+  "queue": 25,
+  "cohort60": 25,
+  "cohort250": 24,
+  "P0_P3_on_cohort60": {
+   "P0": {
+    "n": 25,
+    "not_entered": {},
+    "pct_mean": 0.0058,
+    "pct_median": 0.0136,
+    "atr_mean": 0.2772,
+    "atr_median": 1.2787,
+    "r_own_mean": 0.0528,
+    "r_p0risk_mean": 0.0528,
+    "win_rate_pct_gt0": 0.6,
+    "worst_atr": -8.1518,
+    "days_median": 60,
+    "exit_reasons": {
+     "time_exit": 15,
+     "target": 2,
+     "stop": 7,
+     "gap_stop": 1
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "0/8",
+    "struct_lag_median": null
+   },
+   "P1": {
+    "n": 25,
+    "not_entered": {},
+    "pct_mean": -0.005,
+    "pct_median": -0.0261,
+    "atr_mean": -0.5193,
+    "atr_median": -2.2787,
+    "r_own_mean": -0.3122,
+    "r_p0risk_mean": -0.0247,
+    "win_rate_pct_gt0": 0.28,
+    "worst_atr": -3.6589,
+    "days_median": 10,
+    "exit_reasons": {
+     "stop": 14,
+     "target": 5,
+     "gap_stop": 4,
+     "time_exit": 2
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 4,
+    "stopped_then_continued": "2/18",
+    "struct_lag_median": null
+   },
+   "P2": {
+    "n": 25,
+    "not_entered": {},
+    "pct_mean": -0.0088,
+    "pct_median": -0.0287,
+    "atr_mean": -0.4982,
+    "atr_median": -1.9521,
+    "r_own_mean": -0.2715,
+    "r_p0risk_mean": -0.0248,
+    "win_rate_pct_gt0": 0.2,
+    "worst_atr": -3.6589,
+    "days_median": 9,
+    "exit_reasons": {
+     "struct_exit": 6,
+     "time_exit": 4,
+     "gap_stop": 3,
+     "stop": 11,
+     "struct_exit+gap_stop": 1
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 4,
+    "stopped_then_continued": "2/15",
+    "struct_lag_median": 4
+   },
+   "P3": {
+    "n": 25,
+    "not_entered": {},
+    "pct_mean": -0.0088,
+    "pct_median": -0.0228,
+    "atr_mean": -0.6703,
+    "atr_median": -1.316,
+    "r_own_mean": -0.3176,
+    "r_p0risk_mean": -0.0995,
+    "win_rate_pct_gt0": 0.12,
+    "worst_atr": -3.6589,
+    "days_median": 9,
+    "exit_reasons": {
+     "struct_exit": 4,
+     "breakeven_stop": 4,
+     "gap_stop": 3,
+     "stop": 7,
+     "struct_exit+gap_stop": 1,
+     "breakeven_gap_stop": 3,
+     "time_exit": 3
+    },
+    "breakeven_triggered": 10,
+    "gap_loss_r_lt_minus1": 4,
+    "stopped_then_continued": "3/18",
+    "struct_lag_median": 3
+   }
+  },
+  "paired_diff_atr_vs_P0_all_entered": {
+   "P1": -0.7965,
+   "P2": -0.7755,
+   "P3": -0.9476
+  },
+  "paired_n": 25,
+  "P3_P4_on_cohort250": {
+   "P3": {
+    "n": 24,
+    "not_entered": {},
+    "pct_mean": -0.0067,
+    "pct_median": -0.0225,
+    "atr_mean": -0.6065,
+    "atr_median": -1.3052,
+    "r_own_mean": -0.2861,
+    "r_p0risk_mean": -0.0924,
+    "win_rate_pct_gt0": 0.125,
+    "worst_atr": -3.6589,
+    "days_median": 9.5,
+    "exit_reasons": {
+     "struct_exit": 4,
+     "breakeven_stop": 4,
+     "gap_stop": 2,
+     "stop": 7,
+     "struct_exit+gap_stop": 1,
+     "breakeven_gap_stop": 3,
+     "time_exit": 3
+    },
+    "breakeven_triggered": 10,
+    "gap_loss_r_lt_minus1": 3,
+    "stopped_then_continued": "3/17",
+    "struct_lag_median": 3
+   },
+   "P4": {
+    "n": 24,
+    "not_entered": {},
+    "pct_mean": -0.0015,
+    "pct_median": -0.0225,
+    "atr_mean": -0.3828,
+    "atr_median": -1.3052,
+    "r_own_mean": -0.2032,
+    "r_p0risk_mean": -0.0528,
+    "win_rate_pct_gt0": 0.125,
+    "worst_atr": -3.6589,
+    "days_median": 9.5,
+    "exit_reasons": {
+     "struct_exit": 7,
+     "breakeven_stop": 4,
+     "gap_stop": 2,
+     "stop": 7,
+     "struct_exit+gap_stop": 1,
+     "breakeven_gap_stop": 3
+    },
+    "breakeven_triggered": 10,
+    "gap_loss_r_lt_minus1": 3,
+    "stopped_then_continued": "3/17",
+    "struct_lag_median": 4
+   }
+  },
+  "paired_diff_atr_P4_minus_P3": 0.2236
+ },
+ "ETF|short": {
+  "queue": 16,
+  "cohort60": 16,
+  "cohort250": 14,
+  "P0_P3_on_cohort60": {
+   "P0": {
+    "n": 16,
+    "not_entered": {},
+    "pct_mean": 0.0136,
+    "pct_median": -0.0332,
+    "atr_mean": -0.3907,
+    "atr_median": -1.9894,
+    "r_own_mean": -0.1048,
+    "r_p0risk_mean": -0.1048,
+    "win_rate_pct_gt0": 0.375,
+    "worst_atr": -5.9,
+    "days_median": 60.0,
+    "exit_reasons": {
+     "time_exit": 14,
+     "stop": 2
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 0,
+    "stopped_then_continued": "0/2",
+    "struct_lag_median": null
+   },
+   "P1": {
+    "n": 16,
+    "not_entered": {},
+    "pct_mean": 0.0034,
+    "pct_median": -0.0317,
+    "atr_mean": -0.4377,
+    "atr_median": -2.5127,
+    "r_own_mean": -0.1743,
+    "r_p0risk_mean": -0.0557,
+    "win_rate_pct_gt0": 0.3125,
+    "worst_atr": -3.7361,
+    "days_median": 26.0,
+    "exit_reasons": {
+     "target": 4,
+     "gap_stop": 2,
+     "stop": 9,
+     "time_exit": 1
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 2,
+    "stopped_then_continued": "1/11",
+    "struct_lag_median": null
+   },
+   "P2": {
+    "n": 16,
+    "not_entered": {},
+    "pct_mean": 0.0119,
+    "pct_median": -0.0252,
+    "atr_mean": -0.1385,
+    "atr_median": -1.6077,
+    "r_own_mean": -0.1314,
+    "r_p0risk_mean": -0.0407,
+    "win_rate_pct_gt0": 0.3125,
+    "worst_atr": -2.9206,
+    "days_median": 26.0,
+    "exit_reasons": {
+     "struct_exit": 6,
+     "stop": 5,
+     "time_exit": 4,
+     "gap_stop": 1
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "0/6",
+    "struct_lag_median": 4
+   },
+   "P3": {
+    "n": 16,
+    "not_entered": {},
+    "pct_mean": -0.012,
+    "pct_median": -0.0087,
+    "atr_mean": -0.6047,
+    "atr_median": -0.5605,
+    "r_own_mean": -0.2357,
+    "r_p0risk_mean": -0.1022,
+    "win_rate_pct_gt0": 0.125,
+    "worst_atr": -2.7572,
+    "days_median": 12.5,
+    "exit_reasons": {
+     "struct_exit": 3,
+     "breakeven_gap_stop": 3,
+     "breakeven_stop": 5,
+     "time_exit": 2,
+     "gap_stop": 1,
+     "stop": 2
+    },
+    "breakeven_triggered": 10,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "1/11",
+    "struct_lag_median": 4
+   }
+  },
+  "paired_diff_atr_vs_P0_all_entered": {
+   "P1": -0.047,
+   "P2": 0.2522,
+   "P3": -0.214
+  },
+  "paired_n": 16,
+  "P3_P4_on_cohort250": {
+   "P3": {
+    "n": 14,
+    "not_entered": {},
+    "pct_mean": -0.0163,
+    "pct_median": -0.0155,
+    "atr_mean": -0.9588,
+    "atr_median": -1.1724,
+    "r_own_mean": -0.3591,
+    "r_p0risk_mean": -0.1732,
+    "win_rate_pct_gt0": 0.0714,
+    "worst_atr": -2.7572,
+    "days_median": 10.5,
+    "exit_reasons": {
+     "struct_exit": 3,
+     "breakeven_gap_stop": 3,
+     "breakeven_stop": 4,
+     "gap_stop": 1,
+     "time_exit": 1,
+     "stop": 2
+    },
+    "breakeven_triggered": 8,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "1/10",
+    "struct_lag_median": 4
+   },
+   "P4": {
+    "n": 14,
+    "not_entered": {},
+    "pct_mean": 0.0039,
+    "pct_median": -0.0155,
+    "atr_mean": -0.6227,
+    "atr_median": -1.1724,
+    "r_own_mean": -0.2071,
+    "r_p0risk_mean": -0.1105,
+    "win_rate_pct_gt0": 0.0714,
+    "worst_atr": -2.7572,
+    "days_median": 10.5,
+    "exit_reasons": {
+     "struct_exit": 4,
+     "breakeven_gap_stop": 3,
+     "breakeven_stop": 4,
+     "gap_stop": 1,
+     "stop": 2
+    },
+    "breakeven_triggered": 8,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "1/10",
+    "struct_lag_median": 6
+   }
+  },
+  "paired_diff_atr_P4_minus_P3": 0.3361
+ },
+ "个股|long": {
+  "queue": 37,
+  "cohort60": 37,
+  "cohort250": 35,
+  "P0_P3_on_cohort60": {
+   "P0": {
+    "n": 37,
+    "not_entered": {},
+    "pct_mean": 0.062,
+    "pct_median": 0.0693,
+    "atr_mean": 1.8003,
+    "atr_median": 1.7962,
+    "r_own_mean": 0.3281,
+    "r_p0risk_mean": 0.3281,
+    "win_rate_pct_gt0": 0.6486,
+    "worst_atr": -8.1321,
+    "days_median": 60,
+    "exit_reasons": {
+     "time_exit": 26,
+     "stop": 6,
+     "target": 4,
+     "gap_stop": 1
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "1/7",
+    "struct_lag_median": null
+   },
+   "P1": {
+    "n": 36,
+    "not_entered": {
+     "open_beyond_stop": 1
+    },
+    "pct_mean": 0.0221,
+    "pct_median": -0.0166,
+    "atr_mean": 0.7485,
+    "atr_median": -0.5686,
+    "r_own_mean": 0.3571,
+    "r_p0risk_mean": 0.147,
+    "win_rate_pct_gt0": 0.5,
+    "worst_atr": -4.5907,
+    "days_median": 29.0,
+    "exit_reasons": {
+     "time_exit": 4,
+     "stop": 13,
+     "target": 15,
+     "gap_stop": 4
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 4,
+    "stopped_then_continued": "4/17",
+    "struct_lag_median": null
+   },
+   "P2": {
+    "n": 36,
+    "not_entered": {
+     "open_beyond_stop": 1
+    },
+    "pct_mean": 0.0705,
+    "pct_median": 0.0035,
+    "atr_mean": 1.93,
+    "atr_median": 0.0916,
+    "r_own_mean": 0.7543,
+    "r_p0risk_mean": 0.4247,
+    "win_rate_pct_gt0": 0.5278,
+    "worst_atr": -3.4171,
+    "days_median": 39.0,
+    "exit_reasons": {
+     "struct_exit": 16,
+     "time_exit": 14,
+     "gap_stop": 2,
+     "stop": 4
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 2,
+    "stopped_then_continued": "1/6",
+    "struct_lag_median": 5
+   },
+   "P3": {
+    "n": 36,
+    "not_entered": {
+     "open_beyond_stop": 1
+    },
+    "pct_mean": 0.0557,
+    "pct_median": 0.0,
+    "atr_mean": 1.1141,
+    "atr_median": 0.0,
+    "r_own_mean": 0.4439,
+    "r_p0risk_mean": 0.3136,
+    "win_rate_pct_gt0": 0.3333,
+    "worst_atr": -3.0056,
+    "days_median": 26.5,
+    "exit_reasons": {
+     "struct_exit": 15,
+     "breakeven_gap_stop": 5,
+     "time_exit": 7,
+     "breakeven_stop": 6,
+     "gap_stop": 1,
+     "stop": 2
+    },
+    "breakeven_triggered": 20,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "7/14",
+    "struct_lag_median": 5
+   }
+  },
+  "paired_diff_atr_vs_P0_all_entered": {
+   "P1": -1.1862,
+   "P2": -0.0047,
+   "P3": -0.8206
+  },
+  "paired_n": 36,
+  "P3_P4_on_cohort250": {
+   "P3": {
+    "n": 34,
+    "not_entered": {
+     "open_beyond_stop": 1
+    },
+    "pct_mean": 0.0593,
+    "pct_median": 0.0,
+    "atr_mean": 1.2012,
+    "atr_median": 0.0,
+    "r_own_mean": 0.4663,
+    "r_p0risk_mean": 0.3222,
+    "win_rate_pct_gt0": 0.3235,
+    "worst_atr": -3.0056,
+    "days_median": 26.5,
+    "exit_reasons": {
+     "struct_exit": 14,
+     "breakeven_gap_stop": 5,
+     "time_exit": 7,
+     "breakeven_stop": 6,
+     "gap_stop": 1,
+     "stop": 1
+    },
+    "breakeven_triggered": 19,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "7/13",
+    "struct_lag_median": 5
+   },
+   "P4": {
+    "n": 34,
+    "not_entered": {
+     "open_beyond_stop": 1
+    },
+    "pct_mean": 0.1278,
+    "pct_median": 0.0,
+    "atr_mean": 2.664,
+    "atr_median": 0.0,
+    "r_own_mean": 1.0205,
+    "r_p0risk_mean": 0.6876,
+    "win_rate_pct_gt0": 0.3235,
+    "worst_atr": -3.0056,
+    "days_median": 26.5,
+    "exit_reasons": {
+     "struct_exit": 20,
+     "breakeven_gap_stop": 5,
+     "breakeven_stop": 6,
+     "gap_stop": 1,
+     "time_exit": 1,
+     "stop": 1
+    },
+    "breakeven_triggered": 19,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "7/13",
+    "struct_lag_median": 5
+   }
+  },
+  "paired_diff_atr_P4_minus_P3": 1.4628
+ },
+ "个股|short": {
+  "queue": 29,
+  "cohort60": 29,
+  "cohort250": 29,
+  "P0_P3_on_cohort60": {
+   "P0": {
+    "n": 29,
+    "not_entered": {},
+    "pct_mean": -0.0008,
+    "pct_median": -0.061,
+    "atr_mean": -0.6615,
+    "atr_median": -1.7042,
+    "r_own_mean": -0.1535,
+    "r_p0risk_mean": -0.1535,
+    "win_rate_pct_gt0": 0.3793,
+    "worst_atr": -10.6683,
+    "days_median": 60,
+    "exit_reasons": {
+     "time_exit": 16,
+     "gap_stop": 2,
+     "stop": 8,
+     "target": 3
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 2,
+    "stopped_then_continued": "0/10",
+    "struct_lag_median": null
+   },
+   "P1": {
+    "n": 29,
+    "not_entered": {},
+    "pct_mean": 0.0103,
+    "pct_median": -0.0698,
+    "atr_mean": -0.5934,
+    "atr_median": -2.338,
+    "r_own_mean": -0.2804,
+    "r_p0risk_mean": -0.1163,
+    "win_rate_pct_gt0": 0.3448,
+    "worst_atr": -8.4858,
+    "days_median": 20,
+    "exit_reasons": {
+     "gap_stop": 5,
+     "target": 5,
+     "stop": 14,
+     "time_exit": 5
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 5,
+    "stopped_then_continued": "3/19",
+    "struct_lag_median": null
+   },
+   "P2": {
+    "n": 29,
+    "not_entered": {},
+    "pct_mean": -0.0001,
+    "pct_median": -0.0606,
+    "atr_mean": -0.3831,
+    "atr_median": -1.9139,
+    "r_own_mean": -0.152,
+    "r_p0risk_mean": 0.0016,
+    "win_rate_pct_gt0": 0.2759,
+    "worst_atr": -5.102,
+    "days_median": 30,
+    "exit_reasons": {
+     "gap_stop": 3,
+     "struct_exit": 9,
+     "stop": 11,
+     "time_exit": 6
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 3,
+    "stopped_then_continued": "2/14",
+    "struct_lag_median": 5
+   },
+   "P3": {
+    "n": 29,
+    "not_entered": {},
+    "pct_mean": 0.0047,
+    "pct_median": -0.0386,
+    "atr_mean": -0.1674,
+    "atr_median": -0.9703,
+    "r_own_mean": -0.0504,
+    "r_p0risk_mean": 0.0302,
+    "win_rate_pct_gt0": 0.1724,
+    "worst_atr": -5.102,
+    "days_median": 15,
+    "exit_reasons": {
+     "breakeven_stop": 5,
+     "struct_exit": 6,
+     "stop": 6,
+     "breakeven_gap_stop": 7,
+     "gap_stop": 2,
+     "time_exit": 3
+    },
+    "breakeven_triggered": 17,
+    "gap_loss_r_lt_minus1": 2,
+    "stopped_then_continued": "4/20",
+    "struct_lag_median": 5
+   }
+  },
+  "paired_diff_atr_vs_P0_all_entered": {
+   "P1": 0.0681,
+   "P2": 0.2784,
+   "P3": 0.4941
+  },
+  "paired_n": 29,
+  "P3_P4_on_cohort250": {
+   "P3": {
+    "n": 29,
+    "not_entered": {},
+    "pct_mean": 0.0047,
+    "pct_median": -0.0386,
+    "atr_mean": -0.1674,
+    "atr_median": -0.9703,
+    "r_own_mean": -0.0504,
+    "r_p0risk_mean": 0.0302,
+    "win_rate_pct_gt0": 0.1724,
+    "worst_atr": -5.102,
+    "days_median": 15,
+    "exit_reasons": {
+     "breakeven_stop": 5,
+     "struct_exit": 6,
+     "stop": 6,
+     "breakeven_gap_stop": 7,
+     "gap_stop": 2,
+     "time_exit": 3
+    },
+    "breakeven_triggered": 17,
+    "gap_loss_r_lt_minus1": 2,
+    "stopped_then_continued": "4/20",
+    "struct_lag_median": 5
+   },
+   "P4": {
+    "n": 29,
+    "not_entered": {},
+    "pct_mean": -0.0211,
+    "pct_median": -0.0386,
+    "atr_mean": -0.5701,
+    "atr_median": -0.9703,
+    "r_own_mean": -0.2178,
+    "r_p0risk_mean": -0.1061,
+    "win_rate_pct_gt0": 0.1379,
+    "worst_atr": -5.102,
+    "days_median": 15,
+    "exit_reasons": {
+     "breakeven_stop": 6,
+     "struct_exit": 8,
+     "stop": 6,
+     "breakeven_gap_stop": 7,
+     "gap_stop": 2
+    },
+    "breakeven_triggered": 17,
+    "gap_loss_r_lt_minus1": 2,
+    "stopped_then_continued": "5/21",
+    "struct_lag_median": 5
+   }
+  },
+  "paired_diff_atr_P4_minus_P3": -0.4027
+ },
+ "连续期货|long": {
+  "queue": 10,
+  "cohort60": 10,
+  "cohort250": 10,
+  "P0_P3_on_cohort60": {
+   "P0": {
+    "n": 10,
+    "not_entered": {},
+    "pct_mean": 0.0339,
+    "pct_median": 0.0357,
+    "atr_mean": 1.7294,
+    "atr_median": 2.2631,
+    "r_own_mean": 0.492,
+    "r_p0risk_mean": 0.492,
+    "win_rate_pct_gt0": 0.5,
+    "worst_atr": -7.7586,
+    "days_median": 35.5,
+    "exit_reasons": {
+     "time_exit": 3,
+     "gap_stop": 2,
+     "target": 4,
+     "stop": 1
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 2,
+    "stopped_then_continued": "0/3",
+    "struct_lag_median": null
+   },
+   "P1": {
+    "n": 10,
+    "not_entered": {},
+    "pct_mean": 0.0286,
+    "pct_median": 0.0276,
+    "atr_mean": 1.4816,
+    "atr_median": 1.253,
+    "r_own_mean": 0.4962,
+    "r_p0risk_mean": 0.4877,
+    "win_rate_pct_gt0": 0.5,
+    "worst_atr": -6.7254,
+    "days_median": 10.5,
+    "exit_reasons": {
+     "stop": 4,
+     "target": 5,
+     "gap_stop": 1
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "1/5",
+    "struct_lag_median": null
+   },
+   "P2": {
+    "n": 10,
+    "not_entered": {},
+    "pct_mean": -0.0147,
+    "pct_median": -0.0195,
+    "atr_mean": -0.8677,
+    "atr_median": -1.9654,
+    "r_own_mean": -0.3526,
+    "r_p0risk_mean": -0.1934,
+    "win_rate_pct_gt0": 0.2,
+    "worst_atr": -4.6178,
+    "days_median": 10.0,
+    "exit_reasons": {
+     "struct_exit": 6,
+     "stop": 3,
+     "gap_stop": 1
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "1/4",
+    "struct_lag_median": 2
+   },
+   "P3": {
+    "n": 10,
+    "not_entered": {},
+    "pct_mean": -0.0082,
+    "pct_median": -0.0162,
+    "atr_mean": -0.3712,
+    "atr_median": -1.3419,
+    "r_own_mean": -0.2008,
+    "r_p0risk_mean": -0.0694,
+    "win_rate_pct_gt0": 0.2,
+    "worst_atr": -2.8073,
+    "days_median": 10.0,
+    "exit_reasons": {
+     "breakeven_gap_stop": 3,
+     "struct_exit": 5,
+     "stop": 1,
+     "gap_stop": 1
+    },
+    "breakeven_triggered": 5,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "1/5",
+    "struct_lag_median": 2
+   }
+  },
+  "paired_diff_atr_vs_P0_all_entered": {
+   "P1": -0.2478,
+   "P2": -2.5971,
+   "P3": -2.1006
+  },
+  "paired_n": 10,
+  "P3_P4_on_cohort250": {
+   "P3": {
+    "n": 10,
+    "not_entered": {},
+    "pct_mean": -0.0082,
+    "pct_median": -0.0162,
+    "atr_mean": -0.3712,
+    "atr_median": -1.3419,
+    "r_own_mean": -0.2008,
+    "r_p0risk_mean": -0.0694,
+    "win_rate_pct_gt0": 0.2,
+    "worst_atr": -2.8073,
+    "days_median": 10.0,
+    "exit_reasons": {
+     "breakeven_gap_stop": 3,
+     "struct_exit": 5,
+     "stop": 1,
+     "gap_stop": 1
+    },
+    "breakeven_triggered": 5,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "1/5",
+    "struct_lag_median": 2
+   },
+   "P4": {
+    "n": 10,
+    "not_entered": {},
+    "pct_mean": -0.0082,
+    "pct_median": -0.0162,
+    "atr_mean": -0.3712,
+    "atr_median": -1.3419,
+    "r_own_mean": -0.2008,
+    "r_p0risk_mean": -0.0694,
+    "win_rate_pct_gt0": 0.2,
+    "worst_atr": -2.8073,
+    "days_median": 10.0,
+    "exit_reasons": {
+     "breakeven_gap_stop": 3,
+     "struct_exit": 5,
+     "stop": 1,
+     "gap_stop": 1
+    },
+    "breakeven_triggered": 5,
+    "gap_loss_r_lt_minus1": 1,
+    "stopped_then_continued": "1/5",
+    "struct_lag_median": 2
+   }
+  },
+  "paired_diff_atr_P4_minus_P3": 0.0
+ },
+ "连续期货|short": {
+  "queue": 12,
+  "cohort60": 12,
+  "cohort250": 11,
+  "P0_P3_on_cohort60": {
+   "P0": {
+    "n": 12,
+    "not_entered": {},
+    "pct_mean": -0.0484,
+    "pct_median": -0.0501,
+    "atr_mean": -2.4076,
+    "atr_median": -3.1856,
+    "r_own_mean": -0.3827,
+    "r_p0risk_mean": -0.3827,
+    "win_rate_pct_gt0": 0.1667,
+    "worst_atr": -8.5304,
+    "days_median": 53.5,
+    "exit_reasons": {
+     "time_exit": 6,
+     "gap_stop": 3,
+     "stop": 2,
+     "target": 1
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 3,
+    "stopped_then_continued": "0/5",
+    "struct_lag_median": null
+   },
+   "P1": {
+    "n": 12,
+    "not_entered": {},
+    "pct_mean": -0.0397,
+    "pct_median": -0.0467,
+    "atr_mean": -2.4105,
+    "atr_median": -2.5252,
+    "r_own_mean": -0.5951,
+    "r_p0risk_mean": -0.4254,
+    "win_rate_pct_gt0": 0.1667,
+    "worst_atr": -7.1377,
+    "days_median": 10.0,
+    "exit_reasons": {
+     "stop": 5,
+     "gap_stop": 5,
+     "target": 2
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 5,
+    "stopped_then_continued": "2/10",
+    "struct_lag_median": null
+   },
+   "P2": {
+    "n": 12,
+    "not_entered": {},
+    "pct_mean": -0.0328,
+    "pct_median": -0.0308,
+    "atr_mean": -1.9757,
+    "atr_median": -2.2667,
+    "r_own_mean": -0.701,
+    "r_p0risk_mean": -0.3236,
+    "win_rate_pct_gt0": 0.0833,
+    "worst_atr": -4.219,
+    "days_median": 10.0,
+    "exit_reasons": {
+     "stop": 2,
+     "gap_stop": 4,
+     "struct_exit": 6
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 4,
+    "stopped_then_continued": "1/6",
+    "struct_lag_median": 6
+   },
+   "P3": {
+    "n": 12,
+    "not_entered": {},
+    "pct_mean": -0.0283,
+    "pct_median": -0.0279,
+    "atr_mean": -1.4068,
+    "atr_median": -1.9235,
+    "r_own_mean": -0.5395,
+    "r_p0risk_mean": -0.2054,
+    "win_rate_pct_gt0": 0.0833,
+    "worst_atr": -3.3658,
+    "days_median": 9.5,
+    "exit_reasons": {
+     "stop": 1,
+     "breakeven_stop": 2,
+     "breakeven_gap_stop": 2,
+     "struct_exit": 5,
+     "gap_stop": 2
+    },
+    "breakeven_triggered": 4,
+    "gap_loss_r_lt_minus1": 3,
+    "stopped_then_continued": "0/7",
+    "struct_lag_median": 4
+   }
+  },
+  "paired_diff_atr_vs_P0_all_entered": {
+   "P1": -0.0029,
+   "P2": 0.4319,
+   "P3": 1.0008
+  },
+  "paired_n": 12,
+  "P3_P4_on_cohort250": {
+   "P3": {
+    "n": 11,
+    "not_entered": {},
+    "pct_mean": -0.0277,
+    "pct_median": -0.0272,
+    "atr_mean": -1.3805,
+    "atr_median": -2.1504,
+    "r_own_mean": -0.5153,
+    "r_p0risk_mean": -0.1734,
+    "win_rate_pct_gt0": 0.0909,
+    "worst_atr": -3.3658,
+    "days_median": 10,
+    "exit_reasons": {
+     "stop": 1,
+     "breakeven_stop": 2,
+     "breakeven_gap_stop": 2,
+     "struct_exit": 4,
+     "gap_stop": 2
+    },
+    "breakeven_triggered": 4,
+    "gap_loss_r_lt_minus1": 3,
+    "stopped_then_continued": "0/7",
+    "struct_lag_median": 6
+   },
+   "P4": {
+    "n": 11,
+    "not_entered": {},
+    "pct_mean": -0.0277,
+    "pct_median": -0.0272,
+    "atr_mean": -1.3805,
+    "atr_median": -2.1504,
+    "r_own_mean": -0.5153,
+    "r_p0risk_mean": -0.1734,
+    "win_rate_pct_gt0": 0.0909,
+    "worst_atr": -3.3658,
+    "days_median": 10,
+    "exit_reasons": {
+     "stop": 1,
+     "breakeven_stop": 2,
+     "breakeven_gap_stop": 2,
+     "struct_exit": 4,
+     "gap_stop": 2
+    },
+    "breakeven_triggered": 4,
+    "gap_loss_r_lt_minus1": 3,
+    "stopped_then_continued": "0/7",
+    "struct_lag_median": 6
+   }
+  },
+  "paired_diff_atr_P4_minus_P3": 0.0
+ },
+ "全部|long": {
+  "queue": 72,
+  "cohort60": 72,
+  "cohort250": 69,
+  "P0_P3_on_cohort60": {
+   "P0": {
+    "n": 72,
+    "not_entered": {},
+    "pct_mean": 0.0386,
+    "pct_median": 0.0318,
+    "atr_mean": 1.2616,
+    "atr_median": 1.3301,
+    "r_own_mean": 0.2552,
+    "r_p0risk_mean": 0.2552,
+    "win_rate_pct_gt0": 0.6111,
+    "worst_atr": -8.1518,
+    "days_median": 60.0,
+    "exit_reasons": {
+     "time_exit": 44,
+     "target": 10,
+     "stop": 14,
+     "gap_stop": 4
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 4,
+    "stopped_then_continued": "1/18",
+    "struct_lag_median": null
+   },
+   "P1": {
+    "n": 71,
+    "not_entered": {
+     "open_beyond_stop": 1
+    },
+    "pct_mean": 0.0135,
+    "pct_median": -0.0228,
+    "atr_mean": 0.4054,
+    "atr_median": -1.9997,
+    "r_own_mean": 0.141,
+    "r_p0risk_mean": 0.1345,
+    "win_rate_pct_gt0": 0.4225,
+    "worst_atr": -6.7254,
+    "days_median": 20,
+    "exit_reasons": {
+     "stop": 31,
+     "target": 25,
+     "gap_stop": 9,
+     "time_exit": 6
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 9,
+    "stopped_then_continued": "7/40",
+    "struct_lag_median": null
+   },
+   "P2": {
+    "n": 71,
+    "not_entered": {
+     "open_beyond_stop": 1
+    },
+    "pct_mean": 0.0306,
+    "pct_median": -0.0193,
+    "atr_mean": 0.681,
+    "atr_median": -1.2419,
+    "r_own_mean": 0.2372,
+    "r_p0risk_mean": 0.1794,
+    "win_rate_pct_gt0": 0.3662,
+    "worst_atr": -4.6178,
+    "days_median": 20,
+    "exit_reasons": {
+     "struct_exit": 28,
+     "time_exit": 18,
+     "gap_stop": 6,
+     "stop": 18,
+     "struct_exit+gap_stop": 1
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 7,
+    "stopped_then_continued": "4/25",
+    "struct_lag_median": 4
+   },
+   "P3": {
+    "n": 71,
+    "not_entered": {
+     "open_beyond_stop": 1
+    },
+    "pct_mean": 0.024,
+    "pct_median": -0.0111,
+    "atr_mean": 0.2766,
+    "atr_median": -1.0455,
+    "r_own_mean": 0.085,
+    "r_p0risk_mean": 0.1142,
+    "win_rate_pct_gt0": 0.2394,
+    "worst_atr": -3.6589,
+    "days_median": 15,
+    "exit_reasons": {
+     "struct_exit": 24,
+     "breakeven_stop": 10,
+     "gap_stop": 5,
+     "stop": 10,
+     "struct_exit+gap_stop": 1,
+     "breakeven_gap_stop": 11,
+     "time_exit": 10
+    },
+    "breakeven_triggered": 35,
+    "gap_loss_r_lt_minus1": 6,
+    "stopped_then_continued": "11/37",
+    "struct_lag_median": 4
+   }
+  },
+  "paired_diff_atr_vs_P0_all_entered": {
+   "P1": -0.9168,
+   "P2": -0.6412,
+   "P3": -1.0456
+  },
+  "paired_n": 71,
+  "P3_P4_on_cohort250": {
+   "P3": {
+    "n": 68,
+    "not_entered": {
+     "open_beyond_stop": 1
+    },
+    "pct_mean": 0.0261,
+    "pct_median": -0.0109,
+    "atr_mean": 0.332,
+    "atr_median": -0.9313,
+    "r_own_mean": 0.1026,
+    "r_p0risk_mean": 0.1183,
+    "win_rate_pct_gt0": 0.2353,
+    "worst_atr": -3.6589,
+    "days_median": 15.5,
+    "exit_reasons": {
+     "struct_exit": 23,
+     "breakeven_stop": 10,
+     "gap_stop": 4,
+     "stop": 9,
+     "struct_exit+gap_stop": 1,
+     "breakeven_gap_stop": 11,
+     "time_exit": 10
+    },
+    "breakeven_triggered": 34,
+    "gap_loss_r_lt_minus1": 5,
+    "stopped_then_continued": "11/35",
+    "struct_lag_median": 4
+   },
+   "P4": {
+    "n": 68,
+    "not_entered": {
+     "open_beyond_stop": 1
+    },
+    "pct_mean": 0.0622,
+    "pct_median": -0.0109,
+    "atr_mean": 1.1423,
+    "atr_median": -0.9313,
+    "r_own_mean": 0.409,
+    "r_p0risk_mean": 0.3149,
+    "win_rate_pct_gt0": 0.2353,
+    "worst_atr": -3.6589,
+    "days_median": 15.5,
+    "exit_reasons": {
+     "struct_exit": 32,
+     "breakeven_stop": 10,
+     "gap_stop": 4,
+     "stop": 9,
+     "struct_exit+gap_stop": 1,
+     "breakeven_gap_stop": 11,
+     "time_exit": 1
+    },
+    "breakeven_triggered": 34,
+    "gap_loss_r_lt_minus1": 5,
+    "stopped_then_continued": "11/35",
+    "struct_lag_median": 4
+   }
+  },
+  "paired_diff_atr_P4_minus_P3": 0.8104
+ },
+ "全部|short": {
+  "queue": 57,
+  "cohort60": 57,
+  "cohort250": 54,
+  "P0_P3_on_cohort60": {
+   "P0": {
+    "n": 57,
+    "not_entered": {},
+    "pct_mean": -0.0068,
+    "pct_median": -0.0394,
+    "atr_mean": -0.9531,
+    "atr_median": -2.6867,
+    "r_own_mean": -0.1881,
+    "r_p0risk_mean": -0.1881,
+    "win_rate_pct_gt0": 0.3333,
+    "worst_atr": -10.6683,
+    "days_median": 60,
+    "exit_reasons": {
+     "time_exit": 36,
+     "stop": 12,
+     "gap_stop": 5,
+     "target": 4
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 5,
+    "stopped_then_continued": "0/17",
+    "struct_lag_median": null
+   },
+   "P1": {
+    "n": 57,
+    "not_entered": {},
+    "pct_mean": -0.0021,
+    "pct_median": -0.0502,
+    "atr_mean": -0.9323,
+    "atr_median": -2.4576,
+    "r_own_mean": -0.3169,
+    "r_p0risk_mean": -0.1644,
+    "win_rate_pct_gt0": 0.2982,
+    "worst_atr": -8.4858,
+    "days_median": 17,
+    "exit_reasons": {
+     "target": 11,
+     "gap_stop": 12,
+     "stop": 28,
+     "time_exit": 6
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 12,
+    "stopped_then_continued": "6/40",
+    "struct_lag_median": null
+   },
+   "P2": {
+    "n": 57,
+    "not_entered": {},
+    "pct_mean": -0.0036,
+    "pct_median": -0.0349,
+    "atr_mean": -0.6497,
+    "atr_median": -2.1504,
+    "r_own_mean": -0.2618,
+    "r_p0risk_mean": -0.0787,
+    "win_rate_pct_gt0": 0.2456,
+    "worst_atr": -5.102,
+    "days_median": 17,
+    "exit_reasons": {
+     "struct_exit": 21,
+     "stop": 18,
+     "time_exit": 10,
+     "gap_stop": 8
+    },
+    "breakeven_triggered": 0,
+    "gap_loss_r_lt_minus1": 8,
+    "stopped_then_continued": "3/26",
+    "struct_lag_median": 5
+   },
+   "P3": {
+    "n": 57,
+    "not_entered": {},
+    "pct_mean": -0.0069,
+    "pct_median": -0.0258,
+    "atr_mean": -0.5511,
+    "atr_median": -0.9927,
+    "r_own_mean": -0.2054,
+    "r_p0risk_mean": -0.0566,
+    "win_rate_pct_gt0": 0.1404,
+    "worst_atr": -5.102,
+    "days_median": 11,
+    "exit_reasons": {
+     "struct_exit": 14,
+     "breakeven_gap_stop": 12,
+     "breakeven_stop": 12,
+     "time_exit": 5,
+     "gap_stop": 5,
+     "stop": 9
+    },
+    "breakeven_triggered": 31,
+    "gap_loss_r_lt_minus1": 6,
+    "stopped_then_continued": "5/38",
+    "struct_lag_median": 4
+   }
+  },
+  "paired_diff_atr_vs_P0_all_entered": {
+   "P1": 0.0208,
+   "P2": 0.3034,
+   "P3": 0.402
+  },
+  "paired_n": 57,
+  "P3_P4_on_cohort250": {
+   "P3": {
+    "n": 54,
+    "not_entered": {},
+    "pct_mean": -0.0073,
+    "pct_median": -0.0262,
+    "atr_mean": -0.6197,
+    "atr_median": -1.0666,
+    "r_own_mean": -0.2251,
+    "r_p0risk_mean": -0.064,
+    "win_rate_pct_gt0": 0.1296,
+    "worst_atr": -5.102,
+    "days_median": 11.0,
+    "exit_reasons": {
+     "struct_exit": 13,
+     "breakeven_gap_stop": 12,
+     "breakeven_stop": 11,
+     "gap_stop": 5,
+     "time_exit": 4,
+     "stop": 9
+    },
+    "breakeven_triggered": 29,
+    "gap_loss_r_lt_minus1": 6,
+    "stopped_then_continued": "5/37",
+    "struct_lag_median": 5
+   },
+   "P4": {
+    "n": 54,
+    "not_entered": {},
+    "pct_mean": -0.016,
+    "pct_median": -0.0262,
+    "atr_mean": -0.7488,
+    "atr_median": -1.0666,
+    "r_own_mean": -0.2756,
+    "r_p0risk_mean": -0.1209,
+    "win_rate_pct_gt0": 0.1111,
+    "worst_atr": -5.102,
+    "days_median": 11.0,
+    "exit_reasons": {
+     "struct_exit": 16,
+     "breakeven_gap_stop": 12,
+     "breakeven_stop": 12,
+     "gap_stop": 5,
+     "stop": 9
+    },
+    "breakeven_triggered": 29,
+    "gap_loss_r_lt_minus1": 6,
+    "stopped_then_continued": "6/38",
+    "struct_lag_median": 5
+   }
+  },
+  "paired_diff_atr_P4_minus_P3": -0.1291
+ }
+}

@@ -3252,7 +3252,8 @@ def _capture_thesis_quotes(theses, *, days: int = 10) -> int:
         print("没有近期未验证的事前判断，不需要捕获。")
         return 0
     try:
-        pr = subprocess.run(["longbridge", "quote", *syms, "--format", "json"], capture_output=True, text=True, timeout=60)
+        from undertow.collect import lb_budget
+        pr = lb_budget.run(["longbridge", "quote", *syms, "--format", "json"], capture_output=True, text=True, timeout=60)
         raw = json.JSONDecoder().raw_decode(pr.stdout.lstrip())[0] if pr.returncode == 0 else None
     except Exception as e:
         raw, pr = None, None

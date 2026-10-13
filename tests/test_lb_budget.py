@@ -140,3 +140,67 @@ def test_corrupt_rate_and_stats_are_isolated_not_zeroed(bdir, monkeypatch, capsy
     f.write_text("坏")
     lb._stat("call", 1.0)
     assert list(bdir.glob(f"{f.name}.corrupt-*")) and json.loads(f.read_text())["_stats_corrupt_isolated"] == 1
+
+
+def _hold_lock(path, seconds):
+    code = ("import fcntl,sys,time; f=open(%r,'a+'); fcntl.flock(f.fileno(), fcntl.LOCK_EX); print('held', flush=True); time.sleep(%s)"
+            % (str(path), seconds))
+    p = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
+    assert p.stdout.readline().strip() == "held"
+    return p
+
+
+def test_rate_lock_respects_caller_deadline_and_command_not_run(bdir):
+    """Codex 036 §6 探针：真实子进程持速率锁 0.5 秒，run(timeout=0.05) 旧代码约 0.51 秒才返回。现：按截止返回、命令不执行。"""
+    h = _hold_lock(bdir / ".lb_rate.lock", 1.0)
+    marker = bdir / "ran"
+    t0 = time.monotonic()
+    with pytest.raises(subprocess.TimeoutExpired):
+        lb.run([sys.executable, "-c", f"open({str(marker)!r},'w')"], capture_output=True, text=True, timeout=0.05)
+    assert time.monotonic() - t0 < 0.3 and not marker.exists()
+    h.kill(); h.wait()
+
+
+def test_rate_lock_wait_does_not_hold_slot(bdir, monkeypatch):
+    """等速率锁时不占并发槽：唯一的槽在别的进程持速率锁期间保持空闲。"""
+    monkeypatch.setattr(lb, "N_SLOTS", 1)
+    h = _hold_lock(bdir / ".lb_rate.lock", 0.6)
+    import threading, fcntl as _f
+    errs = []
+    th = threading.Thread(target=lambda: errs.append(None) if lb.acquire(timeout=2).__enter__() is None else None)
+    th.start(); time.sleep(0.2)
+    slot = open(bdir / ".lb_slots" / "slot0.lock", "a+")
+    got = 0
+    for _ in range(20):                                         # 等待者只在极短的单次尝试中碰槽：多数时刻槽是空的
+        try:
+            _f.flock(slot.fileno(), _f.LOCK_EX | _f.LOCK_NB); got += 1; _f.flock(slot.fileno(), _f.LOCK_UN)
+        except OSError:
+            pass
+        time.sleep(0.005)
+    slot.close()
+    assert got >= 15
+    h.kill(); h.wait(); th.join(3)
+
+
+def test_stats_lock_busy_defers_instead_of_blocking(bdir):
+    h = _hold_lock(bdir / ".lb_stats.lock", 1.0)
+    t0 = time.monotonic()
+    lb._stat("call", 1.0)
+    assert time.monotonic() - t0 < 0.5
+    assert list(bdir.glob(".lb_stats_deferred_*.jsonl"))
+    h.kill(); h.wait()
+
+
+def test_all_longbridge_cli_calls_go_through_budget():
+    """调用图核查（Codex 036 §4 先决条件）：除冻结的 longbridge_kline.py 外，所有调长桥 CLI 的 subprocess 都经过 lb_budget.run。"""
+    import re
+    root = Path(__file__).resolve().parents[1]
+    bad = []
+    for f in list((root / "undertow").rglob("*.py")) + list((root / "scripts").rglob("*.py")):
+        if f.name in ("lb_budget.py", "longbridge_kline.py"):
+            continue
+        src = f.read_text("utf-8")
+        for m in re.finditer(r"subprocess\.(run|Popen|check_output)\(([^)]{0,200})", src):
+            if "longbridge" in m.group(2) or "BIN" in m.group(2):
+                bad.append(f"{f.relative_to(root)}:{src[:m.start()].count(chr(10)) + 1}")
+    assert bad == [], bad

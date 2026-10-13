@@ -72,6 +72,8 @@ from __future__ import annotations
 import json
 import math
 import subprocess
+
+from undertow.collect import lb_budget
 from datetime import date, datetime, timezone
 
 from undertow.collect.base import DataSourceError
@@ -113,7 +115,7 @@ def _cli(args: list[str], timeout: float = 30.0):
     if not available():
         raise DataSourceError("未找到 longbridge CLI")
     try:
-        p = subprocess.run([BIN, *args, "--format", "json"],
+        p = lb_budget.run([BIN, *args, "--format", "json"],          # 跨进程调用预算（Codex 036：取数路径全部受预算约束）
                            capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired as e:
         raise DataSourceError(f"longbridge {' '.join(args)} 超时") from e

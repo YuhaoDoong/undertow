@@ -52,11 +52,31 @@ def _isolate(f: Path) -> None:
         pass
 
 
+STAT_LOCK_WAIT_S = 0.2       # 统计是旁路：最多等 0.2 秒，拿不到锁就延后落盘，绝不拖住报价（Codex 036 §6）
+
+
+def _try_lock(fh, until: float) -> bool:
+    """非阻塞反复尝试文件锁，直到单调时钟 until；拿到返回 True。"""
+    while True:
+        try:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return True
+        except OSError:
+            if time.monotonic() >= until:
+                return False
+            time.sleep(0.01)
+
+
 def _stat(key: str, wait_ms: float = 0.0) -> None:
     d = _dir()
     f = d / f".lb_stats_{datetime.now(ET):%Y-%m-%d}.json"
     with open(d / ".lb_stats.lock", "a+") as lk:
-        fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+        if not _try_lock(lk, time.monotonic() + STAT_LOCK_WAIT_S):
+            # 延后落盘：O_APPEND 写一行到当日 deferred 文件（短行追加是原子的），不等锁
+            with open(d / f".lb_stats_deferred_{datetime.now(ET):%Y-%m-%d}.jsonl", "a") as df:
+                df.write(json.dumps({"at": datetime.now(ET).isoformat(), "key": key, "wait_ms": round(wait_ms, 1),
+                                     "priority": priority()}) + "\n")
+            return
         try:
             s = json.loads(f.read_text("utf-8"))
         except FileNotFoundError:
@@ -93,7 +113,9 @@ def _try_rate(prio: str) -> float:
     d = _dir()
     cap = RATE_LOW if prio == "low" else RATE_HIGH
     with open(d / ".lb_rate.lock", "a+") as lk:
-        fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+        # 非阻塞：速率锁被占 → 立即返回短等待，由调用方先放槽再重试（不再阻塞、不越过绝对截止，Codex 036 §6）
+        if not _try_lock(lk, time.monotonic()):          # 持槽期间只试一次，绝不在占槽时等锁
+            return 0.02
         f = d / ".lb_rate.json"
         now = time.monotonic()
         try:

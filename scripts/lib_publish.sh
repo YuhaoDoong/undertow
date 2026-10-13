@@ -14,7 +14,7 @@
 #                               下次运行还认得是自己的 —— 没有这一步，没走到发布就退出的产物会被当成他人改动。
 #   publish_dirs <提交信息> <目录>...
 #     返回 0 成功/无事；2 git 失败；3 索引里有他人已暂存文件；4 已提交但推送失败；5 与他人改动冲突；
-#     6 未调用 publish_begin（分不清本次产物，拒绝发布）；7 全局发布锁 60 秒拿不到。3/5/6/7 时产物原样保留。
+#     6 未调用 publish_begin（分不清本次产物，拒绝发布）；7 全局发布锁 60 秒拿不到；9 本次产物登记未能持久化。3/5/6/7/9 时产物原样保留。
 #   不 stash、不 reset、不改动任何他人内容。
 
 _publish_dirty() {   # 目录下相对索引有改动或未跟踪的路径（每行一个）
@@ -99,28 +99,33 @@ publish_record() {
   # 拿不到锁时登记仍在 spool 里，分类时照样被读到；返回非零让调用方知道（不再总是 return 0）。
   [[ -z "${PUBLISH_PENDING:-}" || -z "${PUBLISH_PRE:-}" || ! -f "$PUBLISH_PRE" ]] && return 0
   local kind p dir="${PUBLISH_PENDING}.spool" tmp
-  mkdir -p -- "$dir" || return 2
-  tmp=$(mktemp "$dir/.rec.XXXXXX") || return 2
+  if ! mkdir -p -- "$dir" || ! tmp=$(mktemp "$dir/.rec.XXXXXX"); then
+    print -u2 -r -- "PUBLISH_RECORD_NOT_PERSISTED spool 目录不可写：本次产物未登记"
+    return 9
+  fi
   _publish_classify "$@" | while IFS=$'\t' read -r kind p; do
     [[ "$kind" == "OURS" ]] && printf '%s\t%s\n' "$p" "$(_publish_hash "$p")"
   done > "$tmp"
   if [[ -s "$tmp" ]]; then
-    mv -- "$tmp" "$dir/$(date +%s).$$.${RANDOM}.rec" || return 2
+    if ! mv -- "$tmp" "$dir/$(date +%s).$$.${RANDOM}.rec"; then
+      print -u2 -r -- "PUBLISH_RECORD_NOT_PERSISTED 登记未能写入 spool：本次产物下次会被当成他人改动"
+      return 9                                   # 9 = 登记根本没持久化（不可恢复，必须告警）
+    fi
   else
     rm -f -- "$tmp"
   fi
-  _publish_pend_locked _publish_spool_merge
+  _publish_pend_locked _publish_spool_merge      # 8 = 已落 spool、暂未并入（可恢复，下次拿到锁并入）
 }
 
-_publish_pend_consume() {   # 按【实际提交】的 (路径, 哈希) 消费登记（须在锁下调用）。参数：路径\t已提交哈希 的清单文件
-  # 原错（035 探针）：按路径删掉该路径全部登记 —— A 提交 h1 后 B 登记了 h2，A 清理时把未提交的 h2 也删了。
-  # 现：每个路径只删「最后一次出现已提交哈希的那一行」及其之前的同路径行（更早的版本）；之后登记的新版本保留。
+_publish_pend_consume() {   # 只消费与【实际提交】完全相等的 (路径, 哈希) 登记（须在锁下调用）。参数：路径\t已提交哈希 的清单文件
+  # 原错一（035）：按路径删全部登记，A 提交 h1 后 B 登记的 h2 被删。
+  # 原错二（036）：改成「删最后一次出现已提交哈希的行及之前的同路径行」，仍假定登记顺序 = 版本顺序；
+  # A 读到 h1、B 写 h2 并先登记、A 的 h1 迟到并入 → 顺序是 h2、h1，清理把未提交的 h2 也删了。
+  # 现：只删精确相等的行，其它哈希一律保留；旧行多留可接受（判定按「命中任一登记哈希」，多留不影响正确性）。
   _publish_spool_merge || return 2
   local tmp; tmp=$(mktemp "${PUBLISH_PENDING}.XXXXXX") || return 2
-  awk -F'\t' 'NR==FNR {c[$1]=$2; next}
-               {n++; line[n]=$0; path[n]=$1; h[n]=$2; if (($1 in c) && $2==c[$1]) last[$1]=n}
-               END {for (i=1;i<=n;i++) if (!((path[i] in last) && i<=last[path[i]])) print line[i]}' \
-      "$1" "$PUBLISH_PENDING" > "$tmp" && mv -- "$tmp" "$PUBLISH_PENDING"
+  awk -F'\t' 'NR==FNR {c[$1 "\t" $2]=1; next} !(($1 "\t" $2) in c)' "$1" "$PUBLISH_PENDING" > "$tmp" \
+    && mv -- "$tmp" "$PUBLISH_PENDING"
 }
 
 publish_dirs() {     # publish_dirs <提交信息> <目录>...
@@ -138,7 +143,12 @@ publish_dirs() {     # publish_dirs <提交信息> <目录>...
       CONFLICT) CONFLICT="${CONFLICT}${p} " ;;
     esac
   done < <(_publish_classify "${DIRS[@]}")
-  publish_record "${DIRS[@]}"                       # 先记下（发布失败时下次还认得）
+  local REC_RC; publish_record "${DIRS[@]}"; REC_RC=$?   # 先记下（发布失败时下次还认得）
+  if (( REC_RC == 9 )); then
+    echo "PUBLISH_RECORD_FAILED 本次产物的登记未能持久化，停止发布（产物保留；需人工核对 spool 目录权限/磁盘）"
+    return 9
+  fi
+  (( REC_RC == 8 )) && echo "PUBLISH_RECORD_DEFERRED 登记已落 spool、待并入（锁暂不可用），不影响本次发布"
   STAGED=$(git diff --cached --name-only 2>/dev/null)
   if [[ -n "$STAGED" ]]; then
     echo "PUBLISH_BLOCKED 索引里有他人已暂存的文件，停止发布（产物保留）：$(printf '%s' "$STAGED" | head -3 | tr '\n' ' ')"

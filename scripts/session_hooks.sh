@@ -289,7 +289,7 @@ close_backup() {
     hb "⑪收盘备份：✅ 提交 $( [[ -f "$MAN" ]] && wc -l < "$MAN" | tr -d ' ' || echo 0 ) 个文件；仍未提交 ${LEFT} 个路径（他人改动或待增量）"
   else
     hb "⑪收盘备份：⏳ rc=$RC $(printf '%s' "$PUB" | tail -1 | clip 120)；仍未提交 ${LEFT} 个路径，下次唤醒重试"
-    if (( RC == 5 || RC == 3 )); then
+    if (( RC == 5 || RC == 3 || RC == 9 )); then          # 9 = 产物登记未能持久化（Codex 036）
       notify "⚠️ 收盘备份未发布（rc=$RC）" "$(printf '%s' "$PUB" | tail -1 | clip 160)"
     fi
   fi

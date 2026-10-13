@@ -118,7 +118,7 @@ cat $PUBLISH_PENDING
 
 
 def test_consume_keeps_newer_uncommitted_version(tmp_path):
-    """Codex 035 反例：A 提交 h1 后 B 登记 h2，A 清理不能把 h2 一起删掉；早于 h1 的旧行可删。"""
+    """Codex 035 反例：A 提交 h1 后 B 登记 h2，A 清理不能把 h2 一起删掉；036：不按登记顺序推断版本，只删精确相等。"""
     _repo(tmp_path)
     script = """
 source scripts/lib_publish.sh
@@ -129,7 +129,7 @@ _publish_pend_locked _publish_pend_consume data/cm; echo "RC=$?"
 cat $PUBLISH_PENDING
 """
     out = subprocess.run(["zsh", "-c", script], cwd=tmp_path, capture_output=True, text=True).stdout
-    assert "RC=0" in out and out.split()[1:] == ["b", "hb", "a", "h2"]
+    assert "RC=0" in out and out.split()[1:] == ["a", "h0", "b", "hb", "a", "h2"]   # 只删精确相等的 (a, h1)
 
 
 def test_lock_unavailable_never_mutates_and_record_survives_in_spool(tmp_path):
@@ -181,3 +181,34 @@ grep -c "$(git hash-object data/history/a.txt)" $PUBLISH_PENDING
     out = subprocess.run(["zsh", "-c", script], cwd=tmp_path, capture_output=True, text=True).stdout
     assert "RC=0" in out and "HEAD=h1" in out
     assert out.strip().splitlines()[-1] == "1"                                # h2 的登记保留
+
+
+def test_late_old_registration_does_not_delete_newer(tmp_path):
+    """Codex 036 反例：迟到的旧 h1 登记排在未提交 h2 之后；提交的是 h1 → 只删 h1，h2 保留。"""
+    _repo(tmp_path)
+    script = """
+source scripts/lib_publish.sh
+export PUBLISH_PENDING=data/pending
+printf 'f\\th_new_uncommitted\\nf\\th_committed\\n' > $PUBLISH_PENDING
+mkdir -p $PUBLISH_PENDING.spool; printf 'f\\th_committed\\n' > $PUBLISH_PENDING.spool/1.1.1.rec; printf 'g\\tx\\n' > $PUBLISH_PENDING.spool/1.1.2.rec
+printf 'f\\th_committed\\n' > data/cm
+_publish_pend_locked _publish_pend_consume data/cm; echo "RC=$?"
+cat $PUBLISH_PENDING; ls $PUBLISH_PENDING.spool | wc -l | tr -d ' '
+"""
+    out = subprocess.run(["zsh", "-c", script], cwd=tmp_path, capture_output=True, text=True).stdout.split()
+    assert out[0] == "RC=0" and out[1:5] == ["f", "h_new_uncommitted", "g", "x"] and out[-1] == "0"
+
+
+def test_record_not_persisted_blocks_publish(tmp_path):
+    """登记根本没写进 spool（目录不可写）→ rc 9，publish_dirs 停止发布；与「已落 spool、锁暂不可用」(8) 区分。"""
+    _repo(tmp_path)
+    script = """
+source scripts/lib_publish.sh
+export PUBLISH_PENDING=data/pending; : > $PUBLISH_PENDING
+touch $PUBLISH_PENDING.spool                       # 同名普通文件 → spool 目录建不了
+publish_begin data/history
+echo x > data/history/a.txt
+PUBLISH_NO_PUSH=1 PUBLISH_LOCK_WAIT=2 publish_dirs "t" data/history; echo "RC=$?"
+"""
+    r = subprocess.run(["zsh", "-c", script], cwd=tmp_path, capture_output=True, text=True)
+    assert "RC=9" in r.stdout and "PUBLISH_RECORD_FAILED" in r.stdout and "NOT_PERSISTED" in r.stderr

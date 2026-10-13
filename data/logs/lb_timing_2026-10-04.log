@@ -1,0 +1,16 @@
+{"t": "10-04 00:07", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 00:22", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 00:37", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 00:52", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 01:07", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 01:22", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 01:37", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 01:52", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 02:08", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 02:23", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 02:38", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 02:53", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 03:08", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 03:23", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 03:38", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}
+{"t": "10-04 03:53", "probe_err": "AttributeError: module 'undertow.collect.longbridge_options' has no attribute 'quotes'", "GLD.US": "ERR AttributeError", "SLV.US": "ERR AttributeError"}

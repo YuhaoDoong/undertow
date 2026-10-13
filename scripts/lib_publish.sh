@@ -35,8 +35,8 @@ _publish_classify() {   # 每行输出 OURS\t路径 / CONFLICT\t路径 / FOREIGN
     [[ -z "$p" ]] && continue
     pre_h=$(awk -F'\t' -v k="$p" '$1 == k {print $2; exit}' "$PUBLISH_PRE")
     pend_hit=""
-    [[ -n "$pre_h" && -n "$PEND" && -f "$PEND" ]] && \
-      pend_hit=$(awk -F'\t' -v k="$p" -v h="$pre_h" '$1 == k && $2 == h {print "y"; exit}' "$PEND")
+    [[ -n "$pre_h" && -n "$PEND" ]] && \
+      pend_hit=$(awk -F'\t' -v k="$p" -v h="$pre_h" '$1 == k && $2 == h {print "y"; exit}' $(_publish_pend_sources) </dev/null 2>/dev/null)
     if [[ -z "$pre_h" ]]; then
       printf 'OURS\t%s\n' "$p"
     elif [[ -n "$pend_hit" ]]; then
@@ -60,37 +60,67 @@ publish_begin() {
   return 0
 }
 
-_publish_pend_locked() {   # 在待发布记录的文件锁下执行 "$@"（zsh 内建 zsystem flock；拿不到锁按旧行为直接执行，不阻断发布）
-  # 原错：publish_dirs 删已发布行是「awk 读全文件 → mv 覆盖」，与其它进程的 publish_record 追加无锁并发 →
-  # 读与覆盖之间别人追加的登记被抹掉 → 那些产物此后被当成他人改动。
-  local fd rc
-  if [[ -n "${PUBLISH_PENDING:-}" ]] && zmodload zsh/system 2>/dev/null \
-     && zsystem flock -t 30 -f fd "${PUBLISH_PENDING}.lock" 2>/dev/null; then
-    "$@"; rc=$?
-    zsystem flock -u $fd
-    return $rc
-  fi
-  "$@"
+_publish_pend_sources() {   # 待发布记录的全部来源：主文件 + 尚未并入的 spool 文件（每行一个路径）
+  [[ -f "$PUBLISH_PENDING" ]] && print -r -- "$PUBLISH_PENDING"
+  local f; for f in "${PUBLISH_PENDING}.spool"/*(N); do print -r -- "$f"; done
 }
 
-_publish_record_unlocked() {
-  local kind p
-  _publish_classify "$@" | while IFS=$'\t' read -r kind p; do
-    [[ "$kind" == "OURS" ]] && printf '%s\t%s\n' "$p" "$(_publish_hash "$p")"
-  done >> "$PUBLISH_PENDING"
+_publish_pend_locked() {   # 在待发布记录的文件锁下执行 "$@"；拿不到锁 → 不执行、留痕、返回 8（Codex 035：不得无锁改文件）
+  # 原错 ①：publish_dirs 删已发布行是「awk 读全文件 → mv 覆盖」，与其它进程的追加无锁并发 → 中间追加的登记被抹掉。
+  # 原错 ②（035 探针）：zmodload / flock 失败时退化成无锁直接执行，且返回 0 —— 修并发的代码在失败路径上又回到并发。
+  local fd rc
+  if [[ -z "${PUBLISH_PENDING:-}" ]]; then return 0; fi
+  if ! zmodload zsh/system 2>/dev/null; then
+    print -u2 -r -- "PUBLISH_PENDING_LOCK_UNAVAILABLE zsh/system 加载失败，未改动待发布记录（登记留在 spool，下次拿到锁时并入）"
+    return 8
+  fi
+  # zsystem flock 不会创建锁文件（文件不存在直接失败）—— 10/13 首版因此从未真正上锁，一直走无锁退化分支。
+  if ! { : >> "${PUBLISH_PENDING}.lock"; } 2>/dev/null \
+     || ! zsystem flock -t ${PUBLISH_PENDING_LOCK_WAIT:-30} -f fd "${PUBLISH_PENDING}.lock" 2>/dev/null; then
+    print -u2 -r -- "PUBLISH_PENDING_LOCK_TIMEOUT 待发布记录锁 ${PUBLISH_PENDING_LOCK_WAIT:-30}s 未拿到，未改动（登记留在 spool，下次并入）"
+    return 8
+  fi
+  "$@"; rc=$?
+  zsystem flock -u $fd
+  return $rc
+}
+
+_publish_spool_merge() {   # 把 spool 里的登记按文件名顺序并入主文件（须在锁下调用）；并入后才删 spool 文件
+  local f
+  for f in "${PUBLISH_PENDING}.spool"/*(N); do
+    cat -- "$f" >> "$PUBLISH_PENDING" || return 2
+    rm -f -- "$f"
+  done
   return 0
 }
 
 publish_record() {
+  # 先把本次产物的哈希写进一个只属于本进程的 spool 文件（原子改名，无需锁、不会丢），再在锁下并入主文件。
+  # 拿不到锁时登记仍在 spool 里，分类时照样被读到；返回非零让调用方知道（不再总是 return 0）。
   [[ -z "${PUBLISH_PENDING:-}" || -z "${PUBLISH_PRE:-}" || ! -f "$PUBLISH_PRE" ]] && return 0
-  _publish_pend_locked _publish_record_unlocked "$@"
-  return 0
+  local kind p dir="${PUBLISH_PENDING}.spool" tmp
+  mkdir -p -- "$dir" || return 2
+  tmp=$(mktemp "$dir/.rec.XXXXXX") || return 2
+  _publish_classify "$@" | while IFS=$'\t' read -r kind p; do
+    [[ "$kind" == "OURS" ]] && printf '%s\t%s\n' "$p" "$(_publish_hash "$p")"
+  done > "$tmp"
+  if [[ -s "$tmp" ]]; then
+    mv -- "$tmp" "$dir/$(date +%s).$$.${RANDOM}.rec" || return 2
+  else
+    rm -f -- "$tmp"
+  fi
+  _publish_pend_locked _publish_spool_merge
 }
 
-_publish_pend_remove() {   # 从待发布记录删掉已发布的路径（须在 _publish_pend_locked 下调用）
-  local tmp; tmp=$(mktemp "${TMPDIR:-/tmp}/publish_pend.XXXXXX")
-  awk -F'\t' 'NR==FNR {done[$0]=1; next} !($1 in done)' <(printf '%s\n' "$@") "$PUBLISH_PENDING" > "$tmp" \
-    && mv "$tmp" "$PUBLISH_PENDING"
+_publish_pend_consume() {   # 按【实际提交】的 (路径, 哈希) 消费登记（须在锁下调用）。参数：路径\t已提交哈希 的清单文件
+  # 原错（035 探针）：按路径删掉该路径全部登记 —— A 提交 h1 后 B 登记了 h2，A 清理时把未提交的 h2 也删了。
+  # 现：每个路径只删「最后一次出现已提交哈希的那一行」及其之前的同路径行（更早的版本）；之后登记的新版本保留。
+  _publish_spool_merge || return 2
+  local tmp; tmp=$(mktemp "${PUBLISH_PENDING}.XXXXXX") || return 2
+  awk -F'\t' 'NR==FNR {c[$1]=$2; next}
+               {n++; line[n]=$0; path[n]=$1; h[n]=$2; if (($1 in c) && $2==c[$1]) last[$1]=n}
+               END {for (i=1;i<=n;i++) if (!((path[i] in last) && i<=last[path[i]])) print line[i]}' \
+      "$1" "$PUBLISH_PENDING" > "$tmp" && mv -- "$tmp" "$PUBLISH_PENDING"
 }
 
 publish_dirs() {     # publish_dirs <提交信息> <目录>...
@@ -130,8 +160,14 @@ publish_dirs() {     # publish_dirs <提交信息> <目录>...
   git add -- "${OURS[@]}" || { rm -f "$LOCKF"; return 2; }
   git commit -q -m "$MSG" --only -- "${OURS[@]}"; RC=$?
   if (( RC != 0 )); then rm -f "$LOCKF"; return 2; fi
-  if [[ -n "${PUBLISH_PENDING:-}" && -f "$PUBLISH_PENDING" ]]; then   # 已发布的从待发布记录里删掉（与追加互斥）
-    _publish_pend_locked _publish_pend_remove "${OURS[@]}"
+  if [[ -n "${PUBLISH_PENDING:-}" ]]; then   # 按 HEAD 里实际提交的内容哈希消费登记（提交期间别人登记的新版本保留）
+    local CM; CM=$(mktemp "${TMPDIR:-/tmp}/publish_committed.XXXXXX")
+    for p in "${OURS[@]}"; do
+      printf '%s\t%s\n' "$p" "$(git rev-parse -q --verify "HEAD:$p" 2>/dev/null || echo DELETED)"
+    done > "$CM"
+    _publish_pend_locked _publish_pend_consume "$CM" \
+      || echo "PUBLISH_PENDING_CONSUME_DEFERRED 已提交，但待发布记录未能清理（锁不可用）；只会多留旧行，不影响判定"
+    rm -f "$CM"
   fi
   if [[ -n "${PUBLISH_NO_PUSH:-}" ]]; then rm -f "$LOCKF"; return 0; fi
   git push -q origin main >/dev/null 2>&1 || { rm -f "$LOCKF"; return 4; }

@@ -98,14 +98,16 @@ PUBLISH_NO_PUSH=1 PUBLISH_LOCK_WAIT=2 publish_dirs "t" data/history; echo "RC=$?
     assert "RC=5" in out and "PUBLISH_CONFLICT" in out
 
 
-def test_pending_append_not_lost_during_removal(tmp_path):
-    """删已发布行（读→覆盖）与别的进程追加登记互斥：持锁期间的追加要等锁，不会被覆盖掉。"""
+def test_pending_append_not_lost_during_consume(tmp_path):
+    """消费已提交登记（读→覆盖）与别的进程登记互斥：持锁期间的登记要等锁，不会被覆盖掉。
+    10/13 首版锁文件不存在 → zsystem flock 失败 → 退化为无锁，旧测试因时序巧合仍通过；此版无锁必失败。"""
     _repo(tmp_path)
     script = """
 source scripts/lib_publish.sh
 export PUBLISH_PENDING=data/pending; printf 'x\\t1\\ny\\t2\\n' > $PUBLISH_PENDING
-slow_remove() { sleep 1; _publish_pend_remove "$@"; }
-_publish_pend_locked slow_remove x &
+printf 'x\\t1\\n' > data/cm
+slow_consume() { local c; c=$(cat $PUBLISH_PENDING); sleep 1; print -r -- "$c" > $PUBLISH_PENDING; _publish_pend_consume "$@"; }
+_publish_pend_locked slow_consume data/cm &   # 先读、睡、再整份写回：无锁时 0.3s 的追加必被覆盖
 sleep 0.3
 _publish_pend_locked eval 'printf "z\\t3\\n" >> $PUBLISH_PENDING'
 wait
@@ -113,3 +115,69 @@ cat $PUBLISH_PENDING
 """
     out = subprocess.run(["zsh", "-c", script], cwd=tmp_path, capture_output=True, text=True).stdout
     assert out.split() == ["y", "2", "z", "3"]
+
+
+def test_consume_keeps_newer_uncommitted_version(tmp_path):
+    """Codex 035 反例：A 提交 h1 后 B 登记 h2，A 清理不能把 h2 一起删掉；早于 h1 的旧行可删。"""
+    _repo(tmp_path)
+    script = """
+source scripts/lib_publish.sh
+export PUBLISH_PENDING=data/pending
+printf 'a\\th0\\na\\th1\\nb\\thb\\na\\th2\\n' > $PUBLISH_PENDING
+printf 'a\\th1\\n' > data/cm
+_publish_pend_locked _publish_pend_consume data/cm; echo "RC=$?"
+cat $PUBLISH_PENDING
+"""
+    out = subprocess.run(["zsh", "-c", script], cwd=tmp_path, capture_output=True, text=True).stdout
+    assert "RC=0" in out and out.split()[1:] == ["b", "hb", "a", "h2"]
+
+
+def test_lock_unavailable_never_mutates_and_record_survives_in_spool(tmp_path):
+    """Codex 035 反例：锁不可用时不得无锁改文件、不得返回 0；登记留在 spool，分类照样认得。"""
+    _repo(tmp_path)
+    (tmp_path / "data/history/a.txt").write_text("base\n"); _git(tmp_path, "add", "-A"); _git(tmp_path, "commit", "-qm", "b")
+    script = """
+source scripts/lib_publish.sh
+export PUBLISH_PENDING=data/pending; : > $PUBLISH_PENDING
+probe() { print MUTATED; }
+zmodload() { return 1; }
+_publish_pend_locked probe; echo "RC=$?"
+publish_begin data/history
+echo h1 > data/history/a.txt
+publish_record data/history; echo "REC=$?"
+echo "MAIN=$(wc -l < $PUBLISH_PENDING | tr -d ' ')"
+unfunction zmodload
+PRE2=$(mktemp); printf 'data/history/a.txt\\t%s\\n' "$(git hash-object data/history/a.txt)" > $PRE2; PUBLISH_PRE=$PRE2
+_publish_classify data/history
+"""
+    r = subprocess.run(["zsh", "-c", script], cwd=tmp_path, capture_output=True, text=True)
+    assert "MUTATED" not in r.stdout and "RC=8" in r.stdout and "REC=8" in r.stdout
+    assert "MAIN=0" in r.stdout and "LOCK_UNAVAILABLE" in r.stderr
+    assert "OURS\tdata/history/a.txt" in r.stdout                       # 只在 spool 里也认得
+
+
+def test_real_repo_publish_keeps_registration_made_during_commit(tmp_path):
+    """真实临时仓库：A 发布 h1 的提交过程中 B 写 h2 并登记 → A 消费后 h2 的登记仍在、下次 A 认得 h2 是自动产物。"""
+    _repo(tmp_path)
+    (tmp_path / "data/history/a.txt").write_text("base\n"); _git(tmp_path, "add", "-A"); _git(tmp_path, "commit", "-qm", "b")
+    script = """
+source scripts/lib_publish.sh
+export PUBLISH_PENDING=data/pending; : > $PUBLISH_PENDING
+publish_begin data/history
+echo h1 > data/history/a.txt
+git() {   # 包一层：commit 刚完成时模拟 B 写 h2 并登记
+  command git "$@"; local rc=$?
+  if [[ "$1" == commit ]]; then
+    echo h2 > data/history/a.txt
+    printf 'data/history/a.txt\\t%s\\n' "$(command git hash-object data/history/a.txt)" >> $PUBLISH_PENDING
+  fi
+  return $rc
+}
+PUBLISH_NO_PUSH=1 PUBLISH_LOCK_WAIT=2 publish_dirs "t" data/history; echo "RC=$?"
+unfunction git
+echo "HEAD=$(git show HEAD:data/history/a.txt)"
+grep -c "$(git hash-object data/history/a.txt)" $PUBLISH_PENDING
+"""
+    out = subprocess.run(["zsh", "-c", script], cwd=tmp_path, capture_output=True, text=True).stdout
+    assert "RC=0" in out and "HEAD=h1" in out
+    assert out.strip().splitlines()[-1] == "1"                                # h2 的登记保留

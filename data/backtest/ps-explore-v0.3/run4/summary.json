@@ -1,0 +1,1332 @@
+{
+ "run": "ps-explore-v0.3",
+ "run_id": "run4",
+ "n_episode_rows": 148,
+ "note": "探索结果（设计集 ≤2015），无 p 值、未做区间推断、非已验证；R 序列是风险单位，不是账户收益；无期权价格，不报卖方价差胜率",
+ "by_symbol": {
+  "GLD": {
+   "long": {
+    "A_episodes": 6,
+    "A_status_counts": {
+     "entered": 5,
+     "occupied": 1
+    },
+    "entered": 5,
+    "confirm_lag_days": {
+     "n": 6,
+     "p10": 3,
+     "median": 7,
+     "p90": 11,
+     "mean": 6.0
+    },
+    "signal_to_stop_atr": {
+     "n": 6,
+     "p10": 4.9758,
+     "median": 6.2896,
+     "p90": 8.9546,
+     "mean": 6.4296
+    },
+    "r_mean": 0.1945,
+    "r_median": 0.1578,
+    "win_rate_r_gt_0": 0.6,
+    "n_zero": 0,
+    "avg_win_r": 0.8775,
+    "avg_loss_r": -0.83,
+    "worst_r": -1.0,
+    "max_consecutive_losses": 1,
+    "cum_r": 0.9725,
+    "max_drawdown_r": -1.0,
+    "days_held": {
+     "n": 5,
+     "p10": 35,
+     "median": 60,
+     "p90": 60,
+     "mean": 50.8
+    },
+    "exit_reasons": {
+     "time_exit": 3,
+     "target": 1,
+     "stop": 1
+    },
+    "baseline_year_r_mean": 0.3314,
+    "excess_vs_year_r": -0.1369,
+    "matched_n": 3,
+    "unmatched": 2,
+    "excess_vs_matched_r": 0.1774,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 0.973,
+    "h4_d10_matched": 0.9917,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 3,
+     "common_known": 3,
+     "unknown": 0,
+     "common_mean_r_I": -0.3213,
+     "common_mean_r_W": -0.3906,
+     "entry_rate_I": 1.0,
+     "entry_rate_W": 0.3333,
+     "conditional_mean_r_I": -0.3213,
+     "conditional_mean_r_W": -1.1719,
+     "policy_w_status": {
+      "signal": 1,
+      "timeout_no_entry": 1,
+      "invalidated_close_beyond_extreme": 1
+     },
+     "policy_w_wait_days": {
+      "n": 1,
+      "p10": 26,
+      "median": 26,
+      "p90": 26,
+      "mean": 26.0
+     }
+    },
+    "barrier": {
+     "2": {
+      "role": "主描述",
+      "matched_set_n": 3,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.6667,
+      "matched_control_survival_w": 0.6303,
+      "survival_diff_vs_matched": 0.0363,
+      "unmatched": 2,
+      "all_events_n": 5,
+      "event_cross_any_all": 1,
+      "year_control_survival": 0.722,
+      "survival_diff_vs_year": 0.078,
+      "event_cross_end_all": 0
+     },
+     "1": {
+      "role": "敏感性",
+      "matched_set_n": 3,
+      "event_cross_any_matched_set": 3,
+      "event_survival_matched_set": 0.0,
+      "matched_control_survival_w": 0.4112,
+      "survival_diff_vs_matched": -0.4112,
+      "unmatched": 2,
+      "all_events_n": 5,
+      "event_cross_any_all": 4,
+      "year_control_survival": 0.5083,
+      "survival_diff_vs_year": -0.3083,
+      "event_cross_end_all": 4
+     },
+     "3": {
+      "role": "敏感性",
+      "matched_set_n": 3,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.6667,
+      "matched_control_survival_w": 0.8008,
+      "survival_diff_vs_matched": -0.1341,
+      "unmatched": 2,
+      "all_events_n": 5,
+      "event_cross_any_all": 1,
+      "year_control_survival": 0.8467,
+      "survival_diff_vs_year": -0.0467,
+      "event_cross_end_all": 0
+     }
+    }
+   },
+   "short": {
+    "A_episodes": 6,
+    "A_status_counts": {
+     "entered": 5,
+     "invalidated_close_beyond_extreme": 1
+    },
+    "entered": 5,
+    "confirm_lag_days": {
+     "n": 5,
+     "p10": 3,
+     "median": 5,
+     "p90": 9,
+     "mean": 5.6
+    },
+    "signal_to_stop_atr": {
+     "n": 5,
+     "p10": 4.3028,
+     "median": 5.5232,
+     "p90": 9.5528,
+     "mean": 6.0816
+    },
+    "r_mean": -0.0374,
+    "r_median": -0.0141,
+    "win_rate_r_gt_0": 0.4,
+    "n_zero": 0,
+    "avg_win_r": 0.68,
+    "avg_loss_r": -0.5157,
+    "worst_r": -1.0,
+    "max_consecutive_losses": 3,
+    "cum_r": -0.1871,
+    "max_drawdown_r": -1.547,
+    "days_held": {
+     "n": 5,
+     "p10": 34,
+     "median": 60,
+     "p90": 60,
+     "mean": 54.8
+    },
+    "exit_reasons": {
+     "time_exit": 4,
+     "stop": 1
+    },
+    "baseline_year_r_mean": -0.0562,
+    "excess_vs_year_r": 0.0188,
+    "matched_n": 4,
+    "unmatched": 1,
+    "excess_vs_matched_r": -0.1887,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 0.9747,
+    "h4_d10_matched": 0.9828,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 9,
+     "common_known": 9,
+     "unknown": 0,
+     "common_mean_r_I": -0.6049,
+     "common_mean_r_W": 0.0,
+     "entry_rate_I": 1.0,
+     "entry_rate_W": 0.0,
+     "conditional_mean_r_I": -0.6049,
+     "conditional_mean_r_W": null,
+     "policy_w_status": {
+      "invalidated_close_beyond_extreme": 4,
+      "timeout_no_entry": 4,
+      "invalidated_close_beyond_hl1": 1
+     },
+     "policy_w_wait_days": null
+    },
+    "barrier": {
+     "2": {
+      "role": "主描述",
+      "matched_set_n": 4,
+      "event_cross_any_matched_set": 2,
+      "event_survival_matched_set": 0.5,
+      "matched_control_survival_w": 0.7184,
+      "survival_diff_vs_matched": -0.2184,
+      "unmatched": 1,
+      "all_events_n": 5,
+      "event_cross_any_all": 2,
+      "year_control_survival": 0.6623,
+      "survival_diff_vs_year": -0.0623,
+      "event_cross_end_all": 1
+     },
+     "1": {
+      "role": "敏感性",
+      "matched_set_n": 4,
+      "event_cross_any_matched_set": 2,
+      "event_survival_matched_set": 0.5,
+      "matched_control_survival_w": 0.5175,
+      "survival_diff_vs_matched": -0.0175,
+      "unmatched": 1,
+      "all_events_n": 5,
+      "event_cross_any_all": 2,
+      "year_control_survival": 0.4405,
+      "survival_diff_vs_year": 0.1595,
+      "event_cross_end_all": 2
+     },
+     "3": {
+      "role": "敏感性",
+      "matched_set_n": 4,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.75,
+      "matched_control_survival_w": 0.8506,
+      "survival_diff_vs_matched": -0.1006,
+      "unmatched": 1,
+      "all_events_n": 5,
+      "event_cross_any_all": 1,
+      "year_control_survival": 0.8301,
+      "survival_diff_vs_year": -0.0301,
+      "event_cross_end_all": 1
+     }
+    }
+   }
+  },
+  "SLV": {
+   "long": {
+    "A_episodes": 3,
+    "A_status_counts": {
+     "timeout_no_entry": 1,
+     "entered": 1,
+     "invalidated_close_beyond_extreme": 1
+    },
+    "entered": 1,
+    "confirm_lag_days": {
+     "n": 1,
+     "p10": 5,
+     "median": 5,
+     "p90": 5,
+     "mean": 5.0
+    },
+    "signal_to_stop_atr": {
+     "n": 1,
+     "p10": 4.652,
+     "median": 4.652,
+     "p90": 4.652,
+     "mean": 4.652
+    },
+    "r_mean": 2.0,
+    "r_median": 2.0,
+    "win_rate_r_gt_0": 1.0,
+    "n_zero": 0,
+    "avg_win_r": 2.0,
+    "avg_loss_r": null,
+    "worst_r": 2.0,
+    "max_consecutive_losses": 0,
+    "cum_r": 2.0,
+    "max_drawdown_r": 0.0,
+    "days_held": {
+     "n": 1,
+     "p10": 43,
+     "median": 43,
+     "p90": 43,
+     "mean": 43.0
+    },
+    "exit_reasons": {
+     "target": 1
+    },
+    "baseline_year_r_mean": 0.3631,
+    "excess_vs_year_r": 1.6369,
+    "matched_n": 1,
+    "unmatched": 0,
+    "excess_vs_matched_r": 0.6972,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 1.0,
+    "h4_d10_matched": 1.0,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 6,
+     "common_known": 6,
+     "unknown": 0,
+     "common_mean_r_I": -0.1853,
+     "common_mean_r_W": -0.1667,
+     "entry_rate_I": 1.0,
+     "entry_rate_W": 0.1667,
+     "conditional_mean_r_I": -0.1853,
+     "conditional_mean_r_W": -1.0,
+     "policy_w_status": {
+      "timeout_no_entry": 3,
+      "signal": 1,
+      "invalidated_close_beyond_extreme": 1,
+      "invalidated_close_beyond_hl1": 1
+     },
+     "policy_w_wait_days": {
+      "n": 1,
+      "p10": 27,
+      "median": 27,
+      "p90": 27,
+      "mean": 27.0
+     }
+    },
+    "barrier": {
+     "2": {
+      "role": "主描述",
+      "matched_set_n": 1,
+      "event_cross_any_matched_set": 0,
+      "event_survival_matched_set": 1.0,
+      "matched_control_survival_w": 0.8019,
+      "survival_diff_vs_matched": 0.1981,
+      "unmatched": 0,
+      "all_events_n": 1,
+      "event_cross_any_all": 0,
+      "year_control_survival": 0.7421,
+      "survival_diff_vs_year": 0.2579,
+      "event_cross_end_all": 0
+     },
+     "1": {
+      "role": "敏感性",
+      "matched_set_n": 1,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.0,
+      "matched_control_survival_w": 0.5543,
+      "survival_diff_vs_matched": -0.5543,
+      "unmatched": 0,
+      "all_events_n": 1,
+      "event_cross_any_all": 1,
+      "year_control_survival": 0.5159,
+      "survival_diff_vs_year": -0.5159,
+      "event_cross_end_all": 0
+     },
+     "3": {
+      "role": "敏感性",
+      "matched_set_n": 1,
+      "event_cross_any_matched_set": 0,
+      "event_survival_matched_set": 1.0,
+      "matched_control_survival_w": 0.8335,
+      "survival_diff_vs_matched": 0.1665,
+      "unmatched": 0,
+      "all_events_n": 1,
+      "event_cross_any_all": 0,
+      "year_control_survival": 0.8651,
+      "survival_diff_vs_year": 0.1349,
+      "event_cross_end_all": 0
+     }
+    }
+   },
+   "short": {
+    "A_episodes": 2,
+    "A_status_counts": {
+     "invalidated_close_beyond_extreme": 1,
+     "entered": 1
+    },
+    "entered": 1,
+    "confirm_lag_days": {
+     "n": 1,
+     "p10": 4,
+     "median": 4,
+     "p90": 4,
+     "mean": 4.0
+    },
+    "signal_to_stop_atr": {
+     "n": 1,
+     "p10": 10.4031,
+     "median": 10.4031,
+     "p90": 10.4031,
+     "mean": 10.4031
+    },
+    "r_mean": 0.3021,
+    "r_median": 0.3021,
+    "win_rate_r_gt_0": 1.0,
+    "n_zero": 0,
+    "avg_win_r": 0.3021,
+    "avg_loss_r": null,
+    "worst_r": 0.3021,
+    "max_consecutive_losses": 0,
+    "cum_r": 0.3021,
+    "max_drawdown_r": 0.0,
+    "days_held": {
+     "n": 1,
+     "p10": 60,
+     "median": 60,
+     "p90": 60,
+     "mean": 60.0
+    },
+    "exit_reasons": {
+     "time_exit": 1
+    },
+    "baseline_year_r_mean": 0.2122,
+    "excess_vs_year_r": 0.0899,
+    "matched_n": 1,
+    "unmatched": 0,
+    "excess_vs_matched_r": 0.4659,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 1.0,
+    "h4_d10_matched": 1.0,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 7,
+     "common_known": 7,
+     "unknown": 0,
+     "common_mean_r_I": 0.2643,
+     "common_mean_r_W": -0.2857,
+     "entry_rate_I": 1.0,
+     "entry_rate_W": 0.2857,
+     "conditional_mean_r_I": 0.2643,
+     "conditional_mean_r_W": -1.0,
+     "policy_w_status": {
+      "invalidated_close_beyond_extreme": 1,
+      "timeout_no_entry": 4,
+      "signal": 2
+     },
+     "policy_w_wait_days": {
+      "n": 2,
+      "p10": 13,
+      "median": 44,
+      "p90": 44,
+      "mean": 28.5
+     }
+    },
+    "barrier": {
+     "2": {
+      "role": "主描述",
+      "matched_set_n": 1,
+      "event_cross_any_matched_set": 0,
+      "event_survival_matched_set": 1.0,
+      "matched_control_survival_w": 0.582,
+      "survival_diff_vs_matched": 0.418,
+      "unmatched": 0,
+      "all_events_n": 1,
+      "event_cross_any_all": 0,
+      "year_control_survival": 0.7098,
+      "survival_diff_vs_year": 0.2902,
+      "event_cross_end_all": 0
+     },
+     "1": {
+      "role": "敏感性",
+      "matched_set_n": 1,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.0,
+      "matched_control_survival_w": 0.4701,
+      "survival_diff_vs_matched": -0.4701,
+      "unmatched": 0,
+      "all_events_n": 1,
+      "event_cross_any_all": 1,
+      "year_control_survival": 0.5959,
+      "survival_diff_vs_year": -0.5959,
+      "event_cross_end_all": 0
+     },
+     "3": {
+      "role": "敏感性",
+      "matched_set_n": 1,
+      "event_cross_any_matched_set": 0,
+      "event_survival_matched_set": 1.0,
+      "matched_control_survival_w": 0.7609,
+      "survival_diff_vs_matched": 0.2391,
+      "unmatched": 0,
+      "all_events_n": 1,
+      "event_cross_any_all": 0,
+      "year_control_survival": 0.8187,
+      "survival_diff_vs_year": 0.1813,
+      "event_cross_end_all": 0
+     }
+    }
+   }
+  },
+  "USO": {
+   "long": {
+    "A_episodes": 6,
+    "A_status_counts": {
+     "entered": 4,
+     "invalidated_close_beyond_extreme": 1,
+     "occupied": 1
+    },
+    "entered": 4,
+    "confirm_lag_days": {
+     "n": 5,
+     "p10": 3,
+     "median": 6,
+     "p90": 7,
+     "mean": 5.4
+    },
+    "signal_to_stop_atr": {
+     "n": 5,
+     "p10": 3.4574,
+     "median": 7.2734,
+     "p90": 10.2881,
+     "mean": 6.8741
+    },
+    "r_mean": -0.6991,
+    "r_median": -1.0,
+    "win_rate_r_gt_0": 0.25,
+    "n_zero": 0,
+    "avg_win_r": 0.2034,
+    "avg_loss_r": -1.0,
+    "worst_r": -1.0,
+    "max_consecutive_losses": 2,
+    "cum_r": -2.7966,
+    "max_drawdown_r": -2.7966,
+    "days_held": {
+     "n": 4,
+     "p10": 10,
+     "median": 37,
+     "p90": 60,
+     "mean": 30.5
+    },
+    "exit_reasons": {
+     "stop": 3,
+     "time_exit": 1
+    },
+    "baseline_year_r_mean": -0.2774,
+    "excess_vs_year_r": -0.4218,
+    "matched_n": 3,
+    "unmatched": 1,
+    "excess_vs_matched_r": -0.2481,
+    "h4_d5": 1.0,
+    "h4_d10": 0.75,
+    "h4_d10_year": 0.9772,
+    "h4_d10_matched": 0.9963,
+    "h4_d10_event_on_matched": 0.6667,
+    "H2": {
+     "episodes": 6,
+     "common_known": 6,
+     "unknown": 0,
+     "common_mean_r_I": -0.1033,
+     "common_mean_r_W": 0.0488,
+     "entry_rate_I": 1.0,
+     "entry_rate_W": 0.3333,
+     "conditional_mean_r_I": -0.1033,
+     "conditional_mean_r_W": 0.1463,
+     "policy_w_status": {
+      "signal": 2,
+      "timeout_no_entry": 1,
+      "invalidated_close_beyond_extreme": 3
+     },
+     "policy_w_wait_days": {
+      "n": 2,
+      "p10": 39,
+      "median": 55,
+      "p90": 55,
+      "mean": 47.0
+     }
+    },
+    "barrier": {
+     "2": {
+      "role": "主描述",
+      "matched_set_n": 3,
+      "event_cross_any_matched_set": 2,
+      "event_survival_matched_set": 0.3333,
+      "matched_control_survival_w": 0.8037,
+      "survival_diff_vs_matched": -0.4704,
+      "unmatched": 1,
+      "all_events_n": 4,
+      "event_cross_any_all": 3,
+      "year_control_survival": 0.6891,
+      "survival_diff_vs_year": -0.4391,
+      "event_cross_end_all": 3
+     },
+     "1": {
+      "role": "敏感性",
+      "matched_set_n": 3,
+      "event_cross_any_matched_set": 3,
+      "event_survival_matched_set": 0.0,
+      "matched_control_survival_w": 0.5145,
+      "survival_diff_vs_matched": -0.5145,
+      "unmatched": 1,
+      "all_events_n": 4,
+      "event_cross_any_all": 4,
+      "year_control_survival": 0.4701,
+      "survival_diff_vs_year": -0.4701,
+      "event_cross_end_all": 3
+     },
+     "3": {
+      "role": "敏感性",
+      "matched_set_n": 3,
+      "event_cross_any_matched_set": 2,
+      "event_survival_matched_set": 0.3333,
+      "matched_control_survival_w": 0.9201,
+      "survival_diff_vs_matched": -0.5868,
+      "unmatched": 1,
+      "all_events_n": 4,
+      "event_cross_any_all": 3,
+      "year_control_survival": 0.8317,
+      "survival_diff_vs_year": -0.5817,
+      "event_cross_end_all": 1
+     }
+    }
+   },
+   "short": {
+    "A_episodes": 5,
+    "A_status_counts": {
+     "invalidated_close_beyond_extreme": 1,
+     "entered": 2,
+     "timeout_no_entry": 2
+    },
+    "entered": 2,
+    "confirm_lag_days": {
+     "n": 2,
+     "p10": 7,
+     "median": 14,
+     "p90": 14,
+     "mean": 10.5
+    },
+    "signal_to_stop_atr": {
+     "n": 2,
+     "p10": 8.3478,
+     "median": 9.1875,
+     "p90": 9.1875,
+     "mean": 8.7676
+    },
+    "r_mean": 0.6059,
+    "r_median": 0.6059,
+    "win_rate_r_gt_0": 0.5,
+    "n_zero": 0,
+    "avg_win_r": 1.5092,
+    "avg_loss_r": -0.2974,
+    "worst_r": -0.2974,
+    "max_consecutive_losses": 1,
+    "cum_r": 1.2118,
+    "max_drawdown_r": -0.2974,
+    "days_held": {
+     "n": 2,
+     "p10": 60,
+     "median": 60,
+     "p90": 60,
+     "mean": 60.0
+    },
+    "exit_reasons": {
+     "time_exit": 2
+    },
+    "baseline_year_r_mean": 0.2301,
+    "excess_vs_year_r": 0.3758,
+    "matched_n": 2,
+    "unmatched": 0,
+    "excess_vs_matched_r": 0.2649,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 1.0,
+    "h4_d10_matched": 1.0,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 6,
+     "common_known": 6,
+     "unknown": 0,
+     "common_mean_r_I": 0.0745,
+     "common_mean_r_W": 0.0,
+     "entry_rate_I": 1.0,
+     "entry_rate_W": 0.5,
+     "conditional_mean_r_I": 0.0745,
+     "conditional_mean_r_W": 0.0,
+     "policy_w_status": {
+      "signal": 3,
+      "invalidated_close_beyond_extreme": 2,
+      "timeout_no_entry": 1
+     },
+     "policy_w_wait_days": {
+      "n": 3,
+      "p10": 17,
+      "median": 23,
+      "p90": 38,
+      "mean": 26.0
+     }
+    },
+    "barrier": {
+     "2": {
+      "role": "主描述",
+      "matched_set_n": 2,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.5,
+      "matched_control_survival_w": 0.7876,
+      "survival_diff_vs_matched": -0.2876,
+      "unmatched": 0,
+      "all_events_n": 2,
+      "event_cross_any_all": 1,
+      "year_control_survival": 0.7597,
+      "survival_diff_vs_year": -0.2597,
+      "event_cross_end_all": 0
+     },
+     "1": {
+      "role": "敏感性",
+      "matched_set_n": 2,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.5,
+      "matched_control_survival_w": 0.5494,
+      "survival_diff_vs_matched": -0.0494,
+      "unmatched": 0,
+      "all_events_n": 2,
+      "event_cross_any_all": 1,
+      "year_control_survival": 0.5091,
+      "survival_diff_vs_year": -0.0091,
+      "event_cross_end_all": 1
+     },
+     "3": {
+      "role": "敏感性",
+      "matched_set_n": 2,
+      "event_cross_any_matched_set": 0,
+      "event_survival_matched_set": 1.0,
+      "matched_control_survival_w": 0.926,
+      "survival_diff_vs_matched": 0.074,
+      "unmatched": 0,
+      "all_events_n": 2,
+      "event_cross_any_all": 0,
+      "year_control_survival": 0.8888,
+      "survival_diff_vs_year": 0.1112,
+      "event_cross_end_all": 0
+     }
+    }
+   }
+  },
+  "QQQ": {
+   "long": {
+    "A_episodes": 6,
+    "A_status_counts": {
+     "entered": 5,
+     "invalidated_close_beyond_extreme": 1
+    },
+    "entered": 5,
+    "confirm_lag_days": {
+     "n": 5,
+     "p10": 3,
+     "median": 4,
+     "p90": 13,
+     "mean": 5.4
+    },
+    "signal_to_stop_atr": {
+     "n": 5,
+     "p10": 2.822,
+     "median": 6.0355,
+     "p90": 12.4195,
+     "mean": 6.3833
+    },
+    "r_mean": 0.2413,
+    "r_median": 0.4088,
+    "win_rate_r_gt_0": 0.6,
+    "n_zero": 0,
+    "avg_win_r": 0.8722,
+    "avg_loss_r": -0.7051,
+    "worst_r": -1.0,
+    "max_consecutive_losses": 1,
+    "cum_r": 1.2064,
+    "max_drawdown_r": -1.0,
+    "days_held": {
+     "n": 5,
+     "p10": 13,
+     "median": 60,
+     "p90": 60,
+     "mean": 50.6
+    },
+    "exit_reasons": {
+     "time_exit": 4,
+     "stop": 1
+    },
+    "baseline_year_r_mean": 0.1231,
+    "excess_vs_year_r": 0.1182,
+    "matched_n": 5,
+    "unmatched": 0,
+    "excess_vs_matched_r": 0.0153,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 0.9595,
+    "h4_d10_matched": 0.9133,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 5,
+     "common_known": 4,
+     "unknown": 1,
+     "common_mean_r_I": -0.2664,
+     "common_mean_r_W": 0.0,
+     "entry_rate_I": 1.0,
+     "entry_rate_W": 0.0,
+     "conditional_mean_r_I": 0.0037,
+     "conditional_mean_r_W": null,
+     "policy_w_status": {
+      "invalidated_close_beyond_extreme": 1,
+      "timeout_no_entry": 3,
+      "signal": 1
+     },
+     "policy_w_wait_days": {
+      "n": 1,
+      "p10": 32,
+      "median": 32,
+      "p90": 32,
+      "mean": 32.0
+     }
+    },
+    "barrier": {
+     "2": {
+      "role": "主描述",
+      "matched_set_n": 5,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.8,
+      "matched_control_survival_w": 0.6743,
+      "survival_diff_vs_matched": 0.1257,
+      "unmatched": 0,
+      "all_events_n": 5,
+      "event_cross_any_all": 1,
+      "year_control_survival": 0.7198,
+      "survival_diff_vs_year": 0.0802,
+      "event_cross_end_all": 1
+     },
+     "1": {
+      "role": "敏感性",
+      "matched_set_n": 5,
+      "event_cross_any_matched_set": 2,
+      "event_survival_matched_set": 0.6,
+      "matched_control_survival_w": 0.4301,
+      "survival_diff_vs_matched": 0.1699,
+      "unmatched": 0,
+      "all_events_n": 5,
+      "event_cross_any_all": 2,
+      "year_control_survival": 0.4548,
+      "survival_diff_vs_year": 0.1452,
+      "event_cross_end_all": 1
+     },
+     "3": {
+      "role": "敏感性",
+      "matched_set_n": 5,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.8,
+      "matched_control_survival_w": 0.8511,
+      "survival_diff_vs_matched": -0.0511,
+      "unmatched": 0,
+      "all_events_n": 5,
+      "event_cross_any_all": 1,
+      "year_control_survival": 0.8794,
+      "survival_diff_vs_year": -0.0794,
+      "event_cross_end_all": 1
+     }
+    }
+   },
+   "short": {
+    "A_episodes": 8,
+    "A_status_counts": {
+     "invalidated_close_beyond_extreme": 5,
+     "entered": 3
+    },
+    "entered": 3,
+    "confirm_lag_days": {
+     "n": 3,
+     "p10": 5,
+     "median": 6,
+     "p90": 7,
+     "mean": 6.0
+    },
+    "signal_to_stop_atr": {
+     "n": 3,
+     "p10": 5.5805,
+     "median": 6.8297,
+     "p90": 6.9833,
+     "mean": 6.4645
+    },
+    "r_mean": -0.1164,
+    "r_median": -0.2074,
+    "win_rate_r_gt_0": 0.3333,
+    "n_zero": 0,
+    "avg_win_r": 0.4962,
+    "avg_loss_r": -0.4226,
+    "worst_r": -0.6379,
+    "max_consecutive_losses": 1,
+    "cum_r": -0.3491,
+    "max_drawdown_r": -0.6379,
+    "days_held": {
+     "n": 3,
+     "p10": 60,
+     "median": 60,
+     "p90": 60,
+     "mean": 60.0
+    },
+    "exit_reasons": {
+     "time_exit": 3
+    },
+    "baseline_year_r_mean": 0.2303,
+    "excess_vs_year_r": -0.3467,
+    "matched_n": 1,
+    "unmatched": 2,
+    "excess_vs_matched_r": -0.0146,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 1.0,
+    "h4_d10_matched": 1.0,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 11,
+     "common_known": 11,
+     "unknown": 0,
+     "common_mean_r_I": -0.5207,
+     "common_mean_r_W": -0.1818,
+     "entry_rate_I": 1.0,
+     "entry_rate_W": 0.1818,
+     "conditional_mean_r_I": -0.5207,
+     "conditional_mean_r_W": -1.0,
+     "policy_w_status": {
+      "invalidated_close_beyond_extreme": 5,
+      "signal": 2,
+      "timeout_no_entry": 3,
+      "invalidated_close_beyond_hl1": 1
+     },
+     "policy_w_wait_days": {
+      "n": 2,
+      "p10": 27,
+      "median": 58,
+      "p90": 58,
+      "mean": 42.5
+     }
+    },
+    "barrier": {
+     "2": {
+      "role": "主描述",
+      "matched_set_n": 1,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.0,
+      "matched_control_survival_w": 0.5863,
+      "survival_diff_vs_matched": -0.5863,
+      "unmatched": 2,
+      "all_events_n": 3,
+      "event_cross_any_all": 1,
+      "year_control_survival": 0.7596,
+      "survival_diff_vs_year": -0.093,
+      "event_cross_end_all": 1
+     },
+     "1": {
+      "role": "敏感性",
+      "matched_set_n": 1,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.0,
+      "matched_control_survival_w": 0.3328,
+      "survival_diff_vs_matched": -0.3328,
+      "unmatched": 2,
+      "all_events_n": 3,
+      "event_cross_any_all": 3,
+      "year_control_survival": 0.4785,
+      "survival_diff_vs_year": -0.4785,
+      "event_cross_end_all": 1
+     },
+     "3": {
+      "role": "敏感性",
+      "matched_set_n": 1,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.0,
+      "matched_control_survival_w": 0.8404,
+      "survival_diff_vs_matched": -0.8404,
+      "unmatched": 2,
+      "all_events_n": 3,
+      "event_cross_any_all": 1,
+      "year_control_survival": 0.9442,
+      "survival_diff_vs_year": -0.2775,
+      "event_cross_end_all": 1
+     }
+    }
+   }
+  },
+  "SPY": {
+   "long": {
+    "A_episodes": 16,
+    "A_status_counts": {
+     "entered": 10,
+     "invalidated_close_beyond_extreme": 4,
+     "timeout_no_entry": 2
+    },
+    "entered": 10,
+    "confirm_lag_days": {
+     "n": 10,
+     "p10": 2,
+     "median": 5,
+     "p90": 6,
+     "mean": 4.6
+    },
+    "signal_to_stop_atr": {
+     "n": 10,
+     "p10": 4.9226,
+     "median": 6.4877,
+     "p90": 8.917,
+     "mean": 7.2327
+    },
+    "r_mean": -0.0063,
+    "r_median": 0.1779,
+    "win_rate_r_gt_0": 0.7,
+    "n_zero": 0,
+    "avg_win_r": 0.4197,
+    "avg_loss_r": -1.0002,
+    "worst_r": -1.0006,
+    "max_consecutive_losses": 1,
+    "cum_r": -0.0627,
+    "max_drawdown_r": -1.6448,
+    "days_held": {
+     "n": 10,
+     "p10": 19,
+     "median": 60,
+     "p90": 60,
+     "mean": 49.4
+    },
+    "exit_reasons": {
+     "time_exit": 7,
+     "stop": 2,
+     "gap_stop": 1
+    },
+    "baseline_year_r_mean": 0.0836,
+    "excess_vs_year_r": -0.0898,
+    "matched_n": 9,
+    "unmatched": 1,
+    "excess_vs_matched_r": 0.0462,
+    "h4_d5": 1.0,
+    "h4_d10": 0.9,
+    "h4_d10_year": 0.977,
+    "h4_d10_matched": 0.9574,
+    "h4_d10_event_on_matched": 0.8889,
+    "H2": {
+     "episodes": 10,
+     "common_known": 9,
+     "unknown": 1,
+     "common_mean_r_I": 0.346,
+     "common_mean_r_W": 0.0597,
+     "entry_rate_I": 1.0,
+     "entry_rate_W": 0.2,
+     "conditional_mean_r_I": 0.4261,
+     "conditional_mean_r_W": 0.2687,
+     "policy_w_status": {
+      "signal": 3,
+      "timeout_no_entry": 4,
+      "invalidated_close_beyond_extreme": 3
+     },
+     "policy_w_wait_days": {
+      "n": 3,
+      "p10": 33,
+      "median": 41,
+      "p90": 52,
+      "mean": 42.0
+     }
+    },
+    "barrier": {
+     "2": {
+      "role": "主描述",
+      "matched_set_n": 9,
+      "event_cross_any_matched_set": 5,
+      "event_survival_matched_set": 0.4444,
+      "matched_control_survival_w": 0.6885,
+      "survival_diff_vs_matched": -0.2441,
+      "unmatched": 1,
+      "all_events_n": 10,
+      "event_cross_any_all": 6,
+      "year_control_survival": 0.7357,
+      "survival_diff_vs_year": -0.3357,
+      "event_cross_end_all": 4
+     },
+     "1": {
+      "role": "敏感性",
+      "matched_set_n": 9,
+      "event_cross_any_matched_set": 6,
+      "event_survival_matched_set": 0.3333,
+      "matched_control_survival_w": 0.4602,
+      "survival_diff_vs_matched": -0.1268,
+      "unmatched": 1,
+      "all_events_n": 10,
+      "event_cross_any_all": 7,
+      "year_control_survival": 0.493,
+      "survival_diff_vs_year": -0.193,
+      "event_cross_end_all": 6
+     },
+     "3": {
+      "role": "敏感性",
+      "matched_set_n": 9,
+      "event_cross_any_matched_set": 3,
+      "event_survival_matched_set": 0.6667,
+      "matched_control_survival_w": 0.8321,
+      "survival_diff_vs_matched": -0.1655,
+      "unmatched": 1,
+      "all_events_n": 10,
+      "event_cross_any_all": 4,
+      "year_control_survival": 0.8755,
+      "survival_diff_vs_year": -0.2755,
+      "event_cross_end_all": 2
+     }
+    }
+   },
+   "short": {
+    "A_episodes": 10,
+    "A_status_counts": {
+     "entered": 5,
+     "invalidated_close_beyond_extreme": 5
+    },
+    "entered": 5,
+    "confirm_lag_days": {
+     "n": 5,
+     "p10": 3,
+     "median": 5,
+     "p90": 10,
+     "mean": 6.2
+    },
+    "signal_to_stop_atr": {
+     "n": 5,
+     "p10": 2.9946,
+     "median": 4.5038,
+     "p90": 8.4699,
+     "mean": 5.1209
+    },
+    "r_mean": -0.531,
+    "r_median": -0.7034,
+    "win_rate_r_gt_0": 0.2,
+    "n_zero": 0,
+    "avg_win_r": 0.3463,
+    "avg_loss_r": -0.7503,
+    "worst_r": -1.0,
+    "max_consecutive_losses": 3,
+    "cum_r": -2.6551,
+    "max_drawdown_r": -2.6551,
+    "days_held": {
+     "n": 5,
+     "p10": 5,
+     "median": 60,
+     "p90": 60,
+     "mean": 49.0
+    },
+    "exit_reasons": {
+     "time_exit": 4,
+     "stop": 1
+    },
+    "baseline_year_r_mean": -0.2085,
+    "excess_vs_year_r": -0.3226,
+    "matched_n": 4,
+    "unmatched": 1,
+    "excess_vs_matched_r": 0.0217,
+    "h4_d5": 0.8,
+    "h4_d10": 0.8,
+    "h4_d10_year": 0.9587,
+    "h4_d10_matched": 0.9013,
+    "h4_d10_event_on_matched": 0.75,
+    "H2": {
+     "episodes": 17,
+     "common_known": 17,
+     "unknown": 0,
+     "common_mean_r_I": -0.1905,
+     "common_mean_r_W": 0.0188,
+     "entry_rate_I": 1.0,
+     "entry_rate_W": 0.1765,
+     "conditional_mean_r_I": -0.1905,
+     "conditional_mean_r_W": 0.1066,
+     "policy_w_status": {
+      "invalidated_close_beyond_extreme": 8,
+      "invalidated_close_beyond_hl1": 5,
+      "signal": 3,
+      "timeout_no_entry": 1
+     },
+     "policy_w_wait_days": {
+      "n": 3,
+      "p10": 18,
+      "median": 19,
+      "p90": 25,
+      "mean": 20.6667
+     }
+    },
+    "barrier": {
+     "2": {
+      "role": "主描述",
+      "matched_set_n": 4,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.75,
+      "matched_control_survival_w": 0.6478,
+      "survival_diff_vs_matched": 0.1022,
+      "unmatched": 1,
+      "all_events_n": 5,
+      "event_cross_any_all": 2,
+      "year_control_survival": 0.7395,
+      "survival_diff_vs_year": -0.1395,
+      "event_cross_end_all": 1
+     },
+     "1": {
+      "role": "敏感性",
+      "matched_set_n": 4,
+      "event_cross_any_matched_set": 2,
+      "event_survival_matched_set": 0.5,
+      "matched_control_survival_w": 0.3062,
+      "survival_diff_vs_matched": 0.1938,
+      "unmatched": 1,
+      "all_events_n": 5,
+      "event_cross_any_all": 3,
+      "year_control_survival": 0.4313,
+      "survival_diff_vs_year": -0.0313,
+      "event_cross_end_all": 2
+     },
+     "3": {
+      "role": "敏感性",
+      "matched_set_n": 4,
+      "event_cross_any_matched_set": 1,
+      "event_survival_matched_set": 0.75,
+      "matched_control_survival_w": 0.8998,
+      "survival_diff_vs_matched": -0.1498,
+      "unmatched": 1,
+      "all_events_n": 5,
+      "event_cross_any_all": 1,
+      "year_control_survival": 0.9166,
+      "survival_diff_vs_year": -0.1166,
+      "event_cross_end_all": 1
+     }
+    }
+   }
+  }
+ },
+ "pooled_descriptive": {
+  "long": {
+   "n": 25,
+   "r_mean": 0.0528,
+   "r_median": 0.1766,
+   "win_rate": 0.6,
+   "excess_vs_year": -0.0417,
+   "excess_vs_matched": 0.0465,
+   "matched_n": 21,
+   "k_atr_median": 6.1548,
+   "time_exits": 15,
+   "h4_d10_survival": 0.92,
+   "barrier": {
+    "2": {
+     "role": "主描述",
+     "matched_set_n": 21,
+     "event_cross_any_matched_set": 9,
+     "event_survival_matched_set": 0.5714,
+     "matched_control_survival_w": 0.6987,
+     "survival_diff_vs_matched": -0.1273,
+     "unmatched": 4,
+     "all_events_n": 25,
+     "event_cross_any_all": 11,
+     "year_control_survival": 0.7226,
+     "survival_diff_vs_year": -0.1626,
+     "event_cross_end_all": 8
+    },
+    "1": {
+     "role": "敏感性",
+     "matched_set_n": 21,
+     "event_cross_any_matched_set": 15,
+     "event_survival_matched_set": 0.2857,
+     "matched_control_survival_w": 0.4582,
+     "survival_diff_vs_matched": -0.1725,
+     "unmatched": 4,
+     "all_events_n": 25,
+     "event_cross_any_all": 18,
+     "year_control_survival": 0.4857,
+     "survival_diff_vs_year": -0.2057,
+     "event_cross_end_all": 14
+    },
+    "3": {
+     "role": "敏感性",
+     "matched_set_n": 21,
+     "event_cross_any_matched_set": 7,
+     "event_survival_matched_set": 0.6667,
+     "matched_control_survival_w": 0.8448,
+     "survival_diff_vs_matched": -0.1781,
+     "unmatched": 4,
+     "all_events_n": 25,
+     "event_cross_any_all": 9,
+     "year_control_survival": 0.8631,
+     "survival_diff_vs_year": -0.2231,
+     "event_cross_end_all": 4
+    }
+   }
+  },
+  "short": {
+   "n": 16,
+   "r_mean": -0.1048,
+   "r_median": -0.2524,
+   "win_rate": 0.375,
+   "excess_vs_year": -0.1073,
+   "excess_vs_matched": 0.0261,
+   "matched_n": 12,
+   "k_atr_median": 6.0104,
+   "time_exits": 14,
+   "h4_d10_survival": 0.9375,
+   "barrier": {
+    "2": {
+     "role": "主描述",
+     "matched_set_n": 12,
+     "event_cross_any_matched_set": 5,
+     "event_survival_matched_set": 0.5833,
+     "matched_control_survival_w": 0.684,
+     "survival_diff_vs_matched": -0.1007,
+     "unmatched": 4,
+     "all_events_n": 16,
+     "event_cross_any_all": 6,
+     "year_control_survival": 0.7198,
+     "survival_diff_vs_year": -0.0948,
+     "event_cross_end_all": 3
+    },
+    "1": {
+     "role": "敏感性",
+     "matched_set_n": 12,
+     "event_cross_any_matched_set": 7,
+     "event_survival_matched_set": 0.4167,
+     "matched_control_survival_w": 0.433,
+     "survival_diff_vs_matched": -0.0164,
+     "unmatched": 4,
+     "all_events_n": 16,
+     "event_cross_any_all": 10,
+     "year_control_survival": 0.463,
+     "survival_diff_vs_year": -0.088,
+     "event_cross_end_all": 6
+    },
+    "3": {
+     "role": "敏感性",
+     "matched_set_n": 12,
+     "event_cross_any_matched_set": 3,
+     "event_survival_matched_set": 0.75,
+     "matched_control_survival_w": 0.8712,
+     "survival_diff_vs_matched": -0.1212,
+     "unmatched": 4,
+     "all_events_n": 16,
+     "event_cross_any_all": 3,
+     "year_control_survival": 0.8852,
+     "survival_diff_vs_year": -0.0727,
+     "event_cross_end_all": 3
+    }
+   }
+  }
+ },
+ "elapsed_s": 0.5
+}

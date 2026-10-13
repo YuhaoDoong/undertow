@@ -96,3 +96,23 @@ def test_barrier_survival_equality_and_incomplete():
     assert ps.barrier_survival(bars, 1, 98.0, "long", 2) is True                 # 收盘等于止损不算越过
     assert ps.barrier_survival(bars, 1, 98.5, "long", 2) is False
     assert ps.barrier_survival(bars, 1, 98.0, "long", 5) is None
+
+
+def test_ps_explore_refuses_existing_run_dir(tmp_path, monkeypatch):
+    """Codex 038：run-id 必填，目录已存在拒绝运行（不覆盖已看过的结果）。"""
+    import pytest
+    from scripts import ps_explore as pe
+    monkeypatch.setattr(pe, "BASE", tmp_path)
+    (tmp_path / "runX").mkdir()
+    monkeypatch.setattr(sys, "argv", ["ps_explore.py", "--run-id", "runX"])
+    with pytest.raises(SystemExit) as e:
+        pe.main()
+    assert "已存在" in str(e.value)
+
+
+def test_h2_policy_value_common_denominator():
+    """规则拒绝入场 → 0R；缺数据/窗口不完整 → None（不折零）。"""
+    from scripts import ps_explore as pe
+    assert pe._policy_value("entered", 1.0) == 1.0
+    assert pe._policy_value("open_beyond_stop", None) == 0.0 and pe._policy_value("timeout_no_entry", None) == 0.0
+    assert pe._policy_value("boundary_excluded", None) is None and pe._policy_value(None, None) is None

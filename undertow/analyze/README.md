@@ -10,6 +10,7 @@
 |---|---|
 | `positioning.py` | 净头寸 / 周变化分解 / 历史分位 / z-score / 大户集中度。<br>Net positioning, weekly-change decomposition, percentiles, concentration. |
 | `signals.py` | 把 `PositioningAnalysis` 翻译成规则化带方向提示：拥挤反指、聪明钱背离、互换商压力（阈值集中在文件顶部，回测后可调）。<br>Rule-based COT signals; thresholds tunable at file top. |
+| `price_structure.py` | 道氏结构（HH/HL）状态机：收盘之字形（m·ATR）、下降/上涨结构保持到突破、fresh 结构、A 型与 H2 episode、交易模拟（跳空/双触及/开盘越止损）、收盘屏障。纯计算，探索阶段（ps-explore-v0.3，未冻结；编排见 `scripts/ps_explore.py`）。<br>Dow-structure state machine (exploratory, unfrozen). |
 
 ## Options microstructure / 期权微观结构
 

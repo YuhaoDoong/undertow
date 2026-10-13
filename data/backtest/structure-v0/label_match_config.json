@@ -1,0 +1,26 @@
+{
+ "version": "label-match-v1-20261013",
+ "status": "在查看标注点位细节之前提交（只看过元数据：64 张、54 张有标点、735 个标记、23 条备注）",
+ "labels_file": "data/soul/structure_labels/2026-10-13_labeling_v3.json（私有，含用户个人判断，不入库）",
+ "labels_sha256": "f83644f478490fab8611a0e39d87f5370ef8e3ab9fe625e13f2ad493a1020ea2",
+ "page": "data/backtest/structure-v0/labeling_v3/（manifest 种子 20261015）",
+ "split": {"selection": "id 1–45（讨论集，用于选认点方式）", "holdout": "id 46–64（选定后只报告一次）"},
+ "classes": {"H": ["HH", "LH", "关键前高"], "L": ["HL", "LL", "关键前低"], "events": ["突破", "入场", "失效位"]},
+ "candidates": [
+  {"id": "frac_k2", "method": "分形 high/low 左右各 2 根 + 交替投影"},
+  {"id": "frac_k3", "method": "分形 high/low 左右各 3 根 + 交替投影"},
+  {"id": "frac_k5", "method": "分形 high/low 左右各 5 根 + 交替投影"},
+  {"id": "zz_close_1atr", "method": "收盘之字形 m=1·ATR14"},
+  {"id": "zz_close_2atr", "method": "收盘之字形 m=2·ATR14（ps-explore 既有）"},
+  {"id": "zz_hl_1.5atr", "method": "影线之字形 m=1.5·ATR14（高点用 high、低点用 low）"}
+ ],
+ "as_of": "算法只用截至截图日的数据；只比较极值落在可见窗口内、且截至截图日已确认的点",
+ "matching": {"rule": "同类（H 对 H、L 对 L）一对一贪心匹配，按 |Δbar| 从小到大", "max_bar_diff": 2, "max_price_diff_atr": 0.5,
+              "atr": "该 bar 截至当时的 ATR14"},
+ "metrics": ["召回率 = 匹配的用户确定点 / 用户确定点", "精确率 = 匹配的算法点 / 算法点", "F1",
+             "用户「不确定」点单列：只报告被算法命中的比例，不进召回分母",
+             "用户答「看不出」的图：算法点单列为该图的点数，不计入精确率分母",
+             "匹配对上的 HH/HL/LH/LL 分类一致率（算法按与前一个同类点比较判定）"],
+ "selection_rule": "讨论集合并 F1 最高者为首选；F1 相差 < 0.03 时取确认滞后更短者；与收益无关",
+ "notes_handling": "备注中提到「窗口之前的点位」的图：该关键位不在可见范围、无法匹配，单列计数、不当作算法漏检"
+}

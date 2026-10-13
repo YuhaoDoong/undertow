@@ -706,7 +706,8 @@ def test_exit_assessment_categories_and_formal_exit_rules():
     assert any("交叉" in x for x in a["data_integrity"])
 
 
-def test_window_exhausted_with_only_incomplete_marks_escalates_once():
+def test_window_exhausted_with_only_incomplete_marks_escalates_once(monkeypatch):
+    monkeypatch.setattr(pt, "SLOT_AUDIT_FROM", date(2026, 9, 1))
     p = _entered(); p.update(mark_slots_et=["15:45"], expiry="2026-10-16")
     M = lambda syms: {"S": {"bid": 1.5, "ask": 1.6, "error": None}, "B": {"bid": None, "ask": 0.9, "error": None}}
     assert pt.step(p, at(29, 15, 46), depth=M) == "retry"
@@ -768,3 +769,46 @@ def test_tranche_is_separate_slot_and_old_keys_unchanged(tmp_path, monkeypatch):
     _env(tmp_path, monkeypatch, [a])
     assert pt.register_revision(b)["ok"]                                   # 第 2 笔不被第 1 笔的成交锁挡住
     assert not pt.register_revision(_th("C", "user_subjective"))["ok"]     # 不带 tranche 的重复仍被挡
+
+
+def test_slot_audit_no_quote_missed_wake_and_unknown_stop(monkeypatch):
+    """Codex 034 §4 探针：两腿报价全缺只有 mark_retry → 过窗也要升级；窗口内完全没唤醒也要升级；无估值时是否越止损为 None。"""
+    monkeypatch.setattr(pt, "SLOT_AUDIT_FROM", date(2026, 9, 1))
+    p = _entered(); p.update(mark_slots_et=["09:45", "15:45"], expiry="2026-10-16")
+    E = lambda syms: {"S": {"bid": None, "ask": None, "error": None}, "B": {"bid": None, "ask": None, "error": None}}
+    assert pt.step(p, at(30, 9, 46), depth=E) == "retry"
+    r = pt.step(p, at(30, 10, 2), depth=E)
+    assert r == "exit_unresolved" and p["state"] == "entered"
+    e = [x for x in p["events"] if x["action"] == "exit_unresolved"][-1]
+    assert e["category"].startswith("no_quote") and e["indicative_crosses_stop"] is None and e["indicative_value"] is None
+    # 15:45 窗口整个没有唤醒 → 16:30 唤醒时补记 missed_wake（只一次）
+    assert pt.step(p, at(30, 16, 30), depth=E) == "exit_unresolved"
+    e = [x for x in p["events"] if x["action"] == "exit_unresolved"][-1]
+    assert e["slot"].endswith("15:45") and e["category"].startswith("missed_wake") and e["attempts"] == 0
+    assert pt.step(p, at(30, 16, 40), depth=E) is None
+
+
+def test_slot_debt_does_not_block_next_window_quote(monkeypatch):
+    """前一窗口欠账升级不能挡住后一窗口取价：同一次唤醒既补记欠账、又按本窗口报价估值。"""
+    monkeypatch.setattr(pt, "SLOT_AUDIT_FROM", date(2026, 9, 1))
+    p = _entered(); p.update(mark_slots_et=["09:45", "10:05"], expiry="2026-10-16")
+    E = lambda syms: {"S": {"bid": None, "ask": None, "error": None}, "B": {"bid": None, "ask": None, "error": None}}
+    assert pt.step(p, at(30, 9, 46), depth=E) == "retry"
+    G = q(0.5, 0.55, 0.2, 0.25)
+    assert pt.step(p, at(30, 10, 6), depth=G) == "mark"                                     # 本窗口照常取价
+    acts = [x["action"] for x in p["events"]]
+    assert "exit_unresolved" in acts and acts[-1] == "mark"
+
+
+def test_slot_audit_starts_from_protocol_date():
+    p = _entered(); p.update(mark_slots_et=["09:45"], expiry="2026-10-16")
+    assert pt.slot_audit(p, at(29, 16, 0), p.setdefault("events", [])) == []               # 早于起点：不回溯告警
+
+
+def test_deferred_close_request_has_same_labels_as_immediate():
+    """Codex 034 §4：延期执行的用户平仓与即时平仓共用事件生成 —— human_intervention / execution_flags 一致。"""
+    p = _entered(); p["close_request"] = {"at": at(29, 20, 0).isoformat(), "note": "用户收盘后要求平仓"}
+    assert pt.step(p, at(30, 9, 50), depth=q(1.5, 1.6, 0.9, 1.0)) == "manual_close"
+    e = p["events"][-1]
+    assert e["human_intervention"] is True and e["deferred_request"] is True and "execution_flags" in e
+    assert e["execution_eligibility_unknown"] == ["size", "same_quote_time"]

@@ -618,29 +618,13 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
         rq = p.pop("close_request")
         p.update(state="closed_manual", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
-        ev.append({"at": now.isoformat(), "action": "manual_close", "quotes": q, "value": val, "pnl": pnl,
-                   "valuation_assumption": assume, "in_rth": True, "user_note": rq.get("note"), "requested_at": rq.get("at"),
-                   "quote_requested_at": req.isoformat(), "returned_at": now.isoformat()})
+        ev.append(manual_close_event(q, p, val, pnl, assume, now=now, user_note=rq.get("note"), requested_at=rq.get("at"),
+                                     quote_requested_at=req.isoformat(), deferred=True))
         return "manual_close"
     done = {e.get("slot") for e in ev if e.get("action") in ("mark", "mark_offhours")}
-    # 窗口耗尽仍只有不可信估值 → 升级通知一次（Codex 033 A1(c)：retry 不推送，过窗不能当作「没触发」）
-    unresolved = {e.get("slot") for e in ev if e.get("action") == "exit_unresolved"}
-    for e in ev:
-        k = e.get("slot")
-        if e.get("action") != "mark_incomplete" or k in done or k in unresolved:
-            continue
-        d_s, sl = k.split(" ")
-        end = datetime.combine(date.fromisoformat(d_s), _hm(sl), tzinfo=ET).timestamp() + 16 * 60
-        if now.timestamp() > end:
-            inc = [x for x in ev if x.get("action") == "mark_incomplete" and x.get("slot") == k]
-            last = inc[-1]
-            sv = p.get("stop_value")
-            ev.append({"at": now.isoformat(), "action": "exit_unresolved", "slot": k, "first_incomplete_at": inc[0]["at"],
-                       "attempts": len(inc), "last_why": last.get("why"), "indicative_value": last.get("value"),
-                       "indicative_crosses_stop": bool(sv is not None and _finite(last.get("value")) and last["value"] >= sv),
-                       "open_exposure_usd": (p.get("economics") or {}).get("max_loss_usd"),
-                       "note": "该盯市时点窗口耗尽仍无可执行两腿报价：未执行任何退出、仓位仍在场，下一时点再判；需人工关注"})
-            return "exit_unresolved"
+    # 预期盯市时点的统一账（Codex 034 §4）：每个已过窗口的预期时点最终必须是「成功 / 无报价 / 不可信报价 /
+    # 取数失败 / 错过唤醒」之一；不成功的各升级一次。不再 return —— 前一窗口的欠账不能挡住本窗口取价。
+    aud = slot_audit(p, now, ev, done)
     for slot in p["mark_slots_et"]:
         key = f"{today.isoformat()} {slot}"
         t0 = _hm(slot)
@@ -687,7 +671,67 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             ev.append({"at": now.isoformat(), "action": "time_exit", "value": val, "pnl": pnl, "exit_rule": p["exit_rule"]})
             return "time_exit"
         return "mark"
-    return None
+    return "exit_unresolved" if aud else None
+
+
+SLOT_AUDIT_FROM = date(2026, 10, 13)   # 统一时点账的起点：更早的时点不回溯告警（旧规则只覆盖 mark_incomplete）
+SLOT_WINDOW_MIN = 16                   # 时点窗口：slot 起 15 分钟内取价，第 16 分钟起算过窗
+
+
+def slot_audit(p: dict, now: datetime, ev: list, done: set | None = None) -> list:
+    """对入场后、SLOT_AUDIT_FROM 起、已过窗的每个预期盯市时点（交易日 × mark_slots_et）归类；未成功的追加一条
+    exit_unresolved（每个时点只一次）。返回新追加的事件。完全没有估值时「是否越过止损」为 None（未知不是 False）。"""
+    from undertow.core import market_calendar as mc
+    done = done if done is not None else {e.get("slot") for e in ev if e.get("action") in ("mark", "mark_offhours")}
+    reported = {e.get("slot") for e in ev if e.get("action") == "exit_unresolved"}
+    t_in = _parse(p.get("entered_at"))
+    if t_in is None:
+        return []
+    d, last_day = max(t_in.astimezone(ET).date(), SLOT_AUDIT_FROM), min(now.astimezone(ET).date(), date.fromisoformat(p["expiry"]))
+    out = []
+    while d <= last_day:
+        if mc.is_trading_day(d):
+            for sl in p.get("mark_slots_et") or []:
+                st = datetime.combine(d, _hm(sl), tzinfo=ET)
+                k = f"{d.isoformat()} {sl}"
+                if st < t_in or now < st + _td(minutes=SLOT_WINDOW_MIN) or k in done or k in reported:
+                    continue
+                inc = [x for x in ev if x.get("slot") == k and x.get("action") == "mark_incomplete"]
+                rty = [x for x in ev if x.get("slot") == k and x.get("action") == "mark_retry"]
+                errs = [x for x in ev if x.get("action") == "error" and st <= (_parse(x.get("at")) or st - _td(1)) < st + _td(minutes=SLOT_WINDOW_MIN)]
+                if inc:
+                    cat, last = "quote_untrustworthy（有报价但估值体检不通过）", inc[-1]
+                elif rty:
+                    cat, last = "no_quote（两腿报价缺失，无法估值）", rty[-1]
+                elif errs:
+                    cat, last = "fetch_failed（取数抛异常）", errs[-1]
+                else:
+                    cat, last = "missed_wake（窗口内没有任何取价尝试：调度未唤醒/被占用）", {}
+                val, sv = last.get("value"), p.get("stop_value")
+                e = {"at": now.isoformat(), "action": "exit_unresolved", "slot": k, "category": cat,
+                     "attempts": len(inc) + len(rty) + len(errs),
+                     "first_attempt_at": min((x["at"] for x in inc + rty + errs), default=None),
+                     "last_why": last.get("why") or last.get("error"), "indicative_value": val if _finite(val) else None,
+                     "indicative_crosses_stop": (val >= sv) if (sv is not None and _finite(val)) else None,
+                     "open_exposure_usd": (p.get("economics") or {}).get("max_loss_usd"),
+                     "note": ("该盯市时点窗口耗尽仍无可执行两腿估值：未执行任何退出、仓位仍在场，下一时点再判；需人工关注"
+                              if p.get("exit_rule") else "该盯市时点窗口耗尽仍无可信估值（本批次无自动退出，只缺估值）；仓位仍在场")}
+                ev.append(e); out.append(e)
+        d += _td(days=1)
+    return out
+
+
+def _td(days: float = 0, minutes: float = 0):
+    from datetime import timedelta
+    return timedelta(days=days, minutes=minutes)
+
+
+def _parse(x):
+    try:
+        t = datetime.fromisoformat(str(x))
+        return t if t.tzinfo else None
+    except (TypeError, ValueError):
+        return None
 
 
 VALUE_TOL = 0.05          # 未校准：估值相对到期收益范围的容差（贷记 0…宽度，借记 −宽度…0）
@@ -801,16 +845,25 @@ def manual_close(tid: str, note: str, now: datetime | None = None, *, depth=_dep
         req, now = now, back
         val, assume = v
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
-        flags = exit_assessment(q, p, val)
         p.update(state="closed_manual", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
-        p["events"].append({"at": now.isoformat(), "action": "manual_close", "quotes": q, "value": val, "pnl": pnl,
-                            "human_intervention": True, "execution_flags": flags["execution_cost"] + flags["execution_policy"],
-                            "valuation_assumption": assume, "in_rth": True, "user_note": note,
-                            "requested_at": req.isoformat(), "returned_at": now.isoformat()})
+        p["events"].append(manual_close_event(q, p, val, pnl, assume, now=now, user_note=note, requested_at=req.isoformat()))
         _outcome(t)
         _write_journal(j)
         sync_ledger(j)
         return {"ok": True, "value": val, "pnl_usd": pnl, "valuation_assumption": assume, "in_rth": True}
+
+
+def manual_close_event(q: dict, p: dict, val, pnl, assume, *, now: datetime, user_note, requested_at,
+                       quote_requested_at=None, deferred: bool = False) -> dict:
+    """即时与延期执行的用户平仓共用同一个事件生成（Codex 034 §4：两条分支标签必须一致）。
+    数量、同一行情时刻等执行资格仍不可知，不因价格为正就视作已确认可成交。"""
+    flags = exit_assessment(q, p, val)
+    return {"at": now.isoformat(), "action": "manual_close", "quotes": q, "value": val, "pnl": pnl,
+            "human_intervention": True, "execution_flags": flags["execution_cost"] + flags["execution_policy"],
+            "execution_eligibility_unknown": ["size", "same_quote_time"],
+            "valuation_assumption": assume, "in_rth": True, "user_note": user_note, "requested_at": requested_at,
+            "quote_requested_at": quote_requested_at or requested_at, "returned_at": now.isoformat(),
+            "deferred_request": deferred}
 
 
 def _step_dynamic(p: dict, now: datetime, selector) -> str | None:
@@ -1104,8 +1157,12 @@ def tick(now: datetime | None = None, *, depth=None) -> list[str]:
             except Exception as e:                      # 取数失败：留痕并在下次唤醒重试
                 p.setdefault("events", []).append({"at": pnow.isoformat(), "action": "error", "error": f"{type(e).__name__}: {e}"[:200]})
                 a = "error"
-            for e in (p.get("events") or [])[n_ev:]:          # 调度版本随事件落盘（旧/新调度分层统计）
+            new_ev = (p.get("events") or [])[n_ev:]
+            for e in new_ev:                                    # 调度版本随事件落盘（旧/新调度分层统计）
                 e.setdefault("sched", os.environ.get("PAPER_SCHED", "manual_or_unknown"))
+            if a != "exit_unresolved" and any(e.get("action") == "exit_unresolved" for e in new_ev):
+                out.append(f"{t['id']}:exit_unresolved")       # 时点欠账升级与本次取价/退出同一 tick 发生：都要出声
+                changed = True
             if a:
                 changed = True
                 if a in OUTCOME_ACTIONS:

@@ -24,6 +24,9 @@ from undertow.analyze import price_structure as ps  # noqa: E402
 CFG = ROOT / "data/backtest/ps-exit-v1/config_v3.json"
 SET = ("P0", "N60", "U1", "U2", "N250", "U3", "U4")
 PAIRS = (("N60", "P0"), ("U1", "N60"), ("U2", "U1"), ("U3", "N250"), ("U3", "U1"), ("N250", "N60"))
+# v4（--version v4）：加用户澄清的「上膛」版 U5/U6
+SET_V4 = SET + ("U5", "U6")
+PAIRS_V4 = PAIRS + (("U5", "N60"), ("U5", "U1"), ("U6", "N250"), ("U6", "U3"))
 
 
 def _r(x):
@@ -62,19 +65,20 @@ def summarize(rows):
     for g, syms in groups.items():
         for d in ("long", "short"):
             rs = [r for r in rows if r["symbol"] in syms and r["direction"] == d]
-            c60 = [r for r in rs if all(r["policies"][p]["status"] == "entered" for p in ("P0", "N60", "U1", "U2"))]
+            p60 = tuple(p for p in SET if ps.POLICIES[p]["hold"] == 60)
+            c60 = [r for r in rs if all(r["policies"][p]["status"] == "entered" for p in p60)]
             c250 = [r for r in rs if all(r["policies"][p]["status"] == "entered" for p in SET)]
             out[f"{g}|{d}"] = {"queue": len(rs), "common60_n": len(c60), "common250_n": len(c250),
-                               "excluded_60": {p: sum(1 for r in rs if r["policies"][p]["status"] != "entered") for p in ("P0", "N60", "U1", "U2")},
-                               "common60": {p: pol_stats(c60, p) for p in ("P0", "N60", "U1", "U2")} if c60 else {},
+                               "excluded_60": {p: sum(1 for r in rs if r["policies"][p]["status"] != "entered") for p in p60},
+                               "common60": {p: pol_stats(c60, p) for p in p60} if c60 else {},
                                "common250": {p: pol_stats(c250, p) for p in SET} if c250 else {},
-                               "pairs60": {f"{a}−{b}": pair_stats(c60, a, b) for a, b in PAIRS if a in ("N60", "U1", "U2") and b in ("P0", "N60", "U1")} if c60 else {},
+                               "pairs60": {f"{a}−{b}": pair_stats(c60, a, b) for a, b in PAIRS if a in p60 and b in p60} if c60 else {},
                                "pairs250": {f"{a}−{b}": pair_stats(c250, a, b) for a, b in PAIRS} if c250 else {}}
     return out
 
 
 def report(summ, meta):
-    L = [f"# ps-exit-v3 {meta['run_id']}：N60/N250 基准 + 用户规则 U1–U4（同一批道氏 A 型入场；≤2015 设计集，描述）\n",
+    L = [f"# {meta['config_file'].replace('config_', 'ps-exit-').replace('.json', '')} {meta['run_id']}：N60/N250 基准 + 用户规则 U1–U4（同一批道氏 A 型入场；≤2015 设计集，描述）\n",
          "**性质：** 探索、无 p 值、同日相关、未扣费；入场队列来自旧规则 P0；初止损 = 收盘之字形 LL/HH ∓0.1ATR（不是影线）。"
          f"配置 sha256 {meta['config_sha256'][:12]}（运行前提交并与代码断言一致），HEAD `{meta['git_head'][:8]}`。\n",
          "配对含义：N60−P0 = 取消 2R；U1−N60 = 60 根下加入 LH/HL 离场；U2−U1 = 移成本；U3−N250 = 250 根下加入 LH/HL 离场；U3−U1、N250−N60 = 期限变化。\n"]
@@ -104,7 +108,11 @@ def report(summ, meta):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-id", required=True)
+    ap.add_argument("--version", choices=("v3", "v4"), default="v3")
     a = ap.parse_args()
+    global CFG, SET, PAIRS
+    if a.version == "v4":
+        CFG, SET, PAIRS = ROOT / "data/backtest/ps-exit-v1/config_v4.json", SET_V4, PAIRS_V4
     cfg = json.loads(CFG.read_text("utf-8"))
     for name, spec in cfg["policies"].items():                 # 配置与计算绑定（Codex 041）
         if ps.POLICIES.get(name) != spec:

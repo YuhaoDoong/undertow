@@ -1,0 +1,97 @@
+{
+ "version": "ps-exit-v4-20261014",
+ "status": "用户澄清 LH 参照后新增 U5/U6；运行真实数据前提交；未校准",
+ "user_rule": "用户：「最新的 HH 后，出现新的 LH，离场。等于随着盈利增加不断抬高」；入场前回踩前的那个高点「不算，要等入场后的新 HH」。即：入场后先要确认一个高于最新旧高点的新 HH（上膛），之后出现低于最新 HH 的已确认高点 → 下一根开盘离场；HH 抬高则参照随之抬高；上膛前只靠 LL/HH 初止损。做空镜像",
+ "stop_basis": "初止损 = 收盘之字形 LL/HH 极值（收盘价）−/+0.1·ATR[信号前一根]；不是影线 LL/HH（未实现，若测需另版本）",
+ "policies": {
+  "P0": {
+   "stop": "extreme",
+   "target": true,
+   "struct_exit": false,
+   "breakeven": false,
+   "hold": 60
+  },
+  "N60": {
+   "stop": "extreme",
+   "target": false,
+   "struct_exit": false,
+   "breakeven": false,
+   "hold": 60
+  },
+  "U1": {
+   "stop": "extreme",
+   "target": false,
+   "struct_exit": true,
+   "breakeven": false,
+   "hold": 60
+  },
+  "U2": {
+   "stop": "extreme",
+   "target": false,
+   "struct_exit": true,
+   "breakeven": true,
+   "hold": 60
+  },
+  "N250": {
+   "stop": "extreme",
+   "target": false,
+   "struct_exit": false,
+   "breakeven": false,
+   "hold": 250
+  },
+  "U3": {
+   "stop": "extreme",
+   "target": false,
+   "struct_exit": true,
+   "breakeven": false,
+   "hold": 250
+  },
+  "U4": {
+   "stop": "extreme",
+   "target": false,
+   "struct_exit": true,
+   "breakeven": true,
+   "hold": 250
+  },
+  "U5": {
+   "stop": "extreme",
+   "target": false,
+   "struct_exit": true,
+   "breakeven": false,
+   "hold": 60,
+   "arm_after_new_hh": true
+  },
+  "U6": {
+   "stop": "extreme",
+   "target": false,
+   "struct_exit": true,
+   "breakeven": false,
+   "hold": 250,
+   "arm_after_new_hh": true
+  }
+ },
+ "cohorts": {
+  "common60": "P0/N60/U1/U2 都在 60 根窗口完整的入场",
+  "common250": "全部七个政策都在 250 根窗口完整的同一批入场（P0/N60/U1/U2 也在这批上重报）"
+ },
+ "pairs": {
+  "N60−P0": "取消 2R 目标",
+  "U1−N60": "60 根下加入 LH/HL 离场",
+  "U2−U1": "移成本",
+  "U3−N250": "250 根下加入 LH/HL 离场",
+  "U3−U1": "结构政策的期限变化",
+  "N250−N60": "纯持有政策的期限变化",
+  "U5−N60": "60 根下加入「上膛后」LH/HL 离场（用户澄清版）",
+  "U5−U1": "上膛版 vs 旧参照版",
+  "U6−N250": "250 根下加入上膛版离场",
+  "U6−U3": "上膛版 vs 旧参照版（250）"
+ },
+ "measures": [
+  "配对差：ATR 单位 / 标的百分比 / 原风险 R 的均值与中位",
+  "每笔贡献的尾部集中度：前 1、前 2 笔贡献占总差，去掉前 1、前 2 笔后的均值（只作诊断，不替代主均值）",
+  "跳空事件次数（出场原因含 gap）与严重度（初始 R < −1）分开",
+  "持有根数、出场原因"
+ ],
+ "entry_queue": "ps-explore-v0.3 A 型、按 P0 占用的同一 129 笔入场",
+ "partition": "≤2015-12-31 设计集（已多次查看）"
+}

@@ -345,6 +345,10 @@ POLICIES = {
     # ps-exit-v3 基准（Codex 041）：同初止损、无目标、无结构离场、无移成本 —— 把「取消 2R」与「加 LH 离场」分开
     "N60": {"stop": "extreme", "target": False, "struct_exit": False, "breakeven": False, "hold": 60},
     "N250": {"stop": "extreme", "target": False, "struct_exit": False, "breakeven": False, "hold": 250},
+    # ps-exit-v4（用户 2026-10-14：「最新的 HH 后，出现新的 LH，离场。等于随着盈利增加不断抬高」；入场前回踩前的高点「不算，要等入场后的新 HH」）
+    # 结构离场要先「上膛」：入场后须先确认一个高于最新旧高点的新 HH；之后出现低于最新 HH 的已确认高点才离场；HH 抬高则参照随之抬高
+    "U5": {"stop": "extreme", "target": False, "struct_exit": True, "breakeven": False, "hold": 60, "arm_after_new_hh": True},
+    "U6": {"stop": "extreme", "target": False, "struct_exit": True, "breakeven": False, "hold": 250, "arm_after_new_hh": True},
 }
 
 
@@ -374,6 +378,11 @@ def simulate_policy(bars: list, piv: list, entry_i: int, stop: float, direction:
     for p in piv:
         by_conf.setdefault(p.conf, []).append(p)
     eff_stop, pending, be_at, audit = stop, None, None, {}
+    arm = pol.get("arm_after_new_hh", False)
+    armed, latest = False, None                     # 上膛模式：latest = 当前参照的最新 HH（入场前为最近的旧同类点）
+    if arm:
+        pre = [q for q in piv if q.kind == want and q.conf < entry_i]
+        latest = pre[-1] if pre else None
     for k in range(pol["hold"]):
         i = entry_i + k
         _, op, hi, lo, cl = bars[i]
@@ -392,6 +401,17 @@ def simulate_policy(bars: list, piv: list, entry_i: int, stop: float, direction:
             return _done_p(o, stop, r, tgt, "target", i, k, s, eff_stop, be_at, audit)
         for p in by_conf.get(i, []):
             if p.kind != want or p.idx < entry_i:
+                continue
+            if arm:
+                if latest is None or s * p.price > s * latest.price:          # 新 HH（做空：新 LL）→ 上膛 / 参照抬高
+                    if not armed:
+                        audit["armed_at"] = {"idx": p.idx, "conf": p.conf, "price": p.price,
+                                             "ref_idx": latest.idx if latest else None, "ref_price": latest.price if latest else None}
+                    armed, latest = True, p
+                elif armed and s * p.price < s * latest.price and pending is None:   # 上膛后低于最新 HH → LH → 下一根离场
+                    pending = i
+                    audit["struct_point"] = {"idx": p.idx, "conf": p.conf, "price": p.price, "ref_idx": latest.idx, "ref_conf": latest.conf,
+                                             "ref_price": latest.price, "decided_at": i, "execute_at": i + 1}
                 continue
             prev = [q for q in piv if q.kind == want and q.conf < p.conf and q.idx < p.idx]
             if not prev:

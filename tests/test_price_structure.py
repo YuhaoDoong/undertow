@@ -215,3 +215,18 @@ def test_policy_no_open_and_short_mirror_struct_exit():
     a = r["audit"]["struct_point"]
     assert (a["ref_idx"], a["decided_at"], a["execute_at"]) == (2, 10, 11)
     assert ps.simulate_policy(bars, piv, 5, 103.0, "short", ps.POLICIES["N60"], last_i=79)["exit_reason"] == "time_exit"
+
+
+def test_armed_lh_exit_waits_for_new_hh_after_entry():
+    """ps-exit-v4（用户：要等入场后的新 HH）：入场后第一个反弹没过旧高（103）不离场；创出新 HH(106) 后，低于 106 的高点(104)才离场；
+    HH 继续抬高时参照跟着抬高。"""
+    bars = flat(80)
+    piv = [P("H", 2, 3, 103.0), P("H", 8, 10, 101.0), P("H", 14, 16, 106.0), P("H", 20, 22, 104.0)]
+    r = ps.simulate_policy(bars, piv, 5, 95.0, "long", ps.POLICIES["U5"], last_i=79)
+    assert r["exit_reason"] == "struct_exit" and r["exit_i"] == 23
+    assert r["audit"]["armed_at"]["price"] == 106.0 and r["audit"]["struct_point"]["ref_price"] == 106.0
+    piv2 = [P("H", 2, 3, 103.0), P("H", 14, 16, 106.0), P("H", 20, 22, 108.0), P("H", 26, 28, 107.0)]
+    r2 = ps.simulate_policy(bars, piv2, 5, 95.0, "long", ps.POLICIES["U5"], last_i=79)
+    assert r2["exit_i"] == 29 and r2["audit"]["struct_point"]["ref_price"] == 108.0          # 参照随 HH 抬高
+    r3 = ps.simulate_policy(bars, piv[:2], 5, 95.0, "long", ps.POLICIES["U5"], last_i=79)
+    assert r3["exit_reason"] == "time_exit"                                                    # 没有新 HH：不上膛、只靠 LL 止损

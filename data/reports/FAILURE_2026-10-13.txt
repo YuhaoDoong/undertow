@@ -1,0 +1,2 @@
+2026-10-13 18:36 +08 | ET 2026-10-13 06:31 | ⚠️ 每日数据未提交（ET 2026-10-13 06:31）
+  发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/signals/gold.json data/history/signals/iwm.json data/history/signals/qqq.json data/history/signals/spy.json data/history/signals/tlt.json data/hist），已停止自动提交；数据已落盘，需人工核对后提交

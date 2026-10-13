@@ -1,0 +1,727 @@
+{
+ "run": "ps-explore-v0.3",
+ "note": "探索结果（设计集 ≤2015），无 p 值、非已验证；R 序列是风险单位，不是账户收益；无期权价格，不报卖方价差胜率",
+ "by_symbol": {
+  "GLD": {
+   "long": {
+    "A_episodes": 6,
+    "A_status_counts": {
+     "entered": 5,
+     "occupied": 1
+    },
+    "entered": 5,
+    "confirm_lag_days": {
+     "n": 6,
+     "p10": 3,
+     "median": 7,
+     "p90": 11,
+     "mean": 6.0
+    },
+    "signal_to_stop_atr": {
+     "n": 6,
+     "p10": 4.9758,
+     "median": 6.2896,
+     "p90": 8.9546,
+     "mean": 6.4296
+    },
+    "r_mean": 0.1945,
+    "r_median": 0.1578,
+    "win_rate_r_gt_0": 0.6,
+    "n_zero": 0,
+    "avg_win_r": 0.8775,
+    "avg_loss_r": -0.83,
+    "worst_r": -1.0,
+    "max_consecutive_losses": 1,
+    "cum_r": 0.9725,
+    "max_drawdown_r": -1.0,
+    "days_held": {
+     "n": 5,
+     "p10": 35,
+     "median": 60,
+     "p90": 60,
+     "mean": 50.8
+    },
+    "exit_reasons": {
+     "time_exit": 3,
+     "target": 1,
+     "stop": 1
+    },
+    "baseline_year_r_mean": 0.3307,
+    "excess_vs_year_r": -0.1362,
+    "matched_n": 3,
+    "unmatched": 2,
+    "excess_vs_matched_r": 0.1717,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 0.9746,
+    "h4_d10_matched": 0.9938,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 2,
+     "policy_i_entered": 2,
+     "policy_i_r_mean": 0.0181,
+     "policy_w_entered": 1,
+     "policy_w_status": {
+      "signal": 1,
+      "timeout_no_entry": 1
+     },
+     "policy_w_r_mean_all_episodes_0_if_no_entry": -0.5859,
+     "policy_w_wait_days": {
+      "n": 1,
+      "p10": 26,
+      "median": 26,
+      "p90": 26,
+      "mean": 26.0
+     }
+    }
+   },
+   "short": {
+    "A_episodes": 6,
+    "A_status_counts": {
+     "entered": 5,
+     "invalidated_close_beyond_extreme": 1
+    },
+    "entered": 5,
+    "confirm_lag_days": {
+     "n": 5,
+     "p10": 3,
+     "median": 5,
+     "p90": 9,
+     "mean": 5.6
+    },
+    "signal_to_stop_atr": {
+     "n": 5,
+     "p10": 4.3028,
+     "median": 5.5232,
+     "p90": 9.5528,
+     "mean": 6.0816
+    },
+    "r_mean": -0.0374,
+    "r_median": -0.0141,
+    "win_rate_r_gt_0": 0.4,
+    "n_zero": 0,
+    "avg_win_r": 0.68,
+    "avg_loss_r": -0.5157,
+    "worst_r": -1.0,
+    "max_consecutive_losses": 3,
+    "cum_r": -0.1871,
+    "max_drawdown_r": -1.547,
+    "days_held": {
+     "n": 5,
+     "p10": 34,
+     "median": 60,
+     "p90": 60,
+     "mean": 54.8
+    },
+    "exit_reasons": {
+     "time_exit": 4,
+     "stop": 1
+    },
+    "baseline_year_r_mean": -0.0591,
+    "excess_vs_year_r": 0.0217,
+    "matched_n": 4,
+    "unmatched": 1,
+    "excess_vs_matched_r": -0.1937,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 0.9737,
+    "h4_d10_matched": 0.9828,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 9,
+     "policy_i_entered": 9,
+     "policy_i_r_mean": -0.6049,
+     "policy_w_entered": 0,
+     "policy_w_status": {
+      "invalidated_close_beyond_extreme": 4,
+      "timeout_no_entry": 4,
+      "invalidated_close_beyond_hl1": 1
+     },
+     "policy_w_r_mean_all_episodes_0_if_no_entry": 0.0,
+     "policy_w_wait_days": null
+    }
+   }
+  },
+  "SLV": {
+   "long": {
+    "A_episodes": 3,
+    "A_status_counts": {
+     "timeout_no_entry": 1,
+     "entered": 1,
+     "invalidated_close_beyond_extreme": 1
+    },
+    "entered": 1,
+    "confirm_lag_days": {
+     "n": 1,
+     "p10": 5,
+     "median": 5,
+     "p90": 5,
+     "mean": 5.0
+    },
+    "signal_to_stop_atr": {
+     "n": 1,
+     "p10": 4.652,
+     "median": 4.652,
+     "p90": 4.652,
+     "mean": 4.652
+    },
+    "r_mean": 2.0,
+    "r_median": 2.0,
+    "win_rate_r_gt_0": 1.0,
+    "n_zero": 0,
+    "avg_win_r": 2.0,
+    "avg_loss_r": null,
+    "worst_r": 2.0,
+    "max_consecutive_losses": 0,
+    "cum_r": 2.0,
+    "max_drawdown_r": 0.0,
+    "days_held": {
+     "n": 1,
+     "p10": 43,
+     "median": 43,
+     "p90": 43,
+     "mean": 43.0
+    },
+    "exit_reasons": {
+     "target": 1
+    },
+    "baseline_year_r_mean": 0.3752,
+    "excess_vs_year_r": 1.6248,
+    "matched_n": 1,
+    "unmatched": 0,
+    "excess_vs_matched_r": 0.7351,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 1.0,
+    "h4_d10_matched": 1.0,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 5,
+     "policy_i_entered": 5,
+     "policy_i_r_mean": -0.0224,
+     "policy_w_entered": 1,
+     "policy_w_status": {
+      "timeout_no_entry": 3,
+      "signal": 1,
+      "invalidated_close_beyond_extreme": 1
+     },
+     "policy_w_r_mean_all_episodes_0_if_no_entry": -0.2,
+     "policy_w_wait_days": {
+      "n": 1,
+      "p10": 27,
+      "median": 27,
+      "p90": 27,
+      "mean": 27.0
+     }
+    }
+   },
+   "short": {
+    "A_episodes": 2,
+    "A_status_counts": {
+     "invalidated_close_beyond_extreme": 1,
+     "entered": 1
+    },
+    "entered": 1,
+    "confirm_lag_days": {
+     "n": 1,
+     "p10": 4,
+     "median": 4,
+     "p90": 4,
+     "mean": 4.0
+    },
+    "signal_to_stop_atr": {
+     "n": 1,
+     "p10": 10.4031,
+     "median": 10.4031,
+     "p90": 10.4031,
+     "mean": 10.4031
+    },
+    "r_mean": 0.3021,
+    "r_median": 0.3021,
+    "win_rate_r_gt_0": 1.0,
+    "n_zero": 0,
+    "avg_win_r": 0.3021,
+    "avg_loss_r": null,
+    "worst_r": 0.3021,
+    "max_consecutive_losses": 0,
+    "cum_r": 0.3021,
+    "max_drawdown_r": 0.0,
+    "days_held": {
+     "n": 1,
+     "p10": 60,
+     "median": 60,
+     "p90": 60,
+     "mean": 60.0
+    },
+    "exit_reasons": {
+     "time_exit": 1
+    },
+    "baseline_year_r_mean": 0.1954,
+    "excess_vs_year_r": 0.1067,
+    "matched_n": 1,
+    "unmatched": 0,
+    "excess_vs_matched_r": 0.453,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 1.0,
+    "h4_d10_matched": 1.0,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 7,
+     "policy_i_entered": 7,
+     "policy_i_r_mean": 0.2643,
+     "policy_w_entered": 2,
+     "policy_w_status": {
+      "invalidated_close_beyond_extreme": 1,
+      "timeout_no_entry": 4,
+      "signal": 2
+     },
+     "policy_w_r_mean_all_episodes_0_if_no_entry": -0.2857,
+     "policy_w_wait_days": {
+      "n": 2,
+      "p10": 13,
+      "median": 44,
+      "p90": 44,
+      "mean": 28.5
+     }
+    }
+   }
+  },
+  "USO": {
+   "long": {
+    "A_episodes": 6,
+    "A_status_counts": {
+     "entered": 4,
+     "invalidated_close_beyond_extreme": 1,
+     "occupied": 1
+    },
+    "entered": 4,
+    "confirm_lag_days": {
+     "n": 5,
+     "p10": 3,
+     "median": 6,
+     "p90": 7,
+     "mean": 5.4
+    },
+    "signal_to_stop_atr": {
+     "n": 5,
+     "p10": 3.4574,
+     "median": 7.2734,
+     "p90": 10.2881,
+     "mean": 6.8741
+    },
+    "r_mean": -0.6991,
+    "r_median": -1.0,
+    "win_rate_r_gt_0": 0.25,
+    "n_zero": 0,
+    "avg_win_r": 0.2034,
+    "avg_loss_r": -1.0,
+    "worst_r": -1.0,
+    "max_consecutive_losses": 2,
+    "cum_r": -2.7966,
+    "max_drawdown_r": -2.7966,
+    "days_held": {
+     "n": 4,
+     "p10": 10,
+     "median": 37,
+     "p90": 60,
+     "mean": 30.5
+    },
+    "exit_reasons": {
+     "stop": 3,
+     "time_exit": 1
+    },
+    "baseline_year_r_mean": -0.2761,
+    "excess_vs_year_r": -0.4231,
+    "matched_n": 3,
+    "unmatched": 1,
+    "excess_vs_matched_r": -0.2474,
+    "h4_d5": 1.0,
+    "h4_d10": 0.75,
+    "h4_d10_year": 0.9787,
+    "h4_d10_matched": 0.9963,
+    "h4_d10_event_on_matched": 0.6667,
+    "H2": {
+     "episodes": 5,
+     "policy_i_entered": 5,
+     "policy_i_r_mean": 0.0761,
+     "policy_w_entered": 2,
+     "policy_w_status": {
+      "signal": 2,
+      "timeout_no_entry": 1,
+      "invalidated_close_beyond_extreme": 2
+     },
+     "policy_w_r_mean_all_episodes_0_if_no_entry": 0.0585,
+     "policy_w_wait_days": {
+      "n": 2,
+      "p10": 39,
+      "median": 55,
+      "p90": 55,
+      "mean": 47.0
+     }
+    }
+   },
+   "short": {
+    "A_episodes": 5,
+    "A_status_counts": {
+     "invalidated_close_beyond_extreme": 1,
+     "entered": 2,
+     "timeout_no_entry": 2
+    },
+    "entered": 2,
+    "confirm_lag_days": {
+     "n": 2,
+     "p10": 7,
+     "median": 14,
+     "p90": 14,
+     "mean": 10.5
+    },
+    "signal_to_stop_atr": {
+     "n": 2,
+     "p10": 8.3478,
+     "median": 9.1875,
+     "p90": 9.1875,
+     "mean": 8.7676
+    },
+    "r_mean": 0.6059,
+    "r_median": 0.6059,
+    "win_rate_r_gt_0": 0.5,
+    "n_zero": 0,
+    "avg_win_r": 1.5092,
+    "avg_loss_r": -0.2974,
+    "worst_r": -0.2974,
+    "max_consecutive_losses": 1,
+    "cum_r": 1.2118,
+    "max_drawdown_r": -0.2974,
+    "days_held": {
+     "n": 2,
+     "p10": 60,
+     "median": 60,
+     "p90": 60,
+     "mean": 60.0
+    },
+    "exit_reasons": {
+     "time_exit": 2
+    },
+    "baseline_year_r_mean": 0.2168,
+    "excess_vs_year_r": 0.3891,
+    "matched_n": 2,
+    "unmatched": 0,
+    "excess_vs_matched_r": 0.2864,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 1.0,
+    "h4_d10_matched": 1.0,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 6,
+     "policy_i_entered": 6,
+     "policy_i_r_mean": 0.0745,
+     "policy_w_entered": 3,
+     "policy_w_status": {
+      "signal": 3,
+      "invalidated_close_beyond_extreme": 2,
+      "timeout_no_entry": 1
+     },
+     "policy_w_r_mean_all_episodes_0_if_no_entry": 0.0,
+     "policy_w_wait_days": {
+      "n": 3,
+      "p10": 17,
+      "median": 23,
+      "p90": 38,
+      "mean": 26.0
+     }
+    }
+   }
+  },
+  "QQQ": {
+   "long": {
+    "A_episodes": 6,
+    "A_status_counts": {
+     "entered": 5,
+     "invalidated_close_beyond_extreme": 1
+    },
+    "entered": 5,
+    "confirm_lag_days": {
+     "n": 5,
+     "p10": 3,
+     "median": 4,
+     "p90": 13,
+     "mean": 5.4
+    },
+    "signal_to_stop_atr": {
+     "n": 5,
+     "p10": 2.822,
+     "median": 6.0355,
+     "p90": 12.4195,
+     "mean": 6.3833
+    },
+    "r_mean": 0.2413,
+    "r_median": 0.4088,
+    "win_rate_r_gt_0": 0.6,
+    "n_zero": 0,
+    "avg_win_r": 0.8722,
+    "avg_loss_r": -0.7051,
+    "worst_r": -1.0,
+    "max_consecutive_losses": 1,
+    "cum_r": 1.2064,
+    "max_drawdown_r": -1.0,
+    "days_held": {
+     "n": 5,
+     "p10": 13,
+     "median": 60,
+     "p90": 60,
+     "mean": 50.6
+    },
+    "exit_reasons": {
+     "time_exit": 4,
+     "stop": 1
+    },
+    "baseline_year_r_mean": 0.1185,
+    "excess_vs_year_r": 0.1228,
+    "matched_n": 5,
+    "unmatched": 0,
+    "excess_vs_matched_r": 0.0268,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 0.9595,
+    "h4_d10_matched": 0.9133,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 4,
+     "policy_i_entered": 4,
+     "policy_i_r_mean": -0.2664,
+     "policy_w_entered": 0,
+     "policy_w_status": {
+      "invalidated_close_beyond_extreme": 1,
+      "timeout_no_entry": 3
+     },
+     "policy_w_r_mean_all_episodes_0_if_no_entry": 0.0,
+     "policy_w_wait_days": null
+    }
+   },
+   "short": {
+    "A_episodes": 8,
+    "A_status_counts": {
+     "invalidated_close_beyond_extreme": 5,
+     "entered": 3
+    },
+    "entered": 3,
+    "confirm_lag_days": {
+     "n": 3,
+     "p10": 5,
+     "median": 6,
+     "p90": 7,
+     "mean": 6.0
+    },
+    "signal_to_stop_atr": {
+     "n": 3,
+     "p10": 5.5805,
+     "median": 6.8297,
+     "p90": 6.9833,
+     "mean": 6.4645
+    },
+    "r_mean": -0.1164,
+    "r_median": -0.2074,
+    "win_rate_r_gt_0": 0.3333,
+    "n_zero": 0,
+    "avg_win_r": 0.4962,
+    "avg_loss_r": -0.4226,
+    "worst_r": -0.6379,
+    "max_consecutive_losses": 1,
+    "cum_r": -0.3491,
+    "max_drawdown_r": -0.6379,
+    "days_held": {
+     "n": 3,
+     "p10": 60,
+     "median": 60,
+     "p90": 60,
+     "mean": 60.0
+    },
+    "exit_reasons": {
+     "time_exit": 3
+    },
+    "baseline_year_r_mean": 0.2297,
+    "excess_vs_year_r": -0.3461,
+    "matched_n": 1,
+    "unmatched": 2,
+    "excess_vs_matched_r": -0.0155,
+    "h4_d5": 1.0,
+    "h4_d10": 1.0,
+    "h4_d10_year": 1.0,
+    "h4_d10_matched": 1.0,
+    "h4_d10_event_on_matched": 1.0,
+    "H2": {
+     "episodes": 11,
+     "policy_i_entered": 11,
+     "policy_i_r_mean": -0.5207,
+     "policy_w_entered": 2,
+     "policy_w_status": {
+      "invalidated_close_beyond_extreme": 5,
+      "signal": 2,
+      "timeout_no_entry": 3,
+      "invalidated_close_beyond_hl1": 1
+     },
+     "policy_w_r_mean_all_episodes_0_if_no_entry": -0.1818,
+     "policy_w_wait_days": {
+      "n": 2,
+      "p10": 27,
+      "median": 58,
+      "p90": 58,
+      "mean": 42.5
+     }
+    }
+   }
+  },
+  "SPY": {
+   "long": {
+    "A_episodes": 16,
+    "A_status_counts": {
+     "entered": 10,
+     "invalidated_close_beyond_extreme": 4,
+     "timeout_no_entry": 2
+    },
+    "entered": 10,
+    "confirm_lag_days": {
+     "n": 10,
+     "p10": 2,
+     "median": 5,
+     "p90": 6,
+     "mean": 4.6
+    },
+    "signal_to_stop_atr": {
+     "n": 10,
+     "p10": 4.9226,
+     "median": 6.4877,
+     "p90": 8.917,
+     "mean": 7.2327
+    },
+    "r_mean": -0.0063,
+    "r_median": 0.1779,
+    "win_rate_r_gt_0": 0.7,
+    "n_zero": 0,
+    "avg_win_r": 0.4197,
+    "avg_loss_r": -1.0002,
+    "worst_r": -1.0006,
+    "max_consecutive_losses": 1,
+    "cum_r": -0.0627,
+    "max_drawdown_r": -1.6448,
+    "days_held": {
+     "n": 10,
+     "p10": 19,
+     "median": 60,
+     "p90": 60,
+     "mean": 49.4
+    },
+    "exit_reasons": {
+     "time_exit": 7,
+     "stop": 2,
+     "gap_stop": 1
+    },
+    "baseline_year_r_mean": 0.0855,
+    "excess_vs_year_r": -0.0917,
+    "matched_n": 9,
+    "unmatched": 1,
+    "excess_vs_matched_r": 0.0463,
+    "h4_d5": 1.0,
+    "h4_d10": 0.9,
+    "h4_d10_year": 0.977,
+    "h4_d10_matched": 0.9568,
+    "h4_d10_event_on_matched": 0.8889,
+    "H2": {
+     "episodes": 9,
+     "policy_i_entered": 9,
+     "policy_i_r_mean": 0.346,
+     "policy_w_entered": 2,
+     "policy_w_status": {
+      "signal": 2,
+      "timeout_no_entry": 4,
+      "invalidated_close_beyond_extreme": 3
+     },
+     "policy_w_r_mean_all_episodes_0_if_no_entry": 0.0597,
+     "policy_w_wait_days": {
+      "n": 2,
+      "p10": 41,
+      "median": 52,
+      "p90": 52,
+      "mean": 46.5
+     }
+    }
+   },
+   "short": {
+    "A_episodes": 10,
+    "A_status_counts": {
+     "entered": 5,
+     "invalidated_close_beyond_extreme": 5
+    },
+    "entered": 5,
+    "confirm_lag_days": {
+     "n": 5,
+     "p10": 3,
+     "median": 5,
+     "p90": 10,
+     "mean": 6.2
+    },
+    "signal_to_stop_atr": {
+     "n": 5,
+     "p10": 2.9946,
+     "median": 4.5038,
+     "p90": 8.4699,
+     "mean": 5.1209
+    },
+    "r_mean": -0.531,
+    "r_median": -0.7034,
+    "win_rate_r_gt_0": 0.2,
+    "n_zero": 0,
+    "avg_win_r": 0.3463,
+    "avg_loss_r": -0.7503,
+    "worst_r": -1.0,
+    "max_consecutive_losses": 3,
+    "cum_r": -2.6551,
+    "max_drawdown_r": -2.6551,
+    "days_held": {
+     "n": 5,
+     "p10": 5,
+     "median": 60,
+     "p90": 60,
+     "mean": 49.0
+    },
+    "exit_reasons": {
+     "time_exit": 4,
+     "stop": 1
+    },
+    "baseline_year_r_mean": -0.2096,
+    "excess_vs_year_r": -0.3214,
+    "matched_n": 4,
+    "unmatched": 1,
+    "excess_vs_matched_r": -0.016,
+    "h4_d5": 0.8,
+    "h4_d10": 0.8,
+    "h4_d10_year": 0.9675,
+    "h4_d10_matched": 0.9229,
+    "h4_d10_event_on_matched": 0.75,
+    "H2": {
+     "episodes": 17,
+     "policy_i_entered": 17,
+     "policy_i_r_mean": -0.1905,
+     "policy_w_entered": 3,
+     "policy_w_status": {
+      "invalidated_close_beyond_extreme": 8,
+      "invalidated_close_beyond_hl1": 5,
+      "signal": 3,
+      "timeout_no_entry": 1
+     },
+     "policy_w_r_mean_all_episodes_0_if_no_entry": 0.0188,
+     "policy_w_wait_days": {
+      "n": 3,
+      "p10": 18,
+      "median": 19,
+      "p90": 25,
+      "mean": 20.6667
+     }
+    }
+   }
+  }
+ },
+ "elapsed_s": 0.5
+}

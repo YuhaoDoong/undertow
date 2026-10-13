@@ -1,0 +1,110 @@
+{
+ "run": "ps-explore-v0.3",
+ "run_id": "run2",
+ "generated_at": "2026-10-13T03:51:12.052448+00:00",
+ "git_head": "663492e612d985fb03ef3f9062e0bc72f71adc6f",
+ "worktree_dirty": [
+  "?? scripts/ps_explore.py",
+  "?? undertow/analyze/price_structure.py"
+ ],
+ "file_sha256": {
+  "undertow/analyze/price_structure.py": "ffb74be52bf23f931d544f3e2b8635c3c6119c5417198ba296719da607b5d037",
+  "scripts/ps_explore.py": "b876f798cd2c4fafe5dfbed2b835b6e1b274c7710eed517573345b36a7ad8fb9",
+  "docs/prereg/2026-10-13_price_structure_v1_DRAFT_v0.2.md": "5f1ff9bd851e54e2e1770ee0a2364ccd1aec0a199e8a4e2d949141c3882be8cf",
+  "docs/prereg/2026-10-13_price_structure_v1_DRAFT_v0.3.md": "05370dbb0557d9c0ba562884a88b3706d21df930f05a25d399854e396a1bfec8"
+ },
+ "params": {
+  "m_atr": 2.0,
+  "atr_n": 14,
+  "stop_buffer_atr": 0.1,
+  "target_r": 2.0,
+  "hold_max": 60,
+  "wait_max": 60,
+  "kernel_span": 250,
+  "v_lookback": 500,
+  "T_bins": "<-1 | [-1,1] | >1",
+  "V_bins": "terciles"
+ },
+ "partition": {
+  "design_end": "2015-12-31",
+  "request_period2": 1451606400,
+  "test_and_2026": "未取数、未计算"
+ },
+ "source": "Yahoo chart v8 interval=1d events=div,splits；OHLC 已按拆股调整、未按分红调整（价格回报研究）",
+ "inputs": {
+  "GLD": {
+   "sha256": "c313f1d34d52e6886309c591255af0ba318f31f681a9626c5d0952f1b5798c19",
+   "range": [
+    "2004-11-18",
+    "2015-12-31"
+   ],
+   "n_bars": 2799,
+   "missing_sessions": 0,
+   "invalid_rows": [],
+   "split_check": [],
+   "dividends_in_range": 0
+  },
+  "SLV": {
+   "sha256": "23b960f8f6c57b86b9eba3f31c7fe0c9f0c7acacd968fba150622db57eab208d",
+   "range": [
+    "2006-04-28",
+    "2015-12-31"
+   ],
+   "n_bars": 2437,
+   "missing_sessions": 0,
+   "invalid_rows": [],
+   "split_check": [
+    {
+     "date": "2008-07-24",
+     "ratio": 10.0,
+     "close_ratio": 1.0041,
+     "check": "continuous_adjusted"
+    }
+   ],
+   "dividends_in_range": 0
+  },
+  "USO": {
+   "sha256": "1c8453a5aa812c6a2c0a8bb6696b4735b711a3bc13468e7daa5f4b70d0a5ca2e",
+   "range": [
+    "2006-04-10",
+    "2015-12-31"
+   ],
+   "n_bars": 2450,
+   "missing_sessions": 0,
+   "invalid_rows": [],
+   "split_check": [],
+   "dividends_in_range": 0
+  },
+  "QQQ": {
+   "sha256": "c20a8cb527fbfcc64854d63deb6f26699f0d3af2e71966720dfe047ce8c50446",
+   "range": [
+    "1999-03-10",
+    "2015-12-31"
+   ],
+   "n_bars": 4232,
+   "missing_sessions": 0,
+   "invalid_rows": [],
+   "split_check": [
+    {
+     "date": "2000-03-20",
+     "ratio": 2.0,
+     "close_ratio": 0.9718,
+     "check": "continuous_adjusted"
+    }
+   ],
+   "dividends_in_range": 47
+  },
+  "SPY": {
+   "sha256": "72a5f9e36d839708a8d885c9d6a7e06cf8a167d98ec9f9f66de21c2fe13a035a",
+   "range": [
+    "1993-01-29",
+    "2015-12-31"
+   ],
+   "n_bars": 5774,
+   "missing_sessions": 0,
+   "invalid_rows": [],
+   "split_check": [],
+   "dividends_in_range": 93
+  }
+ }
+}

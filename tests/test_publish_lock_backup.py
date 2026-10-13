@@ -96,3 +96,20 @@ PUBLISH_NO_PUSH=1 PUBLISH_LOCK_WAIT=2 publish_dirs "t" data/history; echo "RC=$?
 """
     out = subprocess.run(["zsh", "-c", script], cwd=tmp_path, capture_output=True, text=True).stdout
     assert "RC=5" in out and "PUBLISH_CONFLICT" in out
+
+
+def test_pending_append_not_lost_during_removal(tmp_path):
+    """删已发布行（读→覆盖）与别的进程追加登记互斥：持锁期间的追加要等锁，不会被覆盖掉。"""
+    _repo(tmp_path)
+    script = """
+source scripts/lib_publish.sh
+export PUBLISH_PENDING=data/pending; printf 'x\\t1\\ny\\t2\\n' > $PUBLISH_PENDING
+slow_remove() { sleep 1; _publish_pend_remove "$@"; }
+_publish_pend_locked slow_remove x &
+sleep 0.3
+_publish_pend_locked eval 'printf "z\\t3\\n" >> $PUBLISH_PENDING'
+wait
+cat $PUBLISH_PENDING
+"""
+    out = subprocess.run(["zsh", "-c", script], cwd=tmp_path, capture_output=True, text=True).stdout
+    assert out.split() == ["y", "2", "z", "3"]

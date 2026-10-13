@@ -60,13 +60,37 @@ publish_begin() {
   return 0
 }
 
-publish_record() {
-  [[ -z "${PUBLISH_PENDING:-}" || -z "${PUBLISH_PRE:-}" || ! -f "$PUBLISH_PRE" ]] && return 0
+_publish_pend_locked() {   # 在待发布记录的文件锁下执行 "$@"（zsh 内建 zsystem flock；拿不到锁按旧行为直接执行，不阻断发布）
+  # 原错：publish_dirs 删已发布行是「awk 读全文件 → mv 覆盖」，与其它进程的 publish_record 追加无锁并发 →
+  # 读与覆盖之间别人追加的登记被抹掉 → 那些产物此后被当成他人改动。
+  local fd rc
+  if [[ -n "${PUBLISH_PENDING:-}" ]] && zmodload zsh/system 2>/dev/null \
+     && zsystem flock -t 30 -f fd "${PUBLISH_PENDING}.lock" 2>/dev/null; then
+    "$@"; rc=$?
+    zsystem flock -u $fd
+    return $rc
+  fi
+  "$@"
+}
+
+_publish_record_unlocked() {
   local kind p
   _publish_classify "$@" | while IFS=$'\t' read -r kind p; do
     [[ "$kind" == "OURS" ]] && printf '%s\t%s\n' "$p" "$(_publish_hash "$p")"
   done >> "$PUBLISH_PENDING"
   return 0
+}
+
+publish_record() {
+  [[ -z "${PUBLISH_PENDING:-}" || -z "${PUBLISH_PRE:-}" || ! -f "$PUBLISH_PRE" ]] && return 0
+  _publish_pend_locked _publish_record_unlocked "$@"
+  return 0
+}
+
+_publish_pend_remove() {   # 从待发布记录删掉已发布的路径（须在 _publish_pend_locked 下调用）
+  local tmp; tmp=$(mktemp "${TMPDIR:-/tmp}/publish_pend.XXXXXX")
+  awk -F'\t' 'NR==FNR {done[$0]=1; next} !($1 in done)' <(printf '%s\n' "$@") "$PUBLISH_PENDING" > "$tmp" \
+    && mv "$tmp" "$PUBLISH_PENDING"
 }
 
 publish_dirs() {     # publish_dirs <提交信息> <目录>...
@@ -106,10 +130,8 @@ publish_dirs() {     # publish_dirs <提交信息> <目录>...
   git add -- "${OURS[@]}" || { rm -f "$LOCKF"; return 2; }
   git commit -q -m "$MSG" --only -- "${OURS[@]}"; RC=$?
   if (( RC != 0 )); then rm -f "$LOCKF"; return 2; fi
-  if [[ -n "${PUBLISH_PENDING:-}" && -f "$PUBLISH_PENDING" ]]; then   # 已发布的从待发布记录里删掉
-    local tmp; tmp=$(mktemp "${TMPDIR:-/tmp}/publish_pend.XXXXXX")
-    awk -F'\t' 'NR==FNR {done[$0]=1; next} !($1 in done)' <(printf '%s\n' "${OURS[@]}") "$PUBLISH_PENDING" > "$tmp" \
-      && mv "$tmp" "$PUBLISH_PENDING"
+  if [[ -n "${PUBLISH_PENDING:-}" && -f "$PUBLISH_PENDING" ]]; then   # 已发布的从待发布记录里删掉（与追加互斥）
+    _publish_pend_locked _publish_pend_remove "${OURS[@]}"
   fi
   if [[ -n "${PUBLISH_NO_PUSH:-}" ]]; then rm -f "$LOCKF"; return 0; fi
   git push -q origin main >/dev/null 2>&1 || { rm -f "$LOCKF"; return 4; }

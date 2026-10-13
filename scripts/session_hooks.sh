@@ -61,7 +61,11 @@ notify() {  # $1=标题 $2=正文
 source scripts/lib_publish.sh
 PUBLISH_PENDING="data/logs/.publish_pending_auto"; export PUBLISH_PENDING
 publish_begin data/history data/snapshots
-trap 'publish_record data/history data/snapshots' EXIT
+# ⚠️ 本脚本只许有这一个 EXIT trap：各段的 mkdir 锁登记进 _SH_LOCKS，由这里统一释放。
+# 原错（2026-10-05 起）：①②③ 各自 `trap 'rmdir 锁' EXIT` —— zsh 后设的 trap 直接【替换】前一个，
+# 走过这三段的进程退出时不再登记产物 → 10/07 开盘后全链、10/05 起的盘中采样都被当成「他人改动」，收盘备份不提交。
+_SH_LOCKS=()
+trap 'for _l in "${_SH_LOCKS[@]}"; do rmdir "$_l" 2>/dev/null; done; publish_record data/history data/snapshots' EXIT
 
 # ── 本次运行绑定（Codex 025/026）──────────────────────────────────────────
 # 每次运行独立 run_id 与独立状态路径（并发轮次不会互删对方的状态）；lockf(1) 内核文件锁互斥（持锁进程一死内核即释放，
@@ -368,7 +372,7 @@ PYEOF
       if ! mkdir "$LOCK" 2>/dev/null; then
         hb "①盘前：撞锁，跳过"; echo "[盘前] 另一实例正在运行 —— 跳过"; exit 0
       fi
-      trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+      _SH_LOCKS+=("$LOCK")
       TMP="${F}.partial.$$"
       { echo "# 盘前简报 $ET_DATE（ET $(TZ=America/New_York date +%H:%M)）"; echo
         echo "**触发原因**：$REASON"; echo; } > "$TMP"
@@ -403,7 +407,7 @@ if (( ET_MIN >= 580 && ET_MIN <= 595 )); then
     if ! mkdir "$LOCK2" 2>/dev/null; then
       hb "②体检：撞锁，跳过"; echo "[体检] 另一实例正在运行 —— 跳过"; exit 0
     fi
-    trap 'rmdir "$LOCK2" 2>/dev/null' EXIT
+    _SH_LOCKS+=("$LOCK2")
     if ! RES=$("$PY" -m undertow.cli live 2>&1); then
       hb "②体检：❌ live 失败，等下次重试"; echo "[体检] live 执行失败 —— 不落盘，等下一次唤醒重试" >&2
       notify "⚠️ 持仓体检失败" "$(printf '%s' "$RES" | tail -1)"
@@ -449,7 +453,7 @@ PYEOF
       if ! mkdir "$LOCK3" 2>/dev/null; then
         hb "③事件后：撞锁，跳过"; echo "[事件后] 另一实例正在运行 —— 跳过"; exit 0
       fi
-      trap 'rmdir "$LOCK3" 2>/dev/null' EXIT
+      _SH_LOCKS+=("$LOCK3")
       if ! RES3=$("$PY" -m undertow.cli live 2>&1); then
         hb "③事件后：❌ live 失败，等下次重试"; echo "[事件后] live 失败 —— 不落盘，等下一次唤醒重试" >&2
         notify "⚠️ 事件后复核失败" "$(printf '%s' "$RES3" | tail -1)"

@@ -2,6 +2,7 @@
 import datetime as dt
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -193,7 +194,9 @@ def test_publish_dirs_multi_and_daily_wiring(tmp_path):
     assert sorted(_commit_files(tmp_path)) == ["data/history/b.json", "data/snapshots/a.json"]
     for f in ("daily_update", "event_watch", "session_hooks", "spread_log"):
         src = (ROOT / "scripts" / f"{f}.sh").read_text("utf-8")
-        assert "publish_begin" in src and "trap 'publish_record" in src, f
+        traps = [ln for ln in src.splitlines() if re.match(r"\s*trap .*'\s+EXIT\b", ln)]
+        # 只许一个 EXIT trap 且含 publish_record：zsh 后设的 trap 会替换前一个（session_hooks ①②③ 曾因此丢登记）
+        assert "publish_begin" in src and len(traps) == 1 and "publish_record" in traps[0], f
         assert 'PUBLISH_PENDING="data/logs/.publish_pending_auto"; export PUBLISH_PENDING' in src, f
     src = (ROOT / "scripts" / "daily_update.sh").read_text("utf-8")
     tail = src[src.index("009 N01：只提交本次运行产物"):]

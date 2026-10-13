@@ -518,7 +518,7 @@ def report_md(summary: dict, config: dict) -> str:
             if x["h4_d10"] is not None:
                 surv.append((x["h4_d10"], sym, d))
     lo = min(surv) if surv else None
-    L.append("\n## 五品种合并（只作描述；同日相关，不是独立样本；未做区间推断）\n")
+    L.append(f"\n## {len(summary['by_symbol'])} 个标的合并（{'、'.join(summary['by_symbol'])}；只作描述；同日相关，不是独立样本；未做区间推断）\n")
     for d, x in summary["pooled_descriptive"].items():
         L.append(f"- {'做多' if d == 'long' else '做空'} {x['n']} 笔：平均 {x['r_mean']:+.2f}R、中位 {x['r_median']:+.2f}R、R>0 占 {x['win_rate']:.0%}；"
                  f"相对同年 {x['excess_vs_year']:+.2f}R，相对匹配 {x['excess_vs_matched']:+.2f}R（{x['matched_n']} 笔有匹配）；"

@@ -1,0 +1,56 @@
+{
+ "seed": 20261013,
+ "window": 120,
+ "fractal_k": 2,
+ "zigzag_m": 2.0,
+ "samples": [
+  {
+   "symbol": "GLD",
+   "prefix_end": "2010-10-22",
+   "prefix_index": 1492,
+   "input_sha256": "c313f1d34d52e6886309c591255af0ba318f31f681a9626c5d0952f1b5798c19"
+  },
+  {
+   "symbol": "GLD",
+   "prefix_end": "2015-02-09",
+   "prefix_index": 2572,
+   "input_sha256": "c313f1d34d52e6886309c591255af0ba318f31f681a9626c5d0952f1b5798c19"
+  },
+  {
+   "symbol": "SLV",
+   "prefix_end": "2013-10-11",
+   "prefix_index": 1877,
+   "input_sha256": "23b960f8f6c57b86b9eba3f31c7fe0c9f0c7acacd968fba150622db57eab208d"
+  },
+  {
+   "symbol": "SPY",
+   "prefix_end": "2006-07-10",
+   "prefix_index": 3386,
+   "input_sha256": "72a5f9e36d839708a8d885c9d6a7e06cf8a167d98ec9f9f66de21c2fe13a035a"
+  },
+  {
+   "symbol": "SPY",
+   "prefix_end": "2011-04-04",
+   "prefix_index": 4579,
+   "input_sha256": "72a5f9e36d839708a8d885c9d6a7e06cf8a167d98ec9f9f66de21c2fe13a035a"
+  },
+  {
+   "symbol": "QQQ",
+   "prefix_end": "2003-07-22",
+   "prefix_index": 1097,
+   "input_sha256": "c20a8cb527fbfcc64854d63deb6f26699f0d3af2e71966720dfe047ce8c50446"
+  },
+  {
+   "symbol": "GC=F",
+   "prefix_end": "2010-04-07",
+   "prefix_index": 2399,
+   "input_sha256": "d69f9babf6be4d3da3bed123d6346d26ce0d53d10cc1b812944e7ddd812049ca"
+  },
+  {
+   "symbol": "AAPL",
+   "prefix_end": "2003-12-05",
+   "prefix_index": 5802,
+   "input_sha256": "34560292b1f8026eab4776bff21d2ad08b11a0a6f5286f8dff671ef764256d04"
+  }
+ ]
+}

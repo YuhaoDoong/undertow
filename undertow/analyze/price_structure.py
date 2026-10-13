@@ -279,3 +279,52 @@ def barrier_survival(bars: list, entry_i: int, stop: float, direction: str, days
     if entry_i + days - 1 >= len(bars):
         return None
     return all(s * bars[entry_i + k][4] >= s * stop for k in range(days))
+
+
+# ================= 局部分形认点（structure-v0，Codex 039：统一高低点引擎的简单基线；未校准） =================
+FRACTAL_K = 2          # 左右各 2 根；极值 i 最早在 i+2 收盘后确认
+
+
+@dataclass
+class FPivot:
+    kind: str          # "H" / "L"
+    idx: int           # 极值所在根
+    conf: int          # 确认根 = idx + k（该根收盘后可知）
+    price: float       # 影线价：H 用 high、L 用 low（price_basis 固定，不在单个形态内混用收盘）
+    price_basis: str = "high_low"
+    ambiguous_order: bool = False   # 同一根既是高点候选又是低点候选：日内先后未知，需要先后顺序的形态不使用
+    supersedes: int | None = None   # 交替投影中，被本点取代的同类前一点的 idx（原始点流不改写）
+
+
+def fractal_pivots(bars: list, k: int = FRACTAL_K) -> list:
+    """原始分形点流（按确认根排序）：第 i 根 high 严格高于左边 k 根、且不低于右边 k 根中任何一根 → 高点；low 镜像。
+    平台等值：左侧严格、右侧非严格 → 一段相等高点只认最早那根（固定取一端）。只用到第 i+k 根，所以第 i+k 根收盘后才可知。"""
+    out = []
+    n = len(bars)
+    for i in range(k, n - k):
+        hi, lo = bars[i][2], bars[i][3]
+        isH = all(hi > bars[j][2] for j in range(i - k, i)) and all(hi >= bars[j][2] for j in range(i + 1, i + k + 1))
+        isL = all(lo < bars[j][3] for j in range(i - k, i)) and all(lo <= bars[j][3] for j in range(i + 1, i + k + 1))
+        amb = isH and isL
+        if isH:
+            out.append(FPivot("H", i, i + k, hi, ambiguous_order=amb))
+        if isL:
+            out.append(FPivot("L", i, i + k, lo, ambiguous_order=amb))
+    return out
+
+
+def alternating(piv: list) -> list:
+    """交替投影（as-of 流式）：按确认顺序处理；同类相邻时，更极端的新点取代前一点（记 supersedes），否则丢弃新点。
+    只决定「此刻的结构表示」；已经发出的事件引用的是当时的投影，不因后来的取代而改写。ambiguous_order 的点不进入投影。"""
+    seq: list[FPivot] = []
+    for p in sorted(piv, key=lambda p: (p.conf, p.idx, p.kind)):
+        if p.ambiguous_order:
+            continue
+        if seq and seq[-1].kind == p.kind:
+            prev = seq[-1]
+            better = p.price > prev.price if p.kind == "H" else p.price < prev.price
+            if better:
+                seq[-1] = FPivot(p.kind, p.idx, p.conf, p.price, p.price_basis, False, prev.idx)
+            continue
+        seq.append(p)
+    return seq

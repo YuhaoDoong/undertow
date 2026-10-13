@@ -116,3 +116,26 @@ def test_h2_policy_value_common_denominator():
     assert pe._policy_value("entered", 1.0) == 1.0
     assert pe._policy_value("open_beyond_stop", None) == 0.0 and pe._policy_value("timeout_no_entry", None) == 0.0
     assert pe._policy_value("boundary_excluded", None) is None and pe._policy_value(None, None) is None
+
+
+def test_fractal_pivots_confirmation_plateau_and_ambiguity():
+    """structure-v0：左右各 2 根；极值 i 在 i+2 才确认；平台相等取最早；同根高低都满足标 ambiguous_order 且不进交替投影。"""
+    hl = [(10, 9), (11, 10), (13, 11), (13, 11.5), (12, 10.5), (11, 9.5), (12, 10), (14, 9), (12, 8.8), (11, 9.6), (13, 10)]
+    bars = [(date(2001, 1, 1) + timedelta(days=i), (h + l) / 2, h, l, (h + l) / 2) for i, (h, l) in enumerate(hl)]
+    piv = ps.fractal_pivots(bars)
+    H = [p for p in piv if p.kind == "H"]
+    assert H[0].idx == 2 and H[0].conf == 4 and H[0].price == 13            # 平台 13、13 取最早一根
+    seq = ps.alternating(piv)
+    assert all(a.kind != b.kind for a, b in zip(seq, seq[1:]))             # 交替
+    # 前缀不变性：截到第 t 根只看得到 conf ≤ t−1 的点
+    for cut in range(3, len(bars) + 1):
+        pp = ps.fractal_pivots(bars[:cut])
+        assert [(p.kind, p.idx) for p in pp] == [(p.kind, p.idx) for p in piv if p.conf < cut]
+
+
+def test_fractal_same_bar_high_and_low_is_ambiguous():
+    hl = [(10, 9), (10.5, 9.2), (12, 8), (11, 9), (10.8, 9.1)]                 # 第 2 根同时最高、最低（外包线）
+    bars = [(date(2001, 1, 1) + timedelta(days=i), (h + l) / 2, h, l, (h + l) / 2) for i, (h, l) in enumerate(hl)]
+    piv = ps.fractal_pivots(bars)
+    assert {(p.kind, p.idx, p.ambiguous_order) for p in piv} == {("H", 2, True), ("L", 2, True)}
+    assert ps.alternating(piv) == []

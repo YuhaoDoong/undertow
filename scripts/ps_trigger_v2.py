@@ -27,8 +27,19 @@ TOL = "0.5"
 HOLD = {"stop": "extreme", "target": False, "struct_exit": False, "breakeven": False, "hold": 250}
 
 
+MIRROR = False                                             # --mirror：镜像检验（ps-mirror-v1，用户：「直接把 K 线倒过来」）
+
+
+def mirror(bars):
+    """P' = K/P，K = 首根收盘²：高低互换后取倒数，对数收益正负对调，波幅与形态不变。"""
+    K = bars[0][4] ** 2
+    return [(b[0], K / b[1], K / b[3], K / b[2], K / b[4]) for b in bars]
+
+
 def run_symbol(sym, ref_dates):
     bars_all = pe.parse(pe.fetch(sym)[0])[0]
+    if MIRROR:
+        bars_all = mirror(bars_all)
     assert bars_all[-1][0] <= pe.DESIGN_END
     segs, _ = pe.segments(bars_all, [b[0] for b in bars_all] if sym in pe.FUTURES else ref_dates)
     rows = []
@@ -115,7 +126,12 @@ def report(summ, meta):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run-id", required=True)
+    ap.add_argument("--mirror", action="store_true")
     a = ap.parse_args()
+    global MIRROR, BASE, CFG
+    if a.mirror:
+        MIRROR, BASE = True, ROOT / "data/backtest/ps-mirror-v1"
+        CFG = BASE / "config.json"
     out = BASE / a.run_id
     if out.exists():
         raise SystemExit(f"{out} 已存在：不覆盖")
@@ -124,7 +140,7 @@ def main() -> int:
     out.mkdir(parents=True)
     meta = {"run_id": a.run_id, "command": " ".join(sys.argv), "generated_at": datetime.now(timezone.utc).isoformat(),
             "git_head": subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, cwd=ROOT).stdout.strip(),
-            "config_sha256": hashlib.sha256(CFG.read_bytes()).hexdigest(),
+            "config_sha256": hashlib.sha256(CFG.read_bytes()).hexdigest(), "mirror": MIRROR,
             "code_sha256": {p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in ("undertow/analyze/price_structure.py", "scripts/ps_trigger_v2.py")}}
     (out / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1), "utf-8")
     with open(out / "trades.jsonl", "w", encoding="utf-8") as f:

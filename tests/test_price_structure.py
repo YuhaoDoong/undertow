@@ -248,3 +248,13 @@ def test_local_swings_confirm_methods_and_prefix():
 
 def test_tolerance_helper():
     assert ps._tol("0.5", 100, 2.0) == 1.0 and abs(ps._tol("0.5%", 100, 2.0) - 0.5) < 1e-12
+
+
+def test_mirror_flips_log_returns_and_keeps_ranges():
+    import math
+    from scripts.ps_trigger_v2 import mirror
+    bars = [B(100, 102, 98, 101, date(2001, 1, 1)), B(101, 104, 100, 103, date(2001, 1, 2))]
+    m = mirror(bars)
+    assert abs(math.log(m[1][4] / m[0][4]) + math.log(bars[1][4] / bars[0][4])) < 1e-12        # 对数收益正负对调
+    assert abs(math.log(m[1][2] / m[1][3]) - math.log(bars[1][2] / bars[1][3])) < 1e-12        # 当根对数波幅不变
+    assert m[1][2] >= max(m[1][1], m[1][4]) and m[1][3] <= min(m[1][1], m[1][4])                # 高低仍包住开收

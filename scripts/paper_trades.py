@@ -343,7 +343,7 @@ def _dynamic_select(p: dict, now: datetime) -> dict:
     sel = select_with_shadow(spot, dict(oi), listed, quotes, params, side=p["side"], target_oi=dict(toi),
                              fee_round_trip=p["fee_round_trip"], qty=p["qty"])
     main = sel["main"]
-    return {**main, "shadow_no_ratio": {k: sel["shadow_no_ratio"].get(k) for k in ("ok", "sell", "buy", "credit", "reason")},
+    return {**main, "shadow_no_ratio": {k: sel["shadow_no_ratio"].get(k) for k in ("ok", "sell", "buy", "credit", "reason", "gates")},
             "inputs": {"oi_snapshot": str(path), "oi_snapshot_sha256": hashlib.sha256(Path(path).read_bytes()).hexdigest(),
                        "oi_window_days": horizon, "spot": spot, "spot_fetched_at": spot_at,
                        "quotes": {str(k): v for k, v in quotes.items()}, "symbols": {str(k): v for k, v in syms.items()},

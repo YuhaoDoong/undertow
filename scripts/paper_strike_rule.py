@@ -63,7 +63,10 @@ def select_spread(side: str, spot: float, oi: dict, listed: list, quotes: dict, 
     if side not in ("P", "C"):
         raise ValueError(f"side 须为 P/C：{side}")
     up = side == "C"
-    tr = {"rule": RULE, "side": side, "params": dict(params), "params_hash": params_hash(params), "spot": spot}
+    tr = {"rule": RULE, "side": side, "params": dict(params), "params_hash": params_hash(params), "spot": spot,
+          # 选择逻辑的完整门槛集（Codex 044 E3）：PARAMS 哈希不含收益风险比下限，只看哈希会把前后两种规则当成同一个
+          "gates": {"min_credit_ratio": params["min_credit_ratio"],
+                    "payoff_floor": rp.PAYOFF_FLOOR_VERSION if apply_payoff_floor else None}}
     if not _ok(spot):
         return {**tr, "ok": False, "reason": "bad_spot（现价非有限正数）"}
     if up:
@@ -123,7 +126,9 @@ def select_put_spread(spot, put_oi, listed, quotes, params=PARAMS, **kw) -> dict
 
 
 def select_with_shadow(spot, oi, listed, quotes, params=PARAMS, *, side: str = "P", **kw) -> dict:
-    """主规则（含 15% 门槛）与不设门槛的影子对照，在同一候选全集、同一时刻一起算（Codex 028）；主结果仍是含门槛的那个。"""
+    """主规则（含 15% 门槛）与不设门槛的影子对照，在同一候选全集、同一时刻一起算（Codex 028）；主结果仍是含门槛的那个。
+    2026-10-14 起影子对照同时去掉 15% 权利金比与 10% 收益风险比两道门槛：比较的是「整组权利金过滤」，不再只是 15% 门槛；
+    此前记录的影子对照只去 15% 一道，按各自 gates 字段分期解释，不混算（Codex 044 E3）。"""
     return {"main": select_spread(side, spot, oi, listed, quotes, params, **kw),
             "shadow_no_ratio": select_spread(side, spot, oi, listed, quotes, {**params, "min_credit_ratio": 0.0},
                                              apply_payoff_floor=False, **kw)}   # 反事实「不设任何权利金门槛」：两道都去掉

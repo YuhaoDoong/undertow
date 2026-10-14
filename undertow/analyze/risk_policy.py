@@ -144,7 +144,8 @@ POLICY_B_META = {
 # 起因：2026-10-08 用户批次 GLD 370/365P 当天到期收 0.07，含费最大收益 $3.8 对最大亏损 $496（要赢 99.2% 才打平），
 # 当时唯一的检查是「权利金扣费后 > 0」，于是照开。用户 2026-10-14：「权利金 0.07，就不该开仓吧」；
 # 对「含费最大收益 < 最大亏损的 10% 就不开、提示改更远到期」答「两件事都可以」。
-# 10% ⇔ 打平胜率 ≤ 1/1.1 ≈ 90.9%，参照此前估算的卖墙价差约需 89–91% 胜率打平；【未校准】，只是把明显不值的单挡掉。
+# 10% ⇔ 理论满收益/满亏损两点模型的打平胜率 ≤ 1/1.1 ≈ 90.9%；赢时按 90% 止盈拿 0.9G、亏时吃满 L，则要 91.7%（Codex 044 E3）。
+# 两者都不是实际胜率门槛：止损、提前退出、费用滑点会继续改变平均赢亏。【未校准】，只是把明显不值的单挡掉。
 # 不放进 POLICY_B / evaluate_budget：影子账 v5 的预算按其预登记版本复现，不能中途加闸门。
 # ════════════════════════════════════════════════════════════════════════════════════
 
@@ -157,21 +158,28 @@ PAYOFF_FLOOR_META = {"status": "已决定（用户 2026-10-14「两件事都可�
 
 def payoff_floor(net_max_gain, max_loss, rule: dict = PAYOFF_FLOOR) -> dict:
     """含费最大收益 / 含费最大亏损 ≥ 下限才放行。任一金额缺失/非有限/最大亏损 ≤ 0 → incomplete（不是通过）。
-    返回 {"status", "ratio", "limit", "breakeven_win_rate", "version", "note"}；打平胜率 = 最大亏损 / (最大收益 + 最大亏损)。"""
+    返回 {"status", "ratio", "limit", "breakeven_win_rate", "breakeven_win_rate_tp90", "breakeven_basis", "version", "note"}。
+    breakeven_win_rate = L/(G+L)：每次赢满净最大收益 G、每次亏满净最大亏损 L 的两点模型；
+    breakeven_win_rate_tp90 = L/(0.9G+L)：赢时按 90% 止盈。都不是实际打平胜率（平均赢亏另算）。"""
     lim = rule["min_net_gain_to_max_loss"]
-    out = {"status": "incomplete", "ratio": None, "limit": lim, "breakeven_win_rate": None, "version": rule["version"], "note": ""}
+    out = {"status": "incomplete", "ratio": None, "limit": lim, "breakeven_win_rate": None, "breakeven_win_rate_tp90": None,
+           "breakeven_basis": "理论两点模型：赢满 G / 亏满 L（tp90：赢 0.9G）", "version": rule["version"], "note": ""}
     if not (_num(net_max_gain) and _num(max_loss) and max_loss > 0):
         out["note"] = "最大收益或最大亏损未知/非正 → 无法判定"
         return out
     ratio = net_max_gain / max_loss
     bw = max_loss / (net_max_gain + max_loss) if net_max_gain > -max_loss else None
-    out.update(ratio=round(ratio, 4), breakeven_win_rate=None if bw is None else round(bw, 4))
+    tp = POLICY_B["take_profit_gain_frac"]
+    bw90 = max_loss / (tp * net_max_gain + max_loss) if tp * net_max_gain > -max_loss else None
+    out.update(ratio=round(ratio, 4), breakeven_win_rate=None if bw is None else round(bw, 4),
+               breakeven_win_rate_tp90=None if bw90 is None else round(bw90, 4))
     if ratio + 1e-12 >= lim:
         out["status"] = "pass"
     else:
         out["status"] = "fail"
         out["note"] = (f"含费最大收益 ${net_max_gain:,.2f} / 最大亏损 ${max_loss:,.2f} = {ratio:.1%} < {lim:.0%}"
-                       + (f"（打平需胜率 {bw:.1%}）" if bw is not None else "") + "；建议改用更远到期")
+                       + (f"（理论满收益/满亏损打平胜率 {bw:.1%}，按 90% 止盈 {bw90:.1%}）" if bw is not None and bw90 is not None else "")
+                       + "；建议改用更远到期")
     return out
 
 

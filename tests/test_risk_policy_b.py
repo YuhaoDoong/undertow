@@ -127,6 +127,8 @@ def test_payoff_floor_boundary_and_unknown():
     for g, l in ((None, 100.0), (5.0, None), (float("nan"), 100.0), (5.0, 0.0), (5.0, -1.0)):
         assert rp.payoff_floor(g, l)["status"] == "incomplete"          # 未知不是通过
     assert rp.payoff_floor(150.0, 350.0)["breakeven_win_rate"] == 0.7
+    g = rp.payoff_floor(10.0, 100.0)                                       # G/L = .1：两点 90.91%，按 TP90 91.74%（Codex 044 探针）
+    assert g["breakeven_win_rate"] == 0.9091 and g["breakeven_win_rate_tp90"] == 0.9174
 
 
 # —— Codex 044 包 A：逻辑身份与完整账本准入 ——

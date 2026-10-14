@@ -355,7 +355,10 @@ def evaluate_book(open_positions: list | None, capital: dict | None, policy: dic
                             "note": "持仓或权益未知"}]}
     rows, probs = _book_rows(open_positions)
     checks = _book_checks(rows, R, policy)
-    if probs:
+    if probs:                                              # 合计缺成员：已知部分超限仍是确定的 fail；没超限 ≠ pass
+        for c in checks:
+            if "position" not in c and c["status"] == "pass":
+                c["status"], c["note"] = "incomplete", (c["note"] + "；" if c["note"] else "") + "仅已知部分"
         checks.append({"check": "账本完整性", "status": "incomplete", "value": len(probs), "limit": None,
                        "note": "；".join(probs[:5])})
     sts = {c["status"] for c in checks}

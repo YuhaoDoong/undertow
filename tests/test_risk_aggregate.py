@@ -149,3 +149,5 @@ def test_leg_without_identity_is_incomplete_not_merged():
     anon = NS(**{**_c("熊市看涨价差", 80.0, 80.0, credit=0.2).__dict__, "legs": [object(), object()]})
     a = aggregate(_rev([_g([anon, anon])]), CAP, asof="d", policy=rp.POLICY_B)
     assert a["overall"] == "incomplete" and all(b["id"] is None for b in a["book"])
+    mc = next(c for c in a["checks"] if c["item"] == "类别合计（metals）")
+    assert mc["status"] == "incomplete"                                    # 合计缺成员：不显示 pass

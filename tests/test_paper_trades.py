@@ -561,6 +561,29 @@ def test_user_batch_with_exit_rule_never_auto_exits():
     assert pt.validate_spec(_p(exit_rule="claude-exit-v1", batch="rule_dynamic")) is None
 
 
+def test_user_tp90_rule_closes_at_90pct_of_max_gain():
+    """用户 2026-10-14：最大收益 90% 以上提前平仓。入场权利金 0.41、宽 2：含费最大收益 37.8，90% = 34.02。"""
+    p = _entered(); p.update(exit_rule="user-tp90-v1", expiry="2026-10-16", batch="user_subjective")
+    assert pt.step(p, at(30, 9, 46), depth=q(0.06, 0.08, 0.01, 0.02)) == "mark"           # 估值 0.07 → 盈亏 30.8 < 34.02
+    assert p["state"] == "entered"
+    assert pt.step(p, at(30, 15, 46), depth=q(0.03, 0.04, 0.01, 0.02)) == "take_profit"    # 估值 0.04−0.01=0.03 → 盈亏 34.8 ≥ 34.02（买腿 bid 为 0 会被数据体检拦下）
+    assert p["state"] == "closed_tp" and p["pnl_usd"] == 34.8
+    p2 = _entered(); p2.update(exit_rule="user-tp90-v1", expiry="2026-10-02", batch="user_subjective")
+    assert pt.step(p2, datetime(2026, 10, 1, 9, 46, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25)) == "mark"   # 无时间出场
+    assert "未授权" in pt.validate_spec(_p(exit_rule="user-tp90-v1", batch="rule_dynamic"))
+    assert pt.validate_spec(_p(exit_rule="user-tp90-v1", batch="user_subjective")) is None
+
+
+def test_user_tp90_rule_on_debit_spread():
+    p = _debit(); pt.step(p, at(30, 10, 6), depth=q(1.0, 1.1, 5.0, 5.2))                   # 付 5.2 − 1.0 = 4.2，宽 10
+    assert p["state"] == "entered"
+    p.update(exit_rule="user-tp90-v1", batch="user_subjective")
+    mg = pt.economics(p["side"], p["k_sell"], p["k_buy"], p["entry_credit"], 1, 3.2)["max_gain_usd"]   # 576.8
+    assert pt.step(p, datetime(2026, 10, 1, 9, 46, tzinfo=ET), depth=q(4.0, 4.2, 13.5, 13.7)) == "mark"   # 价值 9.3 → 506.8
+    assert pt.step(p, datetime(2026, 10, 1, 15, 46, tzinfo=ET), depth=q(4.0, 4.1, 13.8, 14.0)) == "take_profit"  # 9.7 → 546.8 ≥ 519.1
+    assert p["pnl_usd"] >= 0.9 * mg
+
+
 def test_manual_close_quote_failure_or_late_return_keeps_request(tmp_path, monkeypatch):
     p = _entered()
     load = _env(tmp_path, monkeypatch, [{"id": "M", "execution": "模拟", "paper": p}])

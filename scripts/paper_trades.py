@@ -52,8 +52,12 @@ STRIKE_RULES = ("wall-dynamic-v1", "wall-dynamic-v1.1", "user-sell-fixed-v1", "u
 # 借记价差沿用同一套符号：entry_credit = 卖腿 bid − 买腿 ask < 0（= −付出的权利金），估值/结算/盈亏公式不变。
 STRUCTURES = ("credit", "debit")
 # 出场规则（只用于 Claude 批次；用户 2026-09-30：「你的那一批你可以自己设置提前平仓规则。不适用我的一批，我的由我主观操作。你可以测试一下」）
-EXIT_RULES = {"claude-exit-v1": {"take_profit_frac": 0.5, "time_exit_dte": 3}}
-EXIT_RULE_BATCHES = ("rule_dynamic",)        # 自动出场只授权给 Claude 的规则批；用户批次由用户主观操作（Codex 032 R3）
+# user-tp90-v1（用户 2026-10-14：「最大收益 90% 以上，可以提前平仓」；起因 USO 140/135P 浮盈 $131.8 / 最大 $141.8：
+# 「为了 10 美元收益，暴露两天没必要」）：含费估值盈亏 ≥ 90% × 含费最大收益即平；不设时间出场。未校准。
+EXIT_RULES = {"claude-exit-v1": {"take_profit_frac": 0.5, "time_exit_dte": 3},
+              "user-tp90-v1": {"take_profit_gain_frac": 0.9}}
+# 每条规则授权的批次：claude-exit-v1 只给 Claude 的规则批（Codex 032 R3）；user-tp90-v1 是用户本人定的规则，只给用户批次
+EXIT_RULE_BATCHES = {"claude-exit-v1": ("rule_dynamic",), "user-tp90-v1": ("user_subjective",)}
 
 
 def exit_rule_error(p: dict) -> str | None:
@@ -63,8 +67,8 @@ def exit_rule_error(p: dict) -> str | None:
         return None
     if r not in EXIT_RULES:
         return f"未知出场规则 {r}"
-    if p.get("batch") not in EXIT_RULE_BATCHES:
-        return f"出场规则 {r} 未授权给批次 {p.get('batch')}（只授权 {', '.join(EXIT_RULE_BATCHES)}）"
+    if p.get("batch") not in EXIT_RULE_BATCHES[r]:
+        return f"出场规则 {r} 未授权给批次 {p.get('batch')}（只授权 {', '.join(EXIT_RULE_BATCHES[r])}）"
     return None
 
 
@@ -671,11 +675,14 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
                 return "exit_rule_config_error"
             return "mark"
         xr = EXIT_RULES.get(p.get("exit_rule") or "")
-        if live and xr and val <= xr["take_profit_frac"] * p["entry_credit"]:
+        tp_gain = xr.get("take_profit_gain_frac") if xr else None
+        mg = economics(p["side"], p["k_sell"], p["k_buy"], p["entry_credit"], p["qty"], p["fee_round_trip"])["max_gain_usd"] if tp_gain else None
+        if live and xr and ((xr.get("take_profit_frac") is not None and val <= xr["take_profit_frac"] * p["entry_credit"])
+                            or (tp_gain is not None and mg > 0 and pnl >= tp_gain * mg)):
             p.update(state="closed_tp", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
             ev.append({"at": now.isoformat(), "action": "take_profit", "value": val, "pnl": pnl, "exit_rule": p["exit_rule"]})
             return "take_profit"
-        if live and xr and (exp - today).days <= xr["time_exit_dte"]:
+        if live and xr and xr.get("time_exit_dte") is not None and (exp - today).days <= xr["time_exit_dte"]:
             p.update(state="closed_time", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
             ev.append({"at": now.isoformat(), "action": "time_exit", "value": val, "pnl": pnl, "exit_rule": p["exit_rule"]})
             return "time_exit"

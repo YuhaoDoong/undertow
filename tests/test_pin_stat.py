@@ -117,3 +117,34 @@ def test_signflip_weighted_matches_unweighted_when_weights_equal():
     assert a["exact"] and a["n_weeks"] == 6 and a["est"] == pytest.approx(sum(r["m"] for r in rows))
     z = ps.signflip_weighted(rows, [0.0] * len(rows))
     assert z["est"] is None and z["p_lower"] is None
+
+
+def test_codex046_same_bin_different_distance_residual():
+    """同档不同距离（.01 / .24 ATR，同在第一档）：无墙漂移过程的配对均值 +.0546，交换两侧 −.0546 —— 粗分层不消除残差。"""
+    nn = 20000
+    xs = [-.5 + (i + .5) / nn + .1 for i in range(nn)]
+    def est(du, dd):
+        up = sum(ps.mirror_k(100 + x, 100, 100 + du, 1) for x in xs) / nn
+        dn = sum(ps.mirror_k(100 + x, 100, 100 - dd, 1) for x in xs) / nn
+        rows = [{"inst": i, "side": 1, "dist": du, "week": 0, "m": up} for i in ("GLD", "SLV")] + \
+               [{"inst": i, "side": -1, "dist": dd, "week": 0, "m": dn} for i in ("GLD", "SLV")]
+        r = ps.distance_matched_weights(rows, required=("GLD", "SLV"))
+        assert r["identifiable"]
+        return sum(w * x["m"] for w, x in zip(r["w"], rows))
+    assert abs(est(.01, .24) - .0546) < 1e-3 and abs(est(.24, .01) + .0546) < 1e-3
+
+
+def test_required_instruments_missing_or_edge_cases():
+    g = [{"inst": "GLD", "side": s, "dist": .1, "week": w, "m": 0.0} for w in range(8) for s in (1, -1)]
+    assert ps.distance_matched_weights(g)["identifiable"] is True                       # 不传 required：只是通用函数
+    r = ps.distance_matched_weights(g, required=("GLD", "SLV"))
+    assert r["identifiable"] is False and r["per_inst"]["SLV"] == {"complete_bins": 0, "rows_used": 0}   # 整个 SLV 零行 → 不可识别
+    assert ps.distance_matched_weights([], required=("GLD", "SLV"))["identifiable"] is False
+    z = [{"inst": i, "side": 0, "dist": 0.0, "week": 0, "m": 0.0} for i in ("GLD", "SLV")]
+    assert ps.distance_matched_weights(z, required=("GLD", "SLV"))["identifiable"] is False           # 全部 side 0
+    far = [{"inst": i, "side": s, "dist": 1.5, "week": 0, "m": 0.0} for i in ("GLD", "SLV") for s in (1, -1)]
+    r = ps.distance_matched_weights(far, required=("GLD", "SLV"))
+    assert r["identifiable"] is False and r["excluded"]["墙距超出近价带"] == 4
+    third = [{"inst": "USO", "side": s, "dist": .1, "week": 0, "m": 0.0} for s in (1, -1)]
+    r = ps.distance_matched_weights(third, required=("GLD", "SLV"))
+    assert r["identifiable"] is False and r["excluded"]["品种不在研究计划内"] == 2 and r["w"] == [0.0, 0.0]

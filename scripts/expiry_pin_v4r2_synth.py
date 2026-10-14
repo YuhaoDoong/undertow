@@ -171,7 +171,7 @@ def run(name: str, sc: dict, *, weeks: int, n_sims: int, seed: int, design: str)
         rows, u = simulate(weeks, sc, rng, design)
         for k, v in u.items():
             um[k] = um.get(k, 0) + v
-        dm = ps.distance_matched_weights(rows)
+        dm = ps.distance_matched_weights(rows, required=("GLD", "SLV"))
         if not dm["identifiable"]:
             unid += 1; continue
         r = ps.signflip_weighted(rows, dm["w"], n_perm=2000, seed=seed + i)

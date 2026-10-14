@@ -10,7 +10,8 @@ v4r1 改用【镜像点】：参考价 r = C[S−1]，墙 K* 关于 r 的镜像 
 - 漂移：上方墙距 d 与下方墙距 d 的两行，在同一偏移分布下期望恰好互为相反数（m(x; −d) = −m(x; +d)），所以
   【同距离】两侧等权在任意漂移下都抵消；距离不同则不抵消（Codex 045：上墙 .1 ATR、下墙 .8 ATR、偏移 U[−.5,.5]+.1 →
   等权核均值 +.0266）。v4r1 修订：按事前墙距分档配对两侧（distance_matched_weights），没有两侧的档不进主统计量。
-  这只消除「两侧墙距不同」这一条；两侧在波动、趋势环境上若系统不同，仍可能残留，由合成情景量化。
+  这是【粗分层】：只减轻两侧墙距失衡，不消除 —— 同档不等于同距离（Codex 046：上墙 .01、下墙 .24 ATR 同在第一档，
+  同一漂移过程等权均值 +.0546，交换两侧 −.0546）；两侧在波动、趋势环境上若系统不同，也会残留。负均值不能单独读成墙的增量。
 - |K* − r| 很小的行（墙贴着参考价）m 恒近 0，不提供信息：检验对象是「偏离参考价的墙」，这一点要在结论里写明。
 - 镜像点不是挂牌行权价、不需要 OI 条件，所以不会像同侧安慰剂那样系统性排除低 ATR 日。
 - 检出也只是「收盘离墙更近」的关联，不是因果：OI 也可能是知情资金押在了价格要去的地方。
@@ -112,15 +113,22 @@ def _bin(d: float) -> int | None:
     return None
 
 
-def distance_matched_weights(rows: list[dict]) -> dict:
+def distance_matched_weights(rows: list[dict], required: tuple | None = None) -> dict:
     """v4r1 修订主估计量（Codex 045 §6/§8）的行权重；权重只由事前协变量（品种、墙侧、墙距档）决定，不看结果。
     每个品种 × 墙距档：两侧都有行 → 档估计 = (上方均值 + 下方均值) / 2；品种估计 = 各完整档按行数加权；
     总估计 = 各品种等权平均（为回答「金银」，不按挂牌频率加权）。缺侧的档不进；任一品种没有完整档 → 不可识别（不退成单品种）。
     rows 需带 "inst"、"side"、"dist"（|K* − r| / ATR）。返回 {"w": 每行权重（与 rows 对齐，0 = 不进）, "identifiable",
-    "per_inst": {品种: 完整档数、所用行数}, "excluded": {原因: 行数}}。"""
-    insts = sorted({r["inst"] for r in rows})
+    "per_inst": {品种: 完整档数、所用行数}, "excluded": {原因: 行数}}。
+    required：研究计划要求的品种（主研究传 ("GLD", "SLV")）。Codex 046：不传时品种从数据推断，整个 SLV 零行就退成只检黄金；
+    传了之后缺任何一个品种 → 不可识别；不在 required 里的品种的行不进（计入 excluded）。"""
+    insts = sorted(required) if required is not None else sorted({r["inst"] for r in rows})
+    excl0 = {}
+    if required is not None:
+        extra = sum(1 for r in rows if r["inst"] not in required)
+        if extra:
+            excl0["品种不在研究计划内"] = extra
     w = [0.0] * len(rows)
-    excl: dict = {}
+    excl: dict = dict(excl0)
     per: dict = {}
     for inst in insts:
         cells: dict = {}

@@ -1,0 +1,219 @@
+{
+ "v1": {
+  "transitions": {
+   "entered → entered": 2363,
+   "not:invalidated_close_beyond_extreme → not:invalidated_close_beyond_extreme": 394,
+   "not:timeout_no_entry → not:timeout_no_entry": 320,
+   "not:boundary_excluded → not:boundary_excluded": 170,
+   "not:absent_in_old（旧版提前占位，未评估） → not:busy_skipped": 104,
+   "not:absent_in_old（旧版提前占位，未评估） → entered": 5,
+   "not:invalidated_close_beyond_extreme → entered": 2,
+   "not:open_beyond_stop → not:open_beyond_stop": 2
+  },
+  "by_method": {
+   "bar": {
+    "old_entered": 682,
+    "new_entered": 683,
+    "both": 682,
+    "old_mean": 0.0519,
+    "new_mean": 0.0557,
+    "pair_delta": 0.0,
+    "pair_changed": 0
+   },
+   "two": {
+    "old_entered": 290,
+    "new_entered": 291,
+    "both": 290,
+    "old_mean": 0.4171,
+    "new_mean": 0.4236,
+    "pair_delta": 0.0,
+    "pair_changed": 0
+   },
+   "atr": {
+    "old_entered": 682,
+    "new_entered": 683,
+    "both": 682,
+    "old_mean": -0.2636,
+    "new_mean": -0.2593,
+    "pair_delta": 0.0,
+    "pair_changed": 0
+   },
+   "limit": {
+    "old_entered": 709,
+    "new_entered": 713,
+    "both": 709,
+    "old_mean": 0.1275,
+    "new_mean": 0.1377,
+    "pair_delta": 0.0015,
+    "pair_changed": 3
+   }
+  },
+  "changed_pairs_sample": [
+   {
+    "key": [
+     "AAPL",
+     "short",
+     "2010-01-25",
+     "limit",
+     "1"
+    ],
+    "old": -1.9877,
+    "new": 0.6778,
+    "old_entry": "2010-03-01",
+    "new_entry": "2010-01-26"
+   },
+   {
+    "key": [
+     "GC=F",
+     "short",
+     "2005-10-19",
+     "limit",
+     "1"
+    ],
+    "old": -1.9153,
+    "new": -3.4025,
+    "old_entry": "2005-10-31",
+    "new_entry": "2005-10-25"
+   },
+   {
+    "key": [
+     "AAPL",
+     "short",
+     "2010-01-25",
+     "limit",
+     "0.5"
+    ],
+    "old": 0.7862,
+    "new": 0.6778,
+    "old_entry": "2010-01-27",
+    "new_entry": "2010-01-26"
+   }
+  ],
+  "n_changed_pairs": 3
+ },
+ "v2": {
+  "transitions": {
+   "entered → entered": 593,
+   "not:invalidated_close_beyond_extreme → not:invalidated_close_beyond_extreme": 98,
+   "not:timeout_no_entry → not:timeout_no_entry": 80,
+   "not:boundary_excluded → not:boundary_excluded": 42,
+   "not:absent_in_old（旧版提前占位，未评估） → not:busy_skipped": 26,
+   "not:invalidated_close_beyond_extreme → entered": 1
+  },
+  "by_method": {
+   "bar": {
+    "old_entered": 171,
+    "new_entered": 171,
+    "both": 171,
+    "old_mean": 0.506,
+    "new_mean": 0.506,
+    "pair_delta": 0.0,
+    "pair_changed": 0
+   },
+   "atr": {
+    "old_entered": 173,
+    "new_entered": 173,
+    "both": 173,
+    "old_mean": 0.3797,
+    "new_mean": 0.3797,
+    "pair_delta": 0.0,
+    "pair_changed": 0
+   },
+   "two": {
+    "old_entered": 73,
+    "new_entered": 73,
+    "both": 73,
+    "old_mean": 1.4172,
+    "new_mean": 1.4172,
+    "pair_delta": 0.0,
+    "pair_changed": 0
+   },
+   "limit": {
+    "old_entered": 176,
+    "new_entered": 177,
+    "both": 176,
+    "old_mean": 0.3939,
+    "new_mean": 0.3722,
+    "pair_delta": -0.0016,
+    "pair_changed": 1
+   }
+  },
+  "changed_pairs_sample": [
+   {
+    "key": [
+     "AAPL",
+     "short",
+     "2010-01-25",
+     "limit"
+    ],
+    "old": -1.5404,
+    "new": -1.8258,
+    "old_entry": "2010-01-27",
+    "new_entry": "2010-01-26"
+   }
+  ],
+  "n_changed_pairs": 1
+ },
+ "mirror": {
+  "transitions": {
+   "entered → entered": 590,
+   "not:invalidated_close_beyond_extreme → not:invalidated_close_beyond_extreme": 86,
+   "not:timeout_no_entry → not:timeout_no_entry": 82,
+   "not:boundary_excluded → not:boundary_excluded": 39,
+   "not:absent_in_old（旧版提前占位，未评估） → not:busy_skipped": 27
+  },
+  "by_method": {
+   "two": {
+    "old_entered": 76,
+    "new_entered": 76,
+    "both": 76,
+    "old_mean": 1.0374,
+    "new_mean": 1.0374,
+    "pair_delta": 0.0,
+    "pair_changed": 0
+   },
+   "atr": {
+    "old_entered": 172,
+    "new_entered": 172,
+    "both": 172,
+    "old_mean": 0.1413,
+    "new_mean": 0.1413,
+    "pair_delta": 0.0,
+    "pair_changed": 0
+   },
+   "limit": {
+    "old_entered": 173,
+    "new_entered": 173,
+    "both": 173,
+    "old_mean": 0.6671,
+    "new_mean": 0.6656,
+    "pair_delta": -0.0016,
+    "pair_changed": 1
+   },
+   "bar": {
+    "old_entered": 169,
+    "new_entered": 169,
+    "both": 169,
+    "old_mean": 0.1977,
+    "new_mean": 0.1977,
+    "pair_delta": 0.0,
+    "pair_changed": 0
+   }
+  },
+  "changed_pairs_sample": [
+   {
+    "key": [
+     "AAPL",
+     "long",
+     "2010-01-25",
+     "limit"
+    ],
+    "old": -1.4736,
+    "new": -1.7475,
+    "old_entry": "2010-01-27",
+    "new_entry": "2010-01-26"
+   }
+  ],
+  "n_changed_pairs": 1
+ }
+}

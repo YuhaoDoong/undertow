@@ -1,0 +1,28 @@
+{
+ "version": "exploratory-replay-diagnostics-v1-20261014",
+ "status": "已收集、已见部分摘要后的探索分析计划（Codex 042 02_PLAN/replay_diagnostics.md；Codex 046 要求立即推进）；不是未见预登记；只诊断认知/工具，不证明策略盈利",
+ "exposure_before_analysis": [
+  "v1：12 段、203 条 add/delete 操作（操作量，不是 203 份独立证据）；用户反馈「高点低点还行，入场离场全面太晚」",
+  "v2：12 段；9 笔交易描述、1 笔回看补标、非回看高低点滞后中位 5 根（n65）——已在公开决策记录里描述性看过",
+  "段 1 用户备注已读（双底、筹码密集区、提前博弈反弹）"
+ ],
+ "sources": "私有 data/soul/structure_labels/2026-10-14_replay_v{1,2}.json；页面 data/backtest/structure-v0/replay_v{1,2}/index.html 内嵌的 K 线（已缩放）与 manifest；全部哈希写入产物",
+ "event_classes": {
+  "background_only": "推进前（as_of_bar = 0）标在历史上的点",
+  "frontier_pivot_label": "在当时最远已见处（as_of_i = seen_max）标的 HH/HL/LH/LL/关键位；延迟 = as_of_i − i",
+  "frontier_decision": "在最远处标的入场/离场/止损；最早按决定根的下一根开盘执行",
+  "rewind_edit": "as_of_i < seen_max（已看过更后行情）的任何操作；独立层",
+  "entry_backfilled": "回看补的入场：只作反事实（原补标价 / 发现时点后下一根开盘两种），不进因果交易收益",
+  "deleted_revision": "被删除的对象：首次认知照样保留；删除只对删除时刻之后生效，已可执行的入场不因删图标撤销",
+  "invalid_time": "i > as_of_i（标在未见的未来）"
+ },
+ "state_layers": ["原始 append-only 日志", "当时因果层（每个 as_of 只含此前的 add/delete）", "含回看修改的最终解释层", "操作次数"],
+ "delete_match": {"v1": "type@i（与页面 live() 相同）", "v2": "target = 被删事件 id"},
+ "algorithms": {"zigzag_2atr": "price_structure.detect（收盘 2ATR 之字形）", "bar": "local_swings bar", "two": "local_swings two", "atr": "local_swings atr（影线起、收盘反弹 0.75 ATR）"},
+ "matching": "用户首次因果标的 HH/LH→H、HL/LL→L；只与用户标注时刻 as_of_i 已确认（conf ≤ as_of_i）的同类算法点一对一匹配，极值根距离 ≤ 5 根取最近；另报告离用户标点最近的同类算法点最终何时确认（conf − as_of_i，负 = 算法更早），两者分开命名，不用最终之字形提高吻合度",
+ "trades": "入场做多/做空在最远处决定 → 下一根开盘入场；止损取同一决定时刻或之后、离场前最近一次标的止损价，缺则 missing_stop；离场标在最远处 → 下一根开盘离场；盘中触及止损按止损（跳空按开盘）；段末未平按最后一根收盘 admin_end；持仓中再标入场 = repeat_entry；无仓离场 = exit_without_position；收益以入场前一根 ATR 计，未扣费、无仓位/数量（不推定真实持仓）",
+ "delay_decomposition": "对每笔因果入场：最近一个同侧用户点（做多 HL/LL，做空 LH/HH）极值根 → 用户标出该点（认点延迟）→ 用户入场决定（决策延迟）→ 下一根开盘（执行 1 根）；并列出算法（bar/2ATR）对同一点的确认根",
+ "zones": "v2 密集区/支撑位：本版只报几何（宽度/ATR、距决定时收盘/ATR、事后 5/10/20 根是否回到区间）；按当时 view/chipMode/chipRange 复刻实际显示的 profile 代理【未做】，明确列为待办",
+ "privacy": "逐条结果只写私有 data/soul/structure_labels/diag-v1/；公开/给 Codex 的只有聚合计数与分布；不复制用户逐点判断与备注",
+ "sampling_limit": "v1 偏 QQQ/SPY、GLD 0；v2 以 IWM/TLT/SPY 为主、SLV 0：不能代表金银交易习惯；参数若由这批选择，需后续未看片段或前瞻记录验证"
+}

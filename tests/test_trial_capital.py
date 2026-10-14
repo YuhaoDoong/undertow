@@ -15,8 +15,9 @@ def T(day, hh=12):
 
 
 def funded(amount=500.0):
-    s = tc.new_state(trial_id="t1", planned_capital=500.0, policy_version=P["version"], created_at=T("10-14"))
-    return tc.record_funding(s, amount=amount, at=T("10-15", 0))
+    # 到账 10-14 00:00：此前用例在 10-14 白天做核查，旧版早于到账（10-15）的观察也照算；现在观察早于到账 → 不可判定
+    s = tc.new_state(trial_id="t1", planned_capital=500.0, policy_version=P["version"], created_at=T("10-13"))
+    return tc.record_funding(s, amount=amount, at=T("10-14", 0))
 
 
 def ev(s, equity, at, fill=None):
@@ -121,6 +122,42 @@ def test_stale_observation_does_not_overwrite_history():
     s, _ = ev(funded(), 480.0, T("10-16", 15))
     s2, v = ev(s, 500.0, T("10-16", 14))
     assert v["stale_observation"] and s2["equity_history"] == s["equity_history"]
+
+
+def test_codex_045_stale_equity_does_not_subtract_future_deposit():
+    """045 P2 反例：起始 500，02:00 追加 500，03:00 权益 1000；之后 01:00 的旧读数 500 返回。
+    旧版：500 − 500（02:00 才到的入金）→ 起始亏损 100%、锁住；其实没有亏损。"""
+    s = tc.record_funding(funded(), amount=500, at=T("10-14", 2))
+    s, v = ev(s, 1000.0, T("10-14", 3))
+    assert v["initial_capital_loss_frac"] == 0.0 and v["pause"]["latched"] is False
+    s2, v = ev(s, 500.0, T("10-14", 1))
+    assert v["stale_observation"] and not s2["pause_latched"] and v["pause"] is None   # 只审计：本次不可判定、冻结新增
+    assert v["initial_capital_loss_frac"] == 0.0 and v["net_external_flows"] == 0 and v["flows_after_asof"] == 1
+    assert s2["equity_history"] == s["equity_history"]
+
+
+def test_observation_without_newer_history_uses_flows_asof():
+    """首次观察早于后来登记的入金/转出：只扣观察时点之前已发生的现金流。"""
+    s = tc.record_funding(funded(), amount=500, at=T("10-14", 2))       # 入金登记了，但观察在入金之前
+    s, v = ev(s, 500.0, T("10-14", 1))
+    assert v["initial_capital_loss_frac"] == 0.0 and v["pause"]["latched"] is False
+    s = tc.record_funding(funded(), amount=-200, at=T("10-14", 2))      # 转出登记了，观察在转出之前
+    s, v = ev(s, 500.0, T("10-14", 1))
+    assert v["initial_capital_loss_frac"] == 0.0 and v["net_external_flows"] == 0
+    s, v = ev(s, 300.0, T("10-14", 3))                                   # 转出之后：权益 300 + 转出 200 = 500
+    assert v["initial_capital_loss_frac"] == 0.0 and v["pause"]["latched"] is False
+
+
+def test_observation_before_funding_not_determinable():
+    s, v = ev(funded(), 100.0, T("10-13", 23))
+    assert v["pause"] is None and "早于到账" in v["note"] and not s["pause_latched"] and s["equity_history"] == []
+
+
+def test_stale_observation_keeps_real_latch():
+    s, v = ev(funded(), 200.0, T("10-14", 5))                           # 真亏 60% → 锁
+    assert s["pause_latched"]
+    s2, v = ev(s, 500.0, T("10-14", 4))                                  # 旧读数（更高权益）不能解除
+    assert s2["pause_latched"] and v["pause"]["latched"] is True and v["stale_observation"]
 
 
 @pytest.mark.parametrize("mut", [
@@ -244,3 +281,14 @@ def test_pause_view_end_to_end_four_losses_via_cli_entry(tmp_path, monkeypatch):
     assert r["allowed_units"] == 0 and r["budget_status"] == "fail"
     pause, note = trial_cli.pause_view(960.0, equity_complete=True, asof=T("10-18"), latest_fill_at=...)
     assert pause["latched"] is True                                       # 已锁：成交未核查也不解除
+
+
+def test_store_slow_response_after_deposit_no_false_latch(tmp_path):
+    """045 P2 经正式存储事务：入金与新观察先落盘，慢返回的旧读数在锁内对最新状态计算 → 不锁、不进历史。"""
+    f = tmp_path / "state.json"
+    ts.update(lambda _: funded(), f, create=True)
+    ts.update(lambda cur: tc.record_funding(cur, amount=500, at=T("10-14", 2)), f)
+    ts.update(lambda cur: ev(cur, 1000.0, T("10-14", 3))[0], f)
+    ts.update(lambda cur: ev(cur, 500.0, T("10-14", 1))[0], f)
+    back, _ = ts.load(f)
+    assert back["pause_latched"] is False and [h["asof"] for h in back["equity_history"]] == [T("10-14", 3)]

@@ -8,7 +8,7 @@ A 写入 60% 亏损暂停后，B 拿旧快照（权益 500）照样写入，磁�
 - 计算在锁内对【最新】状态做，旧快照无从写回；rev 每次写入 +1。
 - 不变量：普通更新不得把 pause_latched 从 true 改成 false；只有 resume 事件（resume_log 恰好多一条）才可以。
 - 读到损坏/结构不符 → 隔离原文件（保留字节）并抛 TrialStateError，调用方必须当场告知、冻结新增；绝不用新状态覆盖。
-- 网络读数（权益、成交）在锁外取，传进 fn；fn 内按最新状态计算，旧观察不会覆盖新观察（trial_capital.evaluate）。
+- 网络读数（权益、成交）在锁外取，传进 fn；fn 内按最新状态计算，旧观察不会覆盖新观察，也不作新的暂停决策；现金流按观察时点截面计（trial_capital.evaluate，Codex 045）。
 """
 from __future__ import annotations
 

@@ -138,19 +138,34 @@ def consecutive_losses(state: dict, *, latest_fill_at=..., ) -> tuple[int | None
     return n, ""
 
 
+def flows_asof(state: dict, asof: str) -> float:
+    """截至 asof（含）已发生的外部净现金流。Codex 045 P2：权益与现金流必须是同一时点的截面 ——
+    旧版把所有现金流（含 asof 之后才到账的）从旧权益里减掉：起始 500、02:00 追加 500、03:00 权益 1000 之后，
+    01:00 的旧读数 500 返回，会算成「亏 100%」并锁住，而这段时间根本没有亏损。"""
+    t = ts(asof)
+    return round(sum(f["amount"] for f in state["external_flows"] if ts(f["at"]) <= t), 2)
+
+
 def evaluate(state: dict, *, equity, equity_complete: bool, asof: str, policy: dict, latest_fill_at=...) -> tuple[dict, dict]:
-    """计算当前资本视图，并在越线时把 latch 置上（返回新 state 与视图）。从不解除 latch。
-    asof 早于已记录的最新观察 → 只计算、不写入权益历史（旧观察不覆盖新观察；越线照样锁，更保守）。"""
+    """计算 asof 时点的资本视图，并在越线时把 latch 置上（返回新 state 与视图）。从不解除 latch。
+    现金流只计 asof 之前（含）已发生的（同一截面，Codex 045 P2）。
+    观察早于到账 → 不可判定。asof 早于已记录的最新观察（慢返回的旧读数）→ 只作审计视图：不写入权益历史、
+    不作新的暂停决策（Codex 045 P2：旧读数不能与后来的事件拼出新结论）；已有的 latch 照旧保持。"""
     _need_ts(asof, "asof")
     s = dict(state)
-    flows = round(sum(f["amount"] for f in s["external_flows"]), 2)
+    flows = flows_asof(s, asof)
+    later = [f for f in s["external_flows"] if ts(f["at"]) > ts(asof)]
     view = {"asof": asof, "trial_id": s["trial_id"], "policy_version": policy["version"], "funded_capital": s["funded_capital"],
-            "net_external_flows": flows, "current_equity": equity, "equity_basis": EQUITY_BASIS,
+            "net_external_flows": flows, "flows_after_asof": len(later), "current_equity": equity, "equity_basis": EQUITY_BASIS,
             "initial_capital_loss_frac": None, "cumulative_invested_loss_frac": None, "peak_drawdown_frac": None,
             "consecutive_losses": None, "consecutive_losses_note": "", "determinable": False, "pause": None,
             "trade_coverage": s["trade_coverage"], "stale_observation": False}
+    last = s["equity_history"][-1] if s["equity_history"] else None
+    stale = last is not None and ts(asof) < ts(last["asof"])
     if s["funded_capital"] is None:
         view["note"] = "试行资本尚未到账：计划金额不是到账事实"
+    elif ts(asof) < ts(s["funded_at"]):
+        view["note"] = f"观察时点 {asof} 早于到账 {s['funded_at']} → 不可判定"
     elif not (equity_complete and _num(equity)):
         view["note"] = "估值不完整/权益未知 → 不可判定，冻结新增（未知不是没有亏损）"
     else:
@@ -158,8 +173,6 @@ def evaluate(state: dict, *, equity, equity_complete: bool, asof: str, policy: d
         adj = equity - flows                                         # 剔除外部现金流后的权益
         loss = 1 - adj / F
         cum = 1 - equity / (F + flows) if F + flows > 0 else None
-        last = s["equity_history"][-1] if s["equity_history"] else None
-        stale = last is not None and ts(asof) < ts(last["asof"])
         hist = s["equity_history"] + ([] if stale else [{"asof": asof, "equity": equity, "net_flows": flows}])
         if not stale:
             s["equity_history"] = hist[-500:]
@@ -167,7 +180,12 @@ def evaluate(state: dict, *, equity, equity_complete: bool, asof: str, policy: d
         cl, cl_note = consecutive_losses(s, latest_fill_at=latest_fill_at)
         view.update(initial_capital_loss_frac=round(loss, 4), cumulative_invested_loss_frac=None if cum is None else round(cum, 4),
                     peak_drawdown_frac=round(1 - adj / peak, 4) if peak > 0 else None, consecutive_losses=cl,
-                    consecutive_losses_note=cl_note, determinable=cl is not None, stale_observation=stale)
+                    consecutive_losses_note=cl_note, determinable=cl is not None and not stale, stale_observation=stale)
+        if stale:
+            view["note"] = (f"陈旧观察（早于已记录的最新观察 {last['asof']}）：只作审计，不作新的暂停决策 → 本次不可判定、"
+                            "冻结新增；以最新观察为准")
+            view["pause"] = {"latched": True, "reason": s["pause_reason"], "paused_at": s["paused_at"]} if s["pause_latched"] else None
+            return s, view
         trig = []
         if loss >= policy["pause"]["drawdown_frac"]:
             trig.append(f"起始资本亏损 {loss:.0%} ≥ {policy['pause']['drawdown_frac']:.0%}（已剔除外部现金流）")

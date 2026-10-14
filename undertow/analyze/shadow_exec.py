@@ -29,6 +29,19 @@ DISPOSITION = {
 SELECTION = "independent_alternative"
 
 
+OPERATION_FAIL = ("insufficient_equity", "insufficient_buying_power")
+
+
+def live_status(policy_precheck: str, operation_status: str | None, broker_status: str) -> str:
+    """实盘能否开的整体状态（Codex 045 P1）：政策条件、资金能力、券商执行性都确定通过才 pass。
+    资金确定不足或政策条件 fail → fail；其余任何未核实 → incomplete。现在 broker_status 恒为 unverified，所以不会出现 pass。"""
+    if policy_precheck == "fail" or operation_status in OPERATION_FAIL:
+        return "fail"
+    if policy_precheck == "pass" and operation_status == "capital_ok" and broker_status == "verified":
+        return "pass"
+    return "incomplete"
+
+
 def cluster_of(inst: str) -> str:
     return next((c for c, ks in sh.CLUSTERS.items() if inst in ks), inst)
 
@@ -65,12 +78,15 @@ def candidate(row: dict, leg: dict, *, net_assets, account_open_max_loss, cluste
         n, notes = b["allowed_units"], b["reasons"]
         status = {"pass": "pass", "fail": "fail"}.get(b["budget_status"], "unknown")
         # Codex 044 P2-6：政策组数与资金能力分开保留；insufficient_equity 等确定状态不能只剩 notes 里的人读文字
-        # 实盘最终预检 = B 预算 + 收益风险比下限（Codex 044 E3）。下限不改 budget_status（影子 v5 研究预算按预登记版本复现），
-        # 单列 live_precheck：两项都过才是 pass；任一 incomplete → incomplete。
+        # policy_precheck = B 预算 + 收益风险比下限（Codex 044 E3），只是这两项政策条件；下限不改 budget_status
+        # （影子 v5 研究预算按预登记版本复现）。两项都过才 pass；任一 incomplete → incomplete。
+        # Codex 045 P1：它曾叫 live_precheck「实盘最终预检」，权益 100 < 风险 123.20 时仍显示 pass。名称与范围不符 →
+        # 改名，另给 live_status = 政策条件 + 资金能力 + 券商执行性：资金确定不足 → fail；权限/占用/处置未核实 → incomplete。
         g = rp.payoff_floor(round(credit - fee, 4), max_loss)
         pre = "fail" if "fail" in (status, g["status"]) else ("pass" if (status, g["status"]) == ("pass", "pass") else "incomplete")
         return {**base, **econ, "budget_status": status, "n": n, "policy_allowed_units": b["policy_allowed_units"],
-                "operation_status": b["operation_status"], "payoff_floor": g, "live_precheck": pre, "budget_checks": b["checks"],
+                "operation_status": b["operation_status"], "payoff_floor": g, "policy_precheck": pre,
+                "live_status": live_status(pre, b["operation_status"], base["broker_status"]), "budget_checks": b["checks"],
                 "notes": notes + ["n 为理论预算上限，互斥备选，不可跨候选相加；券商执行性未核实"]}
     n, notes = rp.max_units(net_assets=net_assets, unit_max_loss=max_loss, unit_stop_loss=stop_loss,
                             cluster_open_max_loss=cluster_open.get(base["cluster"], 0.0),

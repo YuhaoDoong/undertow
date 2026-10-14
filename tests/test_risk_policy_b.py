@@ -186,9 +186,59 @@ def test_shadow_adapter_keeps_insufficient_equity():
                          policy=rp.POLICY_B, open_positions=[], pause={"latched": False})
     assert r["budget_status"] == "pass" and r["policy_allowed_units"] == 1
     assert r["operation_status"] == "insufficient_equity"
-    # 收 80 付费 3.2：含费最大收益 76.8 / 最大亏损 123.2 = 62% → 下限通过；实盘预检 = 预算 + 下限
-    assert r["payoff_floor"]["status"] == "pass" and r["live_precheck"] == "pass"
+    # 收 80 付费 3.2：含费最大收益 76.8 / 最大亏损 123.2 = 62% → 下限通过；政策条件 = 预算 + 下限 → pass
+    # Codex 045 P1：但权益 100 < 123.20，资金确定不足 → 整体实盘状态 fail，不能有不加限定的 pass
+    assert r["payoff_floor"]["status"] == "pass" and r["policy_precheck"] == "pass"
+    assert r["live_status"] == "fail" and "live_precheck" not in r
     with patch.object(sx.sh, "window_leg", return_value={"status": "valid", "credit": {"conservative": 7}}):
         r = sx.candidate(row, leg, net_assets=500, account_open_max_loss=0, cluster_open={},
                          policy=rp.POLICY_B, open_positions=[], pause={"latched": False})
-    assert r["budget_status"] == "pass" and r["payoff_floor"]["status"] == "fail" and r["live_precheck"] == "fail"
+    assert r["budget_status"] == "pass" and r["payoff_floor"]["status"] == "fail" and r["policy_precheck"] == "fail"
+    assert r["live_status"] == "fail"
+    with patch.object(sx.sh, "window_leg", return_value={"status": "valid", "credit": {"conservative": 80}}):
+        r = sx.candidate(row, leg, net_assets=500, account_open_max_loss=0, cluster_open={},
+                         policy=rp.POLICY_B, open_positions=[], pause={"latched": False})
+    # 资金够、政策过，但券商权限/组合占用/处置未核实 → incomplete，不是 pass
+    assert r["policy_precheck"] == "pass" and r["operation_status"] != "insufficient_equity"
+    assert r["live_status"] == "incomplete"
+
+
+def test_live_status_matrix():
+    from undertow.analyze import shadow_exec as sx
+    assert sx.live_status("pass", "insufficient_equity", "unverified") == "fail"
+    assert sx.live_status("pass", "insufficient_buying_power", "verified") == "fail"
+    assert sx.live_status("fail", "capital_ok", "verified") == "fail"
+    assert sx.live_status("pass", "capital_ok_permissions_unverified", "unverified") == "incomplete"
+    assert sx.live_status("pass", "unverified", "unverified") == "incomplete"
+    assert sx.live_status("incomplete", "capital_ok", "verified") == "incomplete"
+    assert sx.live_status("pass", "capital_ok", "verified") == "pass"
+
+
+def test_shadow_cli_exec_insufficient_equity_end_to_end(tmp_path, monkeypatch, capsys):
+    """Codex 045 P1 调用链：权益 100、含费风险 123.20，经正式 cmd_exec → JSON 与终端都不得出现不加限定的实盘 pass。"""
+    import json
+    from types import SimpleNamespace as NS
+    from unittest.mock import patch
+    from undertow import shadow_cli as sc, cli, trial_cli
+    from undertow.analyze import shadow_exec as sx
+    row = {"key": "k1", "instrument": "gold", "session": "2026-10-14",
+           "legs": [{"status": "candidate", "leg_id": "L", "rule": "A", "side": "C", "sell": 100, "buy": 102,
+                     "expiry": "2026-10-30", "width_usd": 200}]}
+    src = tmp_path / "gold.jsonl"; src.write_text("")
+    monkeypatch.setattr(sc, "EXEC_DIR", tmp_path / "exec")
+    monkeypatch.setattr(sc, "_instruments", lambda cfg, names: [NS(key="gold")])
+    monkeypatch.setattr(sc, "_path", lambda k, replay: src)
+    monkeypatch.setattr(sc.jl, "load", lambda p, key: [row])
+    monkeypatch.setattr(sc, "prospective_ok", lambda r: True)
+    monkeypatch.setattr(cli, "_load_account_review", lambda no_cache=False: {"review": None})
+    monkeypatch.setattr(trial_cli, "pause_view", lambda *a, **k: ({"latched": False}, ""))
+    from undertow.collect import longbridge_account as lb
+    monkeypatch.setattr(lb, "fetch_assets", lambda: NS(net_assets=100.0))
+    with patch.object(sx.sh, "window_leg", return_value={"status": "valid", "credit": {"conservative": 80}}):
+        assert sc.cmd_exec(NS(session="2026-10-14", instruments=None)) == 0
+    out = capsys.readouterr().out
+    body = json.loads(next((tmp_path / "exec").rglob("2026-10-14.json")).read_text())
+    c = body["candidates"][0]
+    assert c["operation_status"] == "insufficient_equity" and c["policy_precheck"] == "pass"
+    assert c["live_status"] == "fail" and "live_precheck" not in c
+    assert "实盘可开 ✗" in out and "实盘可开确认 0" in out and "权益不足" in out

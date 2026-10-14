@@ -1627,17 +1627,19 @@ def cmd_exec(args) -> int:
     if pause_note:
         acct_note = (acct_note + "；" if acct_note else "") + pause_note
     if net is None:
-        res = [{**r, "budget_status": "unknown", "n": 0, "notes": [acct_note or "净资产未知"] + r.get("notes", [])}
+        res = [{**r, "budget_status": "unknown", "n": 0, "notes": [acct_note or "净资产未知"] + r.get("notes", []),
+                **({"policy_precheck": "incomplete", "live_status": "incomplete"} if "live_status" in r else {})}
                if r["budget_status"] == "pass" else r for r in res]
     body = {"schema": 1, "session": session, "computed_at": _now_iso(), "exec_version": sx.VERSION,
             "config_version": sh.CONFIG["version"], "net_assets": net, "account_open_max_loss": acct_ml,
             "account_note": acct_note, "candidates": res}
     atomic_write_json(out_dir / f"{session}.json", body)
     n_ok = sum(r["budget_status"] == "pass" for r in res)
-    n_cant = sum(r.get("operation_status") in ("insufficient_equity", "insufficient_buying_power") for r in res)
+    n_cant = sum(r.get("operation_status") in sx.OPERATION_FAIL for r in res)
+    n_live = sum(r.get("live_status") == "pass" for r in res)
     print(f"账户风险预算账 {session}（{sx.VERSION}）：候选 {len(res)}，理论预算通过 {n_ok}"
           + (f"，其中 {n_cant} 个资金确定不足（开不了）" if n_cant else "")
-          + "（互斥备选、不可相加；券商执行性未核实）"
+          + f"；实盘可开确认 {n_live}（互斥备选、不可相加；券商权限/占用/处置未核实前不会确认）"
           + (f"；{acct_note}" if acct_note else ""))
     for r in res:
         if r["budget_status"] == "no_candidate":
@@ -1648,7 +1650,8 @@ def cmd_exec(args) -> int:
             r.get("operation_status"), "")
         pf = r.get("payoff_floor") or {}
         pfx = "" if not pf else ("  收益风险比 ✓" if pf.get("status") == "pass" else f"  收益风险比 ✗ {pf.get('note') or pf.get('status')}")
-        print(f"  {r['instrument']:7s} {r['leg_id']:5s} 政策预算 {r['budget_status']} {r['n']} 组{op}{pfx}  {econ}  {r['notes'][0]}")
+        lv = {"fail": "  实盘可开 ✗", "incomplete": "  实盘可开 未核实", "pass": "  实盘可开 ✓"}.get(r.get("live_status"), "")
+        print(f"  {r['instrument']:7s} {r['leg_id']:5s} 政策预算 {r['budget_status']} {r['n']} 组{op}{pfx}{lv}  {econ}  {r['notes'][0]}")
     print(f"  （结果含账户金额，只写 {out_dir}/，已 gitignore）")
     return 0
 

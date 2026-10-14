@@ -1621,7 +1621,7 @@ def cmd_exec(args) -> int:
         if f.stem < session:
             prior += load_json(f, {}).get("candidates", [])
     from undertow.trial_cli import pause_view
-    pause, pause_note = pause_view(net, equity_complete=net is not None, asof=session)
+    pause, pause_note = pause_view(net, equity_complete=net is not None, asof=_now_iso())   # 带时区时间（044 包 B）
     res = sx.evaluate(rows, session=session, net_assets=net, account_open_max_loss=acct_ml,
                       account_cluster_open=acct_cl, prior=prior, policy=sx.rp.POLICY_B, open_positions=book, pause=pause)
     if pause_note:

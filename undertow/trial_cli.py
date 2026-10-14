@@ -1,11 +1,14 @@
-"""实盘试行状态命令（Codex 043 WP3）：只读账户 + 私有状态文件，从不下单、不入金。
+"""实盘试行状态命令（Codex 043 WP3；044 包 B/C）：只读账户 + 私有状态文件，从不下单、不入金。
 
-  undertow trial status                          # 试行状态、额度、暂停（读长桥权益，只读）
+  undertow trial status                          # 试行状态、额度、暂停（读长桥权益与成交，只读）
   undertow trial init --planned 500              # 建立试行（计划金额，不是到账事实）
-  undertow trial fund --amount 500 --note "…"    # 记录用户在券商端已完成的到账（用户原话）
+  undertow trial fund --amount 500 --note "…"    # 记录用户在券商端已完成的到账；之后的正数=追加入金、负数=转出
+  undertow trial trade --id … --pnl -12.4 --closed-at … --complete --note "…"   # 登记一笔逻辑持仓的含费净结果
+  undertow trial verify-trades --note "…"        # 登记「截至现在所有已平逻辑交易都已登记」（对照券商成交核对后）
   undertow trial resume --note "…"               # 解除暂停：只按用户明确决定，记原话
 
-状态在 data/account/live_trial/state.json（gitignore）。损坏 → 隔离并当场报告，冻结新增。
+状态在 data/account/live_trial/state.json（gitignore）。所有写入走 trial_store.update（锁内读—算—写—回读）。
+损坏 → 隔离并当场报告，冻结新增。连续亏损：券商在核对时点之后还有成交 → 不可判定，冻结新增（未知不当 0 笔）。
 """
 from __future__ import annotations
 
@@ -21,16 +24,65 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def pause_view(equity, *, equity_complete: bool, asof: str, persist: bool = True) -> tuple[dict | None, str]:
-    """给预算入口用的暂停视图；None = 未知/未建立/损坏（预算 → incomplete）。越线时把 latch 写盘。"""
+def fills_after(through: str | None):
+    """券商成交记录里 through 之后的最新成交时间：None = 已核查且没有；... = 没核查成（读不到/格式不对）。
+    历史接口不含当天，所以当天接口一起读。只读。"""
+    if tc.ts(through) is None:
+        return ...
+    from undertow.collect import longbridge_account as lb
+    cut = tc.ts(through)
+    try:
+        rows = lb.fetch_executions(start=cut.date().isoformat()) + lb.fetch_today_executions()
+    except Exception:                                          # noqa: BLE001 —— 读不到 = 没核查，不是没有成交
+        return ...
+    times = [tc.ts(r.get("time")) for r in rows]
+    if any(t is None for t in times):
+        return ...                                             # 有成交行没有可比时间：不猜
+    later = [t for t in times if t > cut]
+    return max(later).isoformat() if later else None
+
+
+def _evaluate_in_store(equity, equity_complete, asof, latest_fill_at, persist: bool):
+    """锁内对最新状态评估（只会置上 latch，不会解除）。→ (state, view, problem)。"""
+    out = {}
+
+    def fn(cur):
+        s2, v = tc.evaluate(cur, equity=equity, equity_complete=equity_complete, asof=asof, policy=rp.POLICY_B,
+                            latest_fill_at=latest_fill_at)
+        out["view"] = v
+        return s2 if persist else None
+    try:
+        st = ts.update(fn)
+    except ts.TrialStateError as e:
+        return None, None, str(e)
+    return st, out["view"], None
+
+
+def _check_identity(st) -> str | None:
+    if st["policy_version"] != rp.VERSION_B:
+        return f"试行状态的政策版本 {st['policy_version']} ≠ 现行 {rp.VERSION_B}：不自动沿用，需重新确认"
+    return None
+
+
+_FETCH = object()
+
+
+def pause_view(equity, *, equity_complete: bool, asof: str, persist: bool = True, latest_fill_at=_FETCH) -> tuple[dict | None, str]:
+    """给预算入口用的暂停视图；None = 未知/未建立/损坏（预算 → incomplete）。越线时把 latch 写盘（锁内事务）。
+    latest_fill_at 缺省时自己去券商读成交核对；测试可直接传（None = 已核查无成交，... = 未核查）。"""
     st, prob = ts.load()
     if prob:
         return None, f"⚠️ {prob} —— 冻结新增"
     if st is None:
         return None, "试行未建立（undertow trial init）：暂停状态未知，预算不放行"
-    st2, view = tc.evaluate(st, equity=equity, equity_complete=equity_complete, asof=asof, policy=rp.POLICY_B)
-    if persist and st2 != st:
-        ts.save(st2)
+    bad = _check_identity(st)
+    if bad:
+        return None, f"⚠️ {bad} —— 冻结新增"
+    if latest_fill_at is _FETCH:
+        latest_fill_at = fills_after(st["trade_coverage"]["through"])
+    st2, view, prob = _evaluate_in_store(equity, equity_complete, asof, latest_fill_at, persist)
+    if prob:
+        return None, f"⚠️ {prob} —— 冻结新增"
     return view["pause"], view.get("note", "")
 
 
@@ -41,24 +93,38 @@ def cmd_status(args) -> int:
         print(f"⚠️ {prob}\n新增一律冻结；请检查隔离文件后再决定。"); return 2
     if st is None:
         print("试行未建立。用 `undertow trial init --planned 500` 建立（计划金额，不是到账事实）。"); return 0
+    bad = _check_identity(st)
+    if bad:
+        print(f"⚠️ {bad}；新增冻结。"); return 2
     try:
         equity = lb.fetch_assets().net_assets; complete = equity is not None
     except Exception as e:                                     # noqa: BLE001 —— 账户读不到 = 不可判定
         equity, complete = None, False
         print(f"账户不可用：{str(e)[:120]}")
-    st2, v = tc.evaluate(st, equity=equity, equity_complete=complete, asof=_now(), policy=rp.POLICY_B)
-    if st2 != st:
-        ts.save(st2)
+    fill = fills_after(st["trade_coverage"]["through"])
+    st2, v, prob = _evaluate_in_store(equity, complete, _now(), fill, persist=True)
+    if prob:
+        print(f"⚠️ {prob}\n新增一律冻结。"); return 2
     P = rp.POLICY_B
     R = equity
     f = lambda x: "未知" if x is None else f"${x:,.2f}"
-    print(f"试行 {st2['trial_id']} · 政策 {P['version']}")
-    print(f"计划资本 {f(st2['planned_capital'])} · 实际到账 {f(st2['funded_capital'])} · 外部净入金 {f(v['net_external_flows'])}")
-    print(f"当前权益 R {f(R)} · 起始资本亏损 {'—' if v['initial_capital_loss_frac'] is None else format(v['initial_capital_loss_frac'], '.1%')}"
-          f" · 峰值回撤 {'—' if v['peak_drawdown_frac'] is None else format(v['peak_drawdown_frac'], '.1%')}（只报告）"
-          f" · 连续亏损 {v['consecutive_losses'] if v['consecutive_losses'] is not None else '—'} 笔")
+    pct = lambda x: "—" if x is None else format(x, ".1%")
+    print(f"试行 {st2['trial_id']} · 政策 {P['version']} · 状态版本 rev {st2['rev']}")
+    print(f"计划资本 {f(st2['planned_capital'])} · 起始到账 {f(st2['funded_capital'])} · 外部净现金流 {f(v['net_external_flows'])}")
+    print(f"当前权益 R {f(R)}（{tc.EQUITY_BASIS}）")
+    print(f"起始资本亏损 {pct(v['initial_capital_loss_frac'])}（剔除外部现金流，暂停判据）"
+          f" · 累计投入亏损 {pct(v['cumulative_invested_loss_frac'])}（只报告）"
+          f" · 峰值回撤 {pct(v['peak_drawdown_frac'])}（只报告）")
+    cov = st2["trade_coverage"]
+    print(f"连续亏损 {v['consecutive_losses'] if v['consecutive_losses'] is not None else '不可判定'} 笔"
+          f" · 交易结果已核对至 {cov['through'] or '—'}（{cov['source'] or '—'}）"
+          f" · 已登记完整交易 {sum(t['complete'] for t in st2['closed_trades'].values())} 笔")
+    if v.get("consecutive_losses_note"):
+        print(f"  {v['consecutive_losses_note']}")
     pv = v["pause"]
     print("暂停：" + ("未知（不可判定 → 冻结新增）" if pv is None else ("🔴 已暂停：" + (pv["reason"] or "") if pv["latched"] else "未暂停")))
+    if v.get("stale_observation"):
+        print("（本次观察早于已记录的最新观察：只计算，不写入权益历史）")
     if v.get("note"):
         print(v["note"])
     for name, rule in (("单笔计划止损", P["stop_loss"]), ("单笔理论最大亏损", P["max_loss"]),
@@ -69,23 +135,58 @@ def cmd_status(args) -> int:
     return 0
 
 
+def _write(fn, *, create=False) -> tuple[dict | None, str | None]:
+    try:
+        return ts.update(fn, create=create), None
+    except (ts.TrialStateError, ValueError) as e:
+        return None, str(e)
+
+
 def cmd_init(args) -> int:
-    st, prob = ts.load()
-    if prob or st is not None:
-        print(prob or f"试行 {st['trial_id']} 已存在，不覆盖"); return 1
     tid = f"trial-{datetime.now(timezone.utc):%Y%m%d}"
-    ts.save(tc.new_state(trial_id=tid, planned_capital=float(args.planned), policy_version=rp.VERSION_B, created_at=_now()))
+    st, err = _write(lambda cur: tc.new_state(trial_id=tid, planned_capital=float(args.planned),
+                                              policy_version=rp.VERSION_B, created_at=_now()), create=True)
+    if err:
+        print(err); return 1
     print(f"已建立 {tid}：计划资本 ${float(args.planned):,.2f}（计划，不是到账）"); return 0
 
 
 def cmd_fund(args) -> int:
+    if not (args.note or "").strip():
+        print("需要用户原话（--note）"); return 1
+    st, err = _write(lambda cur: tc.record_funding(cur, amount=float(args.amount), at=_now(), note=args.note))
+    if err:
+        print(err); return 1
+    kind = "起始到账" if not st["external_flows"] else ("追加入金" if args.amount > 0 else "转出")
+    print(f"已记录{kind} ${abs(float(args.amount)):,.2f}（外部现金流从权益里剔除，不洗掉亏损、不解除暂停）"); return 0
+
+
+def cmd_trade(args) -> int:
+    if not (args.note or "").strip():
+        print("需要来源说明（--note：用户原话或对照的流水）"); return 1
+    st, err = _write(lambda cur: tc.record_trade(cur, trade_id=args.id, net_pnl_usd=args.pnl, closed_at=args.closed_at,
+                                                 complete=args.complete, source="人工登记", note=args.note,
+                                                 revise=args.revise))
+    if err:
+        print(err); return 1
+    print(f"已登记 {args.id}：含费净结果 ${args.pnl:,.2f}，{'完整平仓' if args.complete else '部分平仓（不计入连续亏损）'}")
+    print("登记完所有已平交易后，用 `undertow trial verify-trades --note …` 确认覆盖时点；否则连续亏损仍不可判定。")
+    return 0
+
+
+def cmd_verify_trades(args) -> int:
     st, prob = ts.load()
     if prob or st is None:
         print(prob or "试行未建立"); return 1
-    if not (args.note or "").strip():
-        print("需要用户原话（--note）"); return 1
-    ts.save(tc.record_funding(st, amount=float(args.amount), at=_now(), note=args.note))
-    print("已记录到账（入金不解除暂停、不洗掉亏损）"); return 0
+    now = _now()
+    fill = fills_after(st["trade_coverage"]["through"])
+    if fill is ...:
+        print("读不到券商成交记录：无法核对，覆盖时点不推进"); return 1
+    print(f"核对区间 {st['trade_coverage']['through']} → {now}：券商最新成交 {fill or '无'}")
+    st2, err = _write(lambda cur: tc.verify_trades(cur, through=now, verified_at=now, source="人工核对", note=args.note))
+    if err:
+        print(err); return 1
+    print(f"已确认：截至 {now} 的已平逻辑交易都已登记（{len(st2['closed_trades'])} 条）"); return 0
 
 
 def cmd_resume(args) -> int:
@@ -94,8 +195,14 @@ def cmd_resume(args) -> int:
         print(prob or "试行未建立"); return 1
     if not st["pause_latched"]:
         print("当前未暂停"); return 0
-    ts.save(tc.resume(st, user_note=args.note, at=_now()))
-    print("已按用户决定解除暂停；连续亏损从此刻重新计数"); return 0
+    st2, err = _write(lambda cur: tc.resume(cur, user_note=args.note, at=_now()) if cur["pause_latched"] else None)
+    if err:
+        print(err); return 1
+    print("已按用户决定解除暂停；连续亏损从此刻重新计数")
+    w = tc.relock_warning(st2, rp.POLICY_B)
+    if w:
+        print(w)
+    return 0
 
 
 def register(sub):
@@ -105,4 +212,13 @@ def register(sub):
     i = ss.add_parser("init"); i.add_argument("--planned", type=float, required=True); i.set_defaults(func=cmd_init)
     fd = ss.add_parser("fund"); fd.add_argument("--amount", type=float, required=True); fd.add_argument("--note", required=True)
     fd.set_defaults(func=cmd_fund)
+    t = ss.add_parser("trade", help="登记一笔逻辑持仓的含费净实现结果（来自券商流水，人工核对）")
+    t.add_argument("--id", required=True); t.add_argument("--pnl", type=float, required=True)
+    t.add_argument("--closed-at", required=True, help="带时区 ISO 时间，如 2026-10-20T15:30:00-04:00")
+    g = t.add_mutually_exclusive_group(required=True)
+    g.add_argument("--complete", action="store_true"); g.add_argument("--partial", dest="complete", action="store_false")
+    t.add_argument("--note", required=True); t.add_argument("--revise", action="store_true")
+    t.set_defaults(func=cmd_trade)
+    v = ss.add_parser("verify-trades", help="确认截至现在所有已平逻辑交易都已登记"); v.add_argument("--note", required=True)
+    v.set_defaults(func=cmd_verify_trades)
     r = ss.add_parser("resume"); r.add_argument("--note", required=True); r.set_defaults(func=cmd_resume)

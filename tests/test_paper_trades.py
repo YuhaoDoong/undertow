@@ -615,7 +615,7 @@ def test_debit_roi100_prompt_only_never_closes():
     assert pt.step(p, datetime(2026, 10, 1, 15, 46, tzinfo=ET), depth=q(4.0, 4.1, 12.6, 12.7)) == "review_prompt"  # V 8.5
     e = p["events"][-1]
     assert e["action"] == "review_prompt" and e["roi"] >= 1 and e["pnl_usd"] == pytest.approx(426.8)
-    assert p["state"] == "entered" and "pnl_usd" not in p or p.get("pnl_usd") is None      # 只提示：状态与盈亏都不动
+    assert p["state"] == "entered" and p.get("pnl_usd") is None                            # 只提示：状态与盈亏都不动
 
 
 def test_debit_roi100_missing_long_bid_or_offhours_does_not_prompt():
@@ -659,24 +659,97 @@ def test_correct_exit_rule_keeps_history_and_only_touches_named_position(tmp_pat
     assert sum('"action": "exit_rule_corrected"' in ln.split('"evidence"')[0] for ln in led.splitlines()) == 2
 
 
-def test_post_close_track_records_hypothetical_never_reopens(tmp_path, monkeypatch):
+def _tracked(tmp_path, monkeypatch):
     p = _debit_entered()
     load = _env(tmp_path, monkeypatch, [{"id": "S", "execution": "模拟", "paper": p}])
     assert pt.manual_close("S", "用户：平白银", datetime(2026, 10, 1, 10, 5, tzinfo=ET), depth=q(4.0, 4.1, 12.6, 12.7))["ok"]
     assert not pt.start_track("S", "")["ok"]
     assert pt.start_track("S", "用户：继续观察后续", datetime(2026, 10, 1, 10, 6, tzinfo=ET))["ok"]
     assert pt.start_track("S", "again")["unchanged"]
-    st = load()["S"]["paper"]; real = st["pnl_usd"]
+    return load()["S"]["paper"]
+
+
+def test_post_close_track_records_hypothetical_never_reopens(tmp_path, monkeypatch):
+    st = _tracked(tmp_path, monkeypatch); real = st["pnl_usd"]
     assert pt.track_step(st, datetime(2026, 10, 1, 15, 46, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1)) == "track_mark"
     m = st["events"][-1]
-    assert m["hypothetical_pnl_usd"] == pytest.approx((9.9 - 4.2) * 100 - 3.2) and m["actual_pnl_usd"] == real
+    assert m["qualified"] and m["hypothetical_pnl_usd"] == pytest.approx((9.9 - 4.2) * 100 - 3.2) and m["actual_pnl_usd"] == real
     assert pt.track_step(st, datetime(2026, 10, 1, 15, 50, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1)) is None   # 同一时点不重复
-    assert pt.track_step(st, datetime(2026, 10, 2, 9, 46, tzinfo=ET), depth=q(3.0, 3.1, None, 13.1)) == "track_mark"
-    assert st["events"][-1]["hypothetical_pnl_usd"] is None and st["events"][-1]["value"] is None      # 缺多头 bid 不折零
-    assert pt.track_step(st, datetime(2026, 10, 31, 9, 46, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1)) is None   # 过了到期
-    assert pt.track_step(st, datetime(2026, 10, 3, 9, 46, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1)) is None    # 周六
+    assert pt.track_step(st, datetime(2026, 10, 31, 9, 46, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1)) in (None, "track_unresolved")
     assert st["state"] == "closed_manual" and st["pnl_usd"] == real                         # 从不重开、不改实际
     assert pt.start_track("NONE", "x")["ok"] is False
+
+
+def test_track_retry_in_window_then_success(tmp_path, monkeypatch):
+    """Codex 046 WP1：同窗先缺多头 bid（不占时点）→ 09:50 有效报价成功。"""
+    st = _tracked(tmp_path, monkeypatch)
+    assert pt.track_step(st, datetime(2026, 10, 2, 9, 46, tzinfo=ET), depth=q(3.0, 3.1, None, 13.1)) == "track_retry"
+    assert st["events"][-1]["action"] == "track_retry" and "hypothetical_pnl_usd" not in st["events"][-1]
+    assert pt.track_step(st, datetime(2026, 10, 2, 9, 50, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1)) == "track_mark"
+    assert [e["action"] for e in st["events"] if e.get("slot") == "2026-10-02 09:45"] == ["track_retry", "track_mark"]
+
+
+def test_track_late_return_not_in_slot(tmp_path, monkeypatch):
+    """09:46 请求、次日 09:46 才返回：旁路记录，不占前日时点、不给假设盈亏；前日时点窗后定为未决（晚返回）。"""
+    st = _tracked(tmp_path, monkeypatch)
+    monkeypatch.setattr(pt, "_clock", lambda: datetime(2026, 10, 2, 9, 46, tzinfo=ET))
+    assert pt.track_step(st, datetime(2026, 10, 1, 15, 46, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1)) == "track_retry"
+    e = st["events"][-1]
+    assert e["action"] == "track_late_return" and e["slot"] == "2026-10-01 15:45" and "hypothetical_pnl_usd" not in e
+    monkeypatch.setattr(pt, "_clock", lambda: datetime(2000, 1, 1, tzinfo=ET))
+    pt.track_step(st, datetime(2026, 10, 2, 9, 40, tzinfo=ET))
+    u = [x for x in st["events"] if x.get("action") == "track_unresolved"]
+    assert [x["slot"] for x in u] == ["2026-10-01 15:45"] and u[0]["category"].startswith("late_return")
+
+
+def test_track_missed_wake_is_recorded(tmp_path, monkeypatch):
+    """10:02 才唤醒，09:45 窗已过：不是零事件，而是 track_unresolved（错过唤醒）。"""
+    st = _tracked(tmp_path, monkeypatch)
+    assert pt.track_step(st, datetime(2026, 10, 2, 10, 2, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1)) == "track_unresolved"
+    u = [x for x in st["events"] if x.get("action") == "track_unresolved"]
+    assert u[-1]["slot"] == "2026-10-02 09:45" and u[-1]["category"].startswith("missed_wake")
+    # 跟踪开始（10/01 10:06）之前的 10/01 09:45 不算欠账
+    assert not any(x.get("slot") == "2026-10-01 09:45" for x in u)
+
+
+def test_track_combo_out_of_bounds_not_qualified(tmp_path, monkeypatch):
+    """两腿正报价但组合价值超出宽度（多头 bid 14.6 − 空头 ask 3.1 = 11.5 > 宽 10）：只记保守清算情景，不是合格样本。"""
+    st = _tracked(tmp_path, monkeypatch)
+    assert pt.track_step(st, datetime(2026, 10, 2, 9, 46, tzinfo=ET), depth=q(3.0, 3.1, 14.6, 14.7)) == "track_retry"
+    e = st["events"][-1]
+    assert e["action"] == "track_incomplete" and e["execution_flags"] and "hypothetical_pnl_usd" not in e
+    assert not any(x.get("action") == "track_mark" for x in st["events"])
+
+
+def test_advisory_cents_boundary_and_report_agree():
+    """Codex 046 WP2：P 423.19 / L 423.20 不触发，相等触发；报告与事件同一判定。"""
+    from scripts import paper_book as pb
+    assert not pt.advisory_triggered(423.19, 423.2) and pt.advisory_triggered(423.2, 423.2) and pt.advisory_triggered(423.21, 423.2)
+    r = {"structure": "debit", "advisory_rule": "debit-roi100-review-v1", "econ": {"max_loss_usd": 423.2, "max_gain_usd": 576.8}}
+    assert "考虑止盈" not in pb._advisory_cell(r, 423.19, None) and "考虑止盈" in pb._advisory_cell(r, 423.2, None)
+    p = _debit_entered()
+    # V = 8.4639 → pnl = (8.4639 − 4.2)·100 − 3.2 = 423.19
+    v = pt.advisory_view(p, -8.4639, None)
+    assert v["pnl_usd"] == 423.19 and v["triggered"] is False
+
+
+def test_advisory_not_before_effective_and_unknown_rule_reported():
+    p = _debit_entered(); p["advisory_effective_at"] = datetime(2026, 10, 1, 11, 0, tzinfo=ET).isoformat()
+    assert pt.step(p, datetime(2026, 10, 1, 9, 46, tzinfo=ET), depth=q(4.0, 4.1, 12.6, 12.7)) == "mark"   # 生效前不补造
+    assert p["events"][-1]["advisory"]["before_effective"] is True
+    assert pt.step(p, datetime(2026, 10, 1, 15, 46, tzinfo=ET), depth=q(4.0, 4.1, 12.6, 12.7)) == "review_prompt"
+    b = _debit_entered(); b["advisory_rule"] = "nope"
+    pt.step(b, datetime(2026, 10, 1, 9, 46, tzinfo=ET), depth=q(4.0, 4.1, 12.6, 12.7))
+    assert any(e.get("action") == "advisory_config_error" for e in b["events"])
+    assert not any(e.get("action") == "review_prompt" for e in b["events"])
+
+
+def test_correct_exit_rule_closed_is_idempotent(tmp_path, monkeypatch):
+    x = _debit_entered(); x.update(exit_rule="user-tp90-v1", advisory_rule=None, state="closed_manual", pnl_usd=119.8)
+    load = _env(tmp_path, monkeypatch, [{"id": "X", "execution": "模拟", "paper": x}])
+    pt.correct_exit_rule("X", "用户：买方不是按 90%", datetime(2026, 10, 14, 11, 0, tzinfo=ET))
+    assert pt.correct_exit_rule("X", "用户：买方不是按 90%", datetime(2026, 10, 14, 11, 1, tzinfo=ET))["unchanged"]
+    assert sum(e.get("action") == "exit_rule_corrected" for e in load()["X"]["paper"]["events"]) == 1
 
 
 def test_stop_crossed_but_cost_outside_payoff_is_blocked_not_bad_data():

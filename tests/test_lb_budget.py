@@ -155,12 +155,23 @@ def _hold_lock(path):
 
 
 def _release(p):
-    p.stdin.close(); p.wait(5)
+    if p.stdin and not p.stdin.closed:
+        p.stdin.close()
+    p.wait(5)
 
 
-def test_rate_lock_respects_caller_deadline_and_command_not_run(bdir):
+@pytest.fixture
+def holder():
+    """断言失败也回收持锁子进程（Codex 046：try/finally 语义）。"""
+    hs = []
+    yield lambda path: hs.append(_hold_lock(path)) or hs[-1]
+    for h in hs:
+        _release(h)
+
+
+def test_rate_lock_respects_caller_deadline_and_command_not_run(bdir, holder):
     """Codex 036 §6 探针：真实子进程持速率锁 0.5 秒，run(timeout=0.05) 旧代码约 0.51 秒才返回。现：按截止返回、命令不执行。"""
-    h = _hold_lock(bdir / ".lb_rate.lock")
+    h = holder(bdir / ".lb_rate.lock")
     marker = bdir / "ran"
     t0 = time.monotonic()
     with pytest.raises(subprocess.TimeoutExpired):
@@ -169,10 +180,10 @@ def test_rate_lock_respects_caller_deadline_and_command_not_run(bdir):
     _release(h)
 
 
-def test_rate_lock_wait_does_not_hold_slot(bdir, monkeypatch):
+def test_rate_lock_wait_does_not_hold_slot(bdir, holder, monkeypatch):
     """等速率锁时不占并发槽：唯一的槽在别的进程持速率锁期间保持空闲。"""
     monkeypatch.setattr(lb, "N_SLOTS", 1)
-    h = _hold_lock(bdir / ".lb_rate.lock")
+    h = holder(bdir / ".lb_rate.lock")
     import threading, fcntl as _f
     errs = []
     th = threading.Thread(target=lambda: errs.append(None) if lb.acquire(timeout=2).__enter__() is None else None)
@@ -190,8 +201,8 @@ def test_rate_lock_wait_does_not_hold_slot(bdir, monkeypatch):
     _release(h); th.join(3)
 
 
-def test_stats_lock_busy_defers_instead_of_blocking(bdir):
-    h = _hold_lock(bdir / ".lb_stats.lock")
+def test_stats_lock_busy_defers_instead_of_blocking(bdir, holder):
+    h = holder(bdir / ".lb_stats.lock")
     t0 = time.monotonic()
     lb._stat("call", 1.0)
     assert time.monotonic() - t0 < 0.5

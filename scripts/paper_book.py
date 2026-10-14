@@ -43,8 +43,9 @@ def _advisory_cell(r: dict, pnl, note) -> str:
     cap = "（最大可达 %.0f%%，100%% 不可达）" % (M / L * 100) if M / L < 1 else ""
     if pnl is None or note:
         return f"；盈利/风险成本 —（估值不完整）{cap}"
+    from scripts.paper_trades import advisory_triggered       # 与事件同一判定（Codex 046 WP2），显示精度另处理
     roi = pnl / L
-    return f"；盈利/风险成本 {roi:.0%}" + ("　🔔 ≥100% 考虑止盈（只提示）" if roi >= 1 else "") + cap
+    return f"；盈利/风险成本 {roi:.0%}" + ("　🔔 ≥100% 考虑止盈（只提示）" if advisory_triggered(pnl, L) else "") + cap
 
 
 def _num(x) -> bool:
@@ -112,7 +113,8 @@ def classify(theses: list) -> dict:
                "econ": p.get("economics") or {}, "pnl": p.get("pnl_usd"), "stop": p.get("stop_value"),
                "exit_rule": p.get("exit_rule"), "strike_rule": p.get("strike_rule"), "entered_at": p.get("entered_at"),
                "advisory_rule": p.get("advisory_rule"), "track": p.get("post_close_track"),
-               "track_marks": [e for e in p.get("events") or [] if e.get("action") == "track_mark"],
+               "track_events": [e for e in p.get("events") or [] if str(e.get("action", "")).startswith("track_")
+                                and e.get("action") != "track_started"],
                "reason": p.get("skip_reason") or p.get("invalid_reason"), "mark": _last_mark(p),
                "close_request": p.get("close_request"), "result_under_review": p.get("result_under_review"),
                "underlying": p.get("underlying"), "closed_at": p.get("closed_at"), "settle_close": (p.get("settle") or {}).get("close"),
@@ -341,13 +343,22 @@ def render(day: str, c: dict, sm: dict, live: dict, generated_at: str, legacy: l
     tr = [r for r in c["closed"] if r.get("track")]
     if tr:
         md += ["", "## 已平仓位的后续跟踪（仅跟踪：假设未平，不重开、不改实际盈亏）", "",
-               "| 仓位 | 实际了结盈亏 | 跟踪起点 | 最近一次跟踪（时点） | 假设未平的含费盈亏 | 有效 / 共记录 |", "|---|---|---|---|---|---|"]
+               "合格 = 窗口内返回、两腿成立且组合不越界的保守报价；尝试失败与窗口耗尽的时点分开计，不以最近一次成功掩盖缺失。", "",
+               "| 仓位 | 实际了结盈亏 | 跟踪起点 | 最近一次尝试（状态） | 最近合格观察（时点） | 假设未平的含费盈亏 | 合格时点 / 未决时点 / 失败尝试 |",
+               "|---|---|---|---|---|---|---|"]
+        lab = {"track_mark": "合格", "track_retry": "无报价/数据不成立", "track_incomplete": "组合越界（非合格）",
+               "track_late_return": "晚返回（旁路）", "track_unresolved": "时点未决"}
         for r in tr:
-            ms = r["track_marks"]
-            ok = [m for m in ms if _num(m.get("hypothetical_pnl_usd"))]
-            last = ok[-1] if ok else None
+            es = r["track_events"]
+            ok = [e for e in es if e.get("action") == "track_mark" and e.get("qualified") and _num(e.get("hypothetical_pnl_usd"))]
+            att = [e for e in es if e.get("action") != "track_unresolved"]
+            last_att, last_ok = (att[-1] if att else None), (ok[-1] if ok else None)
+            unres = sum(e.get("action") == "track_unresolved" for e in es)
+            fails = sum(e.get("action") in ("track_retry", "track_incomplete", "track_late_return") for e in es)
             md.append(f"| {r['id']} | {'$%+.2f' % r['pnl'] if _num(r['pnl']) else '—'} | {r['track']['from'][:16]} | "
-                      f"{(last or {}).get('slot') or '—'} | {'$%+.2f' % last['hypothetical_pnl_usd'] if last else '—'} | {len(ok)} / {len(ms)} |")
+                      f"{(str(last_att['at'])[:16] + ' ' + lab.get(last_att['action'], last_att['action'])) if last_att else '—'} | "
+                      f"{(last_ok or {}).get('slot') or '—'} | {'$%+.2f' % last_ok['hypothetical_pnl_usd'] if last_ok else '—'} | "
+                      f"{len(ok)} / {unres} / {fails} |")
     md += ["", "## 待入场", ""] + [f"- {r['id']}：{_struct(r)}（{r['batch']}，{r['strike_rule'] or '固定档位'}）" for r in c["planned"]] + \
           ([] if c["planned"] else ["- （无）"])
     md += ["", "## 已了结", "", "| 仓位 | 批次 | 了结方式 | 入场权利金 | 含费盈亏 | 含费最大亏损 | 盈亏/最大亏损 | 若持有到期（反事实） |",

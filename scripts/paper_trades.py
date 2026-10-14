@@ -84,17 +84,31 @@ def exit_rule_error(p: dict) -> str | None:
     return None
 
 
-def advisory_view(p: dict, val, assume) -> dict | None:
-    """提示规则的只读评估：→ {rule, roi, risk_cost_usd, max_roi, target_unreachable, triggered}；没挂提示规则 → None。
-    经济量从共享 spread_econ（经 economics）读；估值缺失、或有估值假设（某腿缺可成交价按 0 计）→ roi None、不触发。"""
+def advisory_triggered(pnl_usd, risk_cost_usd) -> bool:
+    """提示条件的唯一判定（Codex 046 WP2）：含费盈利 P ≥ 含费风险成本 L，按分为单位的金额比较，不先把 ROI 舍入再比
+    （旧版 ROI 四舍五入四位后比 1：P 423.19 / L 423.20 → 1.0 触发，报告却不提示）。显示用的 ROI 另行舍入。"""
+    return _finite(pnl_usd, risk_cost_usd) and risk_cost_usd > 0 and round(pnl_usd, 2) >= round(risk_cost_usd, 2)
+
+
+def advisory_view(p: dict, val, assume, at: datetime | None = None) -> dict | None:
+    """提示规则的只读评估：→ {rule, roi, risk_cost_usd, max_roi, target_unreachable, triggered, ...}；没挂提示规则 → None。
+    经济量从共享 spread_econ（经 economics）读；估值缺失、或有估值假设（某腿缺可成交价按 0 计）→ roi None、不触发。
+    生效（Codex 046 WP2）：评估时刻 at 早于 advisory_effective_at → before_effective，不触发（回放/重建也不补造提示）。
+    未知规则或结构不适用 → config_error（由调用方显式上报，不静默 None）。"""
     r = p.get("advisory_rule")
-    cfg = ADVISORY_RULES.get(r or "")
-    if not cfg or p.get("structure", "credit") not in cfg["structures"]:
+    if not r:
         return None
+    cfg = ADVISORY_RULES.get(r)
+    if not cfg or p.get("structure", "credit") not in cfg["structures"]:
+        return {"rule": r, "config_error": f"提示规则 {r} 未知或不适用于 {p.get('structure', 'credit')} 结构", "triggered": False}
     e = economics(p["side"], p["k_sell"], p["k_buy"], p["entry_credit"], p["qty"], p["fee_round_trip"])
     L, M = e.get("max_loss_usd"), e.get("max_gain_usd")
+    eff = _parse(p.get("advisory_effective_at") or next(
+        (x.get("effective_at") for x in reversed(p.get("events") or []) if x.get("action") == "exit_rule_corrected"
+         and x.get("advisory_rule") == r), None))                  # 早于本字段的纠正：从同一纠正事件取生效时刻
     out = {"rule": r, "roi": None, "risk_cost_usd": L, "max_roi": None, "target_unreachable": None, "triggered": False,
-           "roi_frac": cfg["roi_frac"], "status": cfg["status"]}
+           "roi_frac": cfg["roi_frac"], "status": cfg["status"], "effective_at": p.get("advisory_effective_at"),
+           "before_effective": bool(at is not None and eff is not None and at < eff)}
     if not (_finite(L, M) and L > 0):
         return out
     out["max_roi"] = round(M / L, 4)
@@ -103,7 +117,7 @@ def advisory_view(p: dict, val, assume) -> dict | None:
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
         out["roi"] = round(pnl / L, 4)
         out["pnl_usd"] = pnl
-        out["triggered"] = out["roi"] >= cfg["roi_frac"]
+        out["triggered"] = advisory_triggered(pnl, cfg["roi_frac"] * L) and not out["before_effective"]
     return out
 
 
@@ -727,7 +741,9 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
                           note="数据成立但自动退出受阻（成本越界/政策不接受）：不写成已平仓，保留报价与损失情景，窗口内重取")
             ev.append(e_)
             return "retry"
-        adv = advisory_view(p, val, assume)
+        adv = advisory_view(p, val, assume, now)
+        if adv and adv.get("config_error") and not any(e.get("action") == "advisory_config_error" for e in ev):
+            ev.append({"at": now.isoformat(), "action": "advisory_config_error", "why": adv["config_error"]})
         ev.append({"at": now.isoformat(), "action": "mark" if live else "mark_offhours", "slot": key,
                    "quotes": q, "value": val, "valuation_assumption": assume,
                    "requested_at": req.isoformat(), "returned_at": now.isoformat(),
@@ -779,35 +795,45 @@ SLOT_AUDIT_FROM = date(2026, 10, 13)   # 统一时点账的起点：更早的时
 SLOT_WINDOW_MIN = 16                   # 时点窗口：slot 起 15 分钟内取价，第 16 分钟起算过窗
 
 
-def slot_audit(p: dict, now: datetime, ev: list, done: set | None = None) -> list:
+TRACK_KINDS = {"ok": ("track_mark",), "unresolved": "track_unresolved", "incomplete": "track_incomplete",
+               "retry": "track_retry", "late": "track_late_return"}
+POSITION_KINDS = {"ok": ("mark", "mark_offhours"), "unresolved": "exit_unresolved", "incomplete": "mark_incomplete",
+                  "retry": "mark_retry", "late": "mark_late_return"}
+
+
+def slot_audit(p: dict, now: datetime, ev: list, done: set | None = None, *, kinds: dict | None = None,
+               start: datetime | None = None) -> list:
     """对入场后、SLOT_AUDIT_FROM 起、已过窗的每个预期盯市时点（交易日 × mark_slots_et）归类；未成功的追加一条
-    exit_unresolved（每个时点只一次）。返回新追加的事件。完全没有估值时「是否越过止损」为 None（未知不是 False）。"""
+    exit_unresolved（每个时点只一次）。返回新追加的事件。完全没有估值时「是否越过止损」为 None（未知不是 False）。
+    kinds/start：已平仓位的仅跟踪分支（Codex 046 WP1）复用同一套时点账，事件名换成 track_*，起点为跟踪开始时刻。"""
     from undertow.core import market_calendar as mc
-    done = done if done is not None else {e.get("slot") for e in ev if e.get("action") in ("mark", "mark_offhours")}
-    reported = {e.get("slot") for e in ev if e.get("action") == "exit_unresolved"}
-    t_in = _parse(p.get("entered_at"))
+    k = kinds or POSITION_KINDS
+    done = done if done is not None else {e.get("slot") for e in ev if e.get("action") in k["ok"]}
+    reported = {e.get("slot") for e in ev if e.get("action") == k["unresolved"]}
+    t_in = start or _parse(p.get("entered_at"))
     if t_in is None:
         return []
-    d, last_day = max(t_in.astimezone(ET).date(), SLOT_AUDIT_FROM), min(now.astimezone(ET).date(), date.fromisoformat(p["expiry"]))
+    d0 = t_in.astimezone(ET).date()
+    d, last_day = (d0 if kinds else max(d0, SLOT_AUDIT_FROM)), min(now.astimezone(ET).date(), date.fromisoformat(p["expiry"]))
     out = []
     while d <= last_day:
         td = mc.is_trading_day(d)
         if td is None:                                   # 日历未覆盖：显式记未知（每天一次），不当作非交易日跳过
             k0 = f"{d.isoformat()} *"
             if k0 not in reported:
-                e = {"at": now.isoformat(), "action": "exit_unresolved", "slot": k0, "category": "calendar_unknown（交易日历未覆盖）",
+                e = {"at": now.isoformat(), "action": k["unresolved"], "slot": k0, "category": "calendar_unknown（交易日历未覆盖）",
                      "attempts": 0, "indicative_value": None, "indicative_crosses_stop": None,
                      "open_exposure_usd": (p.get("economics") or {}).get("max_loss_usd")}
                 ev.append(e); out.append(e)
         if td:
             for sl in p.get("mark_slots_et") or []:
                 st = datetime.combine(d, _hm(sl), tzinfo=ET)
-                k = f"{d.isoformat()} {sl}"
-                if st < t_in or now < st + _td(minutes=SLOT_WINDOW_MIN) or k in done or k in reported:
+                sk = f"{d.isoformat()} {sl}"
+                if st < t_in or now < st + _td(minutes=SLOT_WINDOW_MIN) or sk in done or sk in reported:
                     continue
-                inc = [x for x in ev if x.get("slot") == k and x.get("action") == "mark_incomplete"]
-                rty = [x for x in ev if x.get("slot") == k and x.get("action") == "mark_retry"]
-                late = [x for x in ev if x.get("slot") == k and x.get("action") == "mark_late_return"]
+                inc = [x for x in ev if x.get("slot") == sk and x.get("action") == k["incomplete"]]
+                rty = [x for x in ev if x.get("slot") == sk and x.get("action") == k["retry"]]
+                late = [x for x in ev if x.get("slot") == sk and x.get("action") == k["late"]]
                 errs = [x for x in ev if x.get("action") == "error" and st <= (_parse(x.get("at")) or st - _td(1)) < st + _td(minutes=SLOT_WINDOW_MIN)]
                 if inc:
                     cat, last = "quote_untrustworthy（有报价但估值体检不通过）", inc[-1]
@@ -820,13 +846,14 @@ def slot_audit(p: dict, now: datetime, ev: list, done: set | None = None) -> lis
                 else:
                     cat, last = "missed_wake（窗口内没有任何取价尝试：调度未唤醒/被占用）", {}
                 val, sv = last.get("value"), p.get("stop_value")
-                e = {"at": now.isoformat(), "action": "exit_unresolved", "slot": k, "category": cat,
+                e = {"at": now.isoformat(), "action": k["unresolved"], "slot": sk, "category": cat,
                      "attempts": len(inc) + len(rty) + len(errs) + len(late),
                      "first_attempt_at": min((x["at"] for x in inc + rty + errs + late), default=None),
                      "last_why": last.get("why") or last.get("error"), "indicative_value": val if _finite(val) else None,
                      "indicative_crosses_stop": (val >= sv) if (sv is not None and _finite(val)) else None,
                      "open_exposure_usd": (p.get("economics") or {}).get("max_loss_usd"),
-                     "note": ("该盯市时点窗口耗尽仍无可执行两腿估值：未执行任何退出、仓位仍在场，下一时点再判；需人工关注"
+                     "note": ("仅跟踪分支：该时点窗口耗尽仍无合格两腿观察（缺失，不折零；实际已平仓位不受影响）" if kinds
+                              else "该盯市时点窗口耗尽仍无可执行两腿估值：未执行任何退出、仓位仍在场，下一时点再判；需人工关注"
                               if p.get("exit_rule") else "该盯市时点窗口耗尽仍无可信估值（本批次无自动退出，只缺估值）；仓位仍在场")}
                 ev.append(e); out.append(e)
         d += _td(days=1)
@@ -1108,7 +1135,8 @@ def void_exit(tid: str, note: str, why: str, now: datetime | None = None) -> dic
 
 OUTCOME_ACTIONS = ("enter", "skipped", "missed", "invalid_spec", "stop", "settle", "take_profit", "time_exit")
 MANUAL_ACTIONS = ("manual_close", "close_requested", "exit_voided", "exit_rule_corrected", "track_started")
-LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit", "hold_to_expiry", "exit_unresolved", "review_prompt", "track_mark") + MANUAL_ACTIONS
+LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit", "hold_to_expiry", "exit_unresolved", "review_prompt", "track_mark",
+                                    "track_unresolved", "advisory_config_error") + MANUAL_ACTIONS
 
 
 def correct_exit_rule(tid: str, note: str, now: datetime | None = None) -> dict:
@@ -1128,6 +1156,9 @@ def correct_exit_rule(tid: str, note: str, now: datetime | None = None) -> dict:
         r = p.get("exit_rule")
         if not r or r not in EXIT_RULE_STRUCTURES or p.get("structure", "credit") in EXIT_RULE_STRUCTURES[r]:
             return {"ok": True, "unchanged": True, "why": f"出场规则 {r} 与结构 {p.get('structure', 'credit')} 不冲突，无需纠正"}
+        if any(x.get("action") == "exit_rule_corrected" and x.get("from") == r for x in p["events"]):
+            # 已了结仓位保留原规则名，重复纠正同一规则不再追加（Codex 046 WP2）；真正不同的纠正另起版本
+            return {"ok": True, "unchanged": True, "why": f"{r} 已纠正过（已了结仓位只留一次审计）"}
         live = p.get("state") in ("planned", "entered")
         adv = next((k for k, v in ADVISORY_RULES.items() if p.get("structure", "credit") in v["structures"]), None)
         e = {"at": now.isoformat(), "action": "exit_rule_corrected", "from": r, "to": None,
@@ -1139,6 +1170,7 @@ def correct_exit_rule(tid: str, note: str, now: datetime | None = None) -> dict:
         if live:
             p["exit_rule"] = None
             p["advisory_rule"] = adv
+            p["advisory_effective_at"] = e["effective_at"]          # 与纠正事件同源；评估时刻早于它不补造提示
         _write_journal(j)
         sync_ledger(j)
         return {"ok": True, "from": r, "advisory_rule": e["advisory_rule"], "state": p["state"]}
@@ -1171,37 +1203,61 @@ def start_track(tid: str, note: str, now: datetime | None = None) -> dict:
 
 
 def track_step(p: dict, now: datetime, *, depth=_depth) -> str | None:
-    """仅跟踪分支的一步：到期日（含）之前、常规时段内、每个盯市时点窗口内取一次报价并记 track_mark。
-    缺报价/数据不成立 → value 或假设盈亏为 None（不折零）；不触发任何退出，状态与 pnl_usd 永不改变。"""
+    """仅跟踪分支的一步（Codex 045 C；046 WP1 补时序与失败账）。与在场盯市共用窗口、返回资格与时点账：
+    - 窗口 = 盯市时点起 SLOT_WINDOW_MIN 分钟；报价返回时已过窗/跨日/出常规时段 → track_late_return 旁路，不占时点、不给假设盈亏；
+    - 无报价或数据不成立 → track_retry；两腿成立但组合越界/政策不接受 → track_incomplete（保留保守清算情景，非合格样本）；
+      都不占时点，窗内下次唤醒重试；
+    - 合格 → track_mark（qualified，带假设盈亏与执行资格未知标签），每时点只一条；
+    - 窗口结束仍无合格观察 → slot_audit 记 track_unresolved（缺报价/不可信/越界/晚返回/取数失败/错过唤醒）。
+    实际状态与已实现盈亏永不改动、不重开、不占预算。"""
     tr = p.get("post_close_track")
     if not tr or p.get("state") not in EARLY_EXITS:
         return None
-    et = now.astimezone(ET)
-    today, exp = et.date(), date.fromisoformat(p["expiry"])
     start = _parse(tr["from"])
-    if today > exp or not in_rth(now) or start is None:
+    if start is None:
         return None
     ev = p.setdefault("events", [])
+    et = now.astimezone(ET)
+    today, exp = et.date(), date.fromisoformat(p["expiry"])
     done = {e.get("slot") for e in ev if e.get("action") == "track_mark"}
+    aud = slot_audit(p, now, ev, done, kinds=TRACK_KINDS, start=start)
+    if today > exp or not in_rth(now):
+        return "track_unresolved" if aud else None
     for slot in p.get("mark_slots_et") or []:
         key = f"{today.isoformat()} {slot}"
         t0 = datetime.combine(today, _hm(slot), tzinfo=ET)
-        if key in done or now < t0 or now >= t0 + _td(minutes=SLOT_WINDOW_MIN) or t0 < start:
+        w_end = t0 + _td(minutes=SLOT_WINDOW_MIN)
+        if key in done or now < t0 or now >= w_end or t0 < start:
             continue
         q = depth([p["sell"], p["buy"]])
         back = max(now, _clock())
+        base = {"slot": key, "rule": tr["rule"], "quotes": q, "requested_at": now.isoformat(), "returned_at": back.isoformat()}
+        if back >= w_end or back.astimezone(ET).date() != today or not in_rth(back):
+            ev.append({"at": back.isoformat(), "action": "track_late_return", **base, "window_end": w_end.isoformat(),
+                       "note": "返回时已过窗口/跨日/盘外：只留事实，不占时点、不给假设盈亏"})
+            return "track_retry"
         v = close_value(q, p)
-        val, assume = v if v else (None, None)
-        prob = "报价不可用" if v is None else (exit_assessment(q, p, val)["data_integrity"] or None)
-        ok = v is not None and not prob and assume is None
-        hyp = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2) if ok else None
-        ev.append({"at": back.isoformat(), "action": "track_mark", "slot": key, "rule": tr["rule"], "quotes": q,
-                   "value": val if ok else None, "valuation_assumption": assume, "data_problem": prob,
-                   "hypothetical_pnl_usd": hyp, "actual_pnl_usd": p.get("pnl_usd"),
-                   "late_return": back >= t0 + _td(minutes=SLOT_WINDOW_MIN),
-                   "note": "仅跟踪（假设未平）：不重开、不执行、不改实际已实现盈亏"})
+        if v is None:
+            ev.append({"at": back.isoformat(), "action": "track_retry", **base, "why": "报价不可用"})
+            return "track_retry"
+        val, assume = v
+        a_ = exit_assessment(q, p, val)
+        if a_["data_integrity"] or assume is not None:
+            ev.append({"at": back.isoformat(), "action": "track_retry", **base, "value": val, "valuation_assumption": assume,
+                       "why": "数据不成立：" + "；".join(a_["data_integrity"] or [str(assume)])})
+            return "track_retry"
+        scen = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
+        if a_["execution_cost"] or a_["execution_policy"]:
+            ev.append({"at": back.isoformat(), "action": "track_incomplete", **base, "value": val,
+                       "liquidation_scenario_pnl_usd": scen, "execution_flags": a_["execution_cost"] + a_["execution_policy"],
+                       "note": "两腿成立但组合越界/政策不接受：只记保守清算情景，不是合格跟踪样本；窗内重试"})
+            return "track_retry"
+        ev.append({"at": back.isoformat(), "action": "track_mark", **base, "qualified": True, "value": val,
+                   "hypothetical_pnl_usd": scen, "actual_pnl_usd": p.get("pnl_usd"),
+                   "execution_eligibility_unknown": ["size", "same_quote_time"],
+                   "note": "仅跟踪（假设未平）：保守两腿报价，不重开、不执行、不改实际已实现盈亏"})
         return "track_mark"
-    return None
+    return "track_unresolved" if aud else None
 
 
 def event_id(thesis_id: str, e: dict) -> str:

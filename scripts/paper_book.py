@@ -98,7 +98,8 @@ def classify(theses: list) -> dict:
                "exit_rule": p.get("exit_rule"), "strike_rule": p.get("strike_rule"), "entered_at": p.get("entered_at"),
                "reason": p.get("skip_reason") or p.get("invalid_reason"), "mark": _last_mark(p),
                "close_request": p.get("close_request"), "result_under_review": p.get("result_under_review"),
-               "underlying": p.get("underlying"), "closed_at": p.get("closed_at"), "settle_close": (p.get("settle") or {}).get("close")}
+               "underlying": p.get("underlying"), "closed_at": p.get("closed_at"), "settle_close": (p.get("settle") or {}).get("close"),
+               "retrospective_fill": p.get("retrospective_fill"), "recorded_at": p.get("recorded_at")}
         st = p.get("state")
         if st == "entered":
             out["open"].append(row)

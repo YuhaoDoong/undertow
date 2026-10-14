@@ -1,0 +1,21 @@
+{
+ "version": "ps-trigger-causal-v1-20261014",
+ "status": "运行前提交；修复 Codex 042 P1（limit 前视、候选提前占位）后，按 ps-trigger-v1 / v2 / ps-mirror-v1 的【原固定配置】重跑；不改任何门槛、不选新最优；全部参数未校准；≤2015 设计集（已多次查看）",
+ "fixes": {
+  "limit": "挂单在成交前生效：突破后自下一根起每根开盘前挂在关键前高；第 t 根有效 ⇔ 第 t−1 根收盘未越过 LL 且未超过 60 根等待（开盘前可知）；low ≤ 价位即成交（低开按开盘）。tol 不再用于 limit 入场（成交前无法判断），只用于离场。成交根触及止损 → 按止损计；开盘已在止损之下成交 → filled_through_stop，当根按开盘离场（0 ATR），不当作没成交",
+  "scheduler": "按时间流处理：候选只有实际成交（entry_i）才占位；同一版本、同一方向同时只持一笔；新入场须晚于上一笔出场根（entry_i > 上一笔 exit_i，同根不衔接，事前规定）；同根多个候选按突破先后；被占用、失效、超时、无入场根、开盘越过止损、窗口越界全部落行，不 continue 删除",
+  "occupancy_exit": {"v1": "快离场（同确认上膛式 LH）", "v2": "慢离场 U6（2ATR 上膛式 LH）", "mirror": "同 v2（镜像价格）"},
+  "atr_method": "atr 确认 = 从低点【影线】起、收盘反弹 ≥ 0.75·ATR[t−1]（代码一直如此）。v1 配置原文「从低点收盘反弹」与代码口径不一致，旧结果按代码口径解释；本版不改定义",
+  "audit": "每笔保存入场触发点（idx/conf/价格）、门槛值、决定根与执行根、挂单生效根与成交根、止损、快离场上膛/LH、慢离场上膛/LH 原分量"
+ },
+ "unchanged_from": {"v1": "data/backtest/ps-trigger-v1/config.json", "v2": "data/backtest/ps-trigger-v2/config.json", "mirror": "data/backtest/ps-mirror-v1/config.json"},
+ "methods": ["bar", "two", "atr", "limit"],
+ "tolerances_v1": ["0.25", "0.5", "1", "0.5%"],
+ "tolerance_v2": "0.5",
+ "hold_admin_cap": 250,
+ "wait": 60,
+ "groups": {"ETF": ["GLD", "SLV", "USO", "QQQ", "SPY"], "个股": ["GOOGL", "AAPL", "MSFT", "NVDA", "AMD", "INTC", "TSLA"], "连续期货": ["GC=F", "SI=F"]},
+ "old_runs_status": "ps-trigger-v1/run1、ps-trigger-v2/run1、ps-mirror-v1/run1_mirror：timing_invalid（候选提前占位）；其中 limit 另标 invalid_execution_model。原文件保留不改",
+ "comparisons": "旧新队列逐笔对照：增删原因、状态变化、同笔收益差；slow/fast/hold 在同一新因果入场队列上配对（v2 队列按慢离场占位，快离场与只拿着在同一入场上计算，实际占用不同、已注明）；old U6 慢入场对照仍未实施，不冒称完成",
+ "partition": "≤2015-12-31 设计集"
+}

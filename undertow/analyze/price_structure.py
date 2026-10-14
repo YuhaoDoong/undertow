@@ -583,3 +583,55 @@ def _tdone(ei, ep_, stop, px, why, i, s, sig):
     r = s * (ep_ - stop)
     return {"status": "entered", "entry_i": ei, "entry": ep_, "stop": stop, "exit_i": i, "exit_price": px, "exit_reason": why,
             "days_held": i - ei + 1, "r_mult": round(s * (px - ep_) / r, 6), "signals": sig}
+
+
+# ================= ps-trigger-causal-v1（Codex 042 P1 修复；旧 fast_entry 保留供 run1 复现，其 limit 结果标 invalid_execution_model） =================
+# 旧 limit 在第 t 根先用【当日收盘】判失效、再要求【全日】最低价离 LL ≥ tol 才承认当日在关键前高成交 —— 挂单是否成交由当天之后才知道的
+# 结果决定（open102/limit100/LL90/low80/close85 → 旧版判失效，实际先在 100 成交、再跌破止损）。因果版：
+# - limit：突破后自 b0+1 起每根开盘前挂买单于关键前高；挂单在第 t 根有效 ⇔ 第 t−1 根收盘未越过 LL 且未超过等待期（都在开盘前可知）；
+#   low ≤ 价位即成交（跳空低开按开盘）。「相同点位」门槛 tol 无法在成交前判断，limit 入场不再使用（只用于离场）。
+#   成交后同根触及止损按止损计（价格从上方先过挂单价、再到止损，顺序确定）；开盘已在止损之下成交 → 记 filled_through_stop，
+#   当根按开盘离场（不能因亏损而当作没成交）。
+# - bar / two / atr：确认根 t 收盘可知 → t+1 开盘入场，原本就是因果的，逻辑不变；atr 的口径明确为【从低点影线起、收盘反弹 ≥ 0.75·ATR】
+#   （代码一直如此；v1 配置文字「从低点收盘反弹」与代码不一致，旧结果按代码口径解释）。
+# 每个结果都带审计分量（触发点 idx/conf/价格、门槛值、决定根、执行根、挂单生效根），供解释「太晚」。
+
+
+def fast_entry_causal(bars: list, atr: list, ep, loc: list, method: str, tol: str, *, last_i: int, wait: int = WAIT_MAX) -> dict:
+    d = ep.direction
+    s = _sign(d)
+    want_l = "L" if d == "long" else "H"
+    b0, ll = ep.break_at, ep.extreme.price
+    audit = {"break_at": b0, "extreme_price": ll, "key_price": ep.key.price, "method": method, "tol": tol}
+    end = min(last_i, b0 + wait)
+    for t in range(b0 + 1, end + 1):
+        A = atr[t - 1]
+        if method == "limit":
+            if t - 1 > b0 and s * bars[t - 1][4] < s * ll:
+                return {"status": "invalidated_close_beyond_extreme", "resolved_at": t - 1, "audit": audit}
+            if A is None:
+                continue
+            lvl = ep.key.price
+            o = bars[t][1]
+            adv = bars[t][3] if d == "long" else bars[t][2]
+            audit.setdefault("order_live_from", t)
+            if s * adv <= s * lvl:
+                px = min(o, lvl) if d == "long" else max(o, lvl)
+                audit.update(fill_i=t, level=lvl, gap_fill=(s * o < s * lvl), decided_at=t - 1, execute_at=t)
+                return {"status": "entered", "entry_i": t, "entry": px, "audit": audit}
+            continue
+        if s * bars[t][4] < s * ll:
+            return {"status": "invalidated_close_beyond_extreme", "resolved_at": t, "audit": audit}
+        if A is None:
+            continue
+        hit = [p for p in loc if p.conf == t and p.kind == want_l and p.idx > b0]
+        if hit:
+            tv = _tol(tol, hit[0].price, A)
+            if s * (hit[0].price - ll) >= tv:
+                audit.update(pivot={"idx": hit[0].idx, "conf": hit[0].conf, "price": hit[0].price}, tol_value=round(tv, 6),
+                             decided_at=t, execute_at=t + 1)
+                if t + 1 > last_i:
+                    return {"status": "no_entry_bar", "resolved_at": t, "audit": audit}
+                return {"status": "entered", "entry_i": t + 1, "entry": bars[t + 1][1], "audit": audit}
+            audit.setdefault("rejected_pivots", []).append({"idx": hit[0].idx, "conf": t, "price": hit[0].price, "tol_value": round(tv, 6)})
+    return {"status": "timeout_no_entry", "resolved_at": end, "audit": audit}

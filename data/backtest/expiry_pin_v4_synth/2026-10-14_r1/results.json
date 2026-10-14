@@ -1,0 +1,838 @@
+{
+ "schema": 1,
+ "seed": 20261014,
+ "h": 2,
+ "codex_044_counterexample": {
+  "mean_u_kstar": 0.26,
+  "mean_u_placebo": 0.3625,
+  "old_d": -0.1025,
+  "mirror_mean_m": 0.0
+ },
+ "null": [
+  {
+   "scenario": "kernel|base_t4",
+   "params": {
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 1,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.00199,
+   "coverage_of_0": 0.915,
+   "coverage_mc_se": 0.0139,
+   "detect_rate": 0.0425,
+   "reverse_rate": 0.0425,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|base_t4",
+   "params": {
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.00078,
+   "coverage_of_0": 0.905,
+   "coverage_mc_se": 0.0147,
+   "detect_rate": 0.055,
+   "reverse_rate": 0.04,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|drift_+0.1sd/day",
+   "params": {
+    "drift": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 1,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.00205,
+   "coverage_of_0": 0.9325,
+   "coverage_mc_se": 0.0125,
+   "detect_rate": 0.035,
+   "reverse_rate": 0.0325,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|drift_+0.1sd/day",
+   "params": {
+    "drift": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.0004,
+   "coverage_of_0": 0.88,
+   "coverage_mc_se": 0.0162,
+   "detect_rate": 0.07,
+   "reverse_rate": 0.05,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|side_bias_70%below+drift",
+   "params": {
+    "side_bias": 0.7,
+    "drift": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 1,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.00308,
+   "coverage_of_0": 0.9025,
+   "coverage_mc_se": 0.0148,
+   "detect_rate": 0.05,
+   "reverse_rate": 0.0475,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|side_bias_70%below+drift",
+   "params": {
+    "side_bias": 0.7,
+    "drift": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.00028,
+   "coverage_of_0": 0.8675,
+   "coverage_mc_se": 0.017,
+   "detect_rate": 0.06,
+   "reverse_rate": 0.0725,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|neg_skew",
+   "params": {
+    "skew": true,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 1,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.00019,
+   "coverage_of_0": 0.925,
+   "coverage_mc_se": 0.0132,
+   "detect_rate": 0.04,
+   "reverse_rate": 0.035,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|neg_skew",
+   "params": {
+    "skew": true,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.00355,
+   "coverage_of_0": 0.91,
+   "coverage_mc_se": 0.0143,
+   "detect_rate": 0.045,
+   "reverse_rate": 0.045,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|base_t4",
+   "params": {
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 1,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": 0.00143,
+   "coverage_of_0": 0.9175,
+   "coverage_mc_se": 0.0138,
+   "detect_rate": 0.0325,
+   "reverse_rate": 0.05,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|base_t4",
+   "params": {
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.00021,
+   "coverage_of_0": 0.8875,
+   "coverage_mc_se": 0.0158,
+   "detect_rate": 0.0575,
+   "reverse_rate": 0.055,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|drift_+0.1sd/day",
+   "params": {
+    "drift": 0.1,
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 1,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.005,
+   "coverage_of_0": 0.91,
+   "coverage_mc_se": 0.0143,
+   "detect_rate": 0.05,
+   "reverse_rate": 0.04,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|drift_+0.1sd/day",
+   "params": {
+    "drift": 0.1,
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": 0.00672,
+   "coverage_of_0": 0.8775,
+   "coverage_mc_se": 0.0164,
+   "detect_rate": 0.0625,
+   "reverse_rate": 0.06,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|side_bias_70%below+drift",
+   "params": {
+    "side_bias": 0.7,
+    "drift": 0.1,
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 1,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.00391,
+   "coverage_of_0": 0.8925,
+   "coverage_mc_se": 0.0155,
+   "detect_rate": 0.05,
+   "reverse_rate": 0.0575,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|side_bias_70%below+drift",
+   "params": {
+    "side_bias": 0.7,
+    "drift": 0.1,
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.00354,
+   "coverage_of_0": 0.9,
+   "coverage_mc_se": 0.015,
+   "detect_rate": 0.06,
+   "reverse_rate": 0.04,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|neg_skew",
+   "params": {
+    "skew": true,
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 1,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": -0.00364,
+   "coverage_of_0": 0.9125,
+   "coverage_mc_se": 0.0141,
+   "detect_rate": 0.0525,
+   "reverse_rate": 0.035,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|neg_skew",
+   "params": {
+    "skew": true,
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 400,
+   "n_boot": 600,
+   "mean_est": 6e-05,
+   "coverage_of_0": 0.9025,
+   "coverage_mc_se": 0.0148,
+   "detect_rate": 0.06,
+   "reverse_rate": 0.0375,
+   "unidentifiable": 0
+  }
+ ],
+ "power": [
+  {
+   "scenario": "kernel|pin0.1",
+   "params": {
+    "pin": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01354,
+   "coverage_of_0": 0.895,
+   "coverage_mc_se": 0.0217,
+   "detect_rate": 0.1,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.1",
+   "params": {
+    "pin": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 24,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01261,
+   "coverage_of_0": 0.86,
+   "coverage_mc_se": 0.0245,
+   "detect_rate": 0.115,
+   "reverse_rate": 0.025,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.1",
+   "params": {
+    "pin": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 52,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01192,
+   "coverage_of_0": 0.82,
+   "coverage_mc_se": 0.0272,
+   "detect_rate": 0.165,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.2",
+   "params": {
+    "pin": 0.2,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.02599,
+   "coverage_of_0": 0.82,
+   "coverage_mc_se": 0.0272,
+   "detect_rate": 0.165,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.2",
+   "params": {
+    "pin": 0.2,
+    "_stat": "kernel"
+   },
+   "weeks": 24,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.02681,
+   "coverage_of_0": 0.765,
+   "coverage_mc_se": 0.03,
+   "detect_rate": 0.23,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.2",
+   "params": {
+    "pin": 0.2,
+    "_stat": "kernel"
+   },
+   "weeks": 52,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.02578,
+   "coverage_of_0": 0.665,
+   "coverage_mc_se": 0.0334,
+   "detect_rate": 0.335,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.3",
+   "params": {
+    "pin": 0.3,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.04283,
+   "coverage_of_0": 0.67,
+   "coverage_mc_se": 0.0332,
+   "detect_rate": 0.325,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.3",
+   "params": {
+    "pin": 0.3,
+    "_stat": "kernel"
+   },
+   "weeks": 24,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.04454,
+   "coverage_of_0": 0.55,
+   "coverage_mc_se": 0.0352,
+   "detect_rate": 0.45,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.3",
+   "params": {
+    "pin": 0.3,
+    "_stat": "kernel"
+   },
+   "weeks": 52,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.04433,
+   "coverage_of_0": 0.275,
+   "coverage_mc_se": 0.0316,
+   "detect_rate": 0.725,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin_prob0.05",
+   "params": {
+    "pin_prob": 0.05,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01081,
+   "coverage_of_0": 0.875,
+   "coverage_mc_se": 0.0234,
+   "detect_rate": 0.105,
+   "reverse_rate": 0.02,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin_prob0.05",
+   "params": {
+    "pin_prob": 0.05,
+    "_stat": "kernel"
+   },
+   "weeks": 24,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01341,
+   "coverage_of_0": 0.88,
+   "coverage_mc_se": 0.023,
+   "detect_rate": 0.1,
+   "reverse_rate": 0.02,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin_prob0.05",
+   "params": {
+    "pin_prob": 0.05,
+    "_stat": "kernel"
+   },
+   "weeks": 52,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01143,
+   "coverage_of_0": 0.905,
+   "coverage_mc_se": 0.0207,
+   "detect_rate": 0.08,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin_prob0.1",
+   "params": {
+    "pin_prob": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.02242,
+   "coverage_of_0": 0.82,
+   "coverage_mc_se": 0.0272,
+   "detect_rate": 0.16,
+   "reverse_rate": 0.02,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin_prob0.1",
+   "params": {
+    "pin_prob": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 24,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.02282,
+   "coverage_of_0": 0.79,
+   "coverage_mc_se": 0.0288,
+   "detect_rate": 0.195,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin_prob0.1",
+   "params": {
+    "pin_prob": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 52,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.02414,
+   "coverage_of_0": 0.71,
+   "coverage_mc_se": 0.0321,
+   "detect_rate": 0.285,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin0.1",
+   "params": {
+    "pin": 0.1,
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.00738,
+   "coverage_of_0": 0.9,
+   "coverage_mc_se": 0.0212,
+   "detect_rate": 0.065,
+   "reverse_rate": 0.035,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin0.1",
+   "params": {
+    "pin": 0.1,
+    "_stat": "linear"
+   },
+   "weeks": 24,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01253,
+   "coverage_of_0": 0.885,
+   "coverage_mc_se": 0.0226,
+   "detect_rate": 0.07,
+   "reverse_rate": 0.045,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin0.1",
+   "params": {
+    "pin": 0.1,
+    "_stat": "linear"
+   },
+   "weeks": 52,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.0112,
+   "coverage_of_0": 0.925,
+   "coverage_mc_se": 0.0186,
+   "detect_rate": 0.055,
+   "reverse_rate": 0.02,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin0.2",
+   "params": {
+    "pin": 0.2,
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01511,
+   "coverage_of_0": 0.92,
+   "coverage_mc_se": 0.0192,
+   "detect_rate": 0.055,
+   "reverse_rate": 0.025,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin0.2",
+   "params": {
+    "pin": 0.2,
+    "_stat": "linear"
+   },
+   "weeks": 24,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01958,
+   "coverage_of_0": 0.895,
+   "coverage_mc_se": 0.0217,
+   "detect_rate": 0.075,
+   "reverse_rate": 0.03,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin0.2",
+   "params": {
+    "pin": 0.2,
+    "_stat": "linear"
+   },
+   "weeks": 52,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.02287,
+   "coverage_of_0": 0.9,
+   "coverage_mc_se": 0.0212,
+   "detect_rate": 0.085,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin0.3",
+   "params": {
+    "pin": 0.3,
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.04433,
+   "coverage_of_0": 0.85,
+   "coverage_mc_se": 0.0252,
+   "detect_rate": 0.125,
+   "reverse_rate": 0.025,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin0.3",
+   "params": {
+    "pin": 0.3,
+    "_stat": "linear"
+   },
+   "weeks": 24,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.03637,
+   "coverage_of_0": 0.905,
+   "coverage_mc_se": 0.0207,
+   "detect_rate": 0.08,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin0.3",
+   "params": {
+    "pin": 0.3,
+    "_stat": "linear"
+   },
+   "weeks": 52,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.038,
+   "coverage_of_0": 0.845,
+   "coverage_mc_se": 0.0256,
+   "detect_rate": 0.145,
+   "reverse_rate": 0.01,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin_prob0.05",
+   "params": {
+    "pin_prob": 0.05,
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01054,
+   "coverage_of_0": 0.895,
+   "coverage_mc_se": 0.0217,
+   "detect_rate": 0.05,
+   "reverse_rate": 0.055,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin_prob0.05",
+   "params": {
+    "pin_prob": 0.05,
+    "_stat": "linear"
+   },
+   "weeks": 24,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.00412,
+   "coverage_of_0": 0.92,
+   "coverage_mc_se": 0.0192,
+   "detect_rate": 0.045,
+   "reverse_rate": 0.035,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin_prob0.05",
+   "params": {
+    "pin_prob": 0.05,
+    "_stat": "linear"
+   },
+   "weeks": 52,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.00984,
+   "coverage_of_0": 0.93,
+   "coverage_mc_se": 0.018,
+   "detect_rate": 0.055,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin_prob0.1",
+   "params": {
+    "pin_prob": 0.1,
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01477,
+   "coverage_of_0": 0.88,
+   "coverage_mc_se": 0.023,
+   "detect_rate": 0.08,
+   "reverse_rate": 0.04,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin_prob0.1",
+   "params": {
+    "pin_prob": 0.1,
+    "_stat": "linear"
+   },
+   "weeks": 24,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01189,
+   "coverage_of_0": 0.9,
+   "coverage_mc_se": 0.0212,
+   "detect_rate": 0.05,
+   "reverse_rate": 0.05,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|pin_prob0.1",
+   "params": {
+    "pin_prob": 0.1,
+    "_stat": "linear"
+   },
+   "weeks": 52,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.01478,
+   "coverage_of_0": 0.94,
+   "coverage_mc_se": 0.0168,
+   "detect_rate": 0.05,
+   "reverse_rate": 0.01,
+   "unidentifiable": 0
+  }
+ ],
+ "informed_wall_not_null": [
+  {
+   "scenario": "kernel|informed_wall",
+   "params": {
+    "informed": true,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -0.27868,
+   "coverage_of_0": 0.0,
+   "coverage_mc_se": 0.0,
+   "detect_rate": 1.0,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "linear|informed_wall",
+   "params": {
+    "informed": true,
+    "_stat": "linear"
+   },
+   "weeks": 13,
+   "block_weeks": 2,
+   "n_sims": 200,
+   "n_boot": 600,
+   "mean_est": -1.24779,
+   "coverage_of_0": 0.0,
+   "coverage_mc_se": 0.0,
+   "detect_rate": 1.0,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  }
+ ],
+ "code_sha256": {
+  "undertow/analyze/pin_stat.py": "c2f73cc500e601e82fcc1f825f388face827ac03248563ce00efdefde9efd639",
+  "scripts/expiry_pin_v4_synth.py": "b042e165e9730b174e71775d1255eceb67f90c116a1d0c1ea9dc365bf0ada3ef"
+ },
+ "git_head": "8f3e93744ede2389fa6f93efa1919f5fe7d53fe2"
+}

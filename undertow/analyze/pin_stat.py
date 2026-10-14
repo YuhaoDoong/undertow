@@ -99,6 +99,50 @@ def block_bootstrap(rows: list[dict], *, block_weeks: int, n_boot: int, seed: in
     return {**out, "lo": q(0.025), "hi": q(0.975), "n_valid": len(vals)}
 
 
+def signflip_test(rows: list[dict], *, n_perm: int = 20000, seed: int = 20261014, exact_max_weeks: int = 16) -> dict:
+    """周级符号翻转随机化检验（v4r1 主检验；r1 合成校准显示 13 周的 bootstrap 百分位区间覆盖只有 0.87–0.93）。
+    零假设 = 价格增量关于 0 对称：把一整周的增量取反，该周每行的 C_E − r 同时取反，m（线性/核）恰好变号，side 不变。
+    所以按周整体翻转符号得到的分布就是零分布，周内任意相关都保留；不需要渐近近似。周数 ≤ exact_max_weeks 时枚举全部 2^W 种。
+    跨周的 h 日持有窗会把相邻周轻微连在一起（行按决策日 S 归周），这一点由合成校准量化。
+    返回 {"est", "p_lower"(est 这么负或更负的比例), "p_upper", "n_weeks", "exact"}；缺一侧 → est None、p None。"""
+    ws = _week_sums(rows)
+    weeks = sorted(ws)
+    est = _balanced([ws[w] for w in weeks]) if weeks else None
+    out = {"est": est, "p_lower": None, "p_upper": None, "n_weeks": len(weeks), "exact": False}
+    if est is None or len(weeks) < 2:
+        return out
+    S = [ws[w] for w in weeks]
+    W = len(S)
+    nu, nd = sum(x[1] for x in S), sum(x[3] for x in S)
+    c = [(x[0] / nu + x[2] / nd) / 2 for x in S]         # 统计量对各周符号是线性的：stat = Σ ±c_w
+    if W <= exact_max_weeks:
+        out["exact"] = True
+        vals = [0.0]
+        for cw in c:
+            vals = [v + cw for v in vals] + [v - cw for v in vals]
+        lo = sum(v <= est + 1e-12 for v in vals); hi = sum(v >= est - 1e-12 for v in vals); tot = len(vals)
+    else:
+        rng = random.Random(seed)
+        lo = hi = 0
+        for _ in range(n_perm):
+            v = sum(cw if rng.random() < 0.5 else -cw for cw in c)
+            lo += v <= est + 1e-12; hi += v >= est - 1e-12
+        lo += 1; hi += 1; tot = n_perm + 1                   # 抽样版计入观测值本身
+    out.update(p_lower=lo / tot, p_upper=hi / tot)
+    return out
+
+
+def verdict_signflip(r: dict, alpha_each: float = 0.025) -> str:
+    """三选一（写死）：单侧各 2.5%。"""
+    if r["p_lower"] is None:
+        return "本数据不能识别"
+    if r["p_lower"] < alpha_each:
+        return "收盘离墙比离镜像点近（描述性关联，非因果）"
+    if r["p_upper"] < alpha_each:
+        return "收盘反而离墙更远"
+    return "未检出，也未排除"
+
+
 def verdict(ci: dict) -> str:
     """三选一（写死）；区间缺失 → 不能识别。"""
     if ci["lo"] is None or ci["hi"] is None:

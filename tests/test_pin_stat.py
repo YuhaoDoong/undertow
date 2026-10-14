@@ -48,3 +48,18 @@ def test_null_batch_coverage_is_checked_in_batch_not_single_run():
     from scripts.expiry_pin_v4_synth import run_scenario
     r = run_scenario("t", {"_stat": "kernel"}, weeks=13, n_sims=60, n_boot=150, block=2, seed=1)
     assert r["unidentifiable"] == 0 and r["detect_rate"] <= 0.15 and r["coverage_of_0"] >= 0.75
+
+
+def test_signflip_exact_matches_sampled_and_flipping_week_flips_m():
+    rng = random.Random(3)
+    rows = [{"week": w, "side": rng.choice((1, -1)), "m": rng.gauss(0, 1)} for w in range(10) for _ in range(6)]
+    a = ps.signflip_test(rows)
+    b = ps.signflip_test(rows, exact_max_weeks=0, n_perm=40000, seed=1)
+    assert a["exact"] and not b["exact"] and abs(a["p_lower"] - b["p_lower"]) < 0.01
+    # 一整周增量取反 → 该周每行 C_E − r 取反 → m 恰好变号（核版与线性版都是）
+    ref, k, atr = 100.0, 101.0, 2.0
+    for c in (99.3, 100.4, 101.2, 103.0):
+        assert abs(ps.mirror_k(c, ref, k, atr) + ps.mirror_k(2 * ref - c, ref, k, atr)) < 1e-12
+        assert abs(ps.mirror_m(c, ref, k, atr) + ps.mirror_m(2 * ref - c, ref, k, atr)) < 1e-12
+    assert ps.verdict_signflip({"p_lower": 0.01, "p_upper": 0.99}).startswith("收盘离墙")
+    assert ps.verdict_signflip({"p_lower": None}) == "本数据不能识别"

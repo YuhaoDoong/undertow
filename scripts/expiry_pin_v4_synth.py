@@ -81,6 +81,21 @@ def simulate(weeks: int, sc: dict, rng: random.Random) -> list[dict]:
     return rows
 
 
+def run_signflip(name: str, sc: dict, *, weeks: int, n_sims: int, seed: int) -> dict:
+    """周级符号翻转检验的假检出率（零假设下应 ≈ 2.5%）与功效。"""
+    rng = random.Random(f"{seed}|sf|{name}|{weeks}")
+    det = rev = unid = 0
+    for i in range(n_sims):
+        r = ps.signflip_test(simulate(weeks, sc, rng), n_perm=2000, seed=seed + i)
+        v = ps.verdict_signflip(r)
+        unid += v == "本数据不能识别"; det += v.startswith("收盘离墙"); rev += v == "收盘反而离墙更远"
+    k = n_sims - unid
+    se = lambda p: round(math.sqrt(p * (1 - p) / k), 4) if k else None
+    return {"scenario": name, "test": "signflip_week", "params": sc, "weeks": weeks, "n_sims": n_sims,
+            "detect_rate": round(det / k, 4) if k else None, "detect_mc_se": se(det / k) if k else None,
+            "reverse_rate": round(rev / k, 4) if k else None, "unidentifiable": unid}
+
+
 def run_scenario(name: str, sc: dict, *, weeks: int, n_sims: int, n_boot: int, block: int, seed: int) -> dict:
     rng = random.Random(f"{seed}|{name}|{weeks}|{block}")
     cover = det = rev = unid = 0
@@ -123,6 +138,7 @@ def main() -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--sims", type=int, default=400)
     ap.add_argument("--boot", type=int, default=600)
+    ap.add_argument("--signflip", action="store_true", help="r2：只跑周级符号翻转检验的校准")
     a = ap.parse_args()
     out = Path(a.out)
     if out.exists():
@@ -132,7 +148,7 @@ def main() -> int:
     res = {"schema": 1, "seed": SEED, "h": H, "codex_044_counterexample": codex_counterexample(), "null": [], "power": [],
            "informed_wall_not_null": None}
     res["informed_wall_not_null"] = []
-    for stat in ("kernel", "linear"):
+    for stat in (() if a.signflip else ("kernel", "linear")):
         for name, sc in nulls.items():
             for block in (1, 2):
                 r = run_scenario(f"{stat}|{name}", {**sc, "_stat": stat}, weeks=13, n_sims=a.sims, n_boot=a.boot,
@@ -146,6 +162,16 @@ def main() -> int:
                 res["power"].append(r); print(json.dumps(r, ensure_ascii=False))
         res["informed_wall_not_null"].append(run_scenario(f"{stat}|informed_wall", {"informed": True, "_stat": stat}, weeks=13,
                                                           n_sims=max(100, a.sims // 2), n_boot=a.boot, block=2, seed=SEED))
+    if a.signflip:                                           # r2：主检验改为周级符号翻转（r1 显示 bootstrap 区间欠覆盖）
+        res = {"schema": 1, "seed": SEED, "h": H, "test": "signflip_week", "null": [], "power": []}
+        for name, sc in nulls.items():
+            r = run_signflip(f"kernel|{name}", {**sc, "_stat": "kernel"}, weeks=13, n_sims=a.sims, seed=SEED)
+            res["null"].append(r); print(json.dumps(r, ensure_ascii=False))
+        for alt in ({"pin": 0.1}, {"pin": 0.2}, {"pin": 0.3}, {"pin_prob": 0.05}, {"pin_prob": 0.10}):
+            for weeks in (13, 24, 52):
+                key = "_".join(f"{k}{v}" for k, v in alt.items())
+                r = run_signflip(f"kernel|{key}", {**alt, "_stat": "kernel"}, weeks=weeks, n_sims=max(100, a.sims // 2), seed=SEED)
+                res["power"].append(r); print(json.dumps(r, ensure_ascii=False))
     src = [ROOT / "undertow/analyze/pin_stat.py", Path(__file__)]
     res["code_sha256"] = {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in src}
     res["git_head"] = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()

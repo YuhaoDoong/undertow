@@ -1,0 +1,281 @@
+{
+ "schema": 1,
+ "seed": 20261014,
+ "h": 2,
+ "test": "signflip_week",
+ "null": [
+  {
+   "scenario": "kernel|base_t4",
+   "test": "signflip_week",
+   "params": {
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "n_sims": 400,
+   "detect_rate": 0.0225,
+   "detect_mc_se": 0.0074,
+   "reverse_rate": 0.0225,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|drift_+0.1sd/day",
+   "test": "signflip_week",
+   "params": {
+    "drift": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "n_sims": 400,
+   "detect_rate": 0.035,
+   "detect_mc_se": 0.0092,
+   "reverse_rate": 0.0225,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|side_bias_70%below+drift",
+   "test": "signflip_week",
+   "params": {
+    "side_bias": 0.7,
+    "drift": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "n_sims": 400,
+   "detect_rate": 0.015,
+   "detect_mc_se": 0.0061,
+   "reverse_rate": 0.03,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|neg_skew",
+   "test": "signflip_week",
+   "params": {
+    "skew": true,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "n_sims": 400,
+   "detect_rate": 0.0225,
+   "detect_mc_se": 0.0074,
+   "reverse_rate": 0.0225,
+   "unidentifiable": 0
+  }
+ ],
+ "power": [
+  {
+   "scenario": "kernel|pin0.1",
+   "test": "signflip_week",
+   "params": {
+    "pin": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "n_sims": 200,
+   "detect_rate": 0.075,
+   "detect_mc_se": 0.0186,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.1",
+   "test": "signflip_week",
+   "params": {
+    "pin": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 24,
+   "n_sims": 200,
+   "detect_rate": 0.08,
+   "detect_mc_se": 0.0192,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.1",
+   "test": "signflip_week",
+   "params": {
+    "pin": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 52,
+   "n_sims": 200,
+   "detect_rate": 0.07,
+   "detect_mc_se": 0.018,
+   "reverse_rate": 0.02,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.2",
+   "test": "signflip_week",
+   "params": {
+    "pin": 0.2,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "n_sims": 200,
+   "detect_rate": 0.095,
+   "detect_mc_se": 0.0207,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.2",
+   "test": "signflip_week",
+   "params": {
+    "pin": 0.2,
+    "_stat": "kernel"
+   },
+   "weeks": 24,
+   "n_sims": 200,
+   "detect_rate": 0.165,
+   "detect_mc_se": 0.0262,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.2",
+   "test": "signflip_week",
+   "params": {
+    "pin": 0.2,
+    "_stat": "kernel"
+   },
+   "weeks": 52,
+   "n_sims": 200,
+   "detect_rate": 0.415,
+   "detect_mc_se": 0.0348,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.3",
+   "test": "signflip_week",
+   "params": {
+    "pin": 0.3,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "n_sims": 200,
+   "detect_rate": 0.24,
+   "detect_mc_se": 0.0302,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.3",
+   "test": "signflip_week",
+   "params": {
+    "pin": 0.3,
+    "_stat": "kernel"
+   },
+   "weeks": 24,
+   "n_sims": 200,
+   "detect_rate": 0.415,
+   "detect_mc_se": 0.0348,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin0.3",
+   "test": "signflip_week",
+   "params": {
+    "pin": 0.3,
+    "_stat": "kernel"
+   },
+   "weeks": 52,
+   "n_sims": 200,
+   "detect_rate": 0.63,
+   "detect_mc_se": 0.0341,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin_prob0.05",
+   "test": "signflip_week",
+   "params": {
+    "pin_prob": 0.05,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "n_sims": 200,
+   "detect_rate": 0.04,
+   "detect_mc_se": 0.0139,
+   "reverse_rate": 0.02,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin_prob0.05",
+   "test": "signflip_week",
+   "params": {
+    "pin_prob": 0.05,
+    "_stat": "kernel"
+   },
+   "weeks": 24,
+   "n_sims": 200,
+   "detect_rate": 0.095,
+   "detect_mc_se": 0.0207,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin_prob0.05",
+   "test": "signflip_week",
+   "params": {
+    "pin_prob": 0.05,
+    "_stat": "kernel"
+   },
+   "weeks": 52,
+   "n_sims": 200,
+   "detect_rate": 0.125,
+   "detect_mc_se": 0.0234,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin_prob0.1",
+   "test": "signflip_week",
+   "params": {
+    "pin_prob": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 13,
+   "n_sims": 200,
+   "detect_rate": 0.095,
+   "detect_mc_se": 0.0207,
+   "reverse_rate": 0.01,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin_prob0.1",
+   "test": "signflip_week",
+   "params": {
+    "pin_prob": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 24,
+   "n_sims": 200,
+   "detect_rate": 0.165,
+   "detect_mc_se": 0.0262,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "kernel|pin_prob0.1",
+   "test": "signflip_week",
+   "params": {
+    "pin_prob": 0.1,
+    "_stat": "kernel"
+   },
+   "weeks": 52,
+   "n_sims": 200,
+   "detect_rate": 0.22,
+   "detect_mc_se": 0.0293,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  }
+ ],
+ "code_sha256": {
+  "undertow/analyze/pin_stat.py": "663d0929af4952dd7c4ed3d09ebaff525d12bbb0a77a01a0ab9ff9c575aedb74",
+  "scripts/expiry_pin_v4_synth.py": "adef0c5400acba5ceb3ddeb4e5c6f9a3a3721beba6845aac53e1d82554e18b79"
+ },
+ "git_head": "ed981f92fedbff52fac9f10f6a25ffe05480afc1"
+}

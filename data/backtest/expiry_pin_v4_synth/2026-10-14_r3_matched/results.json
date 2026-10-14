@@ -1,0 +1,1500 @@
+{
+ "schema": 1,
+ "run": "r3",
+ "seed": 20261015,
+ "h": 2,
+ "warmup_days": 40,
+ "estimator": "distance_matched_weights + signflip_weighted",
+ "kernel_bw_atr": 0.25,
+ "dist_bins_atr": [
+  0.0,
+  0.25,
+  0.5,
+  1.000000001
+ ],
+ "null": [
+  {
+   "scenario": "base_t4",
+   "design": "fri",
+   "params": {},
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 12.52,
+   "weeks_actual_max": 13,
+   "rows_mean": 23.78,
+   "rows_used_mean": 20.61,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 887
+   },
+   "detect_rate": 0.0226,
+   "detect_mc_se": 0.0074,
+   "reverse_rate": 0.0201,
+   "unidentifiable": 1
+  },
+  {
+   "scenario": "drift_+0.1sd/day",
+   "design": "fri",
+   "params": {
+    "drift": 0.1
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 12.66,
+   "weeks_actual_max": 13,
+   "rows_mean": 24.83,
+   "rows_used_mean": 21.77,
+   "wall_below_share": 0.51,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 467
+   },
+   "detect_rate": 0.0225,
+   "detect_mc_se": 0.0074,
+   "reverse_rate": 0.0325,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "side_bias_belowOIx2.3+drift",
+   "design": "fri",
+   "params": {
+    "side_bias": 2.3,
+    "drift": 0.1
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 11.58,
+   "weeks_actual_max": 13,
+   "rows_mean": 24.81,
+   "rows_used_mean": 17.22,
+   "wall_below_share": 0.78,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 471
+   },
+   "detect_rate": 0.0292,
+   "detect_mc_se": 0.0091,
+   "reverse_rate": 0.038,
+   "unidentifiable": 58
+  },
+  {
+   "scenario": "neg_skew",
+   "design": "fri",
+   "params": {
+    "skew": true
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 12.59,
+   "weeks_actual_max": 13,
+   "rows_mean": 24.24,
+   "rows_used_mean": 20.89,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 713
+   },
+   "detect_rate": 0.0227,
+   "detect_mc_se": 0.0075,
+   "reverse_rate": 0.0353,
+   "unidentifiable": 3
+  },
+  {
+   "scenario": "dist_imbalance+drift",
+   "design": "fri",
+   "params": {
+    "dist_imbalance": true,
+    "drift": 0.1
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 9.91,
+   "weeks_actual_max": 13,
+   "rows_mean": 24.6,
+   "rows_used_mean": 13.46,
+   "wall_below_share": 0.49,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 522
+   },
+   "detect_rate": 0.0247,
+   "detect_mc_se": 0.0172,
+   "reverse_rate": 0.037,
+   "unidentifiable": 319
+  },
+  {
+   "scenario": "paired_week_shock_1sd",
+   "design": "fri",
+   "params": {
+    "paired_shock": 1.0
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 12.66,
+   "weeks_actual_max": 13,
+   "rows_mean": 24.23,
+   "rows_used_mean": 21.12,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 710
+   },
+   "detect_rate": 0.0251,
+   "detect_mc_se": 0.0078,
+   "reverse_rate": 0.0251,
+   "unidentifiable": 2
+  },
+  {
+   "scenario": "weekly_momentum_0.2",
+   "design": "fri",
+   "params": {
+    "momentum": 0.2
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 12.5,
+   "weeks_actual_max": 13,
+   "rows_mean": 23.72,
+   "rows_used_mean": 20.34,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 929
+   },
+   "detect_rate": 0.0177,
+   "detect_mc_se": 0.0066,
+   "reverse_rate": 0.0328,
+   "unidentifiable": 4
+  },
+  {
+   "scenario": "garch_vol_cluster",
+   "design": "fri",
+   "params": {
+    "garch": true
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 12.5,
+   "weeks_actual_max": 13,
+   "rows_mean": 23.31,
+   "rows_used_mean": 20.1,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1106
+   },
+   "detect_rate": 0.0128,
+   "detect_mc_se": 0.0057,
+   "reverse_rate": 0.0383,
+   "unidentifiable": 8
+  },
+  {
+   "scenario": "leverage_vol",
+   "design": "fri",
+   "params": {
+    "leverage": true
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 12.66,
+   "weeks_actual_max": 13,
+   "rows_mean": 24.98,
+   "rows_used_mean": 21.79,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 409
+   },
+   "detect_rate": 0.0325,
+   "detect_mc_se": 0.0089,
+   "reverse_rate": 0.02,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "regime_drift_switch",
+   "design": "fri",
+   "params": {
+    "regime": true
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 12.6,
+   "weeks_actual_max": 13,
+   "rows_mean": 24.31,
+   "rows_used_mean": 21.27,
+   "wall_below_share": 0.49,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 690
+   },
+   "detect_rate": 0.0328,
+   "detect_mc_se": 0.009,
+   "reverse_rate": 0.0379,
+   "unidentifiable": 4
+  },
+  {
+   "scenario": "wall_follows_last_week",
+   "design": "fri",
+   "params": {
+    "feedback": true
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 12.59,
+   "weeks_actual_max": 13,
+   "rows_mean": 23.88,
+   "rows_used_mean": 20.72,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 875
+   },
+   "detect_rate": 0.0177,
+   "detect_mc_se": 0.0066,
+   "reverse_rate": 0.0203,
+   "unidentifiable": 5
+  },
+  {
+   "scenario": "wall_follows+momentum",
+   "design": "fri",
+   "params": {
+    "feedback": true,
+    "momentum": 0.2
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 12.49,
+   "weeks_actual_max": 13,
+   "rows_mean": 23.9,
+   "rows_used_mean": 20.65,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 840
+   },
+   "detect_rate": 0.0202,
+   "detect_mc_se": 0.0071,
+   "reverse_rate": 0.0253,
+   "unidentifiable": 4
+  },
+  {
+   "scenario": "missing_20%_weeks",
+   "design": "fri",
+   "params": {
+    "missing_frac": 0.2
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 9.83,
+   "weeks_actual_max": 13,
+   "rows_mean": 19.01,
+   "rows_used_mean": 15.53,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 770
+   },
+   "detect_rate": 0.0156,
+   "detect_mc_se": 0.0063,
+   "reverse_rate": 0.0208,
+   "unidentifiable": 15
+  },
+  {
+   "scenario": "missing_highvol",
+   "design": "fri",
+   "params": {
+    "missing_highvol": 1.4
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 11.87,
+   "weeks_actual_max": 13,
+   "rows_mean": 22.15,
+   "rows_used_mean": 18.83,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 824,
+    "高波动缺周（事前 ATR）": 747
+   },
+   "detect_rate": 0.0229,
+   "detect_mc_se": 0.0075,
+   "reverse_rate": 0.0254,
+   "unidentifiable": 7
+  },
+  {
+   "scenario": "base_t4",
+   "design": "all",
+   "params": {},
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 97.56,
+   "rows_used_mean": 97.23,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2576
+   },
+   "detect_rate": 0.03,
+   "detect_mc_se": 0.0085,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "drift_+0.1sd/day",
+   "design": "all",
+   "params": {
+    "drift": 0.1
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 100.23,
+   "rows_used_mean": 100.09,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1509
+   },
+   "detect_rate": 0.035,
+   "detect_mc_se": 0.0092,
+   "reverse_rate": 0.0175,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "side_bias_belowOIx2.3+drift",
+   "design": "all",
+   "params": {
+    "side_bias": 2.3,
+    "drift": 0.1
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 100.08,
+   "rows_used_mean": 96.23,
+   "wall_below_share": 0.81,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1569
+   },
+   "detect_rate": 0.0225,
+   "detect_mc_se": 0.0074,
+   "reverse_rate": 0.0325,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "neg_skew",
+   "design": "all",
+   "params": {
+    "skew": true
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 98.81,
+   "rows_used_mean": 98.6,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2074
+   },
+   "detect_rate": 0.025,
+   "detect_mc_se": 0.0078,
+   "reverse_rate": 0.0225,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "dist_imbalance+drift",
+   "design": "all",
+   "params": {
+    "dist_imbalance": true,
+    "drift": 0.1
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 12.89,
+   "weeks_actual_max": 13,
+   "rows_mean": 99.89,
+   "rows_used_mean": 59.77,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1526
+   },
+   "detect_rate": 0.0121,
+   "detect_mc_se": 0.006,
+   "reverse_rate": 0.0394,
+   "unidentifiable": 70
+  },
+  {
+   "scenario": "paired_week_shock_1sd",
+   "design": "all",
+   "params": {
+    "paired_shock": 1.0
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 98.46,
+   "rows_used_mean": 98.22,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2215
+   },
+   "detect_rate": 0.02,
+   "detect_mc_se": 0.007,
+   "reverse_rate": 0.0225,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "weekly_momentum_0.2",
+   "design": "all",
+   "params": {
+    "momentum": 0.2
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 97.2,
+   "rows_used_mean": 96.92,
+   "wall_below_share": 0.51,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2719
+   },
+   "detect_rate": 0.015,
+   "detect_mc_se": 0.0061,
+   "reverse_rate": 0.02,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "garch_vol_cluster",
+   "design": "all",
+   "params": {
+    "garch": true
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 95.25,
+   "rows_used_mean": 94.94,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 3500
+   },
+   "detect_rate": 0.03,
+   "detect_mc_se": 0.0085,
+   "reverse_rate": 0.0325,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "leverage_vol",
+   "design": "all",
+   "params": {
+    "leverage": true
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 100.81,
+   "rows_used_mean": 100.61,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1276
+   },
+   "detect_rate": 0.0225,
+   "detect_mc_se": 0.0074,
+   "reverse_rate": 0.0325,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "regime_drift_switch",
+   "design": "all",
+   "params": {
+    "regime": true
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 98.75,
+   "rows_used_mean": 98.44,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2102
+   },
+   "detect_rate": 0.0175,
+   "detect_mc_se": 0.0066,
+   "reverse_rate": 0.04,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "wall_follows_last_week",
+   "design": "all",
+   "params": {
+    "feedback": true
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 97.73,
+   "rows_used_mean": 97.42,
+   "wall_below_share": 0.51,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2508
+   },
+   "detect_rate": 0.04,
+   "detect_mc_se": 0.0098,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "wall_follows+momentum",
+   "design": "all",
+   "params": {
+    "feedback": true,
+    "momentum": 0.2
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 97.43,
+   "rows_used_mean": 97.08,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2627
+   },
+   "detect_rate": 0.0275,
+   "detect_mc_se": 0.0082,
+   "reverse_rate": 0.0175,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "missing_20%_weeks",
+   "design": "all",
+   "params": {
+    "missing_frac": 0.2
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 10.29,
+   "weeks_actual_max": 13,
+   "rows_mean": 77.14,
+   "rows_used_mean": 76.71,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2066
+   },
+   "detect_rate": 0.025,
+   "detect_mc_se": 0.0078,
+   "reverse_rate": 0.02,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "missing_highvol",
+   "design": "all",
+   "params": {
+    "missing_highvol": 1.4
+   },
+   "weeks_requested": 13,
+   "n_sims": 400,
+   "weeks_actual_mean": 12.8,
+   "weeks_actual_max": 13,
+   "rows_mean": 90.43,
+   "rows_used_mean": 90.21,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2473,
+    "高波动缺周（事前 ATR）": 2954
+   },
+   "detect_rate": 0.0475,
+   "detect_mc_se": 0.0106,
+   "reverse_rate": 0.02,
+   "unidentifiable": 0
+  }
+ ],
+ "power": [
+  {
+   "scenario": "pin0.1",
+   "design": "fri",
+   "params": {
+    "pin": 0.1
+   },
+   "weeks_requested": 13,
+   "n_sims": 200,
+   "weeks_actual_mean": 12.59,
+   "weeks_actual_max": 13,
+   "rows_mean": 24.07,
+   "rows_used_mean": 20.77,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 398
+   },
+   "detect_rate": 0.0303,
+   "detect_mc_se": 0.0122,
+   "reverse_rate": 0.0303,
+   "unidentifiable": 2
+  },
+  {
+   "scenario": "pin0.1",
+   "design": "fri",
+   "params": {
+    "pin": 0.1
+   },
+   "weeks_requested": 24,
+   "n_sims": 200,
+   "weeks_actual_mean": 23.87,
+   "weeks_actual_max": 24,
+   "rows_mean": 43.7,
+   "rows_used_mean": 42.16,
+   "wall_below_share": 0.49,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 861
+   },
+   "detect_rate": 0.045,
+   "detect_mc_se": 0.0147,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.1",
+   "design": "fri",
+   "params": {
+    "pin": 0.1
+   },
+   "weeks_requested": 36,
+   "n_sims": 200,
+   "weeks_actual_mean": 35.95,
+   "weeks_actual_max": 36,
+   "rows_mean": 65.5,
+   "rows_used_mean": 64.94,
+   "wall_below_share": 0.51,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1299
+   },
+   "detect_rate": 0.04,
+   "detect_mc_se": 0.0139,
+   "reverse_rate": 0.01,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.1",
+   "design": "fri",
+   "params": {
+    "pin": 0.1
+   },
+   "weeks_requested": 52,
+   "n_sims": 200,
+   "weeks_actual_mean": 51.95,
+   "weeks_actual_max": 52,
+   "rows_mean": 93.76,
+   "rows_used_mean": 93.64,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2048
+   },
+   "detect_rate": 0.055,
+   "detect_mc_se": 0.0161,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.2",
+   "design": "fri",
+   "params": {
+    "pin": 0.2
+   },
+   "weeks_requested": 13,
+   "n_sims": 200,
+   "weeks_actual_mean": 12.57,
+   "weeks_actual_max": 13,
+   "rows_mean": 23.66,
+   "rows_used_mean": 20.57,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 468
+   },
+   "detect_rate": 0.04,
+   "detect_mc_se": 0.0139,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.2",
+   "design": "fri",
+   "params": {
+    "pin": 0.2
+   },
+   "weeks_requested": 24,
+   "n_sims": 200,
+   "weeks_actual_mean": 23.77,
+   "weeks_actual_max": 24,
+   "rows_mean": 43.58,
+   "rows_used_mean": 41.85,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 884
+   },
+   "detect_rate": 0.1,
+   "detect_mc_se": 0.0212,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.2",
+   "design": "fri",
+   "params": {
+    "pin": 0.2
+   },
+   "weeks_requested": 36,
+   "n_sims": 200,
+   "weeks_actual_mean": 35.95,
+   "weeks_actual_max": 36,
+   "rows_mean": 65.28,
+   "rows_used_mean": 64.8,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1345
+   },
+   "detect_rate": 0.12,
+   "detect_mc_se": 0.023,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.2",
+   "design": "fri",
+   "params": {
+    "pin": 0.2
+   },
+   "weeks_requested": 52,
+   "n_sims": 200,
+   "weeks_actual_mean": 51.94,
+   "weeks_actual_max": 52,
+   "rows_mean": 93.92,
+   "rows_used_mean": 93.71,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2015
+   },
+   "detect_rate": 0.135,
+   "detect_mc_se": 0.0242,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.3",
+   "design": "fri",
+   "params": {
+    "pin": 0.3
+   },
+   "weeks_requested": 13,
+   "n_sims": 200,
+   "weeks_actual_mean": 12.61,
+   "weeks_actual_max": 13,
+   "rows_mean": 23.83,
+   "rows_used_mean": 21.09,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 435
+   },
+   "detect_rate": 0.0859,
+   "detect_mc_se": 0.0199,
+   "reverse_rate": 0.0101,
+   "unidentifiable": 2
+  },
+  {
+   "scenario": "pin0.3",
+   "design": "fri",
+   "params": {
+    "pin": 0.3
+   },
+   "weeks_requested": 24,
+   "n_sims": 200,
+   "weeks_actual_mean": 23.86,
+   "weeks_actual_max": 24,
+   "rows_mean": 43.87,
+   "rows_used_mean": 42.34,
+   "wall_below_share": 0.49,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 827
+   },
+   "detect_rate": 0.16,
+   "detect_mc_se": 0.0259,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.3",
+   "design": "fri",
+   "params": {
+    "pin": 0.3
+   },
+   "weeks_requested": 36,
+   "n_sims": 200,
+   "weeks_actual_mean": 35.95,
+   "weeks_actual_max": 36,
+   "rows_mean": 64.9,
+   "rows_used_mean": 64.48,
+   "wall_below_share": 0.51,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1420
+   },
+   "detect_rate": 0.16,
+   "detect_mc_se": 0.0259,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.3",
+   "design": "fri",
+   "params": {
+    "pin": 0.3
+   },
+   "weeks_requested": 52,
+   "n_sims": 200,
+   "weeks_actual_mean": 51.73,
+   "weeks_actual_max": 52,
+   "rows_mean": 93.85,
+   "rows_used_mean": 93.73,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2030
+   },
+   "detect_rate": 0.315,
+   "detect_mc_se": 0.0328,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.05",
+   "design": "fri",
+   "params": {
+    "pin_prob": 0.05
+   },
+   "weeks_requested": 13,
+   "n_sims": 200,
+   "weeks_actual_mean": 12.48,
+   "weeks_actual_max": 13,
+   "rows_mean": 23.76,
+   "rows_used_mean": 20.38,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 468
+   },
+   "detect_rate": 0.0357,
+   "detect_mc_se": 0.0133,
+   "reverse_rate": 0.0102,
+   "unidentifiable": 4
+  },
+  {
+   "scenario": "pin_prob0.05",
+   "design": "fri",
+   "params": {
+    "pin_prob": 0.05
+   },
+   "weeks_requested": 24,
+   "n_sims": 200,
+   "weeks_actual_mean": 23.83,
+   "weeks_actual_max": 24,
+   "rows_mean": 43.8,
+   "rows_used_mean": 42.05,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 840
+   },
+   "detect_rate": 0.055,
+   "detect_mc_se": 0.0161,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.05",
+   "design": "fri",
+   "params": {
+    "pin_prob": 0.05
+   },
+   "weeks_requested": 36,
+   "n_sims": 200,
+   "weeks_actual_mean": 35.95,
+   "weeks_actual_max": 36,
+   "rows_mean": 65.48,
+   "rows_used_mean": 64.6,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1303
+   },
+   "detect_rate": 0.05,
+   "detect_mc_se": 0.0154,
+   "reverse_rate": 0.01,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.05",
+   "design": "fri",
+   "params": {
+    "pin_prob": 0.05
+   },
+   "weeks_requested": 52,
+   "n_sims": 200,
+   "weeks_actual_mean": 51.92,
+   "weeks_actual_max": 52,
+   "rows_mean": 93.8,
+   "rows_used_mean": 93.53,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2040
+   },
+   "detect_rate": 0.03,
+   "detect_mc_se": 0.0121,
+   "reverse_rate": 0.01,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.1",
+   "design": "fri",
+   "params": {
+    "pin_prob": 0.1
+   },
+   "weeks_requested": 13,
+   "n_sims": 200,
+   "weeks_actual_mean": 12.6,
+   "weeks_actual_max": 13,
+   "rows_mean": 23.89,
+   "rows_used_mean": 20.7,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 423
+   },
+   "detect_rate": 0.04,
+   "detect_mc_se": 0.0139,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.1",
+   "design": "fri",
+   "params": {
+    "pin_prob": 0.1
+   },
+   "weeks_requested": 24,
+   "n_sims": 200,
+   "weeks_actual_mean": 23.86,
+   "weeks_actual_max": 24,
+   "rows_mean": 43.7,
+   "rows_used_mean": 42.34,
+   "wall_below_share": 0.51,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 861
+   },
+   "detect_rate": 0.075,
+   "detect_mc_se": 0.0186,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.1",
+   "design": "fri",
+   "params": {
+    "pin_prob": 0.1
+   },
+   "weeks_requested": 36,
+   "n_sims": 200,
+   "weeks_actual_mean": 35.96,
+   "weeks_actual_max": 36,
+   "rows_mean": 64.93,
+   "rows_used_mean": 64.52,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1414
+   },
+   "detect_rate": 0.08,
+   "detect_mc_se": 0.0192,
+   "reverse_rate": 0.01,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.1",
+   "design": "fri",
+   "params": {
+    "pin_prob": 0.1
+   },
+   "weeks_requested": 52,
+   "n_sims": 200,
+   "weeks_actual_mean": 51.95,
+   "weeks_actual_max": 52,
+   "rows_mean": 93.03,
+   "rows_used_mean": 92.91,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2193
+   },
+   "detect_rate": 0.1,
+   "detect_mc_se": 0.0212,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.1",
+   "design": "all",
+   "params": {
+    "pin": 0.1
+   },
+   "weeks_requested": 13,
+   "n_sims": 200,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 97.61,
+   "rows_used_mean": 97.4,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1277
+   },
+   "detect_rate": 0.055,
+   "detect_mc_se": 0.0161,
+   "reverse_rate": 0.015,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.1",
+   "design": "all",
+   "params": {
+    "pin": 0.1
+   },
+   "weeks_requested": 24,
+   "n_sims": 200,
+   "weeks_actual_mean": 24.0,
+   "weeks_actual_max": 24,
+   "rows_mean": 178.88,
+   "rows_used_mean": 178.84,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2625
+   },
+   "detect_rate": 0.06,
+   "detect_mc_se": 0.0168,
+   "reverse_rate": 0.01,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.1",
+   "design": "all",
+   "params": {
+    "pin": 0.1
+   },
+   "weeks_requested": 36,
+   "n_sims": 200,
+   "weeks_actual_mean": 36.0,
+   "weeks_actual_max": 36,
+   "rows_mean": 266.93,
+   "rows_used_mean": 266.93,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 4214
+   },
+   "detect_rate": 0.085,
+   "detect_mc_se": 0.0197,
+   "reverse_rate": 0.01,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.1",
+   "design": "all",
+   "params": {
+    "pin": 0.1
+   },
+   "weeks_requested": 52,
+   "n_sims": 200,
+   "weeks_actual_mean": 52.0,
+   "weeks_actual_max": 52,
+   "rows_mean": 385.22,
+   "rows_used_mean": 385.22,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 6156
+   },
+   "detect_rate": 0.1,
+   "detect_mc_se": 0.0212,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.2",
+   "design": "all",
+   "params": {
+    "pin": 0.2
+   },
+   "weeks_requested": 13,
+   "n_sims": 200,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 97.53,
+   "rows_used_mean": 97.34,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1295
+   },
+   "detect_rate": 0.145,
+   "detect_mc_se": 0.0249,
+   "reverse_rate": 0.01,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.2",
+   "design": "all",
+   "params": {
+    "pin": 0.2
+   },
+   "weeks_requested": 24,
+   "n_sims": 200,
+   "weeks_actual_mean": 24.0,
+   "weeks_actual_max": 24,
+   "rows_mean": 177.96,
+   "rows_used_mean": 177.96,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2808
+   },
+   "detect_rate": 0.175,
+   "detect_mc_se": 0.0269,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.2",
+   "design": "all",
+   "params": {
+    "pin": 0.2
+   },
+   "weeks_requested": 36,
+   "n_sims": 200,
+   "weeks_actual_mean": 36.0,
+   "weeks_actual_max": 36,
+   "rows_mean": 266.8,
+   "rows_used_mean": 266.8,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 4241
+   },
+   "detect_rate": 0.295,
+   "detect_mc_se": 0.0322,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.2",
+   "design": "all",
+   "params": {
+    "pin": 0.2
+   },
+   "weeks_requested": 52,
+   "n_sims": 200,
+   "weeks_actual_mean": 52.0,
+   "weeks_actual_max": 52,
+   "rows_mean": 383.25,
+   "rows_used_mean": 383.25,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 6549
+   },
+   "detect_rate": 0.37,
+   "detect_mc_se": 0.0341,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.3",
+   "design": "all",
+   "params": {
+    "pin": 0.3
+   },
+   "weeks_requested": 13,
+   "n_sims": 200,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 97.17,
+   "rows_used_mean": 96.95,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1367
+   },
+   "detect_rate": 0.255,
+   "detect_mc_se": 0.0308,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.3",
+   "design": "all",
+   "params": {
+    "pin": 0.3
+   },
+   "weeks_requested": 24,
+   "n_sims": 200,
+   "weeks_actual_mean": 24.0,
+   "weeks_actual_max": 24,
+   "rows_mean": 179.47,
+   "rows_used_mean": 179.47,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2505
+   },
+   "detect_rate": 0.42,
+   "detect_mc_se": 0.0349,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.3",
+   "design": "all",
+   "params": {
+    "pin": 0.3
+   },
+   "weeks_requested": 36,
+   "n_sims": 200,
+   "weeks_actual_mean": 36.0,
+   "weeks_actual_max": 36,
+   "rows_mean": 267.96,
+   "rows_used_mean": 267.96,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 4007
+   },
+   "detect_rate": 0.59,
+   "detect_mc_se": 0.0348,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin0.3",
+   "design": "all",
+   "params": {
+    "pin": 0.3
+   },
+   "weeks_requested": 52,
+   "n_sims": 200,
+   "weeks_actual_mean": 52.0,
+   "weeks_actual_max": 52,
+   "rows_mean": 388.37,
+   "rows_used_mean": 388.37,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 5527
+   },
+   "detect_rate": 0.8,
+   "detect_mc_se": 0.0283,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.05",
+   "design": "all",
+   "params": {
+    "pin_prob": 0.05
+   },
+   "weeks_requested": 13,
+   "n_sims": 200,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 97.14,
+   "rows_used_mean": 96.82,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1372
+   },
+   "detect_rate": 0.05,
+   "detect_mc_se": 0.0154,
+   "reverse_rate": 0.02,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.05",
+   "design": "all",
+   "params": {
+    "pin_prob": 0.05
+   },
+   "weeks_requested": 24,
+   "n_sims": 200,
+   "weeks_actual_mean": 24.0,
+   "weeks_actual_max": 24,
+   "rows_mean": 179.03,
+   "rows_used_mean": 178.96,
+   "wall_below_share": 0.49,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2594
+   },
+   "detect_rate": 0.065,
+   "detect_mc_se": 0.0174,
+   "reverse_rate": 0.005,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.05",
+   "design": "all",
+   "params": {
+    "pin_prob": 0.05
+   },
+   "weeks_requested": 36,
+   "n_sims": 200,
+   "weeks_actual_mean": 36.0,
+   "weeks_actual_max": 36,
+   "rows_mean": 265.33,
+   "rows_used_mean": 265.32,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 4533
+   },
+   "detect_rate": 0.085,
+   "detect_mc_se": 0.0197,
+   "reverse_rate": 0.01,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.05",
+   "design": "all",
+   "params": {
+    "pin_prob": 0.05
+   },
+   "weeks_requested": 52,
+   "n_sims": 200,
+   "weeks_actual_mean": 52.0,
+   "weeks_actual_max": 52,
+   "rows_mean": 383.99,
+   "rows_used_mean": 383.99,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 6403
+   },
+   "detect_rate": 0.105,
+   "detect_mc_se": 0.0217,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.1",
+   "design": "all",
+   "params": {
+    "pin_prob": 0.1
+   },
+   "weeks_requested": 13,
+   "n_sims": 200,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 97.75,
+   "rows_used_mean": 97.49,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1249
+   },
+   "detect_rate": 0.07,
+   "detect_mc_se": 0.018,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.1",
+   "design": "all",
+   "params": {
+    "pin_prob": 0.1
+   },
+   "weeks_requested": 24,
+   "n_sims": 200,
+   "weeks_actual_mean": 24.0,
+   "weeks_actual_max": 24,
+   "rows_mean": 177.8,
+   "rows_used_mean": 177.8,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 2840
+   },
+   "detect_rate": 0.145,
+   "detect_mc_se": 0.0249,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.1",
+   "design": "all",
+   "params": {
+    "pin_prob": 0.1
+   },
+   "weeks_requested": 36,
+   "n_sims": 200,
+   "weeks_actual_mean": 36.0,
+   "weeks_actual_max": 36,
+   "rows_mean": 267.33,
+   "rows_used_mean": 267.33,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 4133
+   },
+   "detect_rate": 0.215,
+   "detect_mc_se": 0.029,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  },
+  {
+   "scenario": "pin_prob0.1",
+   "design": "all",
+   "params": {
+    "pin_prob": 0.1
+   },
+   "weeks_requested": 52,
+   "n_sims": 200,
+   "weeks_actual_mean": 52.0,
+   "weeks_actual_max": 52,
+   "rows_mean": 384.56,
+   "rows_used_mean": 384.56,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 6288
+   },
+   "detect_rate": 0.28,
+   "detect_mc_se": 0.0317,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  }
+ ],
+ "informed_wall_not_null": [
+  {
+   "scenario": "informed_wall",
+   "design": "fri",
+   "params": {
+    "informed": true
+   },
+   "weeks_requested": 13,
+   "n_sims": 200,
+   "weeks_actual_mean": 12.45,
+   "weeks_actual_max": 13,
+   "rows_mean": 23.81,
+   "rows_used_mean": 20.38,
+   "wall_below_share": 0.53,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 443
+   },
+   "detect_rate": 0.9749,
+   "detect_mc_se": 0.0111,
+   "reverse_rate": 0.0,
+   "unidentifiable": 1
+  },
+  {
+   "scenario": "informed_wall",
+   "design": "all",
+   "params": {
+    "informed": true
+   },
+   "weeks_requested": 13,
+   "n_sims": 200,
+   "weeks_actual_mean": 13.0,
+   "weeks_actual_max": 13,
+   "rows_mean": 97.27,
+   "rows_used_mean": 96.59,
+   "wall_below_share": 0.5,
+   "unmatched_total": {
+    "带内有 OI 的行权价 < 3": 1347
+   },
+   "detect_rate": 1.0,
+   "detect_mc_se": 0.0,
+   "reverse_rate": 0.0,
+   "unidentifiable": 0
+  }
+ ],
+ "code_sha256": {
+  "undertow/analyze/pin_stat.py": "6d490c57c151319f6d0938caa826ed1c3951d8057cd2e947d86b20353c2f7398",
+  "scripts/expiry_pin_v4r2_synth.py": "4cdcc409d7bc167d9cc7db016005c3ce872b2f5d2a2e790028732634975a6bea"
+ },
+ "git_head": "6289286de636ca455d1f7571b982abcd9a2011a3"
+}

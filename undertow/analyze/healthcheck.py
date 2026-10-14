@@ -178,24 +178,34 @@ def after_fee_ev(combo, implied_p: float | None = None, spot: float | None = Non
     return gross, fees, net, frac
 
 
-def stop_risk(combo):
-    """**按预设止损了结时的亏损**（软风险）——与 max_loss（跳空硬风险）区分。
+def stop_risk_detail(combo) -> dict | None:
+    """**按预设止损了结时的亏损**（软风险）——与 max_loss（跳空硬风险）区分，两者都要设限。
 
     口径对齐档案的出场规则：
-      · 收权金结构：亏到所收权金的 ~2 倍即平 → 损失 ≈ 净权金 × 100 × 张
-      · 借方/买方结构：亏到成本 ~50% 即平 → 损失 ≈ 0.5 × 已付权金
-    **注意**：软止损只在【正常行情】成立；跳空时直接吃 max_loss，所以两者都要设限。
-    返回美元金额；无法估算返回 None。
-    """
+      · 收权金结构：价差涨到所收权金的 2 倍即平 → 损失 = 净权金 × 100 × 张 + 往返费
+      · 借方/买方结构：亏到成本 50% 即平 → 损失 = 0.5 × 已付权金 + 往返费
+    Codex 043 WP1：旧版 `min(risk, max_loss)` 截断且漏费——宽 5、收 2.70、往返 3.20 时 2C 清算情景是 273.20，旧版报 230。
+    计划止损损失可以【超过】理论最大亏损（宽度不够时 2C 止损线在价差上限之外）；这是要报告的成本状态，不截断。
+    费用：腿数 × 张 × FEE_PER_CONTRACT × 2（模型假设，指派处置费用未知）。无法估算 → None。"""
     nc = getattr(combo, "net_credit", None)
     qty = max(int(getattr(combo, "qty", 1) or 1), 1)
     if nc is None or not combo.max_loss:
         return None
+    fees = max(len(getattr(combo, "legs", []) or []), 1) * qty * FEE_PER_CONTRACT * 2
     if nc > 0:                                   # 收权金：价差翻倍了结
-        risk = nc * CONTRACT_MULT * qty
+        planned, rule = nc * CONTRACT_MULT * qty + fees, {"kind": "credit_multiple", "mult": 2.0}
     else:                                        # 付权金：亏一半了结
-        risk = 0.5 * (-nc) * CONTRACT_MULT * qty
-    return min(risk, combo.max_loss)             # 不可能超过最大亏损
+        planned, rule = 0.5 * (-nc) * CONTRACT_MULT * qty + fees, {"kind": "debit_fraction", "frac": 0.5}
+    payoff = combo.max_loss + fees               # combo.max_loss 是不含费的到期最大亏损
+    return {"planned_stop_loss_usd": round(planned, 2), "stop_rule": rule, "payoff_max_loss_usd": round(payoff, 2),
+            "stop_exceeds_payoff_max_loss": planned > payoff + 1e-9, "fee_usd": round(fees, 2),
+            "fee_assumption": f"{FEE_PER_CONTRACT}/张/笔 × 腿数 × 2；指派处置费用未知"}
+
+
+def stop_risk(combo):
+    """计划止损损失（美元，含费，不截断）；详细口径见 stop_risk_detail。无法估算返回 None。"""
+    d = stop_risk_detail(combo)
+    return None if d is None else d["planned_stop_loss_usd"]
 
 
 def net_delta_per_contract(combo) -> float | None:

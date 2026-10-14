@@ -111,18 +111,18 @@ def test_two_tier_size_limits():
     """双层限额：止损风险(软) 与 最大亏损(硬跳空口径) 分别检查。"""
     from undertow.analyze.healthcheck import stop_risk
     cap = AccountCapital(buy_power=400.0, net_assets=440.0, cash_usd=400.0)
-    # 1张 60/59 收权金0.38：止损亏≈$38(8.6%✅)、最大亏$62(14%✅) → 两条都过
+    # 1张 60/59 收权金0.38：止损亏 $38 + 往返费 $3.20 = $41.2(9.4%✅)、最大亏$62(14%✅) → 两条都过
     pos = [_Pos("SLV260918P60000.US", "60P", -1, 1.76),
            _Pos("SLV260918P59000.US", "59P", 1, 1.38)]
     rv = review_portfolio(pos, {"SLV": _ctx()}, asof=date(2026, 8, 26), capital=cap)
     c = rv.groups[0].combos[0]
     sr = stop_risk(c)
-    assert abs(sr - 38.0) < 1e-6, sr                 # 收权金×100×张
+    assert abs(sr - 41.2) < 1e-6, sr                 # 收权金×100×张 + 往返费（Codex 043：止损情景含费、不截断）
     assert abs(c.capital_at_risk - 62.0) < 1e-6, c.capital_at_risk
     ids = {v.rule_id for v in check_against_profile(rv, cap, _profile())}
-    assert "max_risk_per_trade_pct" not in ids, ids   # 8.6% < 10%
+    assert "max_risk_per_trade_pct" not in ids, ids   # 9.4% < 10%
     assert "max_loss_per_trade_pct" not in ids, ids   # 14% < 20%
-    print(f"PASS test_two_tier_size_limits → 止损 ${sr:.0f}(8.6%) / 最大亏 ${c.capital_at_risk:.0f}(14%) 均通过")
+    print(f"PASS test_two_tier_size_limits → 止损 ${sr:.0f}(9.4%) / 最大亏 ${c.capital_at_risk:.0f}(14%) 均通过")
 
 
 def test_max_loss_tier_catches_gap_risk():

@@ -93,22 +93,15 @@ def is_debit(side: str, k_sell: float, k_buy: float) -> bool:
 
 
 def economics(side: str, k_sell: float, k_buy: float, credit: float, qty: int, fee_round_trip: float) -> dict:
-    """价差经济量的唯一来源（Codex 025-2）。fee_round_trip = 每组往返费用；整单 = 每组 × qty。
-    借记价差：credit 为负（= −付出的权利金 debit）；最大亏损 = debit + 费用，最大收益 = 宽度 − debit − 费用。"""
+    """价差经济量（Codex 025-2）；计算委托给 undertow.analyze.spread_econ（Codex 043 WP1 唯一来源），这里只保留模拟仓台账的字段名。
+    fee_round_trip = 每组往返费用；整单 = 每组 × qty。借记价差：credit 为负（= −付出的权利金 debit）。"""
+    from undertow.analyze import spread_econ as se
+    e = se.vertical(side=side, k_sell=k_sell, k_buy=k_buy, entry_credit=credit, qty=qty, fee_round_trip=fee_round_trip)
     width = abs(k_sell - k_buy)
-    fee_ps = fee_round_trip / 100.0                      # 每股摊到的费用（1 组 = 100 股）
-    if is_debit(side, k_sell, k_buy):
-        debit = -credit
-        be = (k_buy + debit + fee_ps) if side == "C" else (k_buy - debit - fee_ps)
-        return {"structure": "debit", "width": width, "credit": credit, "debit": debit,
-                "max_gain_usd": round(((width - debit) * 100 - fee_round_trip) * qty, 2),
-                "max_loss_usd": round((debit * 100 + fee_round_trip) * qty, 2),
-                "breakeven": round(be, 4), "fee_total_usd": round(fee_round_trip * qty, 2)}
-    be = (k_sell - credit + fee_ps) if side == "P" else (k_sell + credit - fee_ps)
-    return {"width": width, "credit": credit,
-            "max_gain_usd": round((credit * 100 - fee_round_trip) * qty, 2),
-            "max_loss_usd": round(((width - credit) * 100 + fee_round_trip) * qty, 2),
-            "breakeven": round(be, 4), "fee_total_usd": round(fee_round_trip * qty, 2)}
+    out = {"width": width, "credit": credit, "max_gain_usd": e["entry_net_max_gain"], "max_loss_usd": e["entry_net_payoff_max_loss"],
+           "breakeven": e["breakeven"], "fee_total_usd": None if e["fee_total_usd"] is None else round(e["fee_total_usd"], 2)}
+    return {"structure": "debit", "width": width, "credit": credit, "debit": -credit, **{k: v for k, v in out.items() if k not in ("width", "credit")}} \
+        if is_debit(side, k_sell, k_buy) else out
 
 
 def _debit(p: dict) -> bool:
@@ -654,10 +647,29 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
         live = in_rth(now) and now.astimezone(ET).date() == today       # 周末/盘外/跨日：只估值、不执行
         prob = exit_problem(q, p, val, assume, automatic=True)
         if prob:
-            # 估值不可信：不执行任何退出、不占用本时点，窗口内下次唤醒重取（坏报价不得影响模拟仓）
-            ev.append({"at": now.isoformat(), "action": "mark_incomplete", "slot": key, "quotes": q, "value": val,
-                       "valuation_assumption": assume, "requested_at": req.isoformat(), "returned_at": now.isoformat(),
-                       "why": prob, "note": "估值不可信：不执行止损/止盈/时间出场，窗口内重取；盘外也不当作有效估值"})
+            # 不执行任何退出、不占用本时点，窗口内下次唤醒重取（坏报价不得影响模拟仓）。
+            # Codex 043 WP1：分清「数据不成立」与「数据成立但退出受阻（成本越界/政策）」——后者不是坏数据，
+            # 保留报价、按该价值了结的含费损失情景，以及本来会触发的出场规则（止损触发 ≠ 已退出 ≠ 退出受阻）。
+            a_ = exit_assessment(q, p, val)
+            cat = "data_integrity" if a_["data_integrity"] else ("execution_cost" if a_["execution_cost"] else "execution_policy")
+            e_ = {"at": now.isoformat(), "action": "mark_incomplete", "slot": key, "quotes": q, "value": val,
+                  "valuation_assumption": assume, "requested_at": req.isoformat(), "returned_at": now.isoformat(),
+                  "why": prob, "category": cat}
+            if cat == "data_integrity":
+                e_["note"] = "数据不成立：不执行止损/止盈/时间出场，窗口内重取；盘外也不当作有效估值"
+            else:
+                pnl_ = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
+                xr_ = EXIT_RULES.get(p.get("exit_rule") or "") or {}
+                trig = []
+                if p.get("stop_value") is not None and val >= p["stop_value"]:
+                    trig.append("stop")
+                if xr_.get("take_profit_gain_frac") is not None:
+                    mg_ = economics(p["side"], p["k_sell"], p["k_buy"], p["entry_credit"], p["qty"], p["fee_round_trip"])["max_gain_usd"]
+                    if mg_ and mg_ > 0 and pnl_ >= xr_["take_profit_gain_frac"] * mg_:
+                        trig.append("take_profit")
+                e_.update(exit_blocked=True, would_trigger=trig, liquidation_scenario_pnl_usd=pnl_,
+                          note="数据成立但自动退出受阻（成本越界/政策不接受）：不写成已平仓，保留报价与损失情景，窗口内重取")
+            ev.append(e_)
             return "retry"
         ev.append({"at": now.isoformat(), "action": "mark" if live else "mark_offhours", "slot": key,
                    "quotes": q, "value": val, "valuation_assumption": assume,

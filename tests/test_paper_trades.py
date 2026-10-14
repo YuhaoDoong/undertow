@@ -584,6 +584,20 @@ def test_user_tp90_rule_on_debit_spread():
     assert p["pnl_usd"] >= 0.9 * mg
 
 
+def test_stop_crossed_but_cost_outside_payoff_is_blocked_not_bad_data():
+    """Codex 043 WP1：宽 5、收 2.70，2C 止损线 5.40 在价差上限之外；两腿正报价清算 5.45 → 止损本会触发，
+    但成本越界 → 不自动退出，记为「数据成立但退出受阻」，保留含费损失情景；不得写成坏数据或已平仓。"""
+    p = _p(side="C", k_sell=380.0, k_buy=385.0, expiry="2026-10-16")
+    assert pt.step(p, at(29, 10, 6), depth=q(2.9, 3.0, 0.15, 0.2)) == "enter"          # 2.9 − 0.2 = 2.70
+    assert p["entry_credit"] == 2.7 and p["stop_value"] == 5.4
+    assert pt.step(p, at(30, 9, 46), depth=q(5.4, 5.5, 0.05, 0.1)) == "retry"          # 5.5 − 0.05 = 5.45 > 宽 5
+    e = p["events"][-1]
+    assert p["state"] == "entered" and e["action"] == "mark_incomplete" and e["category"] == "execution_cost"
+    assert e["exit_blocked"] is True and e["would_trigger"] == ["stop"] and e["liquidation_scenario_pnl_usd"] == -278.2
+    assert pt.step(p, at(30, 9, 50), depth=q(2.9, 3.0, None, 0.2)) == "retry"          # 买腿缺 bid：数据不成立
+    assert p["events"][-1]["category"] == "data_integrity" and "exit_blocked" not in p["events"][-1]
+
+
 def test_manual_close_quote_failure_or_late_return_keeps_request(tmp_path, monkeypatch):
     p = _entered()
     load = _env(tmp_path, monkeypatch, [{"id": "M", "execution": "模拟", "paper": p}])

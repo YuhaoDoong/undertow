@@ -192,23 +192,81 @@ def _num(x) -> bool:
     return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
 
+def _book_rows(open_positions: list) -> tuple[list[dict], list[str]]:
+    """在场/已选入账本 → (计入的逻辑持仓, 问题清单)。问题非空 = 账本不完整（调用方给 incomplete，不是通过）。
+
+    Codex 044 P1：旧版按 id 去重且 first-wins，而 id 是「标的·策略名」——同标签不同到期的三笔只算一笔。现在：
+    - id 必须是稳定逻辑身份（risk_aggregate.combo_id：标的/到期/腿合约/张数），缺 id → 问题（不能都被 None 去重）；
+    - 同 id 且内容完全一致 → 真重复，只算一次（幂等）；同 id 内容冲突 → 问题（不挑哪条）；
+    - 金额必须是 ≥0 的有限数（负风险会抵消别的风险 → 拒绝）；state 只认 open / selected_pending。"""
+    rows, problems, seen = [], [], {}
+    keys = ("underlying", "stop_loss", "payoff_max_loss", "state")
+    for p in open_positions:
+        pid = p.get("id") if isinstance(p, dict) else None
+        if not isinstance(pid, str) or not pid.strip():
+            problems.append("持仓缺稳定 id（无法判断是否重复）")
+            continue
+        sig = tuple(p.get(k, "open" if k == "state" else None) for k in keys)
+        if pid in seen:
+            if seen[pid] != sig:
+                problems.append(f"{pid}：同 id 两条内容冲突")
+            continue
+        seen[pid] = sig
+        st = p.get("state", "open")
+        if st not in ("open", "selected_pending"):
+            if st not in ("closed", "cancelled"):
+                problems.append(f"{pid}：未知状态 {st!r}")
+            continue
+        if not all(_num(p.get(k)) and p[k] >= 0 for k in ("stop_loss", "payoff_max_loss")):
+            problems.append(f"{pid}：缺金额或金额为负")
+            continue
+        rows.append(p)
+    return rows, problems
+
+
+def _book_checks(rows: list[dict], R: float, policy: dict) -> list[dict]:
+    """整本账（含拟新增的那一笔）在 B 下的全部检查：每笔止损/最大亏损、两类合计、全场合计、大仓数量。
+    evaluate_book 与 evaluate_budget 共用这一处，两个入口对同一本账不会给出相反结论（Codex 044 P1-5）。"""
+    ls, lm = limit_usd(policy["stop_loss"], R), limit_usd(policy["max_loss"], R)
+    out = []
+    for p in rows:
+        for name, key, lim in (("单笔计划止损", "stop_loss", ls), ("单笔理论最大亏损", "payoff_max_loss", lm)):
+            out.append({"check": f"{p['id']}·{name}", "status": "pass" if p[key] <= lim + 1e-9 else "fail",
+                        "value": round(p[key], 2), "limit": lim, "note": "", "position": p["id"]})
+    for cat in ("metals", "other"):
+        tot = sum(p["payoff_max_loss"] for p in rows if category_of(p.get("underlying")) == cat)
+        lim = limit_usd(policy["categories"][cat], R)
+        out.append({"check": f"类别合计（{cat}）", "status": "pass" if tot <= lim + 1e-9 else "fail",
+                    "value": round(tot, 2), "limit": lim, "note": "金银多空不抵扣"})
+    tot = sum(p["payoff_max_loss"] for p in rows)
+    lim = limit_usd(policy["account"], R)
+    out.append({"check": "全场合计", "status": "pass" if tot <= lim + 1e-9 else "fail", "value": round(tot, 2),
+                "limit": lim, "note": ""})
+    thr, mx = policy["big_position"]["threshold_usd"], policy["big_position"]["max_count"]
+    nb = sum(1 for p in rows if p["payoff_max_loss"] > thr)
+    out.append({"check": "大仓数量", "status": "pass" if nb <= mx else "fail", "value": nb, "limit": mx,
+                "note": f"理论最大亏损 > ${thr:.0f}"})
+    return out
+
+
 def evaluate_budget(*, candidate: dict, open_positions: list | None, capital: dict | None, pause: dict | None,
                     policy: dict = POLICY_B, max_qty: int = 20) -> dict:
     """B 政策下，一个候选最多可开几组（只读预算）。
 
     candidate：{"id", "underlying", "unit_stop_loss", "unit_payoff_max_loss", ["unit_occupancy"], ["qty_requested"]}
-               —— 每组含费金额；整笔 = 每组 × 组数（同一笔多组仍是一笔逻辑持仓）。
-    open_positions：在场与已选入待执行的逻辑持仓（整笔）：{"id", "underlying", "stop_loss", "payoff_max_loss", "state"}；
-                    state ∈ open / selected_pending（已选入待执行：暂占额度）。同 id 重复导入只算一次。
-                    None = 现有持仓未知 → incomplete。成员任一金额未知 → incomplete（不当 0）。
+               —— 每组含费金额；整笔 = 每组 × 组数（同一笔多组仍是一笔逻辑持仓）。qty_requested 缺省 = max_qty；
+               给了就必须是正整数（bool/小数/0/负数 → incomplete）。
+    open_positions：在场与已选入待执行的逻辑持仓（整笔）：{"id"(稳定身份), "underlying", "stop_loss", "payoff_max_loss", "state"}；
+                    state ∈ open / selected_pending（暂占额度）/ closed / cancelled。真重复只算一次；缺 id、同 id 冲突、
+                    金额缺失或为负 → incomplete（不当 0、不挑一条）。None = 现有持仓未知 → incomplete。
     capital：{"equity"(R), "asof", ["buying_power"], ["stale"]}；pause：{"latched": bool, ["reason"]}，None = 状态未知。
-    检查顺序：暂停 → 数据完整 → 单笔止损 → 单笔理论最大亏损 → 类别合计 → 全场合计 → 大仓数量；资金能力另列 operation_status。
-    金银多空不互相抵扣；类别合计是该类所有品种的合计，不是每品种额度。"""
+    判定对象是【拟建后的整本账】（现有 + 本笔 k 组），与 evaluate_book 同一套检查：现有账本已超限（任一类别、单笔或大仓数）
+    → 新增 0 组并点名超限项；不自动平旧仓、不换仓。资金能力另列 operation_status。"""
     reasons, checks = [], []
     out = {"policy_version": policy["version"], "profile_id": policy.get("profile_id"),
            "asof": (capital or {}).get("asof"), "policy_basis": "R = 当前可审计权益（Codex 043 推荐口径）",
-           "checks": checks, "allowed_units": 0, "budget_status": "incomplete", "operation_status": "unverified",
-           "reasons": reasons}
+           "checks": checks, "allowed_units": 0, "policy_allowed_units": 0, "budget_status": "incomplete",
+           "operation_status": "unverified", "reasons": reasons}
 
     def chk(name, status, value=None, limit=None, note=""):
         checks.append({"check": name, "status": status, "value": value, "limit": limit, "note": note})
@@ -229,60 +287,49 @@ def evaluate_budget(*, candidate: dict, open_positions: list | None, capital: di
     else:
         chk("当前权益 R", "pass", value=R)
     us, um = candidate.get("unit_stop_loss"), candidate.get("unit_payoff_max_loss")
+    want = candidate.get("qty_requested", max_qty)
     if not (_num(us) and us > 0 and _num(um) and um > 0):
         chk("候选经济量", "incomplete", note="每组止损损失/理论最大亏损未知或非正 → 不开")
+    elif not (isinstance(want, int) and not isinstance(want, bool) and want >= 1):
+        chk("候选经济量", "incomplete", note=f"请求组数 {want!r} 不是正整数")
+    elif not (isinstance(candidate.get("underlying"), str) and candidate["underlying"].strip()):
+        chk("候选经济量", "incomplete", note="候选缺标的 → 无法归类")
     else:
         chk("候选经济量", "pass")
-    seen, opens = set(), []
+    rows = []
     if open_positions is None:
         chk("现有持仓", "incomplete", note="现有持仓风险未传入/未知 → 不能当作空仓")
     else:
-        miss = []
-        for p in open_positions:
-            if p.get("id") in seen:
-                continue                                   # 幂等：重复导入不重复占用
-            seen.add(p.get("id"))
-            if p.get("state", "open") not in ("open", "selected_pending"):
-                continue
-            if not (_num(p.get("payoff_max_loss")) and p["payoff_max_loss"] >= 0) or \
-               not (_num(p.get("stop_loss")) and p["stop_loss"] >= 0):
-                miss.append(str(p.get("id")))
-            opens.append(p)
-        chk("现有持仓", "incomplete" if miss else "pass", note=("缺金额：" + "、".join(miss[:5])) if miss else "")
+        rows, probs = _book_rows(open_positions)
+        chk("现有持仓", "incomplete" if probs else "pass", note="；".join(probs[:5]))
     bad = [c for c in checks if c["status"] != "pass"]
     if bad:                                                # 已暂停 = 确定的 0（fail）；其余缺口 = incomplete（不是通过）
         out["budget_status"] = "fail" if checks[0]["status"] == "fail" else "incomplete"
         reasons += [f"{c['check']}：{c['note'] or c['status']}" for c in bad]
         return out
 
-    lim_stop, lim_max = limit_usd(policy["stop_loss"], R), limit_usd(policy["max_loss"], R)
-    cat = category_of(candidate.get("underlying"))
-    lim_cat, lim_acct = limit_usd(policy["categories"][cat], R), limit_usd(policy["account"], R)
-    big_thr, big_max = policy["big_position"]["threshold_usd"], policy["big_position"]["max_count"]
-    open_cat = sum(p["payoff_max_loss"] for p in opens if category_of(p.get("underlying")) == cat)
-    open_all = sum(p["payoff_max_loss"] for p in opens)
-    open_big = sum(1 for p in opens if p["payoff_max_loss"] > big_thr)
-    want = candidate.get("qty_requested") or max_qty
+    cid = candidate.get("id") or "候选"
 
-    def ok_at(k):
-        s, m = us * k, um * k
-        return [("单笔计划止损", s <= lim_stop + 1e-9, s, lim_stop),
-                ("单笔理论最大亏损", m <= lim_max + 1e-9, m, lim_max),
-                (f"类别合计（{cat}）", open_cat + m <= lim_cat + 1e-9, open_cat + m, lim_cat),
-                ("全场合计", open_all + m <= lim_acct + 1e-9, open_all + m, lim_acct),
-                ("大仓数量", not (m > big_thr and open_big >= big_max), open_big + (1 if m > big_thr else 0), big_max)]
+    def book_at(k):
+        return _book_checks(rows + [{"id": f"{cid}（本笔 ×{k}）", "underlying": candidate["underlying"],
+                                     "stop_loss": us * k, "payoff_max_loss": um * k}], R, policy)
     n = 0
-    for k in range(1, int(want) + 1):
-        if all(ok for _, ok, _, _ in ok_at(k)):
+    for k in range(1, want + 1):
+        if all(c["status"] == "pass" for c in book_at(k)):
             n = k
         else:
             break
-    for name, ok, v, lim in ok_at(max(n, 1)):             # 0 组时报告 1 组卡在哪；≥1 组时报告该组数下的各项
-        chk(name, "pass" if ok else "fail", value=round(v, 2), limit=lim)
-    out["allowed_units"] = n
+    final = book_at(max(n, 1))                             # 0 组时报告 1 组卡在哪；≥1 组时报告该组数下的各项
+    pre = [c for c in _book_checks(rows, R, policy) if c["status"] == "fail"]
+    checks += final
+    out["allowed_units"] = out["policy_allowed_units"] = n
     out["budget_status"] = "pass" if n >= 1 else "fail"
+    if pre:
+        reasons.append("现有账本已超限（新增冻结，已有仓位按原计划管理、不自动平仓）：" +
+                       "、".join(f"{c['check']} {c['value']} > {c['limit']}" for c in pre))
     if n == 0:
-        reasons += [f"{c['check']} {c['value']} > {c['limit']}" for c in checks if c["status"] == "fail"]
+        reasons += [f"{c['check']} {c['value']} > {c['limit']}" for c in final if c["status"] == "fail"
+                    and c not in pre and not any(c["check"] == q["check"] for q in pre)]
     # 资金能力：独立于政策；美元下限不产生资金或保证金能力
     bp, occ = (capital or {}).get("buying_power"), candidate.get("unit_occupancy")
     if n >= 1 and um * n > R:                              # 美元下限只是政策额度，不产生资金：权益不够亏这一笔就开不了
@@ -300,37 +347,17 @@ def evaluate_budget(*, candidate: dict, open_positions: list | None, capital: di
 
 def evaluate_book(open_positions: list | None, capital: dict | None, policy: dict = POLICY_B) -> dict:
     """现有持仓本身是否在 B 的限额内（状态核查，不涉及新增；暂停只冻结新增，不在这里判）。
-    每笔：计划止损、理论最大亏损；合计：金银、其它、全场；大仓数量。任一金额未知 → incomplete。"""
-    checks = []
+    与 evaluate_budget 共用 _book_rows / _book_checks。任一成员缺 id、冲突、金额未知 → incomplete。"""
     R = (capital or {}).get("equity")
     if open_positions is None or not _num(R):
-        checks.append({"check": "现有持仓/权益", "status": "incomplete", "value": None, "limit": None,
-                       "note": "持仓或权益未知"})
-        return {"policy_version": policy["version"], "checks": checks, "overall": "incomplete"}
-    seen, rows = set(), []
-    for p in open_positions:
-        if p.get("id") in seen or p.get("state", "open") not in ("open", "selected_pending"):
-            continue
-        seen.add(p.get("id")); rows.append(p)
-    ls, lm = limit_usd(policy["stop_loss"], R), limit_usd(policy["max_loss"], R)
-    for p in rows:
-        for name, key, lim in (("单笔计划止损", "stop_loss", ls), ("单笔理论最大亏损", "payoff_max_loss", lm)):
-            v = p.get(key)
-            st = "incomplete" if not _num(v) else ("pass" if v <= lim + 1e-9 else "fail")
-            checks.append({"check": f"{p.get('id')}·{name}", "status": st, "value": v, "limit": lim, "note": ""})
-    known = all(_num(p.get("payoff_max_loss")) for p in rows)
-    for cat in ("metals", "other"):
-        tot = sum(p["payoff_max_loss"] for p in rows if category_of(p.get("underlying")) == cat) if known else None
-        lim = limit_usd(policy["categories"][cat], R)
-        checks.append({"check": f"类别合计（{cat}）", "status": "incomplete" if tot is None else ("pass" if tot <= lim + 1e-9 else "fail"),
-                       "value": tot, "limit": lim, "note": "金银多空不抵扣"})
-    tot = sum(p["payoff_max_loss"] for p in rows) if known else None
-    lim = limit_usd(policy["account"], R)
-    checks.append({"check": "全场合计", "status": "incomplete" if tot is None else ("pass" if tot <= lim + 1e-9 else "fail"),
-                   "value": tot, "limit": lim, "note": ""})
-    nb = sum(1 for p in rows if _num(p.get("payoff_max_loss")) and p["payoff_max_loss"] > policy["big_position"]["threshold_usd"])
-    checks.append({"check": "大仓数量", "status": "incomplete" if not known else ("pass" if nb <= policy["big_position"]["max_count"] else "fail"),
-                   "value": nb, "limit": policy["big_position"]["max_count"], "note": f"理论最大亏损 > ${policy['big_position']['threshold_usd']:.0f}"})
+        return {"policy_version": policy["version"], "overall": "incomplete",
+                "checks": [{"check": "现有持仓/权益", "status": "incomplete", "value": None, "limit": None,
+                            "note": "持仓或权益未知"}]}
+    rows, probs = _book_rows(open_positions)
+    checks = _book_checks(rows, R, policy)
+    if probs:
+        checks.append({"check": "账本完整性", "status": "incomplete", "value": len(probs), "limit": None,
+                       "note": "；".join(probs[:5])})
     sts = {c["status"] for c in checks}
     return {"policy_version": policy["version"], "checks": checks,
             "overall": "fail" if "fail" in sts else ("incomplete" if "incomplete" in sts else "pass")}

@@ -64,7 +64,9 @@ def candidate(row: dict, leg: dict, *, net_assets, account_open_max_loss, cluste
                                pause=pause, policy=policy, max_qty=1)
         n, notes = b["allowed_units"], b["reasons"]
         status = {"pass": "pass", "fail": "fail"}.get(b["budget_status"], "unknown")
-        return {**base, **econ, "budget_status": status, "n": n, "budget_checks": b["checks"],
+        # Codex 044 P2-6：政策组数与资金能力分开保留；insufficient_equity 等确定状态不能只剩 notes 里的人读文字
+        return {**base, **econ, "budget_status": status, "n": n, "policy_allowed_units": b["policy_allowed_units"],
+                "operation_status": b["operation_status"], "budget_checks": b["checks"],
                 "notes": notes + ["n 为理论预算上限，互斥备选，不可跨候选相加；券商执行性未核实"]}
     n, notes = rp.max_units(net_assets=net_assets, unit_max_loss=max_loss, unit_stop_loss=stop_loss,
                             cluster_open_max_loss=cluster_open.get(base["cluster"], 0.0),

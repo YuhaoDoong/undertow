@@ -1602,9 +1602,7 @@ def cmd_exec(args) -> int:
         else:
             net = b["capital"].net_assets if b["capital"] is not None else None
             agg = aggregate(b["review"], b["capital"], asof=session, policy=sx.rp.POLICY_B)
-            book = [{"id": f"{i['group']}·{i['label']}", "underlying": i["group"], "stop_loss": i["stop_loss"],
-                     "payoff_max_loss": i["payoff_max_loss_with_fees"]} for i in agg["items"]] + \
-                   [{"id": u, "underlying": u, "stop_loss": None, "payoff_max_loss": None} for u in agg["unmapped"]]
+            book = agg["book"]                                   # 稳定逻辑身份由 risk_aggregate 唯一构造（Codex 044 P1-1）
             tot = agg["totals"]["max_loss"]
             acct_ml = tot["value"]                               # 有未知/无上限成员 → None
             root_to_key = {i.options.symbol.upper(): i.key for i in cfg.instruments.values() if i.options}
@@ -1636,14 +1634,19 @@ def cmd_exec(args) -> int:
             "account_note": acct_note, "candidates": res}
     atomic_write_json(out_dir / f"{session}.json", body)
     n_ok = sum(r["budget_status"] == "pass" for r in res)
+    n_cant = sum(r.get("operation_status") in ("insufficient_equity", "insufficient_buying_power") for r in res)
     print(f"账户风险预算账 {session}（{sx.VERSION}）：候选 {len(res)}，理论预算通过 {n_ok}"
-          f"（互斥备选、不可相加；券商执行性未核实）"
+          + (f"，其中 {n_cant} 个资金确定不足（开不了）" if n_cant else "")
+          + "（互斥备选、不可相加；券商执行性未核实）"
           + (f"；{acct_note}" if acct_note else ""))
     for r in res:
         if r["budget_status"] == "no_candidate":
             continue
         econ = (f"收 ${r['credit']:.0f} 最大亏 ${r['max_loss']:.0f}" if r.get("max_loss") is not None else "")
-        print(f"  {r['instrument']:7s} {r['leg_id']:5s} 预算 {r['budget_status']} {r['n']} 组  {econ}  {r['notes'][0]}")
+        op = {"insufficient_equity": "  ⛔ 权益不足（开不了）", "insufficient_buying_power": "  ⛔ 购买力不足（开不了）",
+              "unverified": "  · 资金/权限未核实", "capital_ok_permissions_unverified": "  · 资金够、权限未核实"}.get(
+            r.get("operation_status"), "")
+        print(f"  {r['instrument']:7s} {r['leg_id']:5s} 政策预算 {r['budget_status']} {r['n']} 组{op}  {econ}  {r['notes'][0]}")
     print(f"  （结果含账户金额，只写 {out_dir}/，已 gitignore）")
     return 0
 

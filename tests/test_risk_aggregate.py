@@ -5,10 +5,11 @@ from types import SimpleNamespace as NS
 from undertow.analyze.risk_aggregate import aggregate, render_md
 
 
-def _c(label, max_loss, cap, legs=2, defined=True, credit=None):
-    return NS(label=label, max_loss=max_loss, capital_at_risk=cap, legs=[object()] * legs,
+def _c(label, max_loss, cap, legs=2, defined=True, credit=None, expiry="2026-10-02"):
+    lg = [NS(symbol=f"SLV{expiry}{label}{i}", qty=(-1 if i == 0 else 1)) for i in range(legs)]   # 合约身份（Codex 044 P1-1）
+    return NS(label=label, max_loss=max_loss, capital_at_risk=cap, legs=lg,
               defined_risk=defined, net_credit=credit, qty=1, max_profit=None, stance="", note="",
-              expiry_label="2026-10-02", underlying="SLV")
+              expiry_label=expiry, underlying="SLV")
 
 
 def _g(combos, delta=10.0, incomplete=None):
@@ -94,3 +95,57 @@ def test_healthcheck_concentration_unknown_and_zero_net():
     assert f0["CONCENTRATION"].severity == "高" and "净资产 ≤0" in f0["CONCENTRATION"].title
     fh = _codes(_hg([_c("熊市看涨价差", 600.0, 600.0, credit=0.2), cal]), NS(net_assets=1000.0, buy_power=1000.0))
     assert "实际更高" in fh["CONCENTRATION"].detail
+
+
+# —— Codex 044 包 A 端到端：真实 Combo/PositionReview 格式 → aggregate → 候选预算 ——
+
+def _leg(sym, kind, strike, exp, qty, cost):
+    from undertow.analyze.portfolio import PositionReview
+    return PositionReview(symbol=sym, name=sym, underlying="GLD", kind=kind, side="", qty=qty, strike=strike,
+                          expiry=date.fromisoformat(exp), dte=None, cost_price=cost, est_value=None, pnl=None,
+                          pos_delta=None, moneyness="", dist_pct=None, wall_note="", align="")
+
+
+def _bear_call(exp, ks=400, kb=402):
+    from undertow.analyze.portfolio import Combo
+    tag = exp.replace("-", "")[2:]
+    return Combo(underlying="GLD", expiry_label=exp, label="熊市看涨价差(收权金)", stance="保守做空",
+                 legs=[_leg(f"GLD{tag}C{ks}000.US", "C", ks, exp, -1, 1.0),
+                       _leg(f"GLD{tag}C{kb}000.US", "C", kb, exp, 1, 0.2)],
+                 qty=1, net_credit=0.8, max_profit=80.0, max_loss=120.0, defined_risk=True, capital_at_risk=120.0, note="")
+
+
+def _gld(combos):
+    return NS(underlying="GLD", combos=combos, net_delta=0.0, net_gamma=0.0, net_theta=0.0, incomplete={})
+
+
+def test_same_label_different_expiries_are_three_positions():
+    """044 反例：三笔 GLD 熊市看涨价差，到期 10/16、10/23、10/30，每笔含费 123.20。旧版 id=标的·策略名 → 只算 123.20、pass。"""
+    from undertow.analyze import risk_policy as rp
+    a = aggregate(_rev([_gld([_bear_call(d) for d in ("2026-10-16", "2026-10-23", "2026-10-30")])]),
+                  NS(net_assets=500.0), asof="2026-10-14", policy=rp.POLICY_B)
+    assert len({b["id"] for b in a["book"]}) == 3
+    mc = next(c for c in a["checks"] if c["item"] == "类别合计（metals）")
+    assert mc["value"] == 369.6 and mc["status"] == "fail" and a["overall"] == "fail"
+    r = rp.evaluate_budget(candidate={"id": "new", "underlying": "SLV", "unit_stop_loss": 10, "unit_payoff_max_loss": 10,
+                                      "qty_requested": 1}, open_positions=a["book"], capital={"equity": 500.0},
+                           pause={"latched": False})
+    assert r["allowed_units"] == 0                                         # 整本账已超金银上限 → 新增冻结
+
+
+def test_same_label_two_big_positions_count_two():
+    from undertow.analyze import risk_policy as rp
+    big = [_bear_call("2026-10-16", 400, 402), _bear_call("2026-10-16", 405, 407)]
+    big = [c.__class__(**{**c.__dict__, "max_loss": 160.0, "net_credit": 0.4}) for c in big]
+    a = aggregate(_rev([_gld(big)]), NS(net_assets=5000.0), asof="d", policy=rp.POLICY_B)
+    bc = next(c for c in a["checks"] if c["item"] == "大仓数量")
+    assert bc["value"] == 2 and bc["status"] == "fail"
+
+
+def test_leg_without_identity_is_incomplete_not_merged():
+    from undertow.analyze import risk_policy as rp
+    a = aggregate(_rev([_g([_c("熊市看涨价差", 80.0, 80.0, credit=0.2)])]), CAP, asof="d", policy=rp.POLICY_B)
+    assert a["overall"] == "pass"
+    anon = NS(**{**_c("熊市看涨价差", 80.0, 80.0, credit=0.2).__dict__, "legs": [object(), object()]})
+    a = aggregate(_rev([_g([anon, anon])]), CAP, asof="d", policy=rp.POLICY_B)
+    assert a["overall"] == "incomplete" and all(b["id"] is None for b in a["book"])

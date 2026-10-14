@@ -28,6 +28,30 @@ def _classify(c) -> tuple[str, float | None]:
     return "unknown", None
 
 
+def _leg_key(lg) -> str | None:
+    """一条腿的合约身份：优先券商合约代码，其次 种类+行权价+到期；都没有 → None（身份不可知）。方向用数量符号。"""
+    q = getattr(lg, "qty", None)
+    sign = "-" if isinstance(q, (int, float)) and q < 0 else "+"
+    sym = getattr(lg, "symbol", None)
+    if isinstance(sym, str) and sym.strip():
+        return sign + sym.strip()
+    k, s, e = getattr(lg, "kind", None), getattr(lg, "strike", None), getattr(lg, "expiry", None)
+    if k is None or s is None or e is None:
+        return None
+    return f"{sign}{k}{s:g}@{e}"
+
+
+def combo_id(underlying, c) -> str | None:
+    """逻辑持仓的稳定身份（Codex 044 P1-1）：标的 | 到期 | 结构 | 各腿合约与方向 | 组数。
+    显示名（「熊市看涨价差(收权金)」）只是策略名，不含到期/腿，旧版拿它当 id，同标签不同到期的多笔被去重成一笔。
+    券商只给同一合约的汇总数量：同合约不同批次在这里本来就合成一笔（按已知汇总风险报告，不假装能区分批次）。
+    任一腿身份不可知 → None（下游 incomplete，不猜）。"""
+    keys = [_leg_key(lg) for lg in getattr(c, "legs", None) or []]
+    if not keys or any(k is None for k in keys):
+        return None
+    return f"{underlying}|{c.expiry_label}|{c.label}|{','.join(sorted(keys))}|x{c.qty}"
+
+
 def _total(values: list[tuple[str, float | None]]) -> dict:
     known = [v for _, v in values if v is not None]
     missing = [name for name, v in values if v is None]
@@ -44,15 +68,16 @@ def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B) -> dict:
             status, ml = _classify(c)
             from undertow.analyze.healthcheck import stop_risk_detail
             d = stop_risk_detail(c) if status == "known" else None
-            items.append({"group": g.underlying, "label": c.label, "status": status, "max_loss": ml,
+            items.append({"id": combo_id(g.underlying, c), "group": g.underlying, "label": c.label,
+                          "expiry": c.expiry_label, "status": status, "max_loss": ml,
                           "stop_loss": None if d is None else d["planned_stop_loss_usd"],
                           "payoff_max_loss_with_fees": None if d is None else d["payoff_max_loss_usd"],
                           "stop_exceeds_payoff_max_loss": None if d is None else d["stop_exceeds_payoff_max_loss"],
                           "occupancy": c.capital_at_risk})
     unmapped = [getattr(lg, "name", "?") for lg in getattr(review, "unmapped", [])]
 
-    def name(it):
-        return f"{it['group']}·{it['label']}"
+    def name(it):                                            # 显示名：带到期，便于人读；身份用 it["id"]
+        return f"{it['group']}·{it['label']}·{it['expiry']}"
     totals = {
         "max_loss": _total([(name(i), i["max_loss"]) for i in items] + [(u, None) for u in unmapped]),
         "stop_loss": _total([(name(i), i["stop_loss"]) for i in items] + [(u, None) for u in unmapped]),
@@ -64,11 +89,13 @@ def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B) -> dict:
                              "incomplete": getattr(g, "incomplete", {})}
               for g in getattr(review, "groups", [])}
 
+    book = book_of(items, unmapped)
     if policy.get("profile_id"):                             # 政策 B：整笔含费金额、类别/全场合计、大仓数量
-        book = [{"id": name(i), "underlying": i["group"], "stop_loss": i["stop_loss"],
-                 "payoff_max_loss": i["payoff_max_loss_with_fees"]} for i in items] + \
-               [{"id": u, "underlying": u, "stop_loss": None, "payoff_max_loss": None} for u in unmapped]
         b = rp.evaluate_book(book, {"equity": net}, policy)
+        disp = {i["id"]: name(i) for i in items if i["id"]}
+        for c in b["checks"]:                                # 人读：单笔检查显示「标的·策略·到期」，身份仍按 id 判
+            if c.get("position") in disp:
+                c["check"] = c["check"].replace(c["position"], disp[c["position"]], 1)
         checks = [{"item": c["check"], "limit": f"≤ ${c['limit']:,.0f}" if isinstance(c["limit"], (int, float)) and not
                    c["check"].startswith("大仓") else (f"≤ {c['limit']} 笔" if c["limit"] is not None else "—"),
                    "status": c["status"], "value": c["value"],
@@ -76,7 +103,7 @@ def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B) -> dict:
                                                        and not c["check"].startswith("大仓")) else None)}
                   for c in b["checks"]]
         return {"asof": str(asof), "policy_version": policy["version"], "net_assets": net,
-                "items": items, "unmapped": unmapped, "totals": totals, "greeks": greeks,
+                "items": items, "unmapped": unmapped, "totals": totals, "greeks": greeks, "book": book,
                 "checks": checks, "overall": b["overall"],
                 "account_limit": f"全场合计 ≤ max(60%·R, $500) = ${rp.limit_usd(policy['account'], net):,.0f}"
                                  if net is not None else "权益未知"}
@@ -102,10 +129,17 @@ def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B) -> dict:
     sts = {c["status"] for c in checks}
     overall = "fail" if "fail" in sts else ("incomplete" if ("incomplete" in sts or not checks) else "pass")
     return {"asof": str(asof), "policy_version": policy["version"], "net_assets": net,
-            "items": items, "unmapped": unmapped, "totals": totals, "greeks": greeks,
+            "items": items, "unmapped": unmapped, "totals": totals, "greeks": greeks, "book": book,
             "checks": checks, "overall": overall,
             "account_limit": ("未设定：全账户合计只报告、不判定" if policy.get("account_max_loss_frac") is None
                               else f"≤{policy['account_max_loss_frac']:.0%}")}
+
+
+def book_of(items: list[dict], unmapped: list[str]) -> list[dict]:
+    """预算/核查用的账本（唯一构造处；shadow exec 也读这里，不再自己拼 id）。无法映射的腿各成一条、金额未知。"""
+    return [{"id": i["id"], "underlying": i["group"], "stop_loss": i["stop_loss"],
+             "payoff_max_loss": i["payoff_max_loss_with_fees"]} for i in items] + \
+           [{"id": f"unmapped|{u}", "underlying": u, "stop_loss": None, "payoff_max_loss": None} for u in unmapped]
 
 
 def render_md(agg: dict) -> str:

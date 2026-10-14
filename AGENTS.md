@@ -1,6 +1,6 @@
 # AGENTS.md — undertow
 
-期权/持仓情报工具，服务于一个**真实的小额实盘账户**（净资产约 $440）。
+期权/持仓情报工具，服务于一个**真实的小额实盘账户**（当前资金一律读私有只读数据，不写进公开文档）。
 纯标准库 Python、零依赖、确定性计算。本文件是给在本仓库工作的 AI 代理
 （Codex / Claude Code / 其它）的统一上手说明。
 
@@ -42,7 +42,7 @@ python3 -m undertow live             # 持仓实时体检（需长桥 CLI）
 品种：`gold silver wti dxy qqq tqqq tlt spy iwm`
   交易 `gold silver qqq tqqq` ／ 分析 `wti dxy tlt spy` ／ 观察 `iwm`（为将来攒链，非独立信息源）
 命令：`analyze gamma vol snapshot flow expiry fib backtest report list account
-consult serve soul journal event plan tech live backtest-stretch news calendar`
+consult serve soul journal event plan tech live backtest-stretch news calendar trial`
 
 ---
 
@@ -320,7 +320,15 @@ StartCalendarInterval 只留给条目少、且错过一次无所谓的任务**�
   看跌结构的净Δ本就为负。
 - **借记价差的最大亏损 = 已付权金**，价值下界为 0、跌不穿，没有强平尾巴。
   这类结构的止损是「减损选择」，不是「防灾必需」。
-- **仓位双层限额**：单笔止损风险 ≤10%（定仓位）、单笔最大亏损 ≤20%（防跳空）。
+- **仓位限额（唯一来源 `analyze/risk_policy.py`）**：
+  - 面向真实账户的预算用**实盘试行政策 B**（`POLICY_B`，用户 2026-10-14 选定，Codex 043 审过）：
+    整笔含费的计划止损 ≤ max(15%·R, $200)、理论最大亏损 ≤ max(30%·R, $300)；
+    最大亏损 > $150 的大仓同时最多 1 笔；金银合计 ≤ max(40%·R, $300)、其它合计 ≤ max(20%·R, $150)、全场 ≤ max(60%·R, $500)；
+    90% 止盈；起始资本亏损 ≥ 50% 或连续 4 笔亏损 → 暂停（latch，只有用户明确决定才解除）。R = 当前可审计权益。
+    下限的理由（用户原话）：「不然反而会因为风险控制，选择风险更大的价格」。
+    R≈$500 时亏满一笔 = −60%，两次止损 = −80%：50% 不是保本线。
+  - 旧双层 10%/20%（`POLICY` v1）冻结，只用于历史研究记录与影子账研究预算的复现。
+  - 每个入口显式传政策版本；政策预算通过 ≠ 券商能开（权限、组合占用、指派处置另行核实）。
 - **手续费按张计**，不按合约代码数。
 - **组合单 vs 分腿建仓决定出场机制**：组合单进 → 券商锁腿、只能整体平；
   分腿进 → 不认作组合、必须逐腿手动且**永远先买回短腿**（否则留下裸卖）。

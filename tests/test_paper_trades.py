@@ -568,10 +568,22 @@ def test_user_tp90_rule_closes_at_90pct_of_max_gain():
     assert p["state"] == "entered"
     assert pt.step(p, at(30, 15, 46), depth=q(0.03, 0.04, 0.01, 0.02)) == "take_profit"    # 估值 0.04−0.01=0.03 → 盈亏 34.8 ≥ 34.02（买腿 bid 为 0 会被数据体检拦下）
     assert p["state"] == "closed_tp" and p["pnl_usd"] == 34.8
+    e = p["events"][-1]
+    assert e["net_max_gain_usd"] == 37.8 and e["threshold_usd"] == 34.02 and e["fee_assumption"] and "rule_effective_at" in e
     p2 = _entered(); p2.update(exit_rule="user-tp90-v1", expiry="2026-10-02", batch="user_subjective")
     assert pt.step(p2, datetime(2026, 10, 1, 9, 46, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25)) == "mark"   # 无时间出场
     assert "未授权" in pt.validate_spec(_p(exit_rule="user-tp90-v1", batch="rule_dynamic"))
     assert pt.validate_spec(_p(exit_rule="user-tp90-v1", batch="user_subjective")) is None
+
+
+@pytest.mark.parametrize("qty", [1, 2])
+def test_user_tp90_threshold_equality_and_nonpositive_gain(qty):
+    """往返费 11：含费最大收益 (41 − 11)·q = 30q，门槛 27q；估值 0.03 → 盈亏 (41 − 3 − 11)·q = 27q，恰好相等 → 平。"""
+    p = _entered(); p.update(exit_rule="user-tp90-v1", expiry="2026-10-16", batch="user_subjective", fee_round_trip=11.0, qty=qty)
+    assert pt.step(p, at(30, 9, 46), depth=q(0.03, 0.04, 0.01, 0.02)) == "take_profit"
+    assert p["events"][-1]["threshold_usd"] == 27.0 * qty and p["pnl_usd"] == 27.0 * qty
+    z = _entered(); z.update(exit_rule="user-tp90-v1", expiry="2026-10-16", batch="user_subjective", fee_round_trip=45.0)
+    assert pt.step(z, at(30, 9, 46), depth=q(0.03, 0.04, 0.01, 0.02)) == "mark"     # 含费最大收益 ≤ 0：不触发
 
 
 def test_user_tp90_rule_on_debit_spread():

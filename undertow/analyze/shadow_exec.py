@@ -34,7 +34,7 @@ def cluster_of(inst: str) -> str:
 
 
 def candidate(row: dict, leg: dict, *, net_assets, account_open_max_loss, cluster_open: dict,
-              policy: dict = rp.POLICY) -> dict:
+              policy: dict = rp.POLICY_B, open_positions: list | None = None, pause: dict | None = None) -> dict:
     """单个候选的理论风险预算。account_open_max_loss=None 表示账户现有持仓最大亏损未知。"""
     session = row["session"]
     base = {"key": row["key"], "instrument": row["instrument"], "session": session, "leg_id": leg["leg_id"],
@@ -57,6 +57,15 @@ def candidate(row: dict, leg: dict, *, net_assets, account_open_max_loss, cluste
     if account_open_max_loss is None:
         return {**base, **econ, "budget_status": "unknown", "n": 0,
                 "notes": ["账户现有持仓的最大亏损未知（含无上限或算不出的成员）→ 预算无法判定"]}
+    if policy.get("profile_id"):                      # 政策 B（Codex 043 WP2）：整笔含费、类别/全场合计、大仓数量、暂停
+        b = rp.evaluate_budget(candidate={"id": base["leg_id"], "underlying": row["instrument"],
+                                          "unit_stop_loss": stop_loss, "unit_payoff_max_loss": max_loss},
+                               open_positions=open_positions, capital={"equity": net_assets, "asof": session},
+                               pause=pause, policy=policy, max_qty=1)
+        n, notes = b["allowed_units"], b["reasons"]
+        status = {"pass": "pass", "fail": "fail"}.get(b["budget_status"], "unknown")
+        return {**base, **econ, "budget_status": status, "n": n, "budget_checks": b["checks"],
+                "notes": notes + ["n 为理论预算上限，互斥备选，不可跨候选相加；券商执行性未核实"]}
     n, notes = rp.max_units(net_assets=net_assets, unit_max_loss=max_loss, unit_stop_loss=stop_loss,
                             cluster_open_max_loss=cluster_open.get(base["cluster"], 0.0),
                             account_open_max_loss=account_open_max_loss, policy=policy)
@@ -80,7 +89,8 @@ def hypothetical_prior_occupancy(prior: list[dict], today: date) -> dict:
 
 
 def evaluate(rows: list[dict], *, session: str, net_assets, account_open_max_loss,
-             account_cluster_open: dict | None, prior: list[dict], policy: dict = rp.POLICY) -> list[dict]:
+             account_cluster_open: dict | None, prior: list[dict], policy: dict = rp.POLICY_B,
+             open_positions: list | None = None, pause: dict | None = None) -> list[dict]:
     """某 session 的全部候选；额度只扣本账户真实持仓（account_cluster_open / account_open_max_loss）。"""
     today = date.fromisoformat(session)
     hyp = hypothetical_prior_occupancy(prior, today)
@@ -91,7 +101,7 @@ def evaluate(rows: list[dict], *, session: str, net_assets, account_open_max_los
             continue
         for leg in r["legs"]:
             c = candidate(r, leg, net_assets=net_assets, account_open_max_loss=account_open_max_loss,
-                          cluster_open=cl, policy=policy)
+                          cluster_open=cl, policy=policy, open_positions=open_positions, pause=pause)
             c["hypothetical_prior_occupancy"] = hyp.get(c["cluster"], 0.0)
             out.append(c)
     return out

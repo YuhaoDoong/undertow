@@ -197,7 +197,8 @@ def _risk_brief(review, capital, asof) -> dict | None:
     if review is None:
         return None
     from undertow.analyze.risk_aggregate import aggregate
-    a = aggregate(review, capital, asof=asof)
+    from undertow.analyze import risk_policy as _rp
+    a = aggregate(review, capital, asof=asof, policy=_rp.POLICY_B)
     return {"overall": a["overall"], "policy_version": a["policy_version"], "account_limit": a["account_limit"],
             "totals": a["totals"], "not_passed": [c for c in a["checks"] if c["status"] != "pass"]}
 

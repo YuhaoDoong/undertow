@@ -1593,15 +1593,18 @@ def cmd_exec(args) -> int:
         p = _path(inst.key, False)
         if p.exists():
             rows += [r for r in jl.load(p, KEY) if r["session"] == session and prospective_ok(r)]
-    net, acct_ml, acct_cl, acct_note = None, None, None, ""
+    net, acct_ml, acct_cl, acct_note, book = None, None, None, "", None
     try:
         b = _load_account_review(no_cache=False)
         if b["review"] is None:
-            acct_ml, acct_cl = 0.0, {}
+            acct_ml, acct_cl, book = 0.0, {}, []
             a = lb.fetch_assets(); net = a.net_assets
         else:
             net = b["capital"].net_assets if b["capital"] is not None else None
-            agg = aggregate(b["review"], b["capital"], asof=session)
+            agg = aggregate(b["review"], b["capital"], asof=session, policy=sx.rp.POLICY_B)
+            book = [{"id": f"{i['group']}·{i['label']}", "underlying": i["group"], "stop_loss": i["stop_loss"],
+                     "payoff_max_loss": i["payoff_max_loss_with_fees"]} for i in agg["items"]] + \
+                   [{"id": u, "underlying": u, "stop_loss": None, "payoff_max_loss": None} for u in agg["unmapped"]]
             tot = agg["totals"]["max_loss"]
             acct_ml = tot["value"]                               # 有未知/无上限成员 → None
             root_to_key = {i.options.symbol.upper(): i.key for i in cfg.instruments.values() if i.options}
@@ -1619,8 +1622,12 @@ def cmd_exec(args) -> int:
     for f in sorted(out_dir.glob("*.json")) if out_dir.exists() else []:
         if f.stem < session:
             prior += load_json(f, {}).get("candidates", [])
+    from undertow.trial_cli import pause_view
+    pause, pause_note = pause_view(net, equity_complete=net is not None, asof=session)
     res = sx.evaluate(rows, session=session, net_assets=net, account_open_max_loss=acct_ml,
-                      account_cluster_open=acct_cl, prior=prior)
+                      account_cluster_open=acct_cl, prior=prior, policy=sx.rp.POLICY_B, open_positions=book, pause=pause)
+    if pause_note:
+        acct_note = (acct_note + "；" if acct_note else "") + pause_note
     if net is None:
         res = [{**r, "budget_status": "unknown", "n": 0, "notes": [acct_note or "净资产未知"] + r.get("notes", [])}
                if r["budget_status"] == "pass" else r for r in res]

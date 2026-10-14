@@ -35,16 +35,20 @@ def _total(values: list[tuple[str, float | None]]) -> dict:
             "complete": not missing, "missing": missing}
 
 
-def aggregate(review, capital, *, asof, policy: dict = rp.POLICY) -> dict:
+def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B) -> dict:
+    """policy 必须显式指定版本（Codex 043 WP2）：默认 = 实盘试行政策 B；传 rp.POLICY（v1）只用于复现历史记录。"""
     net = getattr(capital, "net_assets", None) if capital is not None else None
     items = []
     for g in getattr(review, "groups", []):
         for c in g.combos:
             status, ml = _classify(c)
-            from undertow.analyze.healthcheck import stop_risk
-            sr = stop_risk(c) if status == "known" else None
+            from undertow.analyze.healthcheck import stop_risk_detail
+            d = stop_risk_detail(c) if status == "known" else None
             items.append({"group": g.underlying, "label": c.label, "status": status, "max_loss": ml,
-                          "stop_loss": sr, "occupancy": c.capital_at_risk})
+                          "stop_loss": None if d is None else d["planned_stop_loss_usd"],
+                          "payoff_max_loss_with_fees": None if d is None else d["payoff_max_loss_usd"],
+                          "stop_exceeds_payoff_max_loss": None if d is None else d["stop_exceeds_payoff_max_loss"],
+                          "occupancy": c.capital_at_risk})
     unmapped = [getattr(lg, "name", "?") for lg in getattr(review, "unmapped", [])]
 
     def name(it):
@@ -60,7 +64,23 @@ def aggregate(review, capital, *, asof, policy: dict = rp.POLICY) -> dict:
                              "incomplete": getattr(g, "incomplete", {})}
               for g in getattr(review, "groups", [])}
 
-    # 单笔限额：每项 pass / fail / incomplete
+    if policy.get("profile_id"):                             # 政策 B：整笔含费金额、类别/全场合计、大仓数量
+        book = [{"id": name(i), "underlying": i["group"], "stop_loss": i["stop_loss"],
+                 "payoff_max_loss": i["payoff_max_loss_with_fees"]} for i in items] + \
+               [{"id": u, "underlying": u, "stop_loss": None, "payoff_max_loss": None} for u in unmapped]
+        b = rp.evaluate_book(book, {"equity": net}, policy)
+        checks = [{"item": c["check"], "limit": f"≤ ${c['limit']:,.0f}" if isinstance(c["limit"], (int, float)) and not
+                   c["check"].startswith("大仓") else (f"≤ {c['limit']} 笔" if c["limit"] is not None else "—"),
+                   "status": c["status"], "value": c["value"],
+                   "pct": (c["value"] / net * 100 if (isinstance(c["value"], (int, float)) and net and net > 0
+                                                       and not c["check"].startswith("大仓")) else None)}
+                  for c in b["checks"]]
+        return {"asof": str(asof), "policy_version": policy["version"], "net_assets": net,
+                "items": items, "unmapped": unmapped, "totals": totals, "greeks": greeks,
+                "checks": checks, "overall": b["overall"],
+                "account_limit": f"全场合计 ≤ max(60%·R, $500) = ${rp.limit_usd(policy['account'], net):,.0f}"
+                                 if net is not None else "权益未知"}
+    # 单笔限额（v1，历史复现用）：每项 pass / fail / incomplete
     checks = []
     for it in items:
         for key, frac_key, val in (("最大亏损", "max_loss_frac", it["max_loss"]),

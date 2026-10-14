@@ -2669,9 +2669,10 @@ def render_credit_wall(verdicts: dict, spot: float = 0.0, conv=None,
         if net_assets and v.ok and v.spreads:
             try:
                 from undertow.analyze.sizing import kelly as _kel, size as _sz, ruin_probability
+                from undertow.analyze import risk_policy as _rpol
                 _k = _kel(t["win_rate"], t["per_trade_pct"], t.get("win_roi_pct", 12.0))
                 _occ = v.spreads[0].occupancy
-                _v2 = _sz(net_assets, _occ, _k, buying_power=buying_power)
+                _v2 = _sz(net_assets, _occ, _k, buying_power=buying_power, policy=_rpol.POLICY)   # 研究档位按 v1 复现（Codex 043）
                 import math as _m
                 _n_ruin = max(1, _m.ceil(net_assets / _occ))
                 _rp = ruin_probability(t["win_rate"], _n_ruin)

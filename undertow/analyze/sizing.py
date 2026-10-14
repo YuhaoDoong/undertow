@@ -105,6 +105,7 @@ OVER_KELLY_HARD = 3.0
 def size(net_assets: float, unit_occupancy: float, k: KellyResult,
          *, buying_power: float | None = None,
          unit_max_loss: float | None = None, unit_stop_loss: float | None = None,
+         policy: dict | None = None,
          max_over_kelly: float = OVER_KELLY_SOFT,
          hard_over_kelly: float = OVER_KELLY_HARD,
          allow_over: bool = False) -> SizeVerdict:
@@ -120,6 +121,11 @@ def size(net_assets: float, unit_occupancy: float, k: KellyResult,
                            f"仓位再小也是慢慢亏。")
     import math
     from undertow.analyze import risk_policy as rp
+    # Codex 043 WP2：政策版本须由调用方显式给出；Kelly 档位研究（研报里被 STRATEGY_VALIDATED=False 挡住）按 v1 复现。
+    # 这里只接受 v1 形式（比例上限）；实盘试行 B 的预算走 rp.evaluate_budget（需要在场持仓与暂停状态）。
+    policy = rp.POLICY if policy is None else policy
+    if policy.get("profile_id"):
+        raise ValueError("sizing.size 不处理政策 B：实盘预算请用 risk_policy.evaluate_budget（需在场持仓与暂停状态）")
     vals = (net_assets, unit_occupancy, k.kelly) + ((buying_power,) if buying_power is not None else ())
     if not all(isinstance(v, (int, float)) and math.isfinite(v) for v in vals):
         return SizeVerdict(False, 0, 0.0, unit_occupancy, 0.0, 0.0, 0.0, "输入含非有限数值 —— 不给组数")
@@ -134,7 +140,8 @@ def size(net_assets: float, unit_occupancy: float, k: KellyResult,
     n_pol, pol_notes = rp.max_units(
         net_assets=net_assets, unit_max_loss=(unit_max_loss if unit_max_loss is not None else unit_occupancy),
         unit_stop_loss=unit_stop_loss,
-        buying_power=(buying_power if buying_power is not None else net_assets), unit_occupancy=unit_occupancy)
+        buying_power=(buying_power if buying_power is not None else net_assets), unit_occupancy=unit_occupancy,
+        policy=policy)
     frac1 = unit_occupancy / net_assets
     over = frac1 / k.kelly if k.kelly > 0 else float("inf")
     cap = buying_power if buying_power is not None else net_assets

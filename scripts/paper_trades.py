@@ -692,7 +692,14 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
         if live and xr and ((xr.get("take_profit_frac") is not None and val <= xr["take_profit_frac"] * p["entry_credit"])
                             or (tp_gain is not None and mg > 0 and pnl >= tp_gain * mg)):
             p.update(state="closed_tp", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
-            ev.append({"at": now.isoformat(), "action": "take_profit", "value": val, "pnl": pnl, "exit_rule": p["exit_rule"]})
+            tpe = {"at": now.isoformat(), "action": "take_profit", "value": val, "pnl": pnl, "exit_rule": p["exit_rule"]}
+            if tp_gain is not None:                 # Codex 043 WP4：审计字段（净最大收益已扣往返费，不重复扣）
+                eff = next((e["at"] for e in ev if e.get("action") == "exit_rule_set" and e.get("exit_rule") == p["exit_rule"]),
+                           p.get("registered_at"))
+                tpe.update(net_max_gain_usd=mg, threshold_usd=round(tp_gain * mg, 2), take_profit_gain_frac=tp_gain,
+                           fee_assumption=f"每组往返 {p['fee_round_trip']}（模型假设；退出按两腿保守报价、稀疏时点检查，非盘中实时成交）",
+                           rule_effective_at=eff)
+            ev.append(tpe)
             return "take_profit"
         if live and xr and xr.get("time_exit_dte") is not None and (exp - today).days <= xr["time_exit_dte"]:
             p.update(state="closed_time", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)

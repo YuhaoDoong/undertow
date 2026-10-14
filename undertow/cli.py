@@ -3064,9 +3064,10 @@ def _load_account_review(no_cache):
             detail=f"读取净资产/购买力失败：{assets_error}",
             suggestion="集中度、购买力、接货能力检查都没有做；在券商端核对资金后再看本报告。")] + health
     from undertow.analyze.risk_aggregate import aggregate
+    from undertow.analyze import risk_policy as _rp
     return {"positions": positions, "contexts": contexts, "review": review,
             "health": health, "capital": capital, "assets": assets, "assets_error": assets_error,
-            "risk": aggregate(review, capital, asof=today), "today": today}
+            "risk": aggregate(review, capital, asof=today, policy=_rp.POLICY_B), "today": today}
 
 
 def cmd_account(args) -> int:
@@ -4166,6 +4167,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     from undertow.shadow_cli import register as _shadow_register
     _shadow_register(sub)
+    from undertow.trial_cli import register as _trial_register
+    _trial_register(sub)
     from undertow.dirledger_cli import register as _dir_register
     _dir_register(sub)
 

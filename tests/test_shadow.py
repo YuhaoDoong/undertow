@@ -777,10 +777,18 @@ def _exec_row(inst="silver", session="2026-09-14"):
 def test_s05_budget_status_split():
     from undertow.analyze import shadow_exec as sx
     res = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=2000.0, account_open_max_loss=0.0,
-                      account_cluster_open={}, prior=[])
+                      account_cluster_open={}, prior=[], open_positions=[], pause={"latched": False})
     a = next(x for x in res if x["leg_id"] == "P-A")
     assert a["max_loss"] == pytest.approx(a["width"] - a["credit"] + 3.2)
-    assert a["budget_status"] == "pass" and a["n"] >= 1
+    assert a["budget_status"] == "pass" and a["n"] >= 1 and a["policy_version"] == sx.rp.VERSION_B
+    # 政策 B：现有持仓或暂停状态未知 → unknown（不当空仓/未暂停）
+    u = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=2000.0, account_open_max_loss=0.0,
+                    account_cluster_open={}, prior=[])
+    assert all(x["n"] == 0 and x["budget_status"] in ("unknown", "no_candidate") for x in u)
+    # 历史复现：显式传 v1 仍按原规则
+    v1 = sx.evaluate([_exec_row()], session="2026-09-14", net_assets=2000.0, account_open_max_loss=0.0,
+                     account_cluster_open={}, prior=[], policy=sx.rp.POLICY)
+    assert next(x for x in v1 if x["leg_id"] == "P-A")["policy_version"] == "risk-policy-v1-20260926"
     assert a["broker_status"] == "unverified" and a["selection_status"] == "independent_alternative", \
         "Codex 009 N03：理论预算通过 ≠ 可执行；互斥备选不可相加"
     assert "verdict" not in a

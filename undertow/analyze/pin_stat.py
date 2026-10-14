@@ -6,8 +6,11 @@ Codex 044 指出 v4 原统计量 d = u(K*) − mean u(K_p) 识别不了：零模
 v4r1 改用【镜像点】：参考价 r = C[S−1]，墙 K* 关于 r 的镜像 K_m = 2r − K*。行统计量（ATR 标准化）
     m = (|C_E − K*| − |C_E − K_m|) / ATR14
 若 C_E − r 的分布关于 0 对称（无漂移；尺度、厚尾、波动估多估少都不影响），E[m] = 0 恰好成立 —— 不需要零模型，
-也就没有「零模型波动估错」这一条路。m < 0 = 收盘离墙比离镜像点近。
-- 线性漂移会让墙在上方与墙在下方的行朝相反方向偏；主统计量取两侧各自均值的等权平均（side_balanced_mean），一阶抵消。
+也就没有「零模型波动估错」这一条路。m < 0 = 收盘离墙比离镜像点近。收盘恰在墙上时线性 m = −2|K* − r|/ATR。
+- 漂移：上方墙距 d 与下方墙距 d 的两行，在同一偏移分布下期望恰好互为相反数（m(x; −d) = −m(x; +d)），所以
+  【同距离】两侧等权在任意漂移下都抵消；距离不同则不抵消（Codex 045：上墙 .1 ATR、下墙 .8 ATR、偏移 U[−.5,.5]+.1 →
+  等权核均值 +.0266）。v4r1 修订：按事前墙距分档配对两侧（distance_matched_weights），没有两侧的档不进主统计量。
+  这只消除「两侧墙距不同」这一条；两侧在波动、趋势环境上若系统不同，仍可能残留，由合成情景量化。
 - |K* − r| 很小的行（墙贴着参考价）m 恒近 0，不提供信息：检验对象是「偏离参考价的墙」，这一点要在结论里写明。
 - 镜像点不是挂牌行权价、不需要 OI 条件，所以不会像同侧安慰剂那样系统性排除低 ATR 日。
 - 检出也只是「收盘离墙更近」的关联，不是因果：OI 也可能是知情资金押在了价格要去的地方。
@@ -99,11 +102,91 @@ def block_bootstrap(rows: list[dict], *, block_weeks: int, n_boot: int, seed: in
     return {**out, "lo": q(0.025), "hi": q(0.975), "n_valid": len(vals)}
 
 
+DIST_BINS_ATR = (0.0, 0.25, 0.5, 1.0 + 1e-9)   # 墙距 |K* − r| / ATR 的分档（事前固定；1 ATR 近价带的上沿含在末档）
+
+
+def _bin(d: float) -> int | None:
+    for i in range(len(DIST_BINS_ATR) - 1):
+        if DIST_BINS_ATR[i] <= d < DIST_BINS_ATR[i + 1]:
+            return i
+    return None
+
+
+def distance_matched_weights(rows: list[dict]) -> dict:
+    """v4r1 修订主估计量（Codex 045 §6/§8）的行权重；权重只由事前协变量（品种、墙侧、墙距档）决定，不看结果。
+    每个品种 × 墙距档：两侧都有行 → 档估计 = (上方均值 + 下方均值) / 2；品种估计 = 各完整档按行数加权；
+    总估计 = 各品种等权平均（为回答「金银」，不按挂牌频率加权）。缺侧的档不进；任一品种没有完整档 → 不可识别（不退成单品种）。
+    rows 需带 "inst"、"side"、"dist"（|K* − r| / ATR）。返回 {"w": 每行权重（与 rows 对齐，0 = 不进）, "identifiable",
+    "per_inst": {品种: 完整档数、所用行数}, "excluded": {原因: 行数}}。"""
+    insts = sorted({r["inst"] for r in rows})
+    w = [0.0] * len(rows)
+    excl: dict = {}
+    per: dict = {}
+    for inst in insts:
+        cells: dict = {}
+        for i, r in enumerate(rows):
+            if r["inst"] != inst:
+                continue
+            if r["side"] == 0:
+                excl["墙恰在参考价（side 0）"] = excl.get("墙恰在参考价（side 0）", 0) + 1; continue
+            b = _bin(r["dist"])
+            if b is None:
+                excl["墙距超出近价带"] = excl.get("墙距超出近价带", 0) + 1; continue
+            cells.setdefault(b, {1: [], -1: []})[r["side"]].append(i)
+        full = {b: c for b, c in cells.items() if c[1] and c[-1]}
+        for b, c in cells.items():
+            if b not in full:
+                excl["该墙距档缺一侧"] = excl.get("该墙距档缺一侧", 0) + len(c[1]) + len(c[-1])
+        tot = sum(len(c[1]) + len(c[-1]) for c in full.values())
+        per[inst] = {"complete_bins": len(full), "rows_used": tot}
+        for c in full.values():
+            wb = (len(c[1]) + len(c[-1])) / tot if tot else 0.0
+            for sd in (1, -1):
+                for i in c[sd]:
+                    w[i] = wb * 0.5 / len(c[sd])
+    ok = bool(insts) and all(per[k]["complete_bins"] > 0 for k in insts)
+    if ok:
+        w = [x / len(insts) for x in w]
+    return {"w": w if ok else [0.0] * len(rows), "identifiable": ok, "per_inst": per, "excluded": excl}
+
+
+def signflip_weighted(rows: list[dict], weights: list[float], *, n_perm: int = 20000, seed: int = 20261014,
+                      exact_max_weeks: int = 16) -> dict:
+    """加权线性统计量 Σ w·m 的周级符号翻转检验；权重只依赖事前协变量，所以翻转某周 ⇔ 该周贡献 c_w 变号。
+    【所需的强零假设】（Codex 045 §5）：给定全部事前协变量（墙、墙距、侧、ATR、品种），各周贡献组成的整个向量
+    对「各周独立翻转符号」分布不变。仅逐周或逐行边际对称不够 —— 相邻周共享冲击、周收益自相关、波动与上周符号相关
+    （杠杆效应）、墙位置追随上周走势，都可能破坏它。exact = 枚举了全部 2^W 种符号，只说明没有抽样误差，不说明零分布有效。
+    主设计用「周五到期、h = 2、周三决策」让每行的收益窗口完整落在同一周内，去掉直接的跨周窗口重叠；剩余依赖由合成情景量化。"""
+    c: dict = {}
+    for r, wt in zip(rows, weights):
+        if wt:
+            c[r["week"]] = c.get(r["week"], 0.0) + wt * r["m"]
+    est = sum(c.values()) if c else None
+    out = {"est": est, "p_lower": None, "p_upper": None, "n_weeks": len(c), "exact": False}
+    if est is None or len(c) < 2:
+        return out
+    cs = [c[k] for k in sorted(c)]
+    if len(cs) <= exact_max_weeks:
+        out["exact"] = True
+        vals = [0.0]
+        for cw in cs:
+            vals = [v + cw for v in vals] + [v - cw for v in vals]
+        lo = sum(v <= est + 1e-12 for v in vals); hi = sum(v >= est - 1e-12 for v in vals); tot = len(vals)
+    else:
+        rng = random.Random(seed)
+        lo = hi = 0
+        for _ in range(n_perm):
+            v = sum(cw if rng.random() < 0.5 else -cw for cw in cs)
+            lo += v <= est + 1e-12; hi += v >= est - 1e-12
+        lo += 1; hi += 1; tot = n_perm + 1
+    out.update(p_lower=lo / tot, p_upper=hi / tot)
+    return out
+
+
 def signflip_test(rows: list[dict], *, n_perm: int = 20000, seed: int = 20261014, exact_max_weeks: int = 16) -> dict:
-    """周级符号翻转随机化检验（v4r1 主检验；r1 合成校准显示 13 周的 bootstrap 百分位区间覆盖只有 0.87–0.93）。
-    零假设 = 价格增量关于 0 对称：把一整周的增量取反，该周每行的 C_E − r 同时取反，m（线性/核）恰好变号，side 不变。
-    所以按周整体翻转符号得到的分布就是零分布，周内任意相关都保留；不需要渐近近似。周数 ≤ exact_max_weeks 时枚举全部 2^W 种。
-    跨周的 h 日持有窗会把相邻周轻微连在一起（行按决策日 S 归周），这一点由合成校准量化。
+    """r2 版周级符号翻转（统计量 = 两侧等权、按行加权；保留供 r1/r2 产物复现，v4r1 修订后主检验用 signflip_weighted）。
+    Codex 045 §5 更正：原说明「按周翻转得到的就是零分布」过强 —— 需要整个周向量对独立翻转不变，边际对称推不出；
+    相邻周共享对称冲击（12 周、6 对）时，名义下尾 2.5% 实际拒绝 7/64 = 10.9%。exact 只表示枚举了全部 2^W 种。
     返回 {"est", "p_lower"(est 这么负或更负的比例), "p_upper", "n_weeks", "exact"}；缺一侧 → est None、p None。"""
     ws = _week_sums(rows)
     weeks = sorted(ws)

@@ -1,6 +1,8 @@
 """expiry-pin-v4r1 镜像统计量（undertow/analyze/pin_stat.py，Codex 044 E5）。纯合成。"""
 import random
 
+import pytest
+
 from undertow.analyze import pin_stat as ps
 
 
@@ -63,3 +65,55 @@ def test_signflip_exact_matches_sampled_and_flipping_week_flips_m():
         assert abs(ps.mirror_m(c, ref, k, atr) + ps.mirror_m(2 * ref - c, ref, k, atr)) < 1e-12
     assert ps.verdict_signflip({"p_lower": 0.01, "p_upper": 0.99}).startswith("收盘离墙")
     assert ps.verdict_signflip({"p_lower": None}) == "本数据不能识别"
+
+
+def test_codex045_paired_week_shock_breaks_independent_flip():
+    """Codex 045 §5：12 周、6 对共享对称冲击（边际对称、无墙力）。r2 版检验名义下尾 2.5%，枚举真零 64 种拒绝 7 种。
+    保留为文档化反例：边际对称推不出独立周翻转有效。"""
+    import itertools
+    rej = n = 0
+    for signs in itertools.product((-1, 1), repeat=6):
+        rows = []
+        for w in range(12):
+            z = signs[w // 2] * .25
+            for side in (-1, 1):
+                rows.append({"week": w, "side": side, "m": ps.mirror_k(100 + side * z, 100, 100 + side * .5, 1)})
+        rej += ps.signflip_test(rows)["p_lower"] < .025; n += 1
+    assert (n, rej) == (64, 7)
+
+
+def test_codex045_unequal_distance_drift_and_matched_cancel():
+    """等权两侧在墙距不同时不抵消漂移（+.0266）；同距离两侧在任意漂移下逐点抵消；分档后不同档不配对。"""
+    nn = 20000
+    xs = [-.5 + (i + .5) / nn + .1 for i in range(nn)]
+    up = sum(ps.mirror_k(100 + x, 100, 100.1, 1) for x in xs) / nn
+    dn = sum(ps.mirror_k(100 + x, 100, 99.2, 1) for x in xs) / nn
+    assert abs((up + dn) / 2 - .02661) < 5e-4
+    for d in (.1, .4, .8):
+        for x in (-.7, -.1, .05, .3, .9):
+            assert ps.mirror_k(100 + x, 100, 100 + d, 1) == pytest.approx(-ps.mirror_k(100 + x, 100, 100 - d, 1))
+    rows = [{"inst": "GLD", "side": 1, "dist": .1, "week": 0, "m": up}, {"inst": "GLD", "side": -1, "dist": .8, "week": 0, "m": dn}]
+    r = ps.distance_matched_weights(rows)
+    assert r["identifiable"] is False and r["excluded"]["该墙距档缺一侧"] == 2 and r["w"] == [0.0, 0.0]
+
+
+def test_distance_matched_weights_instrument_equal_and_missing_side():
+    rows = [{"inst": "GLD", "side": s, "dist": d, "week": 0, "m": 0.0}
+            for s, d in ((1, .1), (1, .1), (-1, .2), (1, .6), (-1, .7), (1, .3))] + \
+           [{"inst": "SLV", "side": 1, "dist": .1, "week": 0, "m": 0.0}, {"inst": "SLV", "side": -1, "dist": .05, "week": 0, "m": 0.0},
+            {"inst": "SLV", "side": 0, "dist": 0.0, "week": 0, "m": 0.0}]
+    r = ps.distance_matched_weights(rows)
+    assert r["identifiable"] and r["per_inst"]["GLD"] == {"complete_bins": 2, "rows_used": 5}
+    assert sum(r["w"][:6]) == pytest.approx(.5) and sum(r["w"][6:]) == pytest.approx(.5)   # 金银等权
+    assert r["w"][5] == 0 and r["excluded"]["该墙距档缺一侧"] == 1 and r["excluded"]["墙恰在参考价（side 0）"] == 1
+    assert r["w"][0] == pytest.approx(.5 * 3 / 5 * .5 / 2)                                   # 档 0：3 行、上方 2 行
+    only = [x for x in rows if x["inst"] == "GLD"] + [{"inst": "SLV", "side": 1, "dist": .1, "week": 0, "m": 0.0}]
+    assert ps.distance_matched_weights(only)["identifiable"] is False                        # SLV 缺侧 → 不退成单品种
+
+
+def test_signflip_weighted_matches_unweighted_when_weights_equal():
+    rows = [{"week": w, "side": s, "m": ((w * 7 + s * 3) % 5 - 2) / 4} for w in range(6) for s in (1, -1)]
+    a = ps.signflip_weighted(rows, [1.0] * len(rows))
+    assert a["exact"] and a["n_weeks"] == 6 and a["est"] == pytest.approx(sum(r["m"] for r in rows))
+    z = ps.signflip_weighted(rows, [0.0] * len(rows))
+    assert z["est"] is None and z["p_lower"] is None

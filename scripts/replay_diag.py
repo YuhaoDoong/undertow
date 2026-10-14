@@ -131,7 +131,8 @@ def trades(rows: list, bars: list, atr: list) -> dict:
         for i in range(pos["cursor"], min(t_end, last) + 1):
             st_ = pos.get("stop")
             if st_ is None:
-                cand = [x for x in stops if pos["decided_at"] <= x["as_of_i"] < i]
+                cand = [x for x in stops if pos["decided_at"] <= x["as_of_i"] < i
+                        and (x.get("deleted_at_as_of") is None or x["deleted_at_as_of"] >= i)]   # 已删的止损在删除后不再生效
                 if cand:
                     pos["stop"] = st_ = cand[0]["price"]; pos["stop_set_at"] = cand[0]["as_of_i"]
             if st_ is not None and i > pos["entry_i"] - 1:
@@ -144,6 +145,9 @@ def trades(rows: list, bars: list, atr: list) -> dict:
 
     for r in seq:
         if r["cls"] != "frontier_decision":
+            continue
+        if r.get("deleted_at_as_of") == r["as_of_i"]:     # 同一时刻标了又删 = 执行前取消（下一根开盘前），不算决定
+            flags["cancelled_before_execution"] += 1
             continue
         run_to(r["as_of_i"])
         if r["type"] in ENTRY:

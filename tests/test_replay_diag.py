@@ -46,3 +46,13 @@ def test_match_only_pivots_confirmed_by_label_time():
     m = {x["algo"]: x for x in rd.match(rows, alg, atr)}
     assert m["bar"]["matched"] is False and m["bar"]["nearest_conf_minus_user"] == 2       # 算法晚 2 根确认，不算吻合
     assert m["zigzag_2atr"]["matched"] is True and m["zigzag_2atr"]["conf_minus_user"] == -1
+
+
+def test_same_time_delete_is_cancel_and_deleted_stop_inactive():
+    bars = [(i, 100.0, 101.0, 99.0, 100.0) for i in range(40)]
+    atr = [1.0] * 40
+    ev = [E("add", "入场做多", 15, 15), E("add", "止损", 15, 15, price=99.5), E("delete", "止损", 15, 15),
+          E("add", "离场", 20, 20), E("delete", "离场", 20, 20), E("add", "离场", 25, 25)]
+    t = rd.trades(rd.classify("v1", SEG, ev), bars, atr)
+    assert t["flags"]["cancelled_before_execution"] == 2 and t["flags"]["missing_stop"] == 1
+    assert t["trades"][0]["exit_reason"] == "user_exit_next_open" and t["trades"][0]["exit_i"] == 26     # 99.5 止损已删，不触发

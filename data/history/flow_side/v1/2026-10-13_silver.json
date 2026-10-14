@@ -1,0 +1,377 @@
+{
+ "version": "flow-side-proxy-v1-20260930",
+ "instrument": "silver",
+ "root": "SLV",
+ "day": "2026-10-13",
+ "protocol": [
+  "docs/prereg/2026-09-29_flow_side_check_v0.md",
+  "docs/prereg/2026-09-30_flow_side_check_v1_addendum.md"
+ ],
+ "status": "ok",
+ "spot": 52.92,
+ "computed_at": "2026-10-14T11:14:45.388662+00:00",
+ "inputs": {
+  "snapshot_prev": {
+   "path": "data/snapshots/options/SLV/2026-10-13.json.gz",
+   "sha256": "f6478f53893c6ea5e1168d7e305f4220a2faaac4b672fb0e360d9c728f20f23d"
+  },
+  "snapshot_curr": {
+   "path": "data/snapshots/options/SLV/2026-10-14.json.gz",
+   "sha256": "6f8bb75422c0248ff703fde1ff5b06b57bfe1df09c890be79ea247a153f0787e"
+  },
+  "intraday": {
+   "path": "data/history/option_intraday/SLV/2026-10-13.json.gz",
+   "sha256": "e91937944a766b115d57ed6007478234d64f5bc7db88639cab279b1ececc7826"
+  },
+  "samples": {
+   "path": "data/history/shadow_samples/2026-10-13/silver.jsonl",
+   "sha256": "65fedba872a8bbbce4b324e0663030fff5ce049976dba9a1ac941e1e79dbf58c"
+  },
+  "capture_plan_spot": 54.629,
+  "capture_plan_n": 210
+ },
+ "f_legs_total": 6,
+ "f_weight_total": 711.8806999999999,
+ "f_legs_in_plan": 6,
+ "f_weight_in_plan_frac": 1.0,
+ "not_in_plan": {},
+ "summary_by_mode": {
+  "quote_past": {
+   "n_legs": 6,
+   "n_labelled": 0,
+   "n_agree": 0,
+   "agree_rate": null,
+   "agree_rate_weighted": null,
+   "weight_covered": 1.0,
+   "n_mixed": 0,
+   "n_unknown": 6,
+   "matrix": {
+    "buy→unknown": 6
+   },
+   "base_rate_traded_buy": null,
+   "base_rate_inferred_buy": 1.0
+  },
+  "tick_only": {
+   "n_legs": 6,
+   "n_labelled": 3,
+   "n_agree": 1,
+   "agree_rate": 0.3333,
+   "agree_rate_weighted": 0.7679,
+   "weight_covered": 1.0,
+   "n_mixed": 3,
+   "n_unknown": 0,
+   "matrix": {
+    "buy→buy": 1,
+    "buy→mixed": 3,
+    "buy→sell": 2
+   },
+   "base_rate_traded_buy": 0.3333,
+   "base_rate_inferred_buy": 1.0
+  },
+  "mixed": {
+   "n_legs": 6,
+   "n_labelled": 3,
+   "n_agree": 1,
+   "agree_rate": 0.3333,
+   "agree_rate_weighted": 0.7679,
+   "weight_covered": 1.0,
+   "n_mixed": 3,
+   "n_unknown": 0,
+   "matrix": {
+    "buy→buy": 1,
+    "buy→mixed": 3,
+    "buy→sell": 2
+   },
+   "base_rate_traded_buy": 0.3333,
+   "base_rate_inferred_buy": 1.0
+  },
+  "quote_any_window": {
+   "n_legs": 6,
+   "n_labelled": 0,
+   "n_agree": 0,
+   "agree_rate": null,
+   "agree_rate_weighted": null,
+   "weight_covered": 1.0,
+   "n_mixed": 0,
+   "n_unknown": 6,
+   "matrix": {
+    "buy→unknown": 6
+   },
+   "base_rate_traded_buy": null,
+   "base_rate_inferred_buy": 1.0
+  }
+ },
+ "main_mode": "quote_past",
+ "legs": [
+  {
+   "symbol": "SLV261014C55500.US",
+   "expiry": "2026-10-14",
+   "kind": "C",
+   "strike": 55.5,
+   "d_oi": 3879,
+   "delta": 0.0852,
+   "delta_adj_pp": 5.51,
+   "purity": 0.6686778141699707,
+   "weight": 330.4908,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 5803.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.709,
+     "label": "buy",
+     "classified_frac": 0.999,
+     "volume": 5803.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.709,
+     "label": "buy",
+     "classified_frac": 0.999,
+     "volume": 5803.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 5803.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "SLV261019C54500.US",
+   "expiry": "2026-10-19",
+   "kind": "C",
+   "strike": 54.5,
+   "d_oi": 331,
+   "delta": 0.3335,
+   "delta_adj_pp": 0.34,
+   "purity": 0.8465473145780051,
+   "weight": 110.38850000000001,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 391.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.4585,
+     "label": "mixed",
+     "classified_frac": 0.9872,
+     "volume": 391.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.4585,
+     "label": "mixed",
+     "classified_frac": 0.9872,
+     "volume": 391.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 391.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "SLV261021C53500.US",
+   "expiry": "2026-10-21",
+   "kind": "C",
+   "strike": 53.5,
+   "d_oi": 242,
+   "delta": 0.5149,
+   "delta_adj_pp": 1.27,
+   "purity": 0.55125284738041,
+   "weight": 124.6058,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 439.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.5,
+     "label": "mixed",
+     "classified_frac": 0.9886,
+     "volume": 439.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.5,
+     "label": "mixed",
+     "classified_frac": 0.9886,
+     "volume": 439.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 439.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "SLV261019C55000.US",
+   "expiry": "2026-10-19",
+   "kind": "C",
+   "strike": 55.0,
+   "d_oi": 180,
+   "delta": 0.2584,
+   "delta_adj_pp": 0.35,
+   "purity": 0.5232558139534884,
+   "weight": 46.512,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 345.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.5353,
+     "label": "mixed",
+     "classified_frac": 0.9855,
+     "volume": 345.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.5353,
+     "label": "mixed",
+     "classified_frac": 0.9855,
+     "volume": 345.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 345.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "SLV261023C55500.US",
+   "expiry": "2026-10-23",
+   "kind": "C",
+   "strike": 55.5,
+   "d_oi": 173,
+   "delta": 0.2694,
+   "delta_adj_pp": 0.41,
+   "purity": 0.46630727762803237,
+   "weight": 46.606199999999994,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 371.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.2243,
+     "label": "sell",
+     "classified_frac": 0.9973,
+     "volume": 371.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.2243,
+     "label": "sell",
+     "classified_frac": 0.9973,
+     "volume": 371.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 371.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "SLV261021C54000.US",
+   "expiry": "2026-10-21",
+   "kind": "C",
+   "strike": 54.0,
+   "d_oi": 122,
+   "delta": 0.4367,
+   "delta_adj_pp": 1.23,
+   "purity": 0.6524064171122995,
+   "weight": 53.2774,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 187.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.3978,
+     "label": "sell",
+     "classified_frac": 0.9947,
+     "volume": 187.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.3978,
+     "label": "sell",
+     "classified_frac": 0.9947,
+     "volume": 187.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 187.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  }
+ ]
+}

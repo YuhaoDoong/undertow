@@ -399,7 +399,13 @@ def _user_sell_select(p: dict, now: datetime) -> dict:
     return choose_expiry(p, one)
 
 
-FEE_TYPE_REJECTS = ("fee_exceeds_credit", "credit_outside_0_width")
+FEE_TYPE_REJECTS = ("fee_exceeds_credit", "credit_outside_0_width", "payoff_low")   # 「不值得开」类：可改试更远到期
+
+
+def payoff_gate(e: dict) -> dict:
+    """开仓收益风险比下限（risk_policy.payoff_floor，用户 2026-10-14）。e = economics() 的输出。"""
+    from undertow.analyze import risk_policy as rp
+    return rp.payoff_floor(e.get("max_gain_usd"), e.get("max_loss_usd"))
 
 
 def choose_expiry(p: dict, one) -> dict:
@@ -424,7 +430,7 @@ def choose_expiry(p: dict, one) -> dict:
 
 def pick_protective(side: str, ks: float, tw: float, cands: list, quotes: dict, qty: int, fee: float) -> dict:
     """纯函数：卖腿 ks 固定；保护腿在宽度 [tw−1, tw+1] 的候选里按「离 tw 最近、并列取更宽」依次试，
-    第一个有有效 ask、无交叉、0 < 权利金 < 宽度、含费最大收益 > 0 的即选定。卖腿须有有效 bid。"""
+    第一个有有效 ask、无交叉、0 < 权利金 < 宽度、含费最大收益 > 0、且过收益风险比下限（payoff_gate）的即选定。卖腿须有有效 bid。"""
     from scripts.paper_strike_rule import _crossed, _ok
     qs = quotes.get(ks) or {}
     if qs.get("error") or not _ok(qs.get("bid")) or _crossed(qs):
@@ -441,8 +447,15 @@ def pick_protective(side: str, ks: float, tw: float, cands: list, quotes: dict, 
         e = economics(side, ks, kb, cr, qty, fee)
         if e["max_gain_usd"] <= 0:
             tried.append({"buy": kb, "credit": cr, "reject": "fee_exceeds_credit"}); continue
+        g = payoff_gate(e)
+        if g["status"] != "pass":
+            tried.append({"buy": kb, "credit": cr, "reject": "payoff_low", "payoff_floor": g}); continue
         tried.append({"buy": kb, "credit": cr, "reject": None})
-        return {"ok": True, "buy": kb, "width": w, "credit": cr, "credit_ratio": round(cr / w, 4), "economics": e, "tried": tried}
+        return {"ok": True, "buy": kb, "width": w, "credit": cr, "credit_ratio": round(cr / w, 4), "economics": e,
+                "payoff_floor": g, "tried": tried}
+    pl = [t["payoff_floor"]["note"] for t in tried if t.get("reject") == "payoff_low"]
+    if pl and all(t.get("reject") in FEE_TYPE_REJECTS for t in tried):
+        return {"ok": False, "reason": f"payoff_low（{pl[0]}）", "tried": tried}
     return {"ok": False, "reason": "no_protective_leg（宽度 target±1 内无可成交保护腿）", "tried": tried}
 
 
@@ -507,9 +520,12 @@ def pick_debit(side: str, kb: float, tw: float, cands: list, quotes: dict, qty: 
         e = economics(side, ks, kb, -debit, qty, fee)
         if e["max_gain_usd"] <= 0:
             tried.append({"sell": ks, "debit": debit, "reject": "fee_exceeds_max_gain"}); continue
+        g = payoff_gate(e)
+        if g["status"] != "pass":
+            tried.append({"sell": ks, "debit": debit, "reject": "payoff_low", "payoff_floor": g}); continue
         tried.append({"sell": ks, "debit": debit, "reject": None})
         return {"ok": True, "sell": ks, "buy": kb, "width": w, "credit": -debit, "debit": debit,
-                "debit_ratio": round(debit / w, 4), "economics": e, "tried": tried}
+                "debit_ratio": round(debit / w, 4), "economics": e, "payoff_floor": g, "tried": tried}
     return {"ok": False, "reason": "no_short_leg（宽度 target±1 内无可成交卖腿）", "tried": tried}
 
 
@@ -573,11 +589,16 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             ev.append({"at": now.isoformat(), "action": "entry_quote", "quotes": q, "why": p["last_reject"]})
             return "retry"                                 # 窗口内继续取；第一份合格即入场
         econ = economics(p["side"], p["k_sell"], p["k_buy"], credit, p["qty"], p["fee_round_trip"])
+        g = payoff_gate(econ)
+        if g["status"] != "pass":
+            p["last_reject"] = f"payoff_low（{g['note'] or g['status']}）"
+            ev.append({"at": now.isoformat(), "action": "entry_quote", "quotes": q, "why": p["last_reject"], "payoff_floor": g})
+            return "retry"
         lab = quote_labels(q, p["sell"], p["buy"], p["qty"])
         p.update(state="entered", entered_at=now.isoformat(), entry_credit=credit, economics=econ,
                  stop_value=stop_value_of(p, credit), entry_quote_labels=lab)
         ev.append({"at": now.isoformat(), "action": "enter", "quotes": q, "credit": credit, "economics": econ,
-                   "quote_labels": lab, "requested_at": req.isoformat(), "returned_at": now.isoformat()})
+                   "payoff_floor": g, "quote_labels": lab, "requested_at": req.isoformat(), "returned_at": now.isoformat()})
         return "enter"
     # —— entered ——
     exp = date.fromisoformat(p["expiry"])
@@ -959,11 +980,16 @@ def _step_dynamic(p: dict, now: datetime, selector) -> str | None:
     p.update(sell=syms.get(str(sel["sell"])), buy=syms.get(str(sel["buy"])), k_sell=float(sel["sell"]), k_buy=float(sel["buy"]))
     q = {p["sell"]: qs.get(str(sel["sell"])), p["buy"]: qs.get(str(sel["buy"]))}
     econ = sel["economics"]
+    g = payoff_gate(econ)                                     # 选档器已各自检查；这里兜底，任何选档器漏检都不能入场
+    if g["status"] != "pass":
+        p["last_reject"] = f"payoff_low（{g['note'] or g['status']}）"
+        ev.append({"at": now.isoformat(), "action": "entry_quote", "why": p["last_reject"], "payoff_floor": g})
+        return "retry"
     lab = quote_labels(q, p["sell"], p["buy"], p["qty"])
     p.update(state="entered", entered_at=now.isoformat(), entry_credit=sel["credit"], economics=econ,
              stop_value=stop_value_of(p, sel["credit"]), entry_quote_labels=lab)
     ev.append({"at": now.isoformat(), "action": "enter", "quotes": q, "credit": sel["credit"], "economics": econ,
-               "quote_labels": lab, "selection_rule": sel.get("rule"), "wall_change_reason": reason})
+               "payoff_floor": g, "quote_labels": lab, "selection_rule": sel.get("rule"), "wall_change_reason": reason})
     return "enter"
 
 

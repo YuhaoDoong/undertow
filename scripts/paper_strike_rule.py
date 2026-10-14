@@ -50,13 +50,16 @@ def params_hash(params: dict) -> str:
 
 
 def select_spread(side: str, spot: float, oi: dict, listed: list, quotes: dict, params: dict = PARAMS, *,
-                  fee_round_trip: float = 3.2, qty: int = 1, target_oi: dict | None = None) -> dict:
+                  fee_round_trip: float = 3.2, qty: int = 1, target_oi: dict | None = None,
+                  apply_payoff_floor: bool = True) -> dict:
     """纯函数，两侧镜像。side="P"：牛市看跌价差（墙在现价下方，卖腿不高于墙，买腿向下）；
     side="C"：熊市看涨价差（墙在现价上方，卖腿不低于墙，买腿向上）。
     oi：{行权价: 该侧 OI 合计}；target_oi：目标到期自身 OI（只展示）；listed：目标到期挂牌行权价；quotes：{行权价: {bid, ask, error}}。
     卖腿只锚定一档（离价 ≥ 缓冲、最贴近墙的那档）；它没有有效买价就不开，不继续找。买腿只需有效卖价；交叉报价拒绝。
-    合格 = 0 < 保守权利金 < 宽度、含费最大收益 > 0（economics 唯一口径）、权利金/宽度 ≥ min_credit_ratio。"""
+    合格 = 0 < 保守权利金 < 宽度、含费最大收益 > 0（economics 唯一口径）、权利金/宽度 ≥ min_credit_ratio、
+    含费最大收益/最大亏损 ≥ risk_policy.PAYOFF_FLOOR（2026-10-14 起；版本记在 payoff_floor 字段，不改 PARAMS 哈希）。"""
     from scripts.paper_trades import economics
+    from undertow.analyze import risk_policy as rp
     if side not in ("P", "C"):
         raise ValueError(f"side 须为 P/C：{side}")
     up = side == "C"
@@ -105,6 +108,9 @@ def select_spread(side: str, spot: float, oi: dict, listed: list, quotes: dict, 
             tried.append({**row, "reject": "fee_exceeds_credit（含费最大收益 ≤ 0）"}); continue
         if cr / w < params["min_credit_ratio"]:
             tried.append({**row, "reject": "credit_ratio_low"}); continue
+        g = rp.payoff_floor(e["max_gain_usd"], e["max_loss_usd"])      # 收益风险比下限（用户 2026-10-14），不进 PARAMS 哈希
+        if apply_payoff_floor and g["status"] != "pass":
+            tried.append({**row, "reject": "payoff_low", "payoff_floor": g}); continue
         tried.append({**row, "reject": None})
         return {**tr, "ok": True, "buy": kb, "width": w, "credit": cr, "credit_ratio": row["ratio"],
                 "economics": e, "tried": tried}
@@ -119,7 +125,8 @@ def select_put_spread(spot, put_oi, listed, quotes, params=PARAMS, **kw) -> dict
 def select_with_shadow(spot, oi, listed, quotes, params=PARAMS, *, side: str = "P", **kw) -> dict:
     """主规则（含 15% 门槛）与不设门槛的影子对照，在同一候选全集、同一时刻一起算（Codex 028）；主结果仍是含门槛的那个。"""
     return {"main": select_spread(side, spot, oi, listed, quotes, params, **kw),
-            "shadow_no_ratio": select_spread(side, spot, oi, listed, quotes, {**params, "min_credit_ratio": 0.0}, **kw)}
+            "shadow_no_ratio": select_spread(side, spot, oi, listed, quotes, {**params, "min_credit_ratio": 0.0},
+                                             apply_payoff_floor=False, **kw)}   # 反事实「不设任何权利金门槛」：两道都去掉
 
 
 def _dryrun(sym: str, expiry: str) -> int:

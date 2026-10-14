@@ -106,3 +106,21 @@ def test_evaluate_book_reports_current_state():
     b = rp.evaluate_book([pos("a", 160, u="GLD"), pos("b", 170, u="SPY")], {"equity": 500.0})
     assert b["overall"] == "fail" and any(c["check"] == "大仓数量" and c["status"] == "fail" for c in b["checks"])
     assert rp.evaluate_book([pos("a", None)], {"equity": 500.0})["overall"] == "incomplete"
+
+
+# —— 开仓收益风险比下限（payoff-floor-v1，用户 2026-10-14）——
+
+def test_payoff_floor_blocks_the_0_07_credit_case():
+    """10/08 实例：GLD 370/365P 收 0.07，含费最大收益 3.8 / 最大亏损 496.2 → 0.77% < 10%，打平胜率 99.2%。"""
+    g = rp.payoff_floor(3.8, 496.2)
+    assert g["status"] == "fail" and g["ratio"] == round(3.8 / 496.2, 4) and g["breakeven_win_rate"] == round(496.2 / 500, 4)
+    assert "更远到期" in g["note"] and g["version"] == rp.PAYOFF_FLOOR_VERSION
+
+
+def test_payoff_floor_boundary_and_unknown():
+    assert rp.payoff_floor(10.0, 100.0)["status"] == "pass"            # 恰好 10% 放行
+    assert rp.payoff_floor(9.99, 100.0)["status"] == "fail"
+    assert rp.payoff_floor(0.0, 100.0)["status"] == "fail"             # 合法 0 不当缺失
+    for g, l in ((None, 100.0), (5.0, None), (float("nan"), 100.0), (5.0, 0.0), (5.0, -1.0)):
+        assert rp.payoff_floor(g, l)["status"] == "incomplete"          # 未知不是通过
+    assert rp.payoff_floor(150.0, 350.0)["breakeven_win_rate"] == 0.7

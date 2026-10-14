@@ -79,6 +79,8 @@ def test_shadow_without_ratio_computed_on_same_candidates():
          377: {"bid": 0.55, "ask": 0.6, "error": ""}}
     r = sr.select_with_shadow(381.0, OI, LISTED, q)
     assert r["main"]["buy"] == 377 and r["shadow_no_ratio"]["buy"] == 378          # 378: 0.07/1=7%（含费仍为正）只在影子里过
+    # 378 在主规则里先被比例门槛挡；即使比例门槛为 0，收益风险比下限（3.8/96.2 < 10%）也会挡 —— 影子反事实两道都不设
+    assert sr.select_spread("P", 381.0, OI, LISTED, q, {**sr.PARAMS, "min_credit_ratio": 0.0})["buy"] == 377
     assert r["main"]["params_hash"] != r["shadow_no_ratio"]["params_hash"]
     assert not sr.select_put_spread(float("nan"), OI, LISTED, q)["ok"]
 

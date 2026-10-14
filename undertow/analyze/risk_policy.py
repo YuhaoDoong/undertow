@@ -139,6 +139,42 @@ POLICY_B_META = {
 }
 
 
+# ════════════════════════════════════════════════════════════════════════════════════
+# 开仓收益风险比下限（入场闸门，独立于额度政策；改数值 = 升 PAYOFF_FLOOR_VERSION）。
+# 起因：2026-10-08 用户批次 GLD 370/365P 当天到期收 0.07，含费最大收益 $3.8 对最大亏损 $496（要赢 99.2% 才打平），
+# 当时唯一的检查是「权利金扣费后 > 0」，于是照开。用户 2026-10-14：「权利金 0.07，就不该开仓吧」；
+# 对「含费最大收益 < 最大亏损的 10% 就不开、提示改更远到期」答「两件事都可以」。
+# 10% ⇔ 打平胜率 ≤ 1/1.1 ≈ 90.9%，参照此前估算的卖墙价差约需 89–91% 胜率打平；【未校准】，只是把明显不值的单挡掉。
+# 不放进 POLICY_B / evaluate_budget：影子账 v5 的预算按其预登记版本复现，不能中途加闸门。
+# ════════════════════════════════════════════════════════════════════════════════════
+
+PAYOFF_FLOOR_VERSION = "payoff-floor-v1-20261014"
+PAYOFF_FLOOR = {"version": PAYOFF_FLOOR_VERSION, "min_net_gain_to_max_loss": 0.10}
+PAYOFF_FLOOR_META = {"status": "已决定（用户 2026-10-14「两件事都可以」）；数值未校准",
+                     "applies_to": "模拟仓用户批次与规则批次的新开仓（贷记与借记价差）；实盘开仓前同样检查",
+                     "on_fail": "不开；有备选到期则改试更远到期，否则提示改用更远到期"}
+
+
+def payoff_floor(net_max_gain, max_loss, rule: dict = PAYOFF_FLOOR) -> dict:
+    """含费最大收益 / 含费最大亏损 ≥ 下限才放行。任一金额缺失/非有限/最大亏损 ≤ 0 → incomplete（不是通过）。
+    返回 {"status", "ratio", "limit", "breakeven_win_rate", "version", "note"}；打平胜率 = 最大亏损 / (最大收益 + 最大亏损)。"""
+    lim = rule["min_net_gain_to_max_loss"]
+    out = {"status": "incomplete", "ratio": None, "limit": lim, "breakeven_win_rate": None, "version": rule["version"], "note": ""}
+    if not (_num(net_max_gain) and _num(max_loss) and max_loss > 0):
+        out["note"] = "最大收益或最大亏损未知/非正 → 无法判定"
+        return out
+    ratio = net_max_gain / max_loss
+    bw = max_loss / (net_max_gain + max_loss) if net_max_gain > -max_loss else None
+    out.update(ratio=round(ratio, 4), breakeven_win_rate=None if bw is None else round(bw, 4))
+    if ratio + 1e-12 >= lim:
+        out["status"] = "pass"
+    else:
+        out["status"] = "fail"
+        out["note"] = (f"含费最大收益 ${net_max_gain:,.2f} / 最大亏损 ${max_loss:,.2f} = {ratio:.1%} < {lim:.0%}"
+                       + (f"（打平需胜率 {bw:.1%}）" if bw is not None else "") + "；建议改用更远到期")
+    return out
+
+
 def category_of(underlying: str) -> str:
     """金银 vs 其它。underlying 可以是品种键（gold）、期权根（GLD）或带后缀（GLD.US）。"""
     u = (underlying or "").split(".")[0]

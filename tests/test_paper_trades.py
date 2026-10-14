@@ -801,8 +801,8 @@ def test_dynamic_entry_switches_expiry_and_records_planned():
     p = _dyn(strike_rule="user-sell-fixed-v1", side="P", k_sell=370.0, target_width=5.0, expiry="2026-10-09",
              expiry_candidates=["2026-10-09", "2026-10-12"], batch="user_subjective", min_credit_ratio=0.0,
              entry_date="2026-10-09")
-    sel = {"ok": True, "rule": "user-sell-fixed-v1", "sell": 370.0, "buy": 365.0, "credit": 0.35, "expiry": "2026-10-12",
-           "economics": pt.economics("P", 370.0, 365.0, 0.35, 1, 3.2), "nearest_wall": None,
+    sel = {"ok": True, "rule": "user-sell-fixed-v1", "sell": 370.0, "buy": 365.0, "credit": 0.60, "expiry": "2026-10-12",
+           "economics": pt.economics("P", 370.0, 365.0, 0.60, 1, 3.2), "nearest_wall": None,
            "inputs": {"params_hash": "x", "symbols": {"370.0": "GLD261012P370000.US", "365.0": "GLD261012P365000.US"},
                       "quotes": {"370.0": {"bid": 0.5, "ask": 0.55}, "365.0": {"bid": 0.1, "ask": 0.15}}}}
     assert pt.step(p, datetime(2026, 10, 9, 10, 1, tzinfo=ET), selector=lambda p, n: sel) == "enter"
@@ -887,3 +887,34 @@ def test_slot_debt_recorded_before_settlement(monkeypatch):
     acts = [x["action"] for x in p["events"]]
     assert acts.index("exit_unresolved") < acts.index("settle")
     assert [x for x in p["events"] if x["action"] == "exit_unresolved"][0]["category"].startswith("missed_wake")
+
+
+def test_payoff_floor_rejects_and_falls_back_to_next_expiry():
+    """用户 2026-10-14：含费最大收益 < 最大亏损 10% 不开；有备选到期则改试下一个（与「低于手续费改 12 号」同一退路）。"""
+    q9 = {370.0: {"bid": 0.13, "ask": 0.17}, 365.0: {"bid": 0.03, "ask": 0.06}}      # 0.07 → 3.8/496.2
+    r = pt.pick_protective("P", 370.0, 5.0, [365.0], q9, 1, 3.2)
+    assert not r["ok"] and r["reason"].startswith("payoff_low") and r["tried"][0]["reject"] == "payoff_low"
+    q12 = {370.0: {"bid": 1.30, "ask": 1.35}, 365.0: {"bid": 0.50, "ask": 0.55}}     # 0.75 → 71.8/428.2 = 16.8%
+    calls = []
+
+    def one(e):
+        calls.append(e)
+        return pt.pick_protective("P", 370.0, 5.0, [365.0], q9 if e == "2026-10-09" else q12, 1, 3.2)
+    r = pt.choose_expiry({"expiry": "2026-10-09", "expiry_candidates": ["2026-10-09", "2026-10-12"]}, one)
+    assert r["ok"] and calls == ["2026-10-09", "2026-10-12"] and r["payoff_floor"]["status"] == "pass"
+
+
+def test_payoff_floor_on_fixed_strike_and_dynamic_entry():
+    p = _dyn(strike_rule="user-sell-fixed-v1", side="P", k_sell=370.0, target_width=5.0, expiry="2026-10-09",
+             batch="user_subjective", min_credit_ratio=0.0, entry_date="2026-10-09")
+    sel = {"ok": True, "rule": "user-sell-fixed-v1", "sell": 370.0, "buy": 365.0, "credit": 0.07, "expiry": "2026-10-09",
+           "economics": pt.economics("P", 370.0, 365.0, 0.07, 1, 3.2), "nearest_wall": None,
+           "inputs": {"params_hash": "x", "symbols": {"370.0": "GLD261009P370000.US", "365.0": "GLD261009P365000.US"},
+                      "quotes": {"370.0": {"bid": 0.13, "ask": 0.17}, "365.0": {"bid": 0.03, "ask": 0.06}}}}
+    assert pt.step(p, datetime(2026, 10, 9, 10, 1, tzinfo=ET), selector=lambda p, n: sel) == "retry"   # 选档器漏检也挡住
+    assert p["state"] == "planned" and p["last_reject"].startswith("payoff_low")
+    p = _p(min_credit_ratio=0.0)                                                  # 固定档位：375/373，收 0.05 → 1.8/198.2
+    assert pt.step(p, at(29, 10, 1), depth=q(0.10, 0.12, 0.04, 0.05)) == "retry" and p["last_reject"].startswith("payoff_low")
+    assert pt.step(p, at(29, 10, 21), depth=q(0.10, 0.12, 0.04, 0.05)) == "skipped" and p["skip_reason"].startswith("payoff_low")
+    p = _p(min_credit_ratio=0.0)
+    assert pt.step(p, at(29, 10, 1), depth=q(1.44, 1.6, 0.95, 1.03)) == "enter" and p["events"][-1]["payoff_floor"]["status"] == "pass"

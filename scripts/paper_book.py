@@ -97,7 +97,8 @@ def classify(theses: list) -> dict:
                "econ": p.get("economics") or {}, "pnl": p.get("pnl_usd"), "stop": p.get("stop_value"),
                "exit_rule": p.get("exit_rule"), "strike_rule": p.get("strike_rule"), "entered_at": p.get("entered_at"),
                "reason": p.get("skip_reason") or p.get("invalid_reason"), "mark": _last_mark(p),
-               "close_request": p.get("close_request"), "result_under_review": p.get("result_under_review")}
+               "close_request": p.get("close_request"), "result_under_review": p.get("result_under_review"),
+               "underlying": p.get("underlying"), "closed_at": p.get("closed_at"), "settle_close": (p.get("settle") or {}).get("close")}
         st = p.get("state")
         if st == "entered":
             out["open"].append(row)
@@ -290,7 +291,7 @@ def live_marks(rows: list) -> dict:
 
 
 def render(day: str, c: dict, sm: dict, live: dict, generated_at: str, legacy: list | None = None,
-           shadow: list | None = None) -> tuple[str, str]:
+           shadow: list | None = None, attrib: list | None = None) -> tuple[str, str]:
     batches = sorted(k for k in sm if not k.startswith("_"))
     md = [f"# 模拟仓台账 · {day}", "", f"> 生成于 {generated_at}。盈亏含费；批次分开；同一判断的多个仓位不当独立样本；"
           "比较看含费最大亏损与收益/最大亏损比，不按单笔美元比优劣。数据：私有 journal（只读）。", "",
@@ -333,6 +334,7 @@ def render(day: str, c: dict, sm: dict, live: dict, generated_at: str, legacy: l
     if not c["closed"]:
         md.append("| （无） | | | | | | | |")
     md += early_exit_section(c["closed"])
+    md += attrib or []
     md += audit_section(c["open"] + c["closed"])
     md += ["", "## 未入场（按规则放弃）", ""] + [f"- {r['id']}（{r['batch']}）：{r['reason']}" for r in c["not_entered"]] + \
           ([] if c["not_entered"] else ["- （无）"])
@@ -363,6 +365,26 @@ def render(day: str, c: dict, sm: dict, live: dict, generated_at: str, legacy: l
     md_s = "\n".join(md) + "\n"
     html = _md_to_html(md_s, day)
     return md_s, html
+
+
+def attribution_section(c: dict, legacy: list, partial: list) -> list[str]:
+    """「方向还是墙」归因栏（scripts/paper_attrib.py）。价格存档缺失、基线日线取不到都写进栏内并计入 partial，不静默。"""
+    from scripts import paper_attrib as pa
+    try:
+        rows = pa.build(c["closed"], legacy)
+    except Exception as e:                                   # 归因栏坏了不能拖垮整份台账，但必须当场可见
+        partial.append(f"attribution_failed: {type(e).__name__}")
+        return ["", "## 方向还是墙", "", f"⚠️ 归因计算失败：{type(e).__name__}: {str(e)[:120]}"]
+    notes = []
+    miss = [t["id"] for t in rows if t["dirn"] != 0 and t["category"] is None]
+    if miss:
+        notes.append(f"{len(miss)} 笔缺入场/了结正股价（分钟存档未到或缺失）：{', '.join(miss[:5])}")
+        partial.append("attribution_price_missing")
+    closes, errs = pa.fetch_closes({t["root"] for t in rows if t["dirn"] != 0 and t["root"]})
+    if errs:
+        notes.append("零模型基线所需日线取不到：" + "；".join(errs))
+        partial.append("attribution_baseline_unavailable")
+    return pa.section(rows, pa.summarize(rows, pa.baselines_for(rows, closes)), notes)
 
 
 def _md_to_html(md: str, day: str) -> str:
@@ -423,8 +445,10 @@ def main():
     sh = shadow_summary()
     if sh and sh[0].startswith(("⚠️", "（shadow report")):
         partial.append("shadow_summary_incomplete")
+    legacy = load_legacy()
+    attrib = attribution_section(c, legacy, partial)
     md, html = render(day, c, sm, live, now.strftime("%Y-%m-%d %H:%M ET") + ("（含现取估值）" if live else ""),
-                      legacy=load_legacy(), shadow=sh)
+                      legacy=legacy, shadow=sh, attrib=attrib)
     ver = hashlib.sha256(md.encode("utf-8")).hexdigest()[:12]          # md 与 html 共用同一版本号
     stamp = f"\n\n> 版本 {ver}" + (f"；⚠️ 局部不完整：{', '.join(partial)}" if partial else "")
     md += stamp

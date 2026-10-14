@@ -58,10 +58,19 @@ EXIT_RULES = {"claude-exit-v1": {"take_profit_frac": 0.5, "time_exit_dte": 3},
               "user-tp90-v1": {"take_profit_gain_frac": 0.9}}
 # 每条规则授权的批次：claude-exit-v1 只给 Claude 的规则批（Codex 032 R3）；user-tp90-v1 是用户本人定的规则，只给用户批次
 EXIT_RULE_BATCHES = {"claude-exit-v1": ("rule_dynamic",), "user-tp90-v1": ("user_subjective",)}
+# 每条规则适用的结构（用户 2026-10-14：「买方不是按 90% 啊，买方的最大收益应该很难达到」；Codex 045 C）：
+# 两条现行自动退出规则都是卖方（收权利金）规则。借记价差挂上它们 → 结构化报「不适用」、不自动退出，不静默忽略。
+EXIT_RULE_STRUCTURES = {"claude-exit-v1": ("credit",), "user-tp90-v1": ("credit",)}
+# 提示规则（只提示、从不平仓；与自动退出规则分开）。debit-roi100-review-v1（用户 2026-10-14：「我觉得买方收益率 100% 以上，
+# 可以考虑平掉吧」；Codex 045 建议）：含费盈利 ≥ 100% × 含费风险成本（L = 100·借记 + 往返费）→ 提示「考虑止盈」。未校准。
+# 风险成本含往返费，不等于实际开仓现金；最大可达 ROI = 含费最大收益 / L < 100% 时显式标 target_unreachable，不改阈值。
+ADVISORY_RULES = {"debit-roi100-review-v1": {"roi_frac": 1.0, "structures": ("debit",), "type": "advisory",
+                                             "status": "uncalibrated"}}
 
 
 def exit_rule_error(p: dict) -> str | None:
-    """出场规则配置是否合法：未知规则名，或挂在未授权批次（如 user_subjective）上 → 返回原因；没有 exit_rule → None。"""
+    """出场规则配置是否合法：未知规则名、挂在未授权批次（如 user_subjective）上、或结构不适用（卖方规则挂在借记价差上）
+    → 返回原因；没有 exit_rule → None。"""
     r = p.get("exit_rule")
     if not r:
         return None
@@ -69,7 +78,33 @@ def exit_rule_error(p: dict) -> str | None:
         return f"未知出场规则 {r}"
     if p.get("batch") not in EXIT_RULE_BATCHES[r]:
         return f"出场规则 {r} 未授权给批次 {p.get('batch')}（只授权 {', '.join(EXIT_RULE_BATCHES[r])}）"
+    if p.get("structure", "credit") not in EXIT_RULE_STRUCTURES[r]:
+        return (f"出场规则 {r} 不适用于 {p.get('structure', 'credit')} 结构（只适用 {', '.join(EXIT_RULE_STRUCTURES[r])}；"
+                "买方与卖方是两套框架）")
     return None
+
+
+def advisory_view(p: dict, val, assume) -> dict | None:
+    """提示规则的只读评估：→ {rule, roi, risk_cost_usd, max_roi, target_unreachable, triggered}；没挂提示规则 → None。
+    经济量从共享 spread_econ（经 economics）读；估值缺失、或有估值假设（某腿缺可成交价按 0 计）→ roi None、不触发。"""
+    r = p.get("advisory_rule")
+    cfg = ADVISORY_RULES.get(r or "")
+    if not cfg or p.get("structure", "credit") not in cfg["structures"]:
+        return None
+    e = economics(p["side"], p["k_sell"], p["k_buy"], p["entry_credit"], p["qty"], p["fee_round_trip"])
+    L, M = e.get("max_loss_usd"), e.get("max_gain_usd")
+    out = {"rule": r, "roi": None, "risk_cost_usd": L, "max_roi": None, "target_unreachable": None, "triggered": False,
+           "roi_frac": cfg["roi_frac"], "status": cfg["status"]}
+    if not (_finite(L, M) and L > 0):
+        return out
+    out["max_roi"] = round(M / L, 4)
+    out["target_unreachable"] = M / L < cfg["roi_frac"]
+    if _finite(val) and assume is None:
+        pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
+        out["roi"] = round(pnl / L, 4)
+        out["pnl_usd"] = pnl
+        out["triggered"] = out["roi"] >= cfg["roi_frac"]
+    return out
 
 
 def in_rth(t: datetime) -> bool:
@@ -692,10 +727,17 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
                           note="数据成立但自动退出受阻（成本越界/政策不接受）：不写成已平仓，保留报价与损失情景，窗口内重取")
             ev.append(e_)
             return "retry"
+        adv = advisory_view(p, val, assume)
         ev.append({"at": now.isoformat(), "action": "mark" if live else "mark_offhours", "slot": key,
                    "quotes": q, "value": val, "valuation_assumption": assume,
                    "requested_at": req.isoformat(), "returned_at": now.isoformat(),
+                   **({"advisory": adv} if adv else {}),
                    "note": "稀疏检查（非连续止损）" + ("" if live else "；取回时不在常规时段，只估值、不执行")})
+        prompt = None
+        if live and adv and adv["triggered"]:      # 只提示、不平仓（Codex 045 C）；只在常规时段的合格两腿报价上评估
+            prompt = {"at": now.isoformat(), "action": "review_prompt", "slot": key, "rule": adv["rule"], "roi": adv["roi"],
+                      "pnl_usd": adv["pnl_usd"], "risk_cost_usd": adv["risk_cost_usd"], "value": val,
+                      "note": "含费盈利 ≥ 100% 风险成本：提示考虑止盈（未校准；只提示，平不平由用户决定，不自动执行）"}
         pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
         if live and p.get("stop_value") is not None and val >= p["stop_value"]:
             p.update(state="closed_stop", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
@@ -726,6 +768,9 @@ def step(p: dict, now: datetime, *, depth=_depth, session_close=_session_close, 
             p.update(state="closed_time", closed_at=now.isoformat(), close_value=val, pnl_usd=pnl, exit_assumption=assume)
             ev.append({"at": now.isoformat(), "action": "time_exit", "value": val, "pnl": pnl, "exit_rule": p["exit_rule"]})
             return "time_exit"
+        if prompt:
+            ev.append(prompt)
+            return "review_prompt"
         return "mark"
     return "exit_unresolved" if aud else None
 
@@ -1062,8 +1107,101 @@ def void_exit(tid: str, note: str, why: str, now: datetime | None = None) -> dic
 
 
 OUTCOME_ACTIONS = ("enter", "skipped", "missed", "invalid_spec", "stop", "settle", "take_profit", "time_exit")
-MANUAL_ACTIONS = ("manual_close", "close_requested", "exit_voided")
-LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit", "hold_to_expiry", "exit_unresolved") + MANUAL_ACTIONS
+MANUAL_ACTIONS = ("manual_close", "close_requested", "exit_voided", "exit_rule_corrected", "track_started")
+LEDGER_ACTIONS = OUTCOME_ACTIONS + ("settle_audit", "hold_to_expiry", "exit_unresolved", "review_prompt", "track_mark") + MANUAL_ACTIONS
+
+
+def correct_exit_rule(tid: str, note: str, now: datetime | None = None) -> dict:
+    """纠正挂错结构的出场规则（用户 2026-10-14：「买方不是按 90% 啊」；Codex 045 C）。
+    保留原规则名与原登记（事件里写 from），追加纠正事件与生效时刻；在场仓位改挂提示规则（只提示不平仓）。
+    已了结仓位只追加审计事件、状态与盈亏不变；生效之前的盯市不补造任何动作。幂等：已纠正 → 不重复。"""
+    now = now or datetime.now(timezone.utc)
+    if not (isinstance(note, str) and note.strip()):
+        return {"ok": False, "why": "纠正需要用户原话"}
+    with open(LOCK, "a+") as lk:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+        j = json.loads(JOURNAL.read_text("utf-8"))
+        t = next((x for x in j.get("theses", []) if x["id"] == tid), None)
+        p = (t or {}).get("paper")
+        if not p:
+            return {"ok": False, "why": f"{tid} 不存在"}
+        r = p.get("exit_rule")
+        if not r or r not in EXIT_RULE_STRUCTURES or p.get("structure", "credit") in EXIT_RULE_STRUCTURES[r]:
+            return {"ok": True, "unchanged": True, "why": f"出场规则 {r} 与结构 {p.get('structure', 'credit')} 不冲突，无需纠正"}
+        live = p.get("state") in ("planned", "entered")
+        adv = next((k for k, v in ADVISORY_RULES.items() if p.get("structure", "credit") in v["structures"]), None)
+        e = {"at": now.isoformat(), "action": "exit_rule_corrected", "from": r, "to": None,
+             "advisory_rule": adv if live else None, "effective_at": now.isoformat(), "state_at_correction": p["state"],
+             "user_note": note,
+             "why": (f"{r} 是卖方规则，不适用于 {p.get('structure')}；"
+                     + ("改挂只提示的规则、不自动退出；生效前的盯市不补造动作" if live else "仓位已了结：只留审计，不改状态与盈亏"))}
+        p["events"].append(e)
+        if live:
+            p["exit_rule"] = None
+            p["advisory_rule"] = adv
+        _write_journal(j)
+        sync_ledger(j)
+        return {"ok": True, "from": r, "advisory_rule": e["advisory_rule"], "state": p["state"]}
+
+
+TRACK_RULE = "post-close-track-v1"
+
+
+def start_track(tid: str, note: str, now: datetime | None = None) -> dict:
+    """已了结仓位的「仅跟踪」反事实分支（用户 2026-10-14：「把白银平掉模拟仓吧，但是继续观察后续」；Codex 045 C）：
+    之后每个盯市时点按合格保守报价记录「假设未平」的价值与盈亏，到原到期为止。不重开、不占预算、不改实际已实现结果。"""
+    now = now or datetime.now(timezone.utc)
+    if not (isinstance(note, str) and note.strip()):
+        return {"ok": False, "why": "需要用户原话"}
+    with open(LOCK, "a+") as lk:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+        j = json.loads(JOURNAL.read_text("utf-8"))
+        t = next((x for x in j.get("theses", []) if x["id"] == tid), None)
+        p = (t or {}).get("paper")
+        if not p or p.get("state") not in EARLY_EXITS:
+            return {"ok": False, "why": f"{tid} 不存在或不是提前了结的仓位"}
+        if p.get("post_close_track"):
+            return {"ok": True, "unchanged": True, "track": p["post_close_track"]}
+        p["post_close_track"] = {"rule": TRACK_RULE, "from": now.isoformat(), "until_expiry": p["expiry"], "user_note": note}
+        p["events"].append({"at": now.isoformat(), "action": "track_started", **p["post_close_track"],
+                            "note": "仅跟踪：不重开、不占预算、不改实际已实现盈亏"})
+        _write_journal(j)
+        sync_ledger(j)
+        return {"ok": True, "track": p["post_close_track"]}
+
+
+def track_step(p: dict, now: datetime, *, depth=_depth) -> str | None:
+    """仅跟踪分支的一步：到期日（含）之前、常规时段内、每个盯市时点窗口内取一次报价并记 track_mark。
+    缺报价/数据不成立 → value 或假设盈亏为 None（不折零）；不触发任何退出，状态与 pnl_usd 永不改变。"""
+    tr = p.get("post_close_track")
+    if not tr or p.get("state") not in EARLY_EXITS:
+        return None
+    et = now.astimezone(ET)
+    today, exp = et.date(), date.fromisoformat(p["expiry"])
+    start = _parse(tr["from"])
+    if today > exp or not in_rth(now) or start is None:
+        return None
+    ev = p.setdefault("events", [])
+    done = {e.get("slot") for e in ev if e.get("action") == "track_mark"}
+    for slot in p.get("mark_slots_et") or []:
+        key = f"{today.isoformat()} {slot}"
+        t0 = datetime.combine(today, _hm(slot), tzinfo=ET)
+        if key in done or now < t0 or now >= t0 + _td(minutes=SLOT_WINDOW_MIN) or t0 < start:
+            continue
+        q = depth([p["sell"], p["buy"]])
+        back = max(now, _clock())
+        v = close_value(q, p)
+        val, assume = v if v else (None, None)
+        prob = "报价不可用" if v is None else (exit_assessment(q, p, val)["data_integrity"] or None)
+        ok = v is not None and not prob and assume is None
+        hyp = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2) if ok else None
+        ev.append({"at": back.isoformat(), "action": "track_mark", "slot": key, "rule": tr["rule"], "quotes": q,
+                   "value": val if ok else None, "valuation_assumption": assume, "data_problem": prob,
+                   "hypothetical_pnl_usd": hyp, "actual_pnl_usd": p.get("pnl_usd"),
+                   "late_return": back >= t0 + _td(minutes=SLOT_WINDOW_MIN),
+                   "note": "仅跟踪（假设未平）：不重开、不执行、不改实际已实现盈亏"})
+        return "track_mark"
+    return None
 
 
 def event_id(thesis_id: str, e: dict) -> str:
@@ -1225,7 +1363,8 @@ def tick(now: datetime | None = None, *, depth=None) -> list[str]:
                     continue
             pnow = max(now, _clock())                  # 每个仓位按自己的请求时刻（032 R1：整批复用开始时刻会让排在后面的仓位倒填）
             try:
-                a = step(p, pnow, **({"depth": depth} if depth else {})) or audit_settlement(p, pnow) or hold_to_expiry(p, pnow)
+                a = step(p, pnow, **({"depth": depth} if depth else {})) or audit_settlement(p, pnow) or hold_to_expiry(p, pnow) \
+                    or track_step(p, pnow, **({"depth": depth} if depth else {}))
             except Exception as e:                      # 取数失败：留痕并在下次唤醒重试
                 p.setdefault("events", []).append({"at": pnow.isoformat(), "action": "error", "error": f"{type(e).__name__}: {e}"[:200]})
                 a = "error"
@@ -1275,6 +1414,14 @@ def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
     if cmd == "close":                                   # python3 scripts/paper_trades.py close <id> "用户原话"
         r = manual_close(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "")
+        print(json.dumps(r, ensure_ascii=False))
+        return 0 if r.get("ok") else 1
+    if cmd == "correct-exit-rule":                       # python3 scripts/paper_trades.py correct-exit-rule <id> "用户原话"
+        r = correct_exit_rule(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "")
+        print(json.dumps(r, ensure_ascii=False))
+        return 0 if r.get("ok") else 1
+    if cmd == "track":                                   # python3 scripts/paper_trades.py track <id> "用户原话"
+        r = start_track(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "")
         print(json.dumps(r, ensure_ascii=False))
         return 0 if r.get("ok") else 1
     if cmd == "void-exit":                               # python3 scripts/paper_trades.py void-exit <id> "用户原话" "作废理由"

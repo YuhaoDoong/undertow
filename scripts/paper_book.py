@@ -32,6 +32,21 @@ CLOSED = ("settled", "closed_stop", "closed_manual", "closed_tp", "closed_time")
 HOW = {"settled": "到期结算", "closed_stop": "止损", "closed_manual": "用户主动平仓", "closed_tp": "规则止盈", "closed_time": "规则时间出场"}
 
 
+def _advisory_cell(r: dict, pnl, note) -> str:
+    """借记价差的提示规则（debit-roi100-review-v1，只提示不平仓）：含费盈利 / 含费风险成本；估值有假设（缺腿按 0）不算。"""
+    if r.get("structure") != "debit" or not r.get("advisory_rule"):
+        return ""
+    e = r["econ"]
+    L, M = e.get("max_loss_usd"), e.get("max_gain_usd")
+    if not (_num(L) and _num(M) and L > 0):
+        return f"；提示 {r['advisory_rule']}：风险成本未知"
+    cap = "（最大可达 %.0f%%，100%% 不可达）" % (M / L * 100) if M / L < 1 else ""
+    if pnl is None or note:
+        return f"；盈利/风险成本 —（估值不完整）{cap}"
+    roi = pnl / L
+    return f"；盈利/风险成本 {roi:.0%}" + ("　🔔 ≥100% 考虑止盈（只提示）" if roi >= 1 else "") + cap
+
+
 def _num(x) -> bool:
     return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
@@ -96,6 +111,8 @@ def classify(theses: list) -> dict:
                "exit_assumption": p.get("exit_assumption") or _close_assumption(p),
                "econ": p.get("economics") or {}, "pnl": p.get("pnl_usd"), "stop": p.get("stop_value"),
                "exit_rule": p.get("exit_rule"), "strike_rule": p.get("strike_rule"), "entered_at": p.get("entered_at"),
+               "advisory_rule": p.get("advisory_rule"), "track": p.get("post_close_track"),
+               "track_marks": [e for e in p.get("events") or [] if e.get("action") == "track_mark"],
                "reason": p.get("skip_reason") or p.get("invalid_reason"), "mark": _last_mark(p),
                "close_request": p.get("close_request"), "result_under_review": p.get("result_under_review"),
                "underlying": p.get("underlying"), "closed_at": p.get("closed_at"), "settle_close": (p.get("settle") or {}).get("close"),
@@ -318,9 +335,19 @@ def render(day: str, c: dict, sm: dict, live: dict, generated_at: str, legacy: l
         md.append(f"| {r['id']}<br>{_struct(r)} | {r['batch']} | {_amt(r)} | ${e.get('max_gain_usd')} / ${e.get('max_loss_usd')} | "
                   f"{e.get('breakeven')} | {r['stop'] if r['stop'] is not None else '不设'} | {val if val is not None else '—'}（{when}{'；' + note if note else ''}） | "
                   f"{'$%+.2f' % pnl if pnl is not None else '—'} | {r['exit_rule'] or ('用户主观' if r['batch'] == 'user_subjective' else '—')}"
-                  f"{'；⏳ 平仓请求待开盘执行' if r['close_request'] else ''} |")
+                  f"{_advisory_cell(r, pnl, note)}{'；⏳ 平仓请求待开盘执行' if r['close_request'] else ''} |")
     if not c["open"]:
         md.append("| （无） | | | | | | | | |")
+    tr = [r for r in c["closed"] if r.get("track")]
+    if tr:
+        md += ["", "## 已平仓位的后续跟踪（仅跟踪：假设未平，不重开、不改实际盈亏）", "",
+               "| 仓位 | 实际了结盈亏 | 跟踪起点 | 最近一次跟踪（时点） | 假设未平的含费盈亏 | 有效 / 共记录 |", "|---|---|---|---|---|---|"]
+        for r in tr:
+            ms = r["track_marks"]
+            ok = [m for m in ms if _num(m.get("hypothetical_pnl_usd"))]
+            last = ok[-1] if ok else None
+            md.append(f"| {r['id']} | {'$%+.2f' % r['pnl'] if _num(r['pnl']) else '—'} | {r['track']['from'][:16]} | "
+                      f"{(last or {}).get('slot') or '—'} | {'$%+.2f' % last['hypothetical_pnl_usd'] if last else '—'} | {len(ok)} / {len(ms)} |")
     md += ["", "## 待入场", ""] + [f"- {r['id']}：{_struct(r)}（{r['batch']}，{r['strike_rule'] or '固定档位'}）" for r in c["planned"]] + \
           ([] if c["planned"] else ["- （无）"])
     md += ["", "## 已了结", "", "| 仓位 | 批次 | 了结方式 | 入场权利金 | 含费盈亏 | 含费最大亏损 | 盈亏/最大亏损 | 若持有到期（反事实） |",

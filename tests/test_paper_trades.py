@@ -586,14 +586,97 @@ def test_user_tp90_threshold_equality_and_nonpositive_gain(qty):
     assert pt.step(z, at(30, 9, 46), depth=q(0.03, 0.04, 0.01, 0.02)) == "mark"     # 含费最大收益 ≤ 0：不触发
 
 
-def test_user_tp90_rule_on_debit_spread():
+def test_user_tp90_on_debit_is_not_applicable_never_auto_exits():
+    """用户 2026-10-14「买方不是按 90% 啊」；Codex 045 C。旧测试把「借记价差按卖方 90% 止盈」写成了预期行为。
+    现在：结构化报「不适用」一次、绝不自动退出；新登记（planned）直接 invalid。"""
     p = _debit(); pt.step(p, at(30, 10, 6), depth=q(1.0, 1.1, 5.0, 5.2))                   # 付 5.2 − 1.0 = 4.2，宽 10
     assert p["state"] == "entered"
     p.update(exit_rule="user-tp90-v1", batch="user_subjective")
-    mg = pt.economics(p["side"], p["k_sell"], p["k_buy"], p["entry_credit"], 1, 3.2)["max_gain_usd"]   # 576.8
-    assert pt.step(p, datetime(2026, 10, 1, 9, 46, tzinfo=ET), depth=q(4.0, 4.2, 13.5, 13.7)) == "mark"   # 价值 9.3 → 506.8
-    assert pt.step(p, datetime(2026, 10, 1, 15, 46, tzinfo=ET), depth=q(4.0, 4.1, 13.8, 14.0)) == "take_profit"  # 9.7 → 546.8 ≥ 519.1
-    assert p["pnl_usd"] >= 0.9 * mg
+    assert pt.step(p, datetime(2026, 10, 1, 9, 46, tzinfo=ET), depth=q(4.0, 4.1, 13.8, 14.0)) == "exit_rule_config_error"
+    assert "不适用" in p["events"][-1]["why"] and p["state"] == "entered"
+    assert pt.step(p, datetime(2026, 10, 1, 15, 46, tzinfo=ET), depth=q(4.0, 4.1, 13.8, 14.0)) == "mark"   # 9.7 也不平
+    assert p["state"] == "entered"
+    assert "不适用" in pt.validate_spec(_debit(exit_rule="user-tp90-v1", batch="user_subjective"))
+    assert pt.validate_spec(_p(exit_rule="user-tp90-v1", batch="user_subjective")) is None                # 卖方照旧
+
+
+def _debit_entered(**kw):
+    p = _debit(**kw); pt.step(p, at(30, 10, 6), depth=q(1.0, 1.1, 5.0, 5.2))              # 付 4.2 → L = 423.2，M = 576.8
+    p.update(batch="user_subjective", advisory_rule="debit-roi100-review-v1")
+    return p
+
+
+def test_debit_roi100_prompt_only_never_closes():
+    p = _debit_entered()
+    # 100% 阈值：pnl = (V − 4.2)·100 − 3.2 ≥ 423.2 ⇔ V ≥ 8.464
+    assert pt.step(p, datetime(2026, 10, 1, 9, 46, tzinfo=ET), depth=q(4.0, 4.1, 12.5, 12.6)) == "mark"   # V 8.4 → 99.2%
+    a = p["events"][-1]["advisory"]
+    assert a["roi"] == pytest.approx(416.8 / 423.2, abs=1e-4) and not a["triggered"] and a["target_unreachable"] is False
+    assert pt.step(p, datetime(2026, 10, 1, 15, 46, tzinfo=ET), depth=q(4.0, 4.1, 12.6, 12.7)) == "review_prompt"  # V 8.5
+    e = p["events"][-1]
+    assert e["action"] == "review_prompt" and e["roi"] >= 1 and e["pnl_usd"] == pytest.approx(426.8)
+    assert p["state"] == "entered" and "pnl_usd" not in p or p.get("pnl_usd") is None      # 只提示：状态与盈亏都不动
+
+
+def test_debit_roi100_missing_long_bid_or_offhours_does_not_prompt():
+    p = _debit_entered()
+    assert pt.step(p, datetime(2026, 10, 1, 9, 46, tzinfo=ET), depth=q(4.0, 4.1, None, 12.7)) == "retry"     # 多头腿缺 bid
+    assert not any(e.get("action") == "review_prompt" for e in p["events"])
+    w = _debit_entered()
+    assert pt.step(w, datetime(2026, 10, 3, 9, 46, tzinfo=ET), depth=q(4.0, 4.1, 12.6, 12.7)) == "mark"      # 周六：只估值
+    assert w["events"][-1]["action"] == "mark_offhours" and not any(e.get("action") == "review_prompt" for e in w["events"])
+
+
+def test_debit_roi100_unreachable_flagged_not_lowered():
+    """付 7.5、宽 10：含费最大收益 246.8 / 风险成本 753.2 = 33% < 100% → target_unreachable，不触发、不改阈值。"""
+    p = _debit(); pt.step(p, at(30, 10, 6), depth=q(1.0, 1.1, 8.4, 8.5))
+    p.update(batch="user_subjective", advisory_rule="debit-roi100-review-v1")
+    assert p["entry_credit"] == -7.5
+    pt.step(p, datetime(2026, 10, 1, 9, 46, tzinfo=ET), depth=q(0.0, 0.05, 9.95, 10.0))
+    a = p["events"][-1]["advisory"]
+    assert a["target_unreachable"] is True and a["max_roi"] == pytest.approx(246.8 / 753.2, abs=1e-4) and not a["triggered"]
+
+
+def test_correct_exit_rule_keeps_history_and_only_touches_named_position(tmp_path, monkeypatch):
+    d = _debit_entered(); d.update(exit_rule="user-tp90-v1", advisory_rule=None)
+    c = _entered(); c.update(exit_rule="user-tp90-v1", batch="user_subjective", expiry="2026-10-16")
+    x = _debit_entered(); x.update(exit_rule="user-tp90-v1", advisory_rule=None, state="closed_manual", pnl_usd=119.8)
+    load = _env(tmp_path, monkeypatch, [{"id": "D", "execution": "模拟", "paper": d}, {"id": "C", "execution": "模拟", "paper": c},
+                                        {"id": "X", "execution": "模拟", "paper": x}])
+    assert not pt.correct_exit_rule("D", "")["ok"]                                         # 需要用户原话
+    r = pt.correct_exit_rule("D", "用户：买方不是按 90%", datetime(2026, 10, 14, 11, 0, tzinfo=ET))
+    st = load()
+    assert r["ok"] and st["D"]["paper"]["exit_rule"] is None and st["D"]["paper"]["advisory_rule"] == "debit-roi100-review-v1"
+    e = st["D"]["paper"]["events"][-1]
+    assert e["action"] == "exit_rule_corrected" and e["from"] == "user-tp90-v1" and e["effective_at"].startswith("2026-10-14")
+    assert pt.correct_exit_rule("D", "再来")["unchanged"]                                  # 幂等
+    assert pt.correct_exit_rule("C", "x")["unchanged"] and load()["C"]["paper"]["exit_rule"] == "user-tp90-v1"   # 卖方不动
+    pt.correct_exit_rule("X", "用户：买方不是按 90%")
+    xs = load()["X"]["paper"]
+    assert xs["state"] == "closed_manual" and xs["pnl_usd"] == 119.8 and xs["exit_rule"] == "user-tp90-v1"   # 已了结只留审计
+    assert xs["events"][-1]["action"] == "exit_rule_corrected" and xs["events"][-1]["advisory_rule"] is None
+    led = (tmp_path / "ledger.jsonl").read_text()
+    assert sum('"action": "exit_rule_corrected"' in ln.split('"evidence"')[0] for ln in led.splitlines()) == 2
+
+
+def test_post_close_track_records_hypothetical_never_reopens(tmp_path, monkeypatch):
+    p = _debit_entered()
+    load = _env(tmp_path, monkeypatch, [{"id": "S", "execution": "模拟", "paper": p}])
+    assert pt.manual_close("S", "用户：平白银", datetime(2026, 10, 1, 10, 5, tzinfo=ET), depth=q(4.0, 4.1, 12.6, 12.7))["ok"]
+    assert not pt.start_track("S", "")["ok"]
+    assert pt.start_track("S", "用户：继续观察后续", datetime(2026, 10, 1, 10, 6, tzinfo=ET))["ok"]
+    assert pt.start_track("S", "again")["unchanged"]
+    st = load()["S"]["paper"]; real = st["pnl_usd"]
+    assert pt.track_step(st, datetime(2026, 10, 1, 15, 46, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1)) == "track_mark"
+    m = st["events"][-1]
+    assert m["hypothetical_pnl_usd"] == pytest.approx((9.9 - 4.2) * 100 - 3.2) and m["actual_pnl_usd"] == real
+    assert pt.track_step(st, datetime(2026, 10, 1, 15, 50, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1)) is None   # 同一时点不重复
+    assert pt.track_step(st, datetime(2026, 10, 2, 9, 46, tzinfo=ET), depth=q(3.0, 3.1, None, 13.1)) == "track_mark"
+    assert st["events"][-1]["hypothetical_pnl_usd"] is None and st["events"][-1]["value"] is None      # 缺多头 bid 不折零
+    assert pt.track_step(st, datetime(2026, 10, 31, 9, 46, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1)) is None   # 过了到期
+    assert pt.track_step(st, datetime(2026, 10, 3, 9, 46, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1)) is None    # 周六
+    assert st["state"] == "closed_manual" and st["pnl_usd"] == real                         # 从不重开、不改实际
+    assert pt.start_track("NONE", "x")["ok"] is False
 
 
 def test_stop_crossed_but_cost_outside_payoff_is_blocked_not_bad_data():

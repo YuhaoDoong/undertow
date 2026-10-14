@@ -125,3 +125,15 @@ def test_audit_view_lists_voided_exit_without_double_counting():
     md, _ = pb.render("2026-10-07", c, sm, {}, "now")
     assert "审计视图：被作废的退出" in md and "$-288.20" in md and "B 缺 bid" in md
     assert sm["rule"]["pnl_usd"] == 0.0 and sm["rule"]["open"] == 1                 # 不进合计、仍按在场计
+
+
+def test_advisory_cell_debit_roi_and_unreachable():
+    """Codex 045 C：借记价差在场表显示「盈利/风险成本」；≥100% 标提示（只提示）；最大可达 <100% 标不可达；估值有假设不算。"""
+    from scripts import paper_book as pb
+    r = {"structure": "debit", "advisory_rule": "debit-roi100-review-v1", "econ": {"max_loss_usd": 117.2, "max_gain_usd": 282.8}}
+    assert "102%" in pb._advisory_cell(r, 119.8, None) and "考虑止盈" in pb._advisory_cell(r, 119.8, None)
+    assert "考虑止盈" not in pb._advisory_cell(r, 50.0, None)
+    assert "估值不完整" in pb._advisory_cell(r, -918.2, "buy_bid_missing→按 0 计")
+    u = {**r, "econ": {"max_loss_usd": 753.2, "max_gain_usd": 246.8}}
+    assert "不可达" in pb._advisory_cell(u, 10.0, None)
+    assert pb._advisory_cell({**r, "structure": "credit"}, 100.0, None) == ""

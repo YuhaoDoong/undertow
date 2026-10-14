@@ -1646,7 +1646,9 @@ def cmd_exec(args) -> int:
         op = {"insufficient_equity": "  ⛔ 权益不足（开不了）", "insufficient_buying_power": "  ⛔ 购买力不足（开不了）",
               "unverified": "  · 资金/权限未核实", "capital_ok_permissions_unverified": "  · 资金够、权限未核实"}.get(
             r.get("operation_status"), "")
-        print(f"  {r['instrument']:7s} {r['leg_id']:5s} 政策预算 {r['budget_status']} {r['n']} 组{op}  {econ}  {r['notes'][0]}")
+        pf = r.get("payoff_floor") or {}
+        pfx = "" if not pf else ("  收益风险比 ✓" if pf.get("status") == "pass" else f"  收益风险比 ✗ {pf.get('note') or pf.get('status')}")
+        print(f"  {r['instrument']:7s} {r['leg_id']:5s} 政策预算 {r['budget_status']} {r['n']} 组{op}{pfx}  {econ}  {r['notes'][0]}")
     print(f"  （结果含账户金额，只写 {out_dir}/，已 gitignore）")
     return 0
 

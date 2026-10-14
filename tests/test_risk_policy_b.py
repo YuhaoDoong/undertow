@@ -186,3 +186,9 @@ def test_shadow_adapter_keeps_insufficient_equity():
                          policy=rp.POLICY_B, open_positions=[], pause={"latched": False})
     assert r["budget_status"] == "pass" and r["policy_allowed_units"] == 1
     assert r["operation_status"] == "insufficient_equity"
+    # 收 80 付费 3.2：含费最大收益 76.8 / 最大亏损 123.2 = 62% → 下限通过；实盘预检 = 预算 + 下限
+    assert r["payoff_floor"]["status"] == "pass" and r["live_precheck"] == "pass"
+    with patch.object(sx.sh, "window_leg", return_value={"status": "valid", "credit": {"conservative": 7}}):
+        r = sx.candidate(row, leg, net_assets=500, account_open_max_loss=0, cluster_open={},
+                         policy=rp.POLICY_B, open_positions=[], pause={"latched": False})
+    assert r["budget_status"] == "pass" and r["payoff_floor"]["status"] == "fail" and r["live_precheck"] == "fail"

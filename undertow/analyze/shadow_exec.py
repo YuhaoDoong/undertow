@@ -65,8 +65,12 @@ def candidate(row: dict, leg: dict, *, net_assets, account_open_max_loss, cluste
         n, notes = b["allowed_units"], b["reasons"]
         status = {"pass": "pass", "fail": "fail"}.get(b["budget_status"], "unknown")
         # Codex 044 P2-6：政策组数与资金能力分开保留；insufficient_equity 等确定状态不能只剩 notes 里的人读文字
+        # 实盘最终预检 = B 预算 + 收益风险比下限（Codex 044 E3）。下限不改 budget_status（影子 v5 研究预算按预登记版本复现），
+        # 单列 live_precheck：两项都过才是 pass；任一 incomplete → incomplete。
+        g = rp.payoff_floor(round(credit - fee, 4), max_loss)
+        pre = "fail" if "fail" in (status, g["status"]) else ("pass" if (status, g["status"]) == ("pass", "pass") else "incomplete")
         return {**base, **econ, "budget_status": status, "n": n, "policy_allowed_units": b["policy_allowed_units"],
-                "operation_status": b["operation_status"], "budget_checks": b["checks"],
+                "operation_status": b["operation_status"], "payoff_floor": g, "live_precheck": pre, "budget_checks": b["checks"],
                 "notes": notes + ["n 为理论预算上限，互斥备选，不可跨候选相加；券商执行性未核实"]}
     n, notes = rp.max_units(net_assets=net_assets, unit_max_loss=max_loss, unit_stop_loss=stop_loss,
                             cluster_open_max_loss=cluster_open.get(base["cluster"], 0.0),

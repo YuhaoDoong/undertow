@@ -1,0 +1,31 @@
+{
+ "run_id": "run2",
+ "version": "ps-entry-pair-v1-20261015",
+ "command": "scripts/ps_entry_pair.py --run-id run2",
+ "generated_at": "2026-10-15T11:02:53.568264+00:00",
+ "git_head": "d14849eda9a97d3f4ba11c86dcbb1287573d8ecf",
+ "config_sha256": "13280b6b01caf95ad43c87e09453eb2e0388a41083559db1b8462b21977d2779",
+ "code_sha256": {
+  "undertow/analyze/price_structure.py": "91c21b7ac5a14fc2a00acef6da574d7e07d37372670ea492e463d9b36069db54",
+  "scripts/ps_entry_pair.py": "aaf1ab60b3fcf3c7d012956a98ad809cb8875cbd8115376234547a2c8f0e7a01",
+  "scripts/ps_trigger_causal.py": "631aab9b1ac943c9dbd83d46f8a0ee2e00a4b02d62ed98fdb4fb614bc4ddab03",
+  "scripts/ps_explore.py": "a9224d980a4929c1d96a3b8cdee7bdeb61184535cfd03862921e172a90ea8b9c"
+ },
+ "input_sha256": {
+  "GLD": "c313f1d34d52e6886309c591255af0ba318f31f681a9626c5d0952f1b5798c19",
+  "SLV": "23b960f8f6c57b86b9eba3f31c7fe0c9f0c7acacd968fba150622db57eab208d",
+  "USO": "1c8453a5aa812c6a2c0a8bb6696b4735b711a3bc13468e7daa5f4b70d0a5ca2e",
+  "QQQ": "c20a8cb527fbfcc64854d63deb6f26699f0d3af2e71966720dfe047ce8c50446",
+  "SPY": "72a5f9e36d839708a8d885c9d6a7e06cf8a167d98ec9f9f66de21c2fe13a035a",
+  "GOOGL": "5a4b7db17a096b55da498c6ef7a6a22ba99bae50984739ab8c759cd4e6630a33",
+  "AAPL": "34560292b1f8026eab4776bff21d2ad08b11a0a6f5286f8dff671ef764256d04",
+  "MSFT": "c352a8575cd703023df9a140f4cd3463af5354ec668e1d5d6ede07338bc833c7",
+  "NVDA": "f45c30ac7f02fd9227325e1b443800863755b48fd9032bb96f00337b461dcfca",
+  "AMD": "ea58ba3727b60d16cfd252955cb3bf2951b9d52108d7c52139fd514e209b331b",
+  "INTC": "4d7549ca56ddc4f41fb8b629add83e5f8ea3035d16e6303d62012ac73d13e91c",
+  "TSLA": "462ac183408aa215186a81a413a8c1445e1372cc54cf1cc8c3470742498b2446",
+  "GC=F": "d69f9babf6be4d3da3bed123d6346d26ce0d53d10cc1b812944e7ddd812049ca",
+  "SI=F": "a23f42e38629c7d19477d304e15d18c8a8056b2c3aedb55ec13fe4e9d394e4af"
+ },
+ "n_rows": 840
+}

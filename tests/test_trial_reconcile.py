@@ -13,7 +13,17 @@ from undertow.collect import trial_store as ts
 
 START = "2026-10-15T14:00:00+00:00"
 NOW = "2026-10-21T12:00:00+00:00"
-READS = []                                                     # 「已提供读数且无问题」
+FULL = object()                                                # 默认：按传入行数生成一套合法读段（Codex 049：空 reads 不再算完整）
+
+
+def full_reads(flows, exs, start="2026-10-14", end="2026-10-22"):
+    """两段首尾相接、覆盖 START–NOW、计数与传入行数一致的读数记录 + 当日段（0 行）。"""
+    mid = "2026-10-18"
+    return [{"what": "cash-flow", "start": start, "end": mid, "n": len(flows), "ok": True},
+            {"what": "cash-flow", "start": "2026-10-19", "end": end, "n": 0, "ok": True},
+            {"what": "executions", "start": start, "end": mid, "n": len(exs), "ok": True},
+            {"what": "executions", "start": "2026-10-19", "end": end, "n": 0, "ok": True},
+            {"what": "executions-today", "start": "today", "end": "today", "n": 0, "ok": True}]
 L, S = "USO261030C158000", "USO261030C162000"
 X = "SLV261030P50000"
 
@@ -60,9 +70,9 @@ def bull_call(close=True, fees_close=True):
     return flows, exs
 
 
-def run(flows, exs, positions=None, cov=START, now=NOW, known=None, reads=READS):
+def run(flows, exs, positions=None, cov=START, now=NOW, known=None, reads=FULL):
     return tr.reconcile(cash_flow=flows, positions=positions or {}, executions=exs, coverage_through=cov,
-                        trial_start=START, now=now, known_trades=known, reads=reads)
+                        trial_start=START, now=now, known_trades=known, reads=full_reads(flows, exs, end=now[:10]) if reads is FULL else reads)
 
 
 # —— 基本路径 ——
@@ -361,3 +371,155 @@ def test_today_executions_overlap_handling():
     reads = []
     _executions_since(fake([r1, r2], [r2, r1, dict(r1, order_id="c")]), START, NOW, reads=reads)
     assert reads[-1]["ok"] is False                                                                   # 部分重叠：读数不完整
+
+
+# —— Codex 049 A：金额符号、整数张数、美东日期 ——
+
+def cycle049(day=15, sell_px=0.9, fee_day=None, fee_amt=-1.0, buy_amt=None, qty="1"):
+    """049 探针同形：当日 15:00Z 买 1@1.00、16:00Z 卖 1@sell_px，次日（或 fee_day）各一条费用。"""
+    t1, t2 = f"2026-10-{day:02}T15:00:00Z", f"2026-10-{day:02}T16:00:00Z"
+    tf = f"2026-10-{fee_day or day + 1:02}T10:00:00Z"
+    flows = [cash(X, "buy", -100.0 if buy_amt is None else buy_amt, t1), cash(X, "sell", sell_px * 100, t2),
+             fee(X, "buy", fee_amt, tf), fee(X, "sell", fee_amt, tf)]
+    exs = [dict(ex(f"{day}b", f"{X}.US", "buy", 1, 1.0, t1), quantity=qty),
+           dict(ex(f"{day}s", f"{X}.US", "sell", 1, sell_px, t2), quantity=qty)]
+    return flows, exs
+
+
+def test_valid_cycle_net_minus_12():
+    out = run(*cycle049())
+    assert out["can_advance_coverage"] and [g["net_pnl_usd"] for g in out["groups"]] == [-12.0] and len(out["records"]) == 1
+
+
+@pytest.mark.parametrize("buy_amt", [100.0, 0.0])
+def test_buy_amount_with_wrong_sign_or_zero_blocks(buy_amt):
+    out = run(*cycle049(buy_amt=buy_amt))            # 旧版：+100 买入被 abs() 配上张数，净额 +188 且可推进
+    assert not out["can_advance_coverage"] and out["records"] == []
+    assert any("符号不符或为零" in b for b in out["blockers"])
+
+
+def test_sell_amount_negative_blocks():
+    flows, exs = cycle049()
+    flows[1]["balance"] = "-90.00"
+    out = run(flows, exs)
+    assert not out["can_advance_coverage"] and out["records"] == []
+
+
+def test_zero_fee_blocks():
+    out = run(*cycle049(fee_amt=0.0))
+    assert not out["can_advance_coverage"] and out["records"] == []
+
+
+@pytest.mark.parametrize("qty", ["0.7", "1.5", "nan", "inf"])
+def test_fractional_or_nonfinite_quantity_blocks_not_rounded(qty):
+    out = run(*cycle049(qty=qty))                     # 旧版：0.7 被 round 成 1，照样 −12 可推进
+    assert not out["can_advance_coverage"] and out["records"] == []
+
+
+def test_integer_quantity_as_float_string_ok():
+    out = run(*cycle049(qty="1.0"))
+    assert out["can_advance_coverage"] and out["groups"][0]["net_pnl_usd"] == -12.0
+
+
+def test_multi_contract_quantity_still_ok():
+    flows, exs = single("m1", X, "buy", 3, 1.0, "2026-10-15T15:00:00Z")
+    f2, e2 = single("m2", X, "sell", 3, 1.2, "2026-10-16T15:00:00Z")
+    flows += f2 + [fee(X, "buy", -3.0, "2026-10-16T10:00:00Z"), fee(X, "sell", -3.0, "2026-10-17T10:00:00Z")]
+    out = run(flows, exs + e2)
+    assert out["can_advance_coverage"] and out["groups"][0]["net_pnl_usd"] == 54.0
+
+
+def test_fractional_broker_position_is_hard_block():
+    out = run(*bull_call(close=False), positions={f"{L}.US": 0.5, f"{S}.US": -1})
+    assert not out["can_advance_coverage"] and any("不是有限整数" in b for b in out["blockers"])
+
+
+def test_same_instant_any_offset_same_et_date():
+    from datetime import datetime
+    ts_ = ["2026-10-15T22:00:00+00:00", "2026-10-16T06:00:00+08:00", "2026-10-15T18:00:00-04:00"]
+    assert {tr._et_date(datetime.fromisoformat(s)) for s in ts_} == {tr.date(2026, 10, 15)}
+
+
+@pytest.mark.parametrize("utc,et", [
+    ("2026-03-08T04:30:00+00:00", "2026-03-07"),      # 切换前仍是 EST（−5）：23:30 3/7；旧版按 UTC 日期用 −4 → 3/8
+    ("2026-03-08T07:30:00+00:00", "2026-03-08"),      # 07:00Z 起 EDT
+    ("2026-11-01T04:30:00+00:00", "2026-11-01"),      # 仍是 EDT（−4）：00:30 11/1；旧版按 UTC 日期用 −5 → 10/31
+    ("2026-11-01T06:30:00+00:00", "2026-11-01"),      # 06:00Z 起 EST：01:30 11/1
+    ("2026-11-02T04:30:00+00:00", "2026-11-01"),      # EST：23:30 11/1
+])
+def test_et_date_dst_boundaries(utc, et):
+    from datetime import datetime
+    assert str(tr._et_date(datetime.fromisoformat(utc))) == et
+
+
+def test_expiry_close_utc_follows_dst():
+    assert tr.expiry_close_utc(tr.date(2026, 10, 30)).isoformat() == "2026-10-30T20:00:00+00:00"
+    assert tr.expiry_close_utc(tr.date(2026, 11, 6)).isoformat() == "2026-11-06T21:00:00+00:00"
+
+
+def test_fee_bucket_same_regardless_of_offset_notation():
+    """同一笔流水/成交时刻改写成 +08:00 表示，结果必须与 Z 表示一致。"""
+    a = run(*cycle049())
+    flows, exs = cycle049()
+    for r in flows + exs:
+        from datetime import datetime, timedelta, timezone
+        r["time"] = datetime.fromisoformat(r["time"].replace("Z", "+00:00")).astimezone(timezone(timedelta(hours=8))).isoformat()
+    b = run(flows, exs)
+    assert b["can_advance_coverage"] and [g["net_pnl_usd"] for g in b["groups"]] == [g["net_pnl_usd"] for g in a["groups"]]
+
+
+# —— Codex 049 B：读数证据、费用归属 ——
+
+def test_empty_reads_is_not_complete_evidence():
+    out = run(*cycle049(), reads=[])
+    assert not out["can_advance_coverage"] and out["evidence"]["reads"] == "insufficient"
+
+
+def test_zero_trade_window_with_full_reads_passes():
+    out = run([], [])
+    assert out["can_advance_coverage"] and out["status"] == "complete" and out["evidence"]["reads"] == "declared-segments-read"
+    assert out["evidence"]["assumptions"]
+
+
+def _mut(fn):
+    flows, exs = cycle049()
+    r = full_reads(flows, exs)
+    fn(r)
+    return run(flows, exs, reads=r)
+
+
+@pytest.mark.parametrize("name,fn", [
+    ("缺 cash-flow", lambda r: r.__delitem__(slice(0, 2))),
+    ("缺当日段", lambda r: r.pop()),
+    ("缺口", lambda r: r[1].update(start="2026-10-20")),
+    ("重叠", lambda r: r[3].update(start="2026-10-18")),
+    ("没覆盖 now", lambda r: r[1].update(end="2026-10-20")),
+    ("没覆盖起点", lambda r: r[0].update(start="2026-10-16")),
+    ("计数对不上", lambda r: r[0].update(n=r[0]["n"] + 1)),
+    ("成交计数对不上", lambda r: r[2].update(n=0)),
+    ("行数非整数", lambda r: r[0].update(n="4")),
+    ("日期不可解析", lambda r: r[0].update(start="a")),
+])
+def test_read_evidence_defects_block(name, fn):
+    out = _mut(fn)
+    assert not out["can_advance_coverage"] and out["evidence"]["reads"] == "insufficient", name
+
+
+def test_fifo_fee_attribution_not_identifiable_blocks():
+    """049 探针：两次往返毛利各 +5，费用 −1/−9 分别 10/21、10/22 入账；FIFO 给 +3/−13，反过来 −13/+3 同样合法 → 阻断。"""
+    f1, e1 = cycle049(15, sell_px=1.05, fee_day=21, fee_amt=-1.0)
+    f2, e2 = cycle049(20, sell_px=1.05, fee_day=22, fee_amt=-9.0)
+    out = run(f1 + f2, e1 + e2, now="2026-10-23T12:00:00+00:00")
+    assert not out["can_advance_coverage"] and out["records"] == []
+    assert all(g["state"] == "ambiguous" and any("归属不可识别" in f for f in g["flags"]) for g in out["groups"])
+
+
+def test_fifo_equal_fees_or_forced_order_passes():
+    f1, e1 = cycle049(15, sell_px=1.05, fee_day=21, fee_amt=-1.0)
+    f2, e2 = cycle049(20, sell_px=1.05, fee_day=22, fee_amt=-1.0)       # 金额相同：怎么归属结果都一样
+    out = run(f1 + f2, e1 + e2, now="2026-10-23T12:00:00+00:00")
+    assert out["can_advance_coverage"] and [g["net_pnl_usd"] for g in out["groups"]] == [3.0, 3.0]
+    f1, e1 = cycle049(15, sell_px=1.05, fee_day=16, fee_amt=-1.0)       # 第一笔费用在第二笔成交之前入账：只有一种合法归属
+    f2, e2 = cycle049(20, sell_px=1.05, fee_day=22, fee_amt=-9.0)
+    out = run(f1 + f2, e1 + e2, now="2026-10-23T12:00:00+00:00")
+    assert out["can_advance_coverage"] and [g["net_pnl_usd"] for g in out["groups"]] == [3.0, -13.0]

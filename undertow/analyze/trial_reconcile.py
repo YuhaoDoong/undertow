@@ -1,5 +1,11 @@
 """实盘试行：券商资金流水 + 成交 → 逻辑交易的自动对账（只读候选；纯函数，无 I/O）。
 
+v2.1（Codex 049）：① 期权流水金额符号必须与类型一致（买入负、卖出正），零额/反号不猜成普通成交（可能是冲正）；
+② 成交与持仓张数必须是有限整数（"1.0" 可兼容，0.7 不再被 round 成 1）；③ 美东交易日先换算到 America/New_York 再取日期
+（旧版按输入本地日期猜偏移：同一瞬间 22:00Z 与次日 06:00+08 被分进 10/15、10/16 两个费用桶）；
+④ 读数证据要自证：必要源齐全、各段日期首尾相接覆盖起点到 now、计数与传入行数一致，空 reads 不再当完整；
+⑤ 费用按 FIFO 归属时，若交换归属会改变逐笔结果（费用行没有成交日关联，原始行兼容两种解释）→ 阻断。
+
 v2（Codex 048 P1-2/3/5）。v1 的错：以「合约」为节点、同秒连边 —— 同一合约四次完整往返被压成一笔（−12×4 → 一条 −48），
 已登记首轮后其余三轮以同一 id「已登记」被跳过、覆盖照样推进；任意标的的成交只要 ±2 秒内有任一期权流水就算「对上」；
 0 价成交不核到期日就当到期；非 USD / NaN 金额照算；孤立费用被忽略；同一笔已登记结果后来金额变了也不报。
@@ -32,12 +38,23 @@ v2（Codex 048 P1-2/3/5）。v1 的错：以「合约」为节点、同秒连边
 6. 金额：期权行币种必须 USD、金额必须有限，否则不确定（不按 USD 加总）。外币入金/换汇只列为外部现金流候选，不登记、不折算。
 7. 试行到账之前有成交、又在窗口内继续成交的合约 → 不确定（起点持仓未知）。
 8. 已登记交易：同 id 结果（净额/平仓时刻）不同 → 冲突；本来源登记过、这次却找不到的 id → 冲突。都不静默跳过。
-9. 读数：CLI 传入每段读取记录；未提供、读取未完成、或任一段 ≥ READ_SUSPECT_ROWS 行 → 不确定。
+   【假设，不是证明】「一桶见到一条费用行 = 费用已齐」与「先到先配」都是推定：费用行自身没有成交日/订单关联。
+   v2.1 起，若存在另一种同样合法的归属（较早费用行也能配给较晚的桶、且两条金额不同）会改变某两笔的净额 → 归属不可识别，
+   该两笔标为不确定（不登记）。金额相同或只有一种合法归属时才放行；放行的结果仍是「在一桶一条即齐的推定下」，
+   未经人工或独立结算关联核对，不应被当成决定连续亏损门控的正式来源（见 evidence.assumptions）。
+9. 读数：CLI 传入每段读取记录。必须有 cash-flow、executions（日期段）与 executions-today 三类；日期段首尾相接
+   （下一段起点 = 上一段终点 + 1 天，无缺口无重叠）、覆盖试行起点日到 now 日；n 为非负整数；cash-flow 段行数之和 = 传入流水行数，
+   executions 段行数之和（+ 当日行数，当日整体重叠时不加）= 传入成交行数。缺一项 → 不确定。任一段读取未完成 → 不确定。
+   任一段 ≥ READ_SUSPECT_ROWS 行 → 不确定：150 是从 order --history 截断现象借来的【未校准提示】，不是 executions/cash-flow
+   接口上限的证明；段行数远低于它也只是降低已见截断模式的风险。接口不给 has_more，所以通过的读数证据等级只是
+   「读完本次声明的区间」，不是「券商源绝对完整」。
 10. 只有阻断项为零（can_advance_coverage）时才给出可登记记录；部分可信时一律只读候选，不部分登记。
 11. 问题的阻断范围：读数、持仓不符、券商持仓不可用、已登记冲突、没有时刻的问题 → 永远阻断；
     其余问题只在其时刻晚于覆盖时点、或涉及在场/覆盖后交易的合约时阻断；完全落在覆盖时点之前、
-    且不涉及这些合约的列为 history_issues（照样显示）。理由：覆盖时点之前已经人工核对过；
-    推算若被这些历史问题带偏，现时持仓核对（永远阻断）会抓到。
+    且不涉及这些合约的列为 history_issues（照样显示）。理由与前提：覆盖时点之前那段已有可信的人工核对来源
+    （覆盖时点本身就是人工核查推进的），不必全历史永久阻断。这只是工程上的豁免，【不】证明历史逐笔盈亏/费用/笔数正确 ——
+    现时持仓相等不能证明历史：漏掉一整次往返照样平到 0。豁免不用于解除既有暂停，也不让自动来源的循环自我背书成人工核对；
+    已知交易冲突、跨覆盖仍在场的合约、没有时刻的问题照旧硬阻断。
 """
 from __future__ import annotations
 
@@ -45,14 +62,22 @@ import math
 import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
-SCHEMA = "trial-reconcile-v2"
+SCHEMA = "trial-reconcile-v2.1"
 SOURCE = "券商资金流水自动对账（trial-reconcile-v2）"
 SOURCES_AUTO = frozenset({SOURCE, "券商资金流水自动对账（trial-reconcile-v1）"})
 TIME_TOL_S = 2
 AMT_TOL = 0.011
 PX_TOL = 0.006
-READ_SUSPECT_ROWS = 150          # 实测 order --history 在 180–230 行处静默截断；按周分段读，一段达到这个数就不当完整
+READ_SUSPECT_ROWS = 150          # 未校准提示：借自 order --history 在 180–230 行处静默截断的现象；不是另两个接口上限的证明
+_ET = ZoneInfo("America/New_York")
+ASSUMPTIONS = (
+    "读数：只证明读完了本次声明的日期段（首尾相接、计数一致）；接口不给 has_more，不证明券商源绝对完整",
+    "费用齐全：每（合约, 方向, 美东交易日）见到一条费用行即视为已齐（推定，非券商结算证明）",
+    "费用归属：先到先配（FIFO）；交换归属会改变逐笔结果时已阻断，放行的结果仍依赖上一条推定",
+    "历史豁免：覆盖时点之前的问题按人工核对过处理，不证明历史逐笔结果",
+)
 
 _OCC = re.compile(r"([A-Za-z]+)(\d{6})([CP])(\d+)")
 OPTION_TXN = {"Option Buy Transaction": "buy", "Option Sell Transaction": "sell"}
@@ -103,22 +128,65 @@ def parse_contract(code: str) -> tuple[str, date, str, float]:
     return root.upper(), date(2000 + int(ymd[:2]), int(ymd[2:4]), int(ymd[4:6])), cp, int(k) / 1000.0
 
 
-def _nth_sunday(y, m, n):
-    first = date(y, m, 1)
-    return first + timedelta(days=(6 - first.weekday()) % 7 + 7 * (n - 1))
-
-
-def _et_offset_h(d: date) -> int:
-    return 4 if _nth_sunday(d.year, 3, 2) <= d < _nth_sunday(d.year, 11, 1) else 5
-
-
 def expiry_close_utc(d: date) -> datetime:
-    """到期日 16:00 美东 → UTC（夏令时按日期判定，不依赖系统时区库）。"""
-    return datetime(d.year, d.month, d.day, 16 + _et_offset_h(d), tzinfo=timezone.utc)
+    """到期日 16:00 美东 → UTC（标准库 zoneinfo，按美东本地日期判夏令时）。"""
+    return datetime(d.year, d.month, d.day, 16, tzinfo=_ET).astimezone(timezone.utc)
 
 
 def _et_date(t: datetime) -> date:
-    return (t - timedelta(hours=_et_offset_h(t.date()))).date()
+    """带时区时刻 → 美东日历日。先换算到 America/New_York 再取日期：同一瞬间不论用 Z/+08/−04 表示都落同一天，
+    夏令时切换按瞬间判（Codex 049：旧版按输入本地日期猜偏移，22:00Z 与次日 06:00+08 分进两天）。"""
+    return t.astimezone(_ET).date()
+
+
+def _int_qty(v) -> int | None:
+    """张数：有限且为整数（"1"、"1.0" 可以；0.7 不 round）。"""
+    q = _fnum(v)
+    return int(q) if q is not None and q == int(q) else None
+
+
+def _check_reads(reads, start: datetime, t_now: datetime, n_flows: int, n_exs: int) -> list[str]:
+    """读数证据（规则 9）。返回问题列表（全部硬阻断）；空列表 = 读完了本次声明的区间（不等于券商源绝对完整）。"""
+    if reads is None:
+        return ["未提供分段读数记录：无法确认读取完整"]
+    probs = []
+    for r in reads:
+        n = r.get("n")
+        if not r.get("ok", False):
+            probs.append(f"{r.get('what')} {r.get('start')}–{r.get('end')} 读取未完成")
+        if isinstance(n, bool) or not isinstance(n, int) or n < 0:
+            probs.append(f"{r.get('what')} {r.get('start')}–{r.get('end')} 行数 {n!r} 不是非负整数")
+        elif n >= READ_SUSPECT_ROWS:
+            probs.append(f"{r.get('what')} {r.get('start')}–{r.get('end')} 一段 {n} 行 ≥ {READ_SUSPECT_ROWS}"
+                         "（未校准提示）：可能被截断")
+    counts = {}
+    for what in ("cash-flow", "executions"):
+        segs = [r for r in reads if r.get("what") == what]
+        if not segs:
+            probs.append(f"读数记录缺少 {what}：无法确认该源已读")
+            continue
+        try:
+            span = sorted((date.fromisoformat(r["start"]), date.fromisoformat(r["end"])) for r in segs)
+        except (KeyError, TypeError, ValueError):
+            probs.append(f"{what} 读段起止日期不可解析")
+            continue
+        if any(a > b for a, b in span):
+            probs.append(f"{what} 有起点晚于终点的读段")
+        for (_, b0), (a1, _) in zip(span, span[1:]):
+            if a1 != b0 + timedelta(days=1):
+                probs.append(f"{what} 读段 {b0} 与 {a1} 之间{'有缺口' if a1 > b0 + timedelta(days=1) else '重叠/重复'}")
+        if span[0][0] > start.astimezone(timezone.utc).date() or span[-1][1] < t_now.astimezone(timezone.utc).date():
+            probs.append(f"{what} 读段 {span[0][0]}–{span[-1][1]} 没覆盖试行起点到 now")
+        counts[what] = sum(r["n"] for r in segs if isinstance(r.get("n"), int) and not isinstance(r.get("n"), bool))
+    today = [r for r in reads if r.get("what") == "executions-today"]
+    if len(today) != 1:
+        probs.append(f"读数记录里当日成交段有 {len(today)} 条（应为 1）")
+    if "cash-flow" in counts and counts["cash-flow"] != n_flows:
+        probs.append(f"cash-flow 读段行数之和 {counts['cash-flow']} ≠ 传入流水 {n_flows} 行")
+    if "executions" in counts and len(today) == 1 and isinstance(today[0].get("n"), int):
+        if n_exs not in (counts["executions"], counts["executions"] + today[0]["n"]):
+            probs.append(f"executions 读段行数 {counts['executions']}（当日 {today[0]['n']}）与传入成交 {n_exs} 行对不上")
+    return probs
 
 
 def _near(a: datetime, b: datetime) -> bool:
@@ -147,15 +215,10 @@ def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict],
         """问题。hard / 无时刻 → 永远阻断；否则只在时刻晚于覆盖时点、或涉及在场/覆盖后交易的合约时阻断（见规则 11）。"""
         problems.append({"msg": msg, "t": t, "contracts": tuple(c for c in cs if c), "hard": hard})
 
-    # 9. 读数完整性
-    if reads is None:
-        P("未提供分段读数记录：无法确认读取完整", hard=True)
-    else:
-        for r in reads:
-            if not r.get("ok", False):
-                P(f"{r.get('what')} {r.get('start')}–{r.get('end')} 读取未完成", hard=True)
-            elif (r.get("n") or 0) >= READ_SUSPECT_ROWS:
-                P(f"{r.get('what')} {r.get('start')}–{r.get('end')} 一段 {r['n']} 行 ≥ {READ_SUSPECT_ROWS}：可能被截断", hard=True)
+    # 9. 读数证据
+    read_probs = _check_reads(reads, start, t_now, len(cash_flow), len(executions))
+    for msg in read_probs:
+        P(msg, hard=True)
 
     # 解析流水
     txns, fees = [], []
@@ -183,6 +246,14 @@ def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict],
             if r.get("currency") != "USD":
                 P(f"期权流水币种 {r.get('currency')!r} 不是 USD：{c} {name} @ {r.get('time')}（不按 USD 加总）", t, [c])
                 continue
+            want = {"buy": -1, "sell": 1}.get(OPTION_TXN.get(name), -1)      # 成交：买负卖正；费用：负
+            if amt == 0 or (amt > 0) != (want > 0):
+                if name in OPTION_FEE and amt > 0:
+                    pass                                       # 正数费用在规则 5 里单独报（退款/调整）
+                else:
+                    P(f"期权流水金额 {amt:+.2f} 与类型 {name} 的符号不符或为零（可能是冲正/退款/调整）：{c} @ {r.get('time')}，"
+                      "不当普通成交/费用", t, [c])
+                    continue
             rec = {"i": i, "contract": c, "root": parse_contract(c)[0], "t": t, "amount": amt,
                    "side": OPTION_TXN.get(name) or OPTION_FEE.get(name), "qty": None, "order": None, "px": None}
             (txns if name in OPTION_TXN else fees).append(rec)
@@ -208,9 +279,10 @@ def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict],
             continue
         if t < start or t > t_now:
             continue
-        q, px = _fnum(e.get("quantity")), _fnum(e.get("price"))
+        q, px = _int_qty(e.get("quantity")), _fnum(e.get("price"))
         if q is None or q <= 0 or px is None or px < 0 or not e.get("order_id"):
-            P(f"成交行张数/价格/订单号不可用：{e.get('symbol')} @ {e.get('time')}", t, [contract_of({"symbol": e.get("symbol")})])
+            P(f"成交行张数/价格/订单号不可用（张数须为正整数）：{e.get('symbol')} 张数 {e.get('quantity')!r} @ {e.get('time')}",
+              t, [contract_of({"symbol": e.get("symbol")})])
             continue
         sym = str(e.get("symbol") or "")
         exs.append({"j": j, "t": t, "order": str(e["order_id"]), "symbol": sym, "contract": contract_of({"symbol": sym}),
@@ -223,7 +295,7 @@ def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict],
     def _subset(rows, target):
         best = {0: []}
         for e in rows:
-            q = int(round(e["qty"]))
+            q = e["qty"]                                       # 解析时已保证正整数
             for tot, pick in list(best.items()):
                 if tot + q <= target and tot + q not in best:
                     best[tot + q] = pick + [e]
@@ -370,9 +442,9 @@ def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict],
         c = contract_of({"symbol": sym})
         if c is None:
             continue
-        qv = _fnum(q)
+        qv = _int_qty(q)
         if qv is None:
-            P(f"券商持仓 {sym} 张数不可用", hard=True)
+            P(f"券商持仓 {sym} 张数 {q!r} 不是有限整数", hard=True)
         else:
             broker[c] += qv
     for c in sorted(set(broker) | {c for c, q in pos.items() if q}):
@@ -422,6 +494,19 @@ def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict],
             P(f"费用行配不上任何成交日（孤立/迟到补费/合并）：{f['contract']} {f['side']} "
               f"{f['amount']:+.2f} @ {f['t'].isoformat()}", f["t"], [f["contract"]])
 
+    # 5b. 费用归属可识别性：同（合约, 方向）两条已配费用 f_i 早于 f_j，若 f_j 配给的桶在 f_i 入账时也已成交完（同样合法），
+    #     且两条金额不同、两桶属于不同的笔 → 交换归属会改变两笔的净额，原始行无法区分 → 两桶标为归属不可识别。
+    fee_ambig = set()
+    by_cs = defaultdict(list)
+    for b, f in bucket_fee.items():
+        by_cs[(b[0], b[1])].append((f["t"], f["i"], b, f))
+    for lst in by_cs.values():
+        lst.sort(key=lambda x: (x[0], x[1]))
+        for a, (ti, _, bi, fi) in enumerate(lst):
+            for _, _, bj, fj in lst[a + 1:]:
+                if abs(fi["amount"] - fj["amount"]) > 0.005 and bucket_last[bj] <= ti and bucket_comps[bi] != bucket_comps[bj]:
+                    fee_ambig |= {bi, bj}
+
     groups = []
     for r, ks in comps.items():
         ss = [segs[k] for k in ks]
@@ -435,6 +520,8 @@ def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict],
             flags.append("笔内有腿在其它腿平掉之后才开（换腿/滚仓）：是否同一笔需人工确认")
         mine = [b for b, rs in bucket_comps.items() if r in rs]
         flags += [f"{b[0]} {b[1]} {b[2]} 的成交分属多笔：合并收费无法拆分" for b in mine if len(bucket_comps[b]) > 1]
+        flags += [f"{b[0]} {b[1]} {b[2]} 的费用归属不可识别：另一种同样合法的归属会改变逐笔净额（费用行无成交日关联）"
+                  for b in sorted(mine) if b in fee_ambig]
         pend = [f"{b[0]} {b[1]} {b[2]}" for b in mine if b not in bucket_fee]
         fee_amt = round(sum(bucket_fee[b]["amount"] for b in mine if b in bucket_fee), 2)
         gross = round(sum(v["amount"] for v in evs), 2)
@@ -485,6 +572,8 @@ def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict],
     blockers += [f"{g['trade_id']}：费用未齐（{', '.join(g['fees_pending'])}）" for g in live
                  if g["state"] == "closed" and not g["fees_settled"]]
     ok = not blockers
+    out["evidence"] = {"reads": "insufficient" if read_probs else "declared-segments-read",
+        "fees": "assumed-one-row-per-bucket", "fee_attribution": "fifo-swap-checked", "assumptions": list(ASSUMPTIONS)}
     out.update(groups=groups, problems=[p["msg"] for p in problems], history_issues=history, notes=notes,
                blockers=blockers, can_advance_coverage=ok,
                status="complete" if ok else "incomplete")

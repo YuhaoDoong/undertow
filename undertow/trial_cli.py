@@ -243,7 +243,7 @@ def _state_fingerprint(st) -> str:
 
 
 def cmd_reconcile(args) -> int:
-    """券商资金流水 + 成交 → 逻辑交易的自动对账（trial-reconcile-v2）。默认只打印候选；--apply 只在阻断项为零时登记
+    """券商资金流水 + 成交 → 逻辑交易的自动对账（trial-reconcile-v2.1）。默认只打印候选；--apply 只在阻断项为零时登记
     （需 --note 写用户原话）。Codex 048：正确性未闭环前它不替代人工 trade/verify-trades 协议。"""
     from undertow.analyze import trial_reconcile as tr
     from undertow.collect import longbridge_account as lb
@@ -268,7 +268,7 @@ def cmd_reconcile(args) -> int:
     lab = {"open": "在场", "closed": "已平", "ambiguous": "⚠️ 不确定"}
     for g in out["groups"]:
         pnl = "" if g["net_pnl_usd"] is None else f" · 含费净 ${g['net_pnl_usd']:,.2f}"
-        fee = "" if g["state"] != "closed" else (" · 费用已配齐" if g["fees_settled"] else " · 费用未齐")
+        fee = "" if g["state"] != "closed" else (" · 费用已配（一桶一条推定）" if g["fees_settled"] else " · 费用未齐")
         print(f"  [{lab[g['state']]}] {g['underlying']} {','.join(g['expiries'])} {' / '.join(g['contracts'])}{pnl}{fee}")
         for f in g["flags"]:
             print(f"      {f}")
@@ -279,6 +279,10 @@ def cmd_reconcile(args) -> int:
         print(f"  ·（覆盖时点之前，不阻断）{h}")
     for b in out["blockers"]:
         print(f"  ✋ {b}")
+    ev = out.get("evidence") or {}
+    print(f"  证据等级：读数 {ev.get('reads')}（只证明读完本次声明的日期段，不证明券商源绝对完整）")
+    for a in ev.get("assumptions", []):
+        print(f"  · 假设：{a}")
     new = [r for r in out["records"] if not r["already_recorded"]]
     print(f"可登记 {len(new)} 笔 · 覆盖时点{'可' if out['can_advance_coverage'] else '不可'}推进")
     if not args.apply:

@@ -73,11 +73,11 @@ def test_no_result_source_is_unknown_not_zero():
     assert v["consecutive_losses"] is None and v["pause"] is None and "之后还有成交" in v["consecutive_losses_note"]
     _, v = ev(funded(), 500.0, T("10-16"), fill=None)                    # 已核查：到账后没有任何成交 → 确定 0
     assert v["consecutive_losses"] == 0 and v["pause"]["latched"] is False
-    s = tc.verify_trades(funded(), through=T("10-16", 1), verified_at=T("10-16", 1), source="人工核对", note="对过流水")
+    s = tc.verify_trades(funded(), through=T("10-16", 1), verified_at=T("10-16", 1), source="人工核对", note="对过流水", kind="manual_verified")
     _, v = ev(s, 500.0, T("10-16"), fill=T("10-15", 15))                 # 核对时点覆盖了那笔成交
     assert v["consecutive_losses"] == 0
     with pytest.raises(ValueError):
-        tc.verify_trades(s, through=T("10-15"), verified_at=T("10-16"), source="x", note="回退")
+        tc.verify_trades(s, through=T("10-15"), verified_at=T("10-16"), source="x", note="回退", kind="manual_verified")
 
 
 def test_deposit_before_first_check_does_not_dilute_initial_loss():
@@ -271,7 +271,7 @@ def test_pause_view_end_to_end_four_losses_via_cli_entry(tmp_path, monkeypatch):
     for i in range(4):
         ts.update(lambda cur, i=i: tc.record_trade(cur, trade_id=f"t{i}", net_pnl_usd=-10.0, closed_at=T("10-16", i),
                                                    complete=True, source="人工登记", note="合成"))
-    ts.update(lambda cur: tc.verify_trades(cur, through=T("10-16", 20), verified_at=T("10-16", 20), source="人工核对", note="合成"))
+    ts.update(lambda cur: tc.verify_trades(cur, through=T("10-16", 20), verified_at=T("10-16", 20), source="人工核对", note="合成", kind="manual_verified"))
     ts.update(lambda cur: tc.record_trade(cur, trade_id="t0", net_pnl_usd=-10.0, closed_at=T("10-16", 0),
                                           complete=True, source="人工登记", note="合成"))   # 重复导入不增笔数
     pause, note = trial_cli.pause_view(960.0, equity_complete=True, asof=T("10-17"), latest_fill_at=None)

@@ -70,9 +70,10 @@ def bull_call(close=True, fees_close=True):
     return flows, exs
 
 
-def run(flows, exs, positions=None, cov=START, now=NOW, known=None, reads=FULL):
+def run(flows, exs, positions=None, cov=START, now=NOW, known=None, reads=FULL, kind="unknown"):
     return tr.reconcile(cash_flow=flows, positions=positions or {}, executions=exs, coverage_through=cov,
-                        trial_start=START, now=now, known_trades=known, reads=full_reads(flows, exs, end=now[:10]) if reads is FULL else reads)
+                        trial_start=START, now=now, known_trades=known, reads=full_reads(flows, exs, end=now[:10]) if reads is FULL else reads,
+                        coverage_kind=kind)
 
 
 # —— 基本路径 ——
@@ -246,8 +247,10 @@ def test_unknown_flow_type_blocks_after_coverage_but_old_issue_is_history():
              "symbol": "USO.US", "time": "2026-10-19T16:00:00Z"}
     out = run(flows + [stock], exs)
     assert not out["can_advance_coverage"]
-    old = run(flows + [stock], exs, cov="2026-10-20T00:00:00+00:00")   # 覆盖时点之后再看：这条早于覆盖、不涉及在场合约
+    old = run(flows + [stock], exs, cov="2026-10-20T00:00:00+00:00", kind="manual_verified")   # 人工核查覆盖：早于覆盖、不涉及在场合约
     assert old["history_issues"] and old["can_advance_coverage"]
+    auto = run(flows + [stock], exs, cov="2026-10-20T00:00:00+00:00", kind="automatic")       # 同一时点但自动覆盖 → 不豁免
+    assert not auto["history_issues"] and not auto["can_advance_coverage"]
 
 
 def test_pre_trial_trades_on_same_contract_block():
@@ -291,52 +294,98 @@ def test_cli_dry_run_writes_nothing(cli, capsys):
     assert cli.cmd_reconcile(A(apply=False, note="")) == 0
     st, _ = ts.load()
     assert st["closed_trades"] == {} and st["trade_coverage"]["through"] == START
-    assert "可登记 1 笔" in capsys.readouterr().out
+    assert "候选 1 笔" in capsys.readouterr().out
 
 
-def test_cli_apply_records_and_advances_idempotently(cli):
-    assert cli.cmd_reconcile(A()) == 0
-    st, _ = ts.load()
-    (tid, row), = st["closed_trades"].items()
-    assert row["source"] == tr.SOURCE and st["trade_coverage"]["through"] == NOW
-    assert cli.cmd_reconcile(A()) == 0
-    assert len(ts.load()[0]["closed_trades"]) == 1
+def _formal(st):
+    return {k: st[k] for k in ("rev", "closed_trades", "trade_coverage", "pause_latched", "pause_reason", "paused_at")}
 
 
-def test_cli_concurrent_manual_registration_inside_window_is_refused(cli, monkeypatch):
-    orig = ts.update
-    calls = {"n": 0}
-
-    def racing_update(fn, *a, **k):
-        if calls["n"] == 0:                                    # 锁外算完提案之后、写入之前，另一进程人工登记了同一笔
-            calls["n"] += 1
-            orig(lambda cur: tc.record_trade(cur, trade_id="manual-1", net_pnl_usd=91.5,
-                                             closed_at="2026-10-19T15:00:01+00:00", complete=True, source="人工登记", note="x"))
-        return orig(fn, *a, **k)
-    monkeypatch.setattr(ts, "update", racing_update)
-    assert cli.cmd_reconcile(A()) == 1
-    st, _ = ts.load()
-    assert list(st["closed_trades"]) == ["manual-1"] and st["trade_coverage"]["through"] == START
+def test_cli_apply_refuses_and_writes_no_formal_state(cli, capsys):
+    """Codex 050：旧版 apply 写 complete=True 交易 + 推进覆盖，连续亏损从「不可判定」变成 1。现在同一合成有效候选 → 拒绝、零写入。"""
+    before, _ = ts.load()
+    latest = "2026-10-19T15:00:01+00:00"
+    assert tc.consecutive_losses(before, latest_fill_at=latest)[0] is None
+    for note in ("用户：对账登记", "", " "):
+        assert cli.cmd_reconcile(A(note=note)) == 1
+    after, _ = ts.load()
+    assert _formal(after) == _formal(before)
+    assert tc.consecutive_losses(after, latest_fill_at=latest)[0] is None        # 仍不可判定
+    out = capsys.readouterr().out
+    assert "--apply 已停用" in out and "trial trade" in out and "verify-trades" in out
 
 
-def test_cli_manual_record_already_present_refuses(cli):
-    ts.update(lambda cur: tc.record_trade(cur, trade_id="manual-1", net_pnl_usd=91.5, closed_at="2026-10-19T15:00:01+00:00",
-                                          complete=True, source="人工登记", note="x"))
-    assert cli.cmd_reconcile(A()) == 1
-    st, _ = ts.load()
-    assert list(st["closed_trades"]) == ["manual-1"] and st["trade_coverage"]["through"] == START
+def test_cli_dry_run_prints_manual_reference_only(cli, capsys):
+    assert cli.cmd_reconcile(A(apply=False)) == 0
+    out = capsys.readouterr().out
+    assert "参考：undertow trial trade --id" in out and "证据类型 funding_start" in out
+    assert _formal(ts.load()[0])["closed_trades"] == {}
 
 
-def test_cli_blockers_refuse_apply(cli, monkeypatch):
+def test_cli_blockers_still_reported_and_nothing_written(cli, monkeypatch, capsys):
     from undertow.collect import longbridge_account as lb
     monkeypatch.setattr(lb, "fetch_positions", lambda: [types.SimpleNamespace(symbol=f"{L}.US", quantity=1.0)])
-    assert cli.cmd_reconcile(A()) == 1
+    before, _ = ts.load()
+    assert cli.cmd_reconcile(A(apply=False)) == 0
+    assert "阻断项未清" in capsys.readouterr().out
+    assert _formal(ts.load()[0]) == _formal(before)
+
+
+def test_manual_verify_trades_records_manual_kind(cli, monkeypatch):
+    monkeypatch.setattr(cli, "fills_after", lambda through: None)
+    assert cli.cmd_verify_trades(types.SimpleNamespace(note="用户：对过流水")) == 0
     st, _ = ts.load()
-    assert st["closed_trades"] == {} and st["trade_coverage"]["through"] == START
+    assert tc.coverage_kind(st) == "manual_verified" and st["trade_coverage"]["through"] == NOW
 
 
-def test_cli_apply_needs_note(cli):
-    assert cli.cmd_reconcile(A(note=" ")) == 1
+# —— 规则 11：历史豁免看覆盖证据类型（Codex 050 B）——
+
+def _unknown_before(cov_t):
+    return {"flow_name": "SYNTHETIC unknown adjustment", "balance": "-1", "currency": "USD", "symbol": "OTHER.US",
+            "time": cov_t}
+
+
+def test_history_exemption_requires_manual_coverage_kind():
+    flows, exs = bull_call()
+    cov = "2026-10-20T00:00:00+00:00"                          # 往返在 10/19 已平，覆盖点之后才出现的问题仍阻断
+    extra = _unknown_before("2026-10-16T12:00:00+00:00")
+    rec = run(flows, exs)["records"][0]
+    known = {rec["trade_id"]: {"net_pnl_usd": rec["net_pnl_usd"], "closed_at": rec["closed_at"], "source": "人工登记"}}
+
+    def go(kind):
+        rows = flows + [extra]
+        return tr.reconcile(cash_flow=rows, positions={}, executions=exs, coverage_through=cov, trial_start=START,
+                            now=NOW, known_trades=known, reads=full_reads(rows, exs, end=NOW[:10]), coverage_kind=kind)
+    m = go("manual_verified")
+    assert m["can_advance_coverage"] and m["history_issues"] and m["evidence"]["history_exemption"] is True
+    for kind in ("automatic", "unknown", "garbage"):
+        o = go(kind)
+        assert not o["can_advance_coverage"] and not o["records"] and not o["history_issues"]
+        assert any("不豁免" in b for b in o["blockers"]) and o["evidence"]["history_exemption"] is False
+    d = tr.reconcile(cash_flow=flows + [extra], positions={}, executions=exs, coverage_through=cov, trial_start=START,
+                     now=NOW, known_trades=known, reads=full_reads(flows + [extra], exs, end=NOW[:10]))       # 缺省 = unknown
+    assert not d["can_advance_coverage"]
+
+
+def test_history_exemption_does_not_relax_hard_blocks():
+    flows, exs = bull_call()
+    out = tr.reconcile(cash_flow=flows, positions={f"{L}.US": 1}, executions=exs, coverage_through=NOW, trial_start=START,
+                       now=NOW, reads=full_reads(flows, exs, end=NOW[:10]), coverage_kind="manual_verified")
+    assert not out["can_advance_coverage"]
+
+
+def test_coverage_kind_legacy_and_funding():
+    st = tc.new_state(trial_id="t", planned_capital=500.0, policy_version=rp.VERSION_B, created_at=START)
+    assert tc.coverage_kind(st) == "unknown"
+    f = tc.record_funding(st, amount=500.0, at=START)
+    assert tc.coverage_kind(f) == "funding_start"
+    legacy = {**f, "trade_coverage": {k: v for k, v in f["trade_coverage"].items() if k != "kind"}}
+    assert tc.coverage_kind(legacy) == "unknown"                       # 旧状态缺字段不猜，也不看 source 文案
+    legacy["trade_coverage"]["source"] = "人工核对"
+    assert tc.coverage_kind(legacy) == "unknown"
+    with pytest.raises(ValueError):
+        tc.verify_trades(f, through=NOW, verified_at=NOW, source="x", note="y", kind="人工")
+    assert tc.validate(legacy) is None
 
 
 def test_cash_flow_chunks_do_not_overlap_and_keep_identical_rows():

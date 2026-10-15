@@ -24,6 +24,9 @@ import math
 from datetime import datetime
 
 SCHEMA = 2
+# 覆盖证据类型（Codex 050 B）：覆盖时间与「凭什么说截至此刻都登记了」分开存。只认这个结构化字段，不从 source 文案模糊匹配；
+# 旧状态没有该字段 → unknown（不补造核查记录）。funding_start 只证明试行开始前没有试行交易，不背书之后的区间。
+COVERAGE_KINDS = ("funding_start", "manual_verified", "automatic", "unknown")
 EQUITY_BASIS = "长桥 net_assets（券商口径；未独立核验保守 bid/ask 与全部费用）"
 
 
@@ -52,7 +55,7 @@ def new_state(*, trial_id: str, planned_capital: float, policy_version: str, cre
     return {"schema": SCHEMA, "rev": 0, "trial_id": trial_id, "policy_version": policy_version, "created_at": created_at,
             "planned_capital": float(planned_capital), "funded_capital": None, "funded_at": None,
             "external_flows": [], "equity_history": [], "closed_trades": {},
-            "trade_coverage": {"through": None, "verified_at": None, "source": None, "note": ""},
+            "trade_coverage": {"through": None, "verified_at": None, "source": None, "note": "", "kind": None},
             "pause_latched": False, "pause_reason": None, "paused_at": None, "resume_log": [], "counter_reset_at": None}
 
 
@@ -67,7 +70,8 @@ def record_funding(state: dict, *, amount: float, at: str, note: str = "") -> di
         if amount <= 0:
             raise ValueError("首次到账必须为正")
         s.update(funded_capital=float(amount), funded_at=at,
-                 trade_coverage={"through": at, "verified_at": at, "source": "到账起点（试行开始，尚无试行交易）", "note": note})
+                 trade_coverage={"through": at, "verified_at": at, "source": "到账起点（试行开始，尚无试行交易）", "note": note,
+                                         "kind": "funding_start"})
     else:
         s["external_flows"] = s["external_flows"] + [{"at": at, "amount": float(amount), "note": note}]
     return s
@@ -98,17 +102,26 @@ def record_trade(state: dict, *, trade_id: str, net_pnl_usd, closed_at: str, com
     return s
 
 
-def verify_trades(state: dict, *, through: str, verified_at: str, source: str, note: str) -> dict:
-    """登记「截至 through，所有已平逻辑交易都已登记」（人工核对或程序同步）。只能往后推，不能回退。"""
+def verify_trades(state: dict, *, through: str, verified_at: str, source: str, note: str, kind: str) -> dict:
+    """登记「截至 through，所有已平逻辑交易都已登记」。只能往后推，不能回退。
+    kind 必须显式给出（COVERAGE_KINDS 之一）：人工 verify-trades 是 manual_verified；没有调用方可以靠默认值冒充人工。"""
     _need_ts(through, "through"); _need_ts(verified_at, "verified_at")
+    if kind not in COVERAGE_KINDS:
+        raise ValueError(f"覆盖证据类型必须是 {COVERAGE_KINDS} 之一：{kind!r}")
     if not (isinstance(note, str) and note.strip()):
         raise ValueError("核对登记需要说明（谁、对照了什么）")
     cur = ts(state["trade_coverage"]["through"])
     if cur is not None and ts(through) < cur:
         raise ValueError("覆盖时间不能回退")
     s = dict(state)
-    s["trade_coverage"] = {"through": through, "verified_at": verified_at, "source": source, "note": note}
+    s["trade_coverage"] = {"through": through, "verified_at": verified_at, "source": source, "note": note, "kind": kind}
     return s
+
+
+def coverage_kind(state: dict) -> str:
+    """覆盖证据类型；缺字段/不认识的值 → unknown（旧状态不猜）。"""
+    k = (state.get("trade_coverage") or {}).get("kind")
+    return k if k in COVERAGE_KINDS else "unknown"
 
 
 def consecutive_losses(state: dict, *, latest_fill_at=..., ) -> tuple[int | None, str]:

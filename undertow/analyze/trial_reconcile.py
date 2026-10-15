@@ -1,5 +1,10 @@
 """实盘试行：券商资金流水 + 成交 → 逻辑交易的自动对账（只读候选；纯函数，无 I/O）。
 
+v2.2（Codex 050）：① 结果只是候选 —— CLI 的 `--apply` 不再写正式交易结果/覆盖时点（旧版会 record_trade(complete=True) +
+verify_trades，下游 consecutive_losses 照常消费，自动推定就成了正式风控来源）；正式登记仍走人工 trade / verify-trades。
+② 规则 11 的历史豁免要看覆盖证据类型（coverage_kind），不再只看覆盖时间：旧版先由自动 apply 推进覆盖，再出现一条覆盖前的
+未知调整行，就从阻断降成 history_issues —— 自动覆盖被当成了人工前提。
+
 v2.1（Codex 049）：① 期权流水金额符号必须与类型一致（买入负、卖出正），零额/反号不猜成普通成交（可能是冲正）；
 ② 成交与持仓张数必须是有限整数（"1.0" 可兼容，0.7 不再被 round 成 1）；③ 美东交易日先换算到 America/New_York 再取日期
 （旧版按输入本地日期猜偏移：同一瞬间 22:00Z 与次日 06:00+08 被分进 10/15、10/16 两个费用桶）；
@@ -48,13 +53,15 @@ v2（Codex 048 P1-2/3/5）。v1 的错：以「合约」为节点、同秒连边
    任一段 ≥ READ_SUSPECT_ROWS 行 → 不确定：150 是从 order --history 截断现象借来的【未校准提示】，不是 executions/cash-flow
    接口上限的证明；段行数远低于它也只是降低已见截断模式的风险。接口不给 has_more，所以通过的读数证据等级只是
    「读完本次声明的区间」，不是「券商源绝对完整」。
-10. 只有阻断项为零（can_advance_coverage）时才给出可登记记录；部分可信时一律只读候选，不部分登记。
+10. 只有阻断项为零（can_advance_coverage）时才给出候选记录；部分可信时一律只读候选，不部分列出。
+    v2.2 起候选记录不由本模块或 CLI 写入正式状态：要计入连续亏损，须人工逐笔对照流水 `trial trade` 并 `verify-trades`。
 11. 问题的阻断范围：读数、持仓不符、券商持仓不可用、已登记冲突、没有时刻的问题 → 永远阻断；
     其余问题只在其时刻晚于覆盖时点、或涉及在场/覆盖后交易的合约时阻断；完全落在覆盖时点之前、
-    且不涉及这些合约的列为 history_issues（照样显示）。理由与前提：覆盖时点之前那段已有可信的人工核对来源
-    （覆盖时点本身就是人工核查推进的），不必全历史永久阻断。这只是工程上的豁免，【不】证明历史逐笔盈亏/费用/笔数正确 ——
-    现时持仓相等不能证明历史：漏掉一整次往返照样平到 0。豁免不用于解除既有暂停，也不让自动来源的循环自我背书成人工核对；
-    已知交易冲突、跨覆盖仍在场的合约、没有时刻的问题照旧硬阻断。
+    且不涉及这些合约的，【仅当】调用方传入的覆盖证据类型是 manual_verified（人工 verify-trades）或 funding_start
+    （覆盖点就是到账起点，之前没有试行交易）时才列为 history_issues（照样显示）；automatic / unknown（含旧状态缺字段）
+    → 照样阻断：自动/来源不明的覆盖不能循环背书自己。前提由结构化字段传入（trial_capital.coverage_kind），不匹配中文字样。
+    这只是工程上的豁免，【不】证明历史逐笔盈亏/费用/笔数正确 —— 现时持仓相等不能证明历史：漏掉一整次往返照样平到 0。
+    豁免不用于解除既有暂停；已知交易冲突、跨覆盖仍在场的合约、没有时刻的问题照旧硬阻断。
 """
 from __future__ import annotations
 
@@ -64,7 +71,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-SCHEMA = "trial-reconcile-v2.1"
+SCHEMA = "trial-reconcile-v2.2"
 SOURCE = "券商资金流水自动对账（trial-reconcile-v2）"
 SOURCES_AUTO = frozenset({SOURCE, "券商资金流水自动对账（trial-reconcile-v1）"})
 TIME_TOL_S = 2
@@ -72,11 +79,12 @@ AMT_TOL = 0.011
 PX_TOL = 0.006
 READ_SUSPECT_ROWS = 150          # 未校准提示：借自 order --history 在 180–230 行处静默截断的现象；不是另两个接口上限的证明
 _ET = ZoneInfo("America/New_York")
+HISTORY_EXEMPT_KINDS = frozenset({"manual_verified", "funding_start"})   # 规则 11：只有这两类覆盖前提可豁免覆盖前问题
 ASSUMPTIONS = (
     "读数：只证明读完了本次声明的日期段（首尾相接、计数一致）；接口不给 has_more，不证明券商源绝对完整",
     "费用齐全：每（合约, 方向, 美东交易日）见到一条费用行即视为已齐（推定，非券商结算证明）",
     "费用归属：先到先配（FIFO）；交换归属会改变逐笔结果时已阻断，放行的结果仍依赖上一条推定",
-    "历史豁免：覆盖时点之前的问题按人工核对过处理，不证明历史逐笔结果",
+    "历史豁免：只在覆盖证据类型为人工核查（或到账起点）时，覆盖时点之前的问题才不阻断；不证明历史逐笔结果",
 )
 
 _OCC = re.compile(r"([A-Za-z]+)(\d{6})([CP])(\d+)")
@@ -194,12 +202,14 @@ def _near(a: datetime, b: datetime) -> bool:
 
 
 def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict], coverage_through: str,
-              trial_start: str, now: str, known_trades: dict | None = None, reads: list[dict] | None = None) -> dict:
+              trial_start: str, now: str, known_trades: dict | None = None, reads: list[dict] | None = None,
+              coverage_kind: str = "unknown") -> dict:
     """→ 对账候选（见模块头规则）。
 
     cash_flow / executions：试行到账起至 now 的原样行（可含缓冲日之外的行，按时间裁剪）；
     positions：{代码(.US 可带): 带符号张数}（券商当前持仓）；known_trades：状态里的 closed_trades（id → 记录）；
-    reads：[{"what","start","end","n","ok"}] 每段读数（None = 未提供 → 不可推进）。"""
+    reads：[{"what","start","end","n","ok"}] 每段读数（None = 未提供 → 不可推进）；
+    coverage_kind：覆盖证据类型（trial_capital.COVERAGE_KINDS），缺省 unknown → 不给历史豁免（规则 11）。"""
     start, cov, t_now = _ts(trial_start), _ts(coverage_through), _ts(now)
     out = {"schema": SCHEMA, "status": "incomplete", "groups": [], "records": [], "external": [], "other": [],
            "unknown": [], "problems": [], "history_issues": [], "notes": [], "conflicts": [], "blockers": [],
@@ -564,16 +574,25 @@ def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict],
 
     live = [g for g in groups if g["state"] != "closed" or _ts(g["closed_at"]) > cov]
     live_cs = {c for g in live for c in g["contracts"]}
-    blocking, history = [], []
+    exempt_ok = coverage_kind in HISTORY_EXEMPT_KINDS
+    blocking, history, denied = [], [], 0
     for p in problems:
-        (blocking if p["hard"] or p["t"] is None or p["t"] > cov or set(p["contracts"]) & live_cs else history).append(p["msg"])
+        if p["hard"] or p["t"] is None or p["t"] > cov or set(p["contracts"]) & live_cs:
+            blocking.append(p["msg"])
+        elif exempt_ok:
+            history.append(p["msg"])
+        else:
+            blocking.append(p["msg"]); denied += 1
+    if denied:
+        blocking.append(f"覆盖证据类型是 {coverage_kind}（非人工核查/到账起点）：覆盖时点之前的 {denied} 个问题不豁免（规则 11）")
     blockers = blocking + out["conflicts"]
     blockers += [f"{g['trade_id']}：{'；'.join(g['flags'])}" for g in live if g["state"] == "ambiguous"]
     blockers += [f"{g['trade_id']}：费用未齐（{', '.join(g['fees_pending'])}）" for g in live
                  if g["state"] == "closed" and not g["fees_settled"]]
     ok = not blockers
     out["evidence"] = {"reads": "insufficient" if read_probs else "declared-segments-read",
-        "fees": "assumed-one-row-per-bucket", "fee_attribution": "fifo-swap-checked", "assumptions": list(ASSUMPTIONS)}
+        "fees": "assumed-one-row-per-bucket", "fee_attribution": "fifo-swap-checked", "assumptions": list(ASSUMPTIONS),
+        "coverage_kind": coverage_kind, "history_exemption": exempt_ok, "formal_state": "candidate-only"}
     out.update(groups=groups, problems=[p["msg"] for p in problems], history_issues=history, notes=notes,
                blockers=blockers, can_advance_coverage=ok,
                status="complete" if ok else "incomplete")

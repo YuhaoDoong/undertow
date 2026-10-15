@@ -118,7 +118,7 @@ def cmd_status(args) -> int:
           f" · 峰值回撤 {pct(v['peak_drawdown_frac'])}（只报告）")
     cov = st2["trade_coverage"]
     print(f"连续亏损 {v['consecutive_losses'] if v['consecutive_losses'] is not None else '不可判定'} 笔"
-          f" · 交易结果已核对至 {cov['through'] or '—'}（{cov['source'] or '—'}）"
+          f" · 交易结果已核对至 {cov['through'] or '—'}（{cov['source'] or '—'}；证据类型 {tc.coverage_kind(st2)}）"
           f" · 已登记完整交易 {sum(t['complete'] for t in st2['closed_trades'].values())} 笔")
     if v.get("consecutive_losses_note"):
         print(f"  {v['consecutive_losses_note']}")
@@ -184,7 +184,8 @@ def cmd_verify_trades(args) -> int:
     if fill is ...:
         print("读不到券商成交记录：无法核对，覆盖时点不推进"); return 1
     print(f"核对区间 {st['trade_coverage']['through']} → {now}：券商最新成交 {fill or '无'}")
-    st2, err = _write(lambda cur: tc.verify_trades(cur, through=now, verified_at=now, source="人工核对", note=args.note))
+    st2, err = _write(lambda cur: tc.verify_trades(cur, through=now, verified_at=now, source="人工核对", note=args.note,
+                                                    kind="manual_verified"))
     if err:
         print(err); return 1
     print(f"已确认：截至 {now} 的已平逻辑交易都已登记（{len(st2['closed_trades'])} 条）"); return 0
@@ -233,18 +234,12 @@ def _executions_since(lb, start_iso: str, now_iso: str, chunk_days: int = 7, rea
     return rows + (today if inter == 0 else [])
 
 
-def _state_fingerprint(st) -> str:
-    """提案绑定的状态指纹：rev、覆盖、已登记交易（含来源/结果）、暂停。锁内用最新状态重算，变了就拒绝。"""
-    import hashlib
-    import json
-    core = {"rev": st.get("rev"), "coverage": st.get("trade_coverage"), "closed": st.get("closed_trades"),
-            "latched": st.get("pause_latched")}
-    return hashlib.sha256(json.dumps(core, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
-
-
 def cmd_reconcile(args) -> int:
-    """券商资金流水 + 成交 → 逻辑交易的自动对账（trial-reconcile-v2.1）。默认只打印候选；--apply 只在阻断项为零时登记
-    （需 --note 写用户原话）。Codex 048：正确性未闭环前它不替代人工 trade/verify-trades 协议。"""
+    """券商资金流水 + 成交 → 逻辑交易的自动对账（trial-reconcile-v2.2）。只打印候选，【从不】写正式交易结果/覆盖时点。
+
+    Codex 050：旧版 --apply 会 record_trade(complete=True) + verify_trades 推进覆盖，下游 consecutive_losses 照常消费 ——
+    「同意导入」被当成了「已独立核过费用齐全/逐笔归属/覆盖」，自动推定成了正式风控来源。现在 --apply 明确拒绝、不写任何状态；
+    正式登记仍走人工 `trial trade`（逐笔对照流水）+ `trial verify-trades`。人审导入入口另行设计（见 GPTcom 050 回信），未实施。"""
     from undertow.analyze import trial_reconcile as tr
     from undertow.collect import longbridge_account as lb
     st, prob = ts.load()
@@ -254,7 +249,6 @@ def cmd_reconcile(args) -> int:
         print("试行尚未到账（undertow trial fund）：没有对账起点"); return 1
     now = _now()
     cov = st["trade_coverage"]["through"]
-    fp = _state_fingerprint(st)
     reads: list = []
     try:
         flows = _cash_flow_since(lb, st["funded_at"], now, reads=reads)
@@ -263,8 +257,8 @@ def cmd_reconcile(args) -> int:
     except Exception as e:                                     # noqa: BLE001 —— 读不到 = 没对账，不是没有交易
         print(f"读不到券商数据，未对账、不登记、不推进：{str(e)[:200]}"); return 1
     out = tr.reconcile(cash_flow=flows, positions=pos, executions=ex, coverage_through=cov, trial_start=st["funded_at"],
-                       now=now, known_trades=st["closed_trades"], reads=reads)
-    print(f"对账 {out['schema']} · 窗口 {st['funded_at']} → {now} · 覆盖时点 {cov}")
+                       now=now, known_trades=st["closed_trades"], reads=reads, coverage_kind=tc.coverage_kind(st))
+    print(f"对账 {out['schema']} · 窗口 {st['funded_at']} → {now} · 覆盖时点 {cov}（证据类型 {tc.coverage_kind(st)}）")
     lab = {"open": "在场", "closed": "已平", "ambiguous": "⚠️ 不确定"}
     for g in out["groups"]:
         pnl = "" if g["net_pnl_usd"] is None else f" · 含费净 ${g['net_pnl_usd']:,.2f}"
@@ -284,30 +278,16 @@ def cmd_reconcile(args) -> int:
     for a in ev.get("assumptions", []):
         print(f"  · 假设：{a}")
     new = [r for r in out["records"] if not r["already_recorded"]]
-    print(f"可登记 {len(new)} 笔 · 覆盖时点{'可' if out['can_advance_coverage'] else '不可'}推进")
-    if not args.apply:
-        print("（只读候选；阻断项为零时才可 --apply --note \"用户原话\" 登记）"); return 0
-    if not (args.note or "").strip():
-        print("--apply 需要 --note（用户原话）"); return 1
-    if not out["can_advance_coverage"]:
-        print("有阻断项：不登记、不推进（部分可信时不部分登记）"); return 1
-
-    def fn(cur):
-        if _state_fingerprint(cur) != fp:
-            raise ValueError("对账期间试行状态已改变（rev/覆盖/已登记交易/暂停）：拒绝，请重跑对账")
-        manual = [k for k, t in cur["closed_trades"].items()
-                  if t.get("source") not in tr.SOURCES_AUTO and tc.ts(t["closed_at"]) > tc.ts(cov)]
-        if manual and new:
-            raise ValueError(f"覆盖时点之后已有人工登记 {manual[:3]}：自动登记可能重复计数，拒绝；请人工核对后再 verify-trades")
-        s2 = cur
-        for r in new:
-            s2 = tc.record_trade(s2, trade_id=r["trade_id"], net_pnl_usd=r["net_pnl_usd"], closed_at=r["closed_at"],
-                                 complete=True, source=tr.SOURCE, note=args.note)
-        return tc.verify_trades(s2, through=now, verified_at=now, source=tr.SOURCE, note=args.note)
-    st2, err = _write(fn)
-    if err:
-        print(err); return 1
-    print(f"已登记 {len(new)} 笔；覆盖时点 {st2['trade_coverage']['through']}")
+    print(f"候选 {len(new)} 笔 · 阻断项{'为零' if out['can_advance_coverage'] else '未清'}（只读候选，不写正式状态）")
+    for r in new:
+        print(f"  参考：undertow trial trade --id '{r['trade_id']}' --pnl {r['net_pnl_usd']:.2f} --closed-at {r['closed_at']} "
+              "--complete --note \"<对照了哪些流水/结算单>\"")
+    if new or out["can_advance_coverage"]:
+        print("  要计入连续亏损：逐笔对照券商流水后人工 trial trade，全部登记完再 trial verify-trades（候选数字只是参考）")
+    if args.apply:
+        print("--apply 已停用（Codex 050）：自动对账结果只是候选，不写交易结果、不推进覆盖时点、不改暂停。"
+              "请按上面的人工 trade / verify-trades 登记")
+        return 1
     return 0
 
 
@@ -343,7 +323,7 @@ def register(sub):
     t.set_defaults(func=cmd_trade)
     v = ss.add_parser("verify-trades", help="确认截至现在所有已平逻辑交易都已登记"); v.add_argument("--note", required=True)
     v.set_defaults(func=cmd_verify_trades)
-    rc = ss.add_parser("reconcile", help="券商流水+成交自动对账（默认只读候选；阻断项为零时 --apply 登记）")
+    rc = ss.add_parser("reconcile", help="券商流水+成交自动对账（只读候选；--apply 已停用，正式登记走人工 trade/verify-trades）")
     rc.add_argument("--apply", action="store_true"); rc.add_argument("--note", default="")
     rc.set_defaults(func=cmd_reconcile)
     r = ss.add_parser("resume"); r.add_argument("--note", required=True); r.set_defaults(func=cmd_resume)

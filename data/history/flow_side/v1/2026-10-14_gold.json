@@ -9,7 +9,7 @@
  ],
  "status": "ok",
  "spot": 375.99,
- "computed_at": "2026-10-15T09:58:47.523370+00:00",
+ "computed_at": "2026-10-15T10:23:50.573802+00:00",
  "inputs": {
   "snapshot_prev": {
    "path": "data/snapshots/options/GLD/2026-10-14.json.gz",

@@ -16,13 +16,36 @@
   "deleted_revision": "被删除的对象：首次认知照样保留；删除只对删除时刻之后生效，已可执行的入场不因删图标撤销",
   "invalid_time": "i > as_of_i（标在未见的未来）"
  },
- "state_layers": ["原始 append-only 日志", "当时因果层（每个 as_of 只含此前的 add/delete）", "含回看修改的最终解释层", "操作次数"],
- "delete_match": {"v1": "type@i（与页面 live() 相同）", "v2": "target = 被删事件 id"},
- "algorithms": {"zigzag_2atr": "price_structure.detect（收盘 2ATR 之字形）", "bar": "local_swings bar", "two": "local_swings two", "atr": "local_swings atr（影线起、收盘反弹 0.75 ATR）"},
+ "state_layers": [
+  "原始 append-only 日志",
+  "当时因果层（每个 as_of 只含此前的 add/delete）",
+  "含回看修改的最终解释层",
+  "操作次数"
+ ],
+ "delete_match": {
+  "v1": "type@i（与页面 live() 相同）",
+  "v2": "target = 被删事件 id"
+ },
+ "algorithms": {
+  "zigzag_2atr": "price_structure.detect（收盘 2ATR 之字形）",
+  "bar": "local_swings bar",
+  "two": "local_swings two",
+  "atr": "local_swings atr（影线起、收盘反弹 0.75 ATR）"
+ },
  "matching": "用户首次因果标的 HH/LH→H、HL/LL→L；只与用户标注时刻 as_of_i 已确认（conf ≤ as_of_i）的同类算法点一对一匹配，极值根距离 ≤ 5 根取最近；另报告离用户标点最近的同类算法点最终何时确认（conf − as_of_i，负 = 算法更早），两者分开命名，不用最终之字形提高吻合度",
  "trades": "入场做多/做空在最远处决定 → 下一根开盘入场；止损取同一决定时刻或之后、离场前最近一次标的止损价，缺则 missing_stop；离场标在最远处 → 下一根开盘离场；盘中触及止损按止损（跳空按开盘）；段末未平按最后一根收盘 admin_end；持仓中再标入场 = repeat_entry；无仓离场 = exit_without_position；收益以入场前一根 ATR 计，未扣费、无仓位/数量（不推定真实持仓）",
  "delay_decomposition": "对每笔因果入场：最近一个同侧用户点（做多 HL/LL，做空 LH/HH）极值根 → 用户标出该点（认点延迟）→ 用户入场决定（决策延迟）→ 下一根开盘（执行 1 根）；并列出算法（bar/2ATR）对同一点的确认根",
  "zones": "v2 密集区/支撑位：本版只报几何（宽度/ATR、距决定时收盘/ATR、事后 5/10/20 根是否回到区间）；按当时 view/chipMode/chipRange 复刻实际显示的 profile 代理【未做】，明确列为待办",
  "privacy": "逐条结果只写私有 data/soul/structure_labels/diag-v1/；公开/给 Codex 的只有聚合计数与分布；不复制用户逐点判断与备注",
- "sampling_limit": "v1 偏 QQQ/SPY、GLD 0；v2 以 IWM/TLT/SPY 为主、SLV 0：不能代表金银交易习惯；参数若由这批选择，需后续未看片段或前瞻记录验证"
+ "sampling_limit": "v1 偏 QQQ/SPY、GLD 0；v2 以 IWM/TLT/SPY 为主、SLV 0：不能代表金银交易习惯；参数若由这批选择，需后续未看片段或前瞻记录验证",
+ "engine_revision": {
+  "id": "r2-047",
+  "why": "Codex 047 §3–§5 用公开代码合成反例指出四条路径；看过 run1–run3 聚合后修（不是未见预登记），run1/2/3 保留并追加状态说明",
+  "delete_boundary": "删除的知识边界 = 删除操作的 seen_max（实际推进到的根），不是回看光标 as_of。删除边界 == 决定根（未推进就删）→ 执行前取消；更晚 → 决定已可执行，删除只进最终解释层 final_layer，不撤销因果交易",
+  "stop_state": "bar i 的有效止损 = 决定根 < i、不早于本笔入场决定、删除边界 ≥ i（未在 i 之前删除）的止损中 (决定根, seq) 最新一条；新增/更新/删除最早从下一根生效；最新那条删掉回落到仍有效的上一条",
+  "bar_order": "同一根：① 开盘执行上一根的用户离场 → ② 开盘执行上一根的入场（同根多条按 seq）→ ③ 开盘已越过有效止损：入场根 filled_through_stop、其后 gap_stop，按开盘价 → ④ 盘中触及止损按止损价。入场根不做取消（不看开盘条件择优），开盘越过止损即按开盘进出、0 ATR",
+  "delay_reference": "事前最近同侧候选参照（启发式，不是用户声明的入场理由）：决定时仍有效的同侧用户点中极值根最晚者；保存 seq/id/点根/标注根/删除有效性/选择规则；决定前已删的点另栏；无有效点 → None，不补造意图",
+  "algo_compare": "延迟表的算法列改为最终确认根 − 用户标注根（不以 conf ≤ 标注时为条件），另记标注时是否已确认；匹配表补 unmatched 与条件化说明",
+  "conclusion_scope": "只说「快局部点更常与用户小摆动相邻、一些点确认更早；2ATR 粒度/确认是候选解释之一」；不排除突破识别/回踩等待/执行，不推到金银交易习惯"
+ }
 }

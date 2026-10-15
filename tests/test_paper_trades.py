@@ -1074,3 +1074,102 @@ def test_payoff_floor_on_fixed_strike_and_dynamic_entry():
     assert pt.step(p, at(29, 10, 21), depth=q(0.10, 0.12, 0.04, 0.05)) == "skipped" and p["skip_reason"].startswith("payoff_low")
     p = _p(min_credit_ratio=0.0)
     assert pt.step(p, at(29, 10, 1), depth=q(1.44, 1.6, 0.95, 1.03)) == "enter" and p["events"][-1]["payoff_floor"]["status"] == "pass"
+
+
+# ---- Codex 047 C：关键新事件进 typed 结果与告警，不依赖 step 返回值、不靠 grep 文案 ----
+
+def test_unknown_advisory_alerts_even_when_step_returns_mark(tmp_path, monkeypatch):
+    """只有配置错误、没有其它错误/欠账帮忙：step 返回 mark，tick 结果仍带 advisory_config_error（只一次）。"""
+    p = _entered(); p.update(advisory_rule="no-such-rule", mark_slots_et=["09:45", "15:45"], expiry="2026-10-16")
+    load = _env(tmp_path, monkeypatch, [{"id": "A", "execution": "模拟", "paper": p}])
+    monkeypatch.setattr(pt, "SLOT_AUDIT_FROM", date(2026, 9, 30))
+    r = pt.tick_result(datetime(2026, 9, 30, 9, 46, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))
+    assert r["schema"] == pt.TICK_SCHEMA and "A:mark" in r["tokens"] and "A:advisory_config_error" in r["tokens"]
+    assert [(a["action"], a["kind"]) for a in r["alerts"]] == [("advisory_config_error", "config_error")]
+    assert r["alerts"][0]["schema"] == pt.ALERT_SCHEMA and r["alerts"][0]["alert_id"].startswith("A|advisory_config_error|")
+    r2 = pt.tick_result(datetime(2026, 9, 30, 15, 46, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))
+    assert r2["alerts"] == [] and "A:advisory_config_error" not in r2["tokens"]            # 重复运行只升级一次
+    assert load()["A"]["paper"]["state"] == "entered"
+    sf = tmp_path / "res.json"; sf.write_text(__import__("json").dumps(r))
+    assert pt.alert_summary(sf) == {"status": "alert", "n": 1, "kinds": {"config_error": 1}}
+
+
+def test_old_track_window_unresolved_while_current_window_succeeds(tmp_path, monkeypatch):
+    """同一 tick：09:45 跟踪窗已错过（track_unresolved）、15:45 窗成功（track_mark）→ 两者都要出现；说明不是持仓风险。"""
+    _tracked(tmp_path, monkeypatch)
+    r = pt.tick_result(datetime(2026, 10, 2, 15, 46, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1))
+    assert "S:track_mark" in r["tokens"] and "S:track_unresolved" in r["tokens"]
+    a = [x for x in r["alerts"] if x["action"] == "track_unresolved"]                     # 10/01 15:45 与 10/02 09:45 都没唤醒
+    assert sorted(x["slot"] for x in a) == ["2026-10-01 15:45", "2026-10-02 09:45"]
+    assert all(x["kind"] == "research_observation_missing" and "不代表仍有持仓风险" in x["message"]
+               and x["detail"].startswith("missed_wake") for x in a)
+    led = (tmp_path / "ledger.jsonl").read_text()
+    assert '"action": "track_unresolved"' in led
+
+
+def test_only_track_unresolved_and_multiple_slots_same_wake_get_distinct_ids(tmp_path, monkeypatch):
+    """只剩未决（窗口都过了）：返回 track_unresolved 并告警；同一次唤醒补记三个时点（同一 at）→ 三条不同 alert_id。"""
+    _tracked(tmp_path, monkeypatch)
+    r = pt.tick_result(datetime(2026, 10, 2, 16, 30, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1))
+    ids = [a["alert_id"] for a in r["alerts"] if a["action"] == "track_unresolved"]
+    assert len(ids) == 3 and len(set(ids)) == 3 and "S:track_unresolved" in r["tokens"]
+    assert pt.tick_result(datetime(2026, 10, 2, 16, 40, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1))["alerts"] == []
+
+
+def test_normal_tick_and_non_trading_time_do_not_alert(tmp_path, monkeypatch):
+    p = _entered(); p.update(mark_slots_et=["09:45"], expiry="2026-10-16")
+    _env(tmp_path, monkeypatch, [{"id": "A", "execution": "模拟", "paper": p}])
+    monkeypatch.setattr(pt, "SLOT_AUDIT_FROM", date(2026, 10, 2))
+    assert pt.tick_result(datetime(2026, 10, 2, 9, 20, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))["alerts"] == []   # 未到点
+    assert pt.tick_result(datetime(2026, 10, 2, 9, 46, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))["alerts"] == []   # 正常盯市
+    assert pt.tick_result(datetime(2026, 10, 3, 11, 0, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))["alerts"] == []   # 周六
+
+
+def test_alert_outbox_bootstrap_does_not_replay_history(tmp_path, monkeypatch):
+    p = _entered(); p["events"].append({"at": "2026-09-29T11:00:00-04:00", "action": "exit_unresolved", "slot": "2026-09-29 10:45"})
+    _env(tmp_path, monkeypatch, [{"id": "A", "execution": "模拟", "paper": p}])
+    r = pt.tick_result(datetime(2026, 9, 29, 12, 0, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))
+    assert r["alerts"] == []
+    rows = [__import__("json").loads(x) for x in (tmp_path / "alerts.jsonl").read_text().splitlines()]
+    assert len(rows) == 1 and rows[0]["bootstrap"] is True
+    (tmp_path / "alerts.jsonl").write_text("{坏行\n")
+    with pytest.raises(RuntimeError):                                                      # 发件箱损坏：显式失败，不静默重发/漏发
+        pt.tick_result(datetime(2026, 9, 29, 12, 5, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))
+
+
+def test_alert_summary_crashed_states(tmp_path):
+    assert pt.alert_summary(tmp_path / "missing.json")["status"] == "crashed"
+    (tmp_path / "bad.json").write_text("{")
+    assert pt.alert_summary(tmp_path / "bad.json")["status"] == "crashed"
+    (tmp_path / "old.json").write_text('{"schema": "x", "alerts": []}')
+    assert pt.alert_summary(tmp_path / "old.json")["status"] == "crashed"
+    (tmp_path / "ok.json").write_text('{"schema": "%s", "alerts": []}' % pt.TICK_SCHEMA)
+    assert pt.alert_summary(tmp_path / "ok.json") == {"status": "ok", "n": 0, "kinds": {}}
+
+
+def test_cli_tick_writes_status_file_and_shell_dispatch_smoke(tmp_path, monkeypatch):
+    """端到端：CLI tick 写 typed 结果 → 调度脚本里的 dispatch_alerts 读它 → 通知（桩）+ 公开兜底只含类别计数。"""
+    import json as _j, subprocess
+    p = _entered(); p.update(advisory_rule="no-such-rule", mark_slots_et=["09:45"], expiry="2026-10-16")
+    _env(tmp_path, monkeypatch, [{"id": "SECRET-ID", "execution": "模拟", "paper": p}])
+    monkeypatch.setattr(pt, "SLOT_AUDIT_FROM", date(2026, 9, 30))
+    real = pt.tick_result
+    monkeypatch.setattr(pt, "tick_result", lambda now=None, depth=None: real(datetime(2026, 9, 30, 9, 46, tzinfo=ET),
+                                                                             depth=q(0.5, 0.55, 0.2, 0.25)))
+    sf = tmp_path / ".tick_result.json"
+    monkeypatch.setattr(sys, "argv", ["paper_trades.py", "tick", "--status-file", str(sf)])
+    assert pt.main() == 0 and _j.loads(sf.read_text())["alerts"][0]["action"] == "advisory_config_error"
+    root = Path(__file__).resolve().parents[1]
+    sh = (root / "scripts" / "paper_tick.sh").read_text("utf-8")
+    lines = sh.splitlines()
+    d = next(i for i, ln in enumerate(lines) if ln.startswith("dispatch_alerts() {"))
+    assert all(i > d for i, ln in enumerate(lines) if "dispatch_alerts \"" in ln)              # 定义在调用之前
+    assert '--status-file "$TRES"' in sh
+    fn = "\n".join(lines[d:next(i for i in range(d, len(lines)) if lines[i] == "}") + 1])
+    w = tmp_path / "w"; (w / "data" / "reports").mkdir(parents=True); (w / "scripts").symlink_to(root / "scripts")
+    script = (f'PY={sys.executable}; WAKE=W; ET_DATE=2026-09-30\nnotify() {{ printf "%s|%s\\n" "$1" "$2" >> notified; }}\n{fn}\n'
+              f'dispatch_alerts "{sf}"\ndispatch_alerts "{tmp_path}/missing.json"\n')
+    subprocess.run(["zsh", "-c", script], cwd=w, check=True)
+    note = (w / "notified").read_text(); fail = (w / "data" / "reports" / "FAILURE_2026-09-30.txt").read_text()
+    assert "config_error×1" in note and "crashed" in fail and "config_error×1" in fail
+    assert "SECRET-ID" not in fail and "SECRET-ID" not in note                                # 公开兜底不含仓位 id

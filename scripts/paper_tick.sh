@@ -11,6 +11,9 @@
 # 互斥：lockf(1) 内核锁；上一轮未结束（取报价慢）→ 本轮记「busy」直接退出，不排队堆积。
 # 留痕：每次唤醒原子写 data/paper/.status_paper.json（wake/start/end/rc/sched）；有动作或失败才写月志（私有）；
 #       周末只 touch 心跳。失败：连续 3 次通知 + 写 data/reports/FAILURE_<ET日期>.txt（AGENTS 静默失败第 1 条）。
+# 告警（Codex 047 C）：tick 另写 typed 结果 data/paper/.tick_result.json（schema paper-tick-result-v1），按其中 alerts
+#       升级 —— 配置错误 / 在场估值未决 / 跟踪观察缺失，同轮 mark 成功也照报；不靠 grep 人读文案。
+#       通知之外总落兜底：公开 FAILURE 文件只写类别计数，详情在私有 data/paper/alerts.jsonl。结果文件缺失/损坏 = crashed，同样兜底。
 # 只读行情、只写私有文件；从不下单。
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
@@ -32,6 +35,23 @@ notify() {  # $1=标题 $2=正文
   /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Glass\"" 2>/dev/null || true
 }
 clip() { "$PY" -c 'import sys; print(sys.stdin.read().replace("\n", " ").strip()[:int(sys.argv[1])])' "$1"; }
+dispatch_alerts() {  # $1=typed 结果文件：crashed / alert 都通知并落兜底；ok 什么都不做
+  local sm st n kinds
+  sm=$("$PY" scripts/paper_trades.py alert-summary "$1" 2>/dev/null)
+  st=$(printf '%s' "$sm" | "$PY" -c 'import json,sys; print(json.load(sys.stdin)["status"])' 2>/dev/null || echo crashed)
+  [[ "$st" == "ok" ]] && return 0
+  if [[ "$st" == "alert" ]]; then
+    n=$(printf '%s' "$sm" | "$PY" -c 'import json,sys; print(json.load(sys.stdin)["n"])')
+    kinds=$(printf '%s' "$sm" | "$PY" -c 'import json,sys; print("，".join(f"{k}×{v}" for k,v in sorted(json.load(sys.stdin)["kinds"].items())))')
+    notify "⚠️ 模拟仓需关注 ${n} 条" "$kinds"
+    printf '%s | ET %s | ⚠️ 模拟仓需关注事件 %s 条（%s），详见私有 data/paper/alerts.jsonl\n' \
+      "$(date '+%F %H:%M %z')" "$WAKE" "$n" "$kinds" >> "data/reports/FAILURE_${ET_DATE}.txt"
+  else
+    notify "⚠️ 模拟仓结果文件缺失或损坏" "tick 返回 0 但 typed 结果不可读"
+    printf '%s | ET %s | ⚠️ 模拟仓 tick 结果文件缺失或损坏（crashed），详见私有 data/paper/paper_tick_*.log\n' \
+      "$(date '+%F %H:%M %z')" "$WAKE" >> "data/reports/FAILURE_${ET_DATE}.txt"
+  fi
+}
 status() {  # $1=rc $2=start $3=end $4=summary —— 原子写（同目录临时文件 + mv）
   local tmp="$PDIR/.status_paper.json.$$"
   "$PY" - "$1" "$2" "$3" "$4" "$WAKE" "$SCHED" > "$tmp" <<'EOF' && mv -f "$tmp" "$PDIR/.status_paper.json"
@@ -43,7 +63,8 @@ EOF
 }
 
 START=$(TZ=America/New_York date +%FT%T%z)
-RES=$(PAPER_SCHED="$SCHED" lockf -t 0 "$LOG_DIR/.paper_tick.lock" "$PY" scripts/paper_trades.py tick 2>&1); RC=$?
+TRES="$PDIR/.tick_result.json"; rm -f "$TRES"
+RES=$(PAPER_SCHED="$SCHED" lockf -t 0 "$LOG_DIR/.paper_tick.lock" "$PY" scripts/paper_trades.py tick --status-file "$TRES" 2>&1); RC=$?
 END=$(TZ=America/New_York date +%FT%T%z)
 if (( RC == 75 )); then                          # 上一轮仍持锁：不是失败，也不排队
   status 75 "" "" "busy（上一轮仍在运行）"
@@ -55,6 +76,7 @@ status "$RC" "$START" "$END" "$LAST"
 FAILF="$LOG_DIR/.paper_fail_${ET_DATE}"
 if (( RC != 0 )); then
   printf '%s | start %s end %s | ⚠️ rc=%s %s\n' "$WAKE" "$START" "$END" "$RC" "$LAST" >> "$LOG"
+  [[ -f "$TRES" ]] && dispatch_alerts "$TRES"   # rc=1（某仓位取数异常）时别的仓位的新告警已进发件箱，这里照发；崩溃无结果文件走下面的连续失败兜底
   printf 'x' >> "$FAILF"
   if [[ $(wc -c < "$FAILF") -eq 3 ]]; then
     notify "⚠️ 模拟仓调度连续失败" "$LAST"
@@ -65,9 +87,10 @@ if (( RC != 0 )); then
   exit 0
 fi
 rm -f "$FAILF"
+dispatch_alerts "$TRES"
 if [[ "$RES" != *"无到点动作"* ]]; then
   printf '%s | start %s end %s | %s\n' "$WAKE" "$START" "$END" "$LAST" >> "$LOG"
-  if printf '%s' "$RES" | grep -qE ':(enter|skipped|missed|invalid_spec|stop|settle|settlement_pending|error|exit_rule_config_error|exit_unresolved|take_profit|time_exit|manual_close|hold_to_expiry|review_prompt)'; then
+  if printf '%s' "$RES" | grep -qE ':(enter|skipped|missed|invalid_spec|stop|settle|settlement_pending|error|take_profit|time_exit|manual_close|hold_to_expiry|review_prompt)'; then
     notify "📒 模拟仓" "$(printf '%s' "$LAST" | clip 160)"
   fi
 fi

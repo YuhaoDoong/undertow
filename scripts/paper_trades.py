@@ -1264,6 +1264,80 @@ def event_id(thesis_id: str, e: dict) -> str:
     return f"{thesis_id}|{e['action']}|{e['at']}"
 
 
+# 需要用户当场知道的事件（Codex 047 C）：typed、带 schema，按稳定 alert_id 只升级一次，与本轮 step 返回什么无关。
+ALERT_SCHEMA = "paper-alert-v1"
+TICK_SCHEMA = "paper-tick-result-v1"
+ALERT_ACTIONS = {
+    "exit_unresolved": ("position_valuation_missing", "在场仓位某盯市时点窗口耗尽仍无可执行估值：未执行任何退出，需要人工看一眼"),
+    "exit_rule_config_error": ("config_error", "出场规则配置错误：该仓位不会自动退出"),
+    "advisory_config_error": ("config_error", "提示规则配置错误：该仓位的提示不会被评估"),
+    "track_unresolved": ("research_observation_missing", "已平仓位的跟踪时点缺合格观察：只是研究观察缺失，实际已平仓、不代表仍有持仓风险"),
+}
+
+
+def _alerts_path() -> Path:
+    return LEDGER.with_name("alerts.jsonl")             # 私有 data/paper/；测试改 LEDGER 时随之进临时目录
+
+
+def alert_id(thesis_id: str, e: dict) -> str:
+    """event_id 加时点：slot_audit 同一次唤醒可对多个时点各追加一条（同一 at），只用 at 会撞号。"""
+    return event_id(thesis_id, e) + (f"|{e['slot']}" if e.get("slot") else "")
+
+
+def _alert_seen(path: Path) -> set:
+    seen = set()
+    if path.exists():
+        for i, line in enumerate(path.read_text("utf-8").splitlines(), 1):
+            if line.strip():
+                try:
+                    seen.add(json.loads(line)["alert_id"])
+                except (ValueError, KeyError) as e:
+                    raise RuntimeError(f"{path.name} 第 {i} 行损坏：{e}")
+    return seen
+
+
+def collect_alerts(j: dict, *, bootstrap: bool = False) -> list[dict]:
+    """把 journal 里尚未升级过的关键事件写进私有发件箱 alerts.jsonl 并返回（只追加、按 alert_id 去重）。
+    在 journal 落盘之后调用：中途崩溃时事件已在 journal、下次唤醒补发，不会丢也不会重复。
+    bootstrap=True：发件箱首次建立时，把已有的历史事件记为 bootstrap、不返回（上线时不把旧账一次性全报出来）。"""
+    path = _alerts_path()
+    seen = _alert_seen(path)
+    new = []
+    for t in j.get("theses", []):
+        p = t.get("paper")
+        if t.get("execution") != "模拟" or not p:
+            continue
+        for e in p.get("events") or []:
+            k = ALERT_ACTIONS.get(e.get("action"))
+            if not k or alert_id(t["id"], e) in seen:
+                continue
+            new.append({"schema": ALERT_SCHEMA, "alert_id": alert_id(t["id"], e), "thesis_id": t["id"], "action": e["action"],
+                        "kind": k[0], "message": k[1], "event_at": e.get("at"), "slot": e.get("slot"),
+                        "detail": e.get("category") or e.get("why"), "bootstrap": bootstrap})
+            seen.add(new[-1]["alert_id"])
+    if new:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            for r in new:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            f.flush(); os.fsync(f.fileno())
+    return [] if bootstrap else new
+
+
+def alert_summary(status_file: Path) -> dict:
+    """读 tick 的 typed 结果，给调度脚本用：crashed（缺失/损坏/schema 不对）/ ok（无告警）/ alert（按类别计数，不含仓位内容）。"""
+    try:
+        r = json.loads(Path(status_file).read_text("utf-8"))
+        if r.get("schema") != TICK_SCHEMA or not isinstance(r.get("alerts"), list):
+            raise ValueError("schema")
+    except (OSError, ValueError):
+        return {"status": "crashed", "n": 0, "kinds": {}}
+    kinds = {}
+    for a in r["alerts"]:
+        kinds[a["kind"]] = kinds.get(a["kind"], 0) + 1
+    return {"status": "alert" if kinds else "ok", "n": sum(kinds.values()), "kinds": kinds}
+
+
 def sync_ledger(j: dict, ledger: Path | None = None) -> int:
     """paper-discretionary 研究台账 = journal 关键事件的只追加投影（Codex 025/026）。
     在 journal 原子替换【之后】调用；按稳定 event_id 去重 —— 中途崩溃后下次唤醒补齐，重复运行不重复写。
@@ -1397,12 +1471,20 @@ def register_revision(new: dict, now: datetime | None = None) -> dict:
 
 
 def tick(now: datetime | None = None, *, depth=None) -> list[str]:
+    return tick_result(now, depth=depth)["tokens"]
+
+
+def tick_result(now: datetime | None = None, *, depth=None) -> dict:
+    """一次唤醒：推进全部模拟仓，返回 typed 结果（TICK_SCHEMA）：tokens（人读「id:动作」）+ alerts（ALERT_ACTIONS 新事件）。
+    告警来自 journal 事件本身，不看 step 返回值：同轮 mark 成功也照样带出配置错误/跟踪未决（Codex 047 C）。"""
     now = now or datetime.now(timezone.utc)
     out = []
     LOCK.parent.mkdir(parents=True, exist_ok=True)
     with open(LOCK, "a+") as lk:
         fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
         j = json.loads(JOURNAL.read_text("utf-8"))
+        if not _alerts_path().exists():
+            collect_alerts(j, bootstrap=True)
         changed = False
         for t in j.get("theses", []):
             p = t.get("paper")
@@ -1427,8 +1509,7 @@ def tick(now: datetime | None = None, *, depth=None) -> list[str]:
             new_ev = (p.get("events") or [])[n_ev:]
             for e in new_ev:                                    # 调度版本随事件落盘（旧/新调度分层统计）
                 e.setdefault("sched", os.environ.get("PAPER_SCHED", "manual_or_unknown"))
-            if a != "exit_unresolved" and any(e.get("action") == "exit_unresolved" for e in new_ev):
-                out.append(f"{t['id']}:exit_unresolved")       # 时点欠账升级与本次取价/退出同一 tick 发生：都要出声
+            if new_ev:
                 changed = True
             if a:
                 changed = True
@@ -1438,8 +1519,13 @@ def tick(now: datetime | None = None, *, depth=None) -> list[str]:
         if changed:
             _write_journal(j)
         sync_ledger(j)                                   # journal 落盘之后再投影；每次都核对补齐
+        alerts = collect_alerts(j)                       # 同上：落盘之后，按 alert_id 只升级一次
         fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
-    return out
+    for al in alerts:                                    # 人读输出也带上（同一 id:动作 只列一次）
+        tok = f"{al['thesis_id']}:{al['action']}"
+        if tok not in out:
+            out.append(tok)
+    return {"schema": TICK_SCHEMA, "at": now.isoformat(), "tokens": out, "alerts": alerts}
 
 
 def size_report(theses: list) -> dict:
@@ -1495,10 +1581,19 @@ def main():
             print(f"  {g:12s} n={b['n']} 已入场 {b['entered']} 已结 {len(b['pnl'])} 盈亏合计 "
                   f"{sum(b['pnl']):+.2f} 未入场原因 {b['not_entered'] or '—'}")
         return 0
-    if cmd == "tick":
-        acts = tick()
+    if cmd == "tick":                                    # tick [--status-file PATH]：另写 typed 结果（原子替换）
+        r = tick_result()
+        acts = r["tokens"]
+        if "--status-file" in sys.argv:
+            sf = Path(sys.argv[sys.argv.index("--status-file") + 1])
+            tmp = sf.with_name(sf.name + f".{os.getpid()}")
+            tmp.write_text(json.dumps(r, ensure_ascii=False), "utf-8")
+            os.replace(tmp, sf)
         print("模拟仓：" + ("；".join(acts) if acts else "无到点动作"))
         return 1 if any(a.endswith(":error") for a in acts) else 0
+    if cmd == "alert-summary":                           # alert-summary PATH → 一行 JSON（调度脚本用，不含仓位内容）
+        print(json.dumps(alert_summary(Path(sys.argv[2])), ensure_ascii=False))
+        return 0
     j = json.loads(JOURNAL.read_text("utf-8"))
     for t in j.get("theses", []):
         p = t.get("paper")

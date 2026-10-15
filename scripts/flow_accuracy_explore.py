@@ -103,7 +103,8 @@ def analyze(key: str, sym: str, rows: list[dict], px: dict) -> dict:
                     "big": big_thr is not None and abs(r_cc) >= big_thr, "sha": r.get("call_code_sha")})
 
     def sgn(d):
-        return 1 if d == "偏多" else (-1 if d == "偏空" else 0)
+        # call_direction 用「偏多/偏空」，强信号 direction 用「看涨/看跌」（run1 漏了后者 → 强信号一栏全 0/0，见 run1/STATUS.md）
+        return 1 if d in ("偏多", "看涨") else (-1 if d in ("偏空", "看跌") else 0)
 
     def hits(sub, field, dir_field="dir"):
         out = []

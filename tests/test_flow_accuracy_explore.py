@@ -29,3 +29,10 @@ def test_tie_excluded_and_pending_counted():
 def test_binomial_and_wilson():
     assert fae.binom_p(5, 10) == 1.0 and round(fae.binom_p(9, 10), 4) == 0.0215
     assert fae.wilson_lo(0, 0) is None and 0.5 < fae.wilson_lo(23, 32) < 0.6
+
+
+def test_strong_signal_direction_words_counted():
+    rows = [{"date": "2026-10-12", "call_direction": "偏空", "fired": True, "direction": "看涨"}]
+    r = fae.analyze("x", "X", rows, px())
+    assert r["periods"]["all"]["strong_signal_oc"] == {"n": 1, "hits": 1, "rate": 1.0, "p_two_sided": 1.0,
+                                                        "wilson_lo": r["periods"]["all"]["strong_signal_oc"]["wilson_lo"]}

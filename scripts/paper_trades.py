@@ -1261,7 +1261,70 @@ def track_step(p: dict, now: datetime, *, depth=_depth) -> str | None:
 
 
 def event_id(thesis_id: str, e: dict) -> str:
+    """研究台账旧身份（v1）：thesis|action|at。同一次唤醒对多个盯市时点各追加一条时 at 相同 → 撞号，后一条被当成「已写」
+    静默丢掉（Codex 047/048）。保留它只为兼容旧行；去重改用 event_id_v2。"""
     return f"{thesis_id}|{e['action']}|{e['at']}"
+
+
+def event_id_v2(thesis_id: str, e: dict, seq: int) -> str:
+    """研究台账身份 v2 = 旧 id + slot（无则空）+ 同一 (thesis, action, at, slot) 内按 journal 顺序的序号。
+    journal 事件只追加，序号稳定；同一事件重跑得到同一个 id。"""
+    return f"{event_id(thesis_id, e)}|{e.get('slot') or ''}#{seq}"
+
+
+def _ledger_events(j: dict) -> list[tuple[dict, dict, dict, str, str]]:
+    """journal 里应进研究台账的事件，按 journal 顺序 → [(thesis, paper, event, 旧 id, v2 id)]。"""
+    out = []
+    for t in j.get("theses", []):
+        p = t.get("paper")
+        if t.get("execution") != "模拟" or not p:
+            continue
+        seq: dict = {}
+        for e in p.get("events") or []:
+            if e.get("action") not in LEDGER_ACTIONS:
+                continue
+            k = (e["action"], e["at"], e.get("slot"))
+            n = seq.get(k, 0); seq[k] = n + 1
+            out.append((t, p, e, event_id(t["id"], e), event_id_v2(t["id"], e, n)))
+    return out
+
+
+def ledger_id_map(j: dict, rows: list[dict]) -> dict:
+    """旧台账行（无 event_id_v2）→ v2 身份的兼容映射。纯函数、确定性：同一台账 + journal 重算结果相同（幂等）。旧行原样保留。
+
+    每个旧 id：候选 = journal 里同旧 id、v2 尚未被新式行占用的事件；
+    - 候选 1 个、旧行 1 行 → 映射；
+    - 否则逐行用 evidence 与事件全等匹配：每行恰好匹配一个且互不重复 → 映射，其余候选是当年撞号丢掉的事件（之后按 v2 补写）；
+    - 匹配不唯一（例如两条内容完全相同的事件）→ 歧义：该旧 id 的全部候选都隔离（不补写、不吞），列入报告等人工核对；
+    - journal 里找不到 → 孤行（只报告）。
+    → {"mapped": {v2: 行号}, "blocked": [v2…], "ambiguous": [{旧 id, 行号, 候选数}], "orphans": [{旧 id, 行号}]}"""
+    evs = _ledger_events(j)
+    by_old: dict = {}
+    for _, _, e, old, v2 in evs:
+        by_old.setdefault(old, []).append((e, v2))
+    taken = {r["event_id_v2"] for r in rows if r.get("event_id_v2")}
+    legacy: dict = {}
+    for i, r in enumerate(rows, 1):
+        if not r.get("event_id_v2"):
+            legacy.setdefault(r["event_id"], []).append((i, r))
+    out = {"mapped": {}, "blocked": [], "ambiguous": [], "orphans": []}
+    for old, lines in sorted(legacy.items()):
+        cands = [(e, v2) for e, v2 in by_old.get(old, []) if v2 not in taken]
+        if not by_old.get(old):
+            out["orphans"] += [{"event_id": old, "line": i} for i, _ in lines]
+            continue
+        if len(cands) == 1 and len(lines) == 1:
+            out["mapped"][cands[0][1]] = lines[0][0]
+            continue
+        hit = [[v2 for e, v2 in cands if e == r.get("evidence")] for _, r in lines]
+        flat = [h[0] for h in hit if len(h) == 1]
+        if all(len(h) == 1 for h in hit) and len(set(flat)) == len(flat):
+            for (i, _), v2 in zip(lines, flat):
+                out["mapped"][v2] = i
+        else:
+            out["blocked"] += [v2 for _, v2 in cands]
+            out["ambiguous"].append({"event_id": old, "lines": [i for i, _ in lines], "candidates": len(cands)})
+    return out
 
 
 # 需要用户当场知道的事件（Codex 047 C）：typed、带 schema，按稳定 alert_id 只升级一次，与本轮 step 返回什么无关。
@@ -1402,41 +1465,70 @@ def alert_summary(status_file: Path) -> dict:
 
 def sync_ledger(j: dict, ledger: Path | None = None) -> int:
     """paper-discretionary 研究台账 = journal 关键事件的只追加投影（Codex 025/026）。
-    在 journal 原子替换【之后】调用；按稳定 event_id 去重 —— 中途崩溃后下次唤醒补齐，重复运行不重复写。
+    在 journal 原子替换【之后】调用；按 event_id_v2 去重 —— 中途崩溃后下次唤醒补齐，重复运行不重复写。
+    旧行（只有 v1 event_id）经 ledger_id_map 兼容映射，不改写；歧义旧 id 的候选隔离不补写，写报告并提示（Codex 049/050）。
+    新行仍带 v1 event_id 字段（兼容旧读者；撞号补回的行与旧行 v1 相同，去重请用 event_id_v2）。
     台账某行解析失败 → 抛错（不静默跳过、不覆盖）。返回本次追加条数。"""
     ledger = ledger or LEDGER
-    seen = set()
+    rows = []
     if ledger.exists():
         for i, line in enumerate(ledger.read_text("utf-8").splitlines(), 1):
             if line.strip():
                 try:
-                    seen.add(json.loads(line)["event_id"])
-                except (ValueError, KeyError) as e:
+                    r = json.loads(line)
+                    r["event_id"]
+                except (ValueError, KeyError, TypeError) as e:
                     raise RuntimeError(f"{ledger.name} 第 {i} 行损坏：{e}")
+                rows.append(r)
+    m = ledger_id_map(j, rows)
+    seen = {r["event_id_v2"] for r in rows if r.get("event_id_v2")} | set(m["mapped"]) | set(m["blocked"])
     new = []
-    for t in j.get("theses", []):
-        p = t.get("paper")
-        if t.get("execution") != "模拟" or not p:
+    for t, p, e, old, v2 in _ledger_events(j):
+        if v2 in seen:
             continue
-        for e in p.get("events") or []:
-            if e.get("action") not in LEDGER_ACTIONS or event_id(t["id"], e) in seen:
-                continue
-            new.append({"event_id": event_id(t["id"], e), "thesis_id": t["id"],
-                        "rule_version": p.get("rule_version", RULE_VERSION), "action": e["action"], "at": e["at"],
-                        "state_now": p["state"],
-                        "spec": {k: p.get(k) for k in ("underlying", "expiry", "side", "structure", "strike_rule", "batch",
-                                                       "judgment_id", "exit_rule",
-                                                       "target_width", "sell", "buy", "k_sell", "k_buy",
-                                                       "qty", "entry_window_et", "min_credit_ratio", "stop_mult",
-                                                       "fee_round_trip", "mark_slots_et")},
-                        "evidence": e,
-                        "result": {k: p.get(k) for k in ("entry_credit", "economics", "pnl_usd", "settle", "skip_reason")}})
+        new.append({"event_id": old, "event_id_v2": v2, "thesis_id": t["id"],
+                    "rule_version": p.get("rule_version", RULE_VERSION), "action": e["action"], "at": e["at"],
+                    "state_now": p["state"],
+                    "spec": {k: p.get(k) for k in ("underlying", "expiry", "side", "structure", "strike_rule", "batch",
+                                                   "judgment_id", "exit_rule",
+                                                   "target_width", "sell", "buy", "k_sell", "k_buy",
+                                                   "qty", "entry_window_et", "min_credit_ratio", "stop_mult",
+                                                   "fee_round_trip", "mark_slots_et")},
+                    "evidence": e,
+                    "result": {k: p.get(k) for k in ("entry_credit", "economics", "pnl_usd", "settle", "skip_reason")}})
     if new:
         with open(ledger, "a", encoding="utf-8") as f:
             for r in new:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
             f.flush(); os.fsync(f.fileno())
+    if m["ambiguous"]:
+        _atomic_json(ledger.with_name("ledger_id_ambiguous.json"), {"schema": "ledger-id-ambiguous-v1", **m})
+        print(f"⚠️ 研究台账有 {len(m['ambiguous'])} 个旧 id 歧义、{len(m['blocked'])} 条事件隔离未补写："
+              f"见私有 {ledger.with_name('ledger_id_ambiguous.json').name}", file=sys.stderr)
     return len(new)
+
+
+def _atomic_json(path: Path, obj) -> None:
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.")
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=1, sort_keys=True)
+        f.flush(); os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def fallback_append(path: Path, line: str) -> None:
+    """公开兜底文件追加一行并 fsync（文件 + 新建时的目录）。alert-ack 只在它返回后才执行 ——
+    「已送达」承诺的故障模型因此覆盖到进程崩溃与断电（以文件系统遵守 fsync 为前提）；通知弹窗仍只是尽力而为。"""
+    new = not path.exists()
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(line.rstrip("\n") + "\n")
+        f.flush(); os.fsync(f.fileno())
+    if new:
+        dfd = os.open(path.parent, os.O_RDONLY)
+        try:
+            os.fsync(dfd)
+        finally:
+            os.close(dfd)
 
 
 def judgment_id(j: dict, t: dict) -> str:
@@ -1668,6 +1760,25 @@ def main():
             print(f"ack 失败（下轮重发）：{type(e).__name__}", file=sys.stderr)
             return 1
         print(n)
+        return 0
+    if cmd == "fallback-append":                         # fallback-append PATH LINE：兜底追加 + fsync；失败 rc=1（不 ack）
+        try:
+            fallback_append(Path(sys.argv[2]), sys.argv[3])
+        except OSError as e:
+            print(f"兜底写失败：{type(e).__name__}", file=sys.stderr)
+            return 1
+        return 0
+    if cmd == "ledger-ids":                              # ledger-ids：研究台账 v1→v2 兼容映射审计（只读台账；映射另存，幂等）
+        j = json.loads(JOURNAL.read_text("utf-8"))
+        rows = [json.loads(x) for x in LEDGER.read_text("utf-8").splitlines() if x.strip()] if LEDGER.exists() else []
+        m = ledger_id_map(j, rows)
+        _atomic_json(LEDGER.with_name("ledger_id_map.json"), {"schema": "ledger-id-map-v1", **m})
+        print(json.dumps({"rows": len(rows), "legacy_rows": sum(not r.get("event_id_v2") for r in rows),
+                          "mapped": len(m["mapped"]), "blocked": len(m["blocked"]), "ambiguous": len(m["ambiguous"]),
+                          "orphans": len(m["orphans"]),
+                          "would_append": sum(1 for *_, v2 in _ledger_events(j)
+                                              if v2 not in set(m["mapped"]) | set(m["blocked"])
+                                              | {r["event_id_v2"] for r in rows if r.get("event_id_v2")})}))
         return 0
     if cmd == "alerts-bootstrap":                        # 显式一次性迁移：发件箱首次建立时把历史事件记为 bootstrap
         print(bootstrap_alerts(json.loads(JOURNAL.read_text("utf-8"))))

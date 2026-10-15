@@ -1305,3 +1305,95 @@ def test_ack_rejects_unknown_ids_and_lost_outbox_with_acks_does_not_redeliver(tm
     (tmp_path / "alerts_ack.jsonl").write_text("{坏\n")
     with pytest.raises(RuntimeError):
         pt.pending_alerts()
+
+
+# ---- Codex 049/050 C：研究台账 event_id v1 撞号 → v2 兼容迁移（旧行不改、映射另算、歧义隔离、幂等）----
+
+AT = "2026-10-14T10:50:00-04:00"
+
+
+def _jr(events):
+    return {"theses": [{"id": "T1", "execution": "模拟", "paper": {"state": "entered", "events": events}}]}
+
+
+def _legacy_rows(j, events):
+    """模拟 v1 代码写出的台账：只有 v1 event_id，撞号的后一条被丢。"""
+    rows, seen = [], set()
+    for e in events:
+        old = pt.event_id("T1", e)
+        if old not in seen:
+            seen.add(old)
+            rows.append({"event_id": old, "thesis_id": "T1", "action": e["action"], "at": e["at"], "evidence": e})
+    return rows
+
+
+def _write_rows(path, rows):
+    import json as _j
+    path.write_text("".join(_j.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+
+
+def test_v1_collision_recovered_once_and_legacy_rows_untouched(tmp_path):
+    ev = [{"at": AT, "action": "exit_unresolved", "slot": "10:00"}, {"at": AT, "action": "exit_unresolved", "slot": "10:45"}]
+    j, led = _jr(ev), tmp_path / "ledger.jsonl"
+    _write_rows(led, _legacy_rows(_jr(ev), ev))
+    raw0 = led.read_bytes()
+    assert pt.sync_ledger(j, led) == 1                                  # 只补回被撞掉的那一条，不全量再投影
+    assert led.read_bytes().startswith(raw0)                            # 旧行逐字节保留
+    import json as _j
+    rows = [_j.loads(x) for x in led.read_text().splitlines()]
+    assert rows[1]["evidence"]["slot"] == "10:45" and rows[1]["event_id_v2"].endswith("|10:45#0")
+    assert pt.sync_ledger(j, led) == 0 and pt.sync_ledger(j, led) == 0   # 幂等
+    m1, m2 = pt.ledger_id_map(j, rows), pt.ledger_id_map(j, rows)
+    assert m1 == m2 and len(m1["mapped"]) == 1 and not m1["ambiguous"]
+
+
+def test_no_collision_legacy_ledger_appends_nothing(tmp_path):
+    ev = [{"at": AT, "action": "exit_unresolved", "slot": "10:00"},
+          {"at": "2026-10-14T11:00:00-04:00", "action": "exit_unresolved", "slot": "10:45"}]
+    led = tmp_path / "ledger.jsonl"
+    _write_rows(led, _legacy_rows(_jr(ev), ev))
+    raw0 = led.read_bytes()
+    assert pt.sync_ledger(_jr(ev), led) == 0 and led.read_bytes() == raw0
+
+
+def test_identical_duplicate_events_are_ambiguous_isolated_not_swallowed(tmp_path, capsys):
+    e = {"at": AT, "action": "exit_unresolved", "slot": "10:00"}
+    j, led = _jr([dict(e), dict(e)]), tmp_path / "ledger.jsonl"
+    _write_rows(led, _legacy_rows(j, [e]))
+    raw0 = led.read_bytes()
+    assert pt.sync_ledger(j, led) == 0 and led.read_bytes() == raw0     # 不补写（可能重复）
+    rep = tmp_path / "ledger_id_ambiguous.json"
+    import json as _j
+    r = _j.loads(rep.read_text())
+    assert r["ambiguous"] == [{"event_id": pt.event_id("T1", e), "lines": [1], "candidates": 2}] and len(r["blocked"]) == 2
+    assert "歧义" in capsys.readouterr().err                             # 当场提示，不只写文件
+    first = rep.read_bytes()
+    assert pt.sync_ledger(j, led) == 0 and rep.read_bytes() == first     # 重跑结果一致
+
+
+def test_fresh_ledger_writes_both_colliding_events_with_v2(tmp_path):
+    ev = [{"at": AT, "action": "exit_unresolved", "slot": "10:00"}, {"at": AT, "action": "exit_unresolved", "slot": "10:45"}]
+    led = tmp_path / "ledger.jsonl"
+    assert pt.sync_ledger(_jr(ev), led) == 2 and pt.sync_ledger(_jr(ev), led) == 0
+
+
+def test_orphan_legacy_row_reported_not_dropped(tmp_path):
+    led = tmp_path / "ledger.jsonl"
+    _write_rows(led, [{"event_id": "GONE|x|y", "evidence": {}}])
+    m = pt.ledger_id_map(_jr([]), [{"event_id": "GONE|x|y", "evidence": {}}])
+    assert m["orphans"] == [{"event_id": "GONE|x|y", "line": 1}]
+    assert pt.sync_ledger(_jr([]), led) == 0 and len(led.read_text().splitlines()) == 1
+
+
+def test_fallback_append_fsyncs_file_and_new_dir_entry(tmp_path, monkeypatch):
+    import os as _o
+    calls = []
+    real = _o.fsync
+    monkeypatch.setattr(pt.os, "fsync", lambda fd: (calls.append(fd), real(fd))[1])
+    f = tmp_path / "FAILURE_x.txt"
+    pt.fallback_append(f, "一行")
+    assert f.read_text() == "一行\n" and len(calls) == 2               # 新建：文件 + 目录
+    pt.fallback_append(f, "二行\n")
+    assert f.read_text() == "一行\n二行\n" and len(calls) == 3
+    monkeypatch.setattr(sys, "argv", ["paper_trades.py", "fallback-append", str(tmp_path / "nodir" / "f.txt"), "x"])
+    assert pt.main() == 1

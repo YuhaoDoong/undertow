@@ -53,8 +53,10 @@ dispatch_alerts() {  # $1=typed 结果文件：crashed / alert 都通知并落�
     kinds=$(printf '%s' "$sm" | "$PY" -c 'import json,sys; print("，".join(f"{k}×{v}" for k,v in sorted(json.load(sys.stdin)["kinds"].items())))')
     dig=$(printf '%s' "$sm" | "$PY" -c 'import json,sys; print(json.load(sys.stdin)["digest"])')
     notify "⚠️ 模拟仓需关注 ${n} 条" "$kinds"
-    if printf '%s | ET %s | ⚠️ 模拟仓需关注事件 %s 条（%s；批次 %s），详见私有 data/paper/alerts.jsonl\n' \
-         "$(date '+%F %H:%M %z')" "$WAKE" "$n" "$kinds" "$dig" >> "data/reports/FAILURE_${ET_DATE}.txt"; then
+    # 兜底经 fallback-append 追加并 fsync（文件 + 新建目录项）；成功返回后才 ack —— 断电也不会出现「已确认但兜底没落盘」
+    if "$PY" scripts/paper_trades.py fallback-append "data/reports/FAILURE_${ET_DATE}.txt" \
+         "$(printf '%s | ET %s | ⚠️ 模拟仓需关注事件 %s 条（%s；批次 %s），详见私有 data/paper/alerts.jsonl' \
+            "$(date '+%F %H:%M %z')" "$WAKE" "$n" "$kinds" "$dig")" 2>/dev/null; then
       "$PY" scripts/paper_trades.py alert-ack "$1" >/dev/null 2>&1 \
         || printf '%s | alert-ack 失败：下轮重发同一批次\n' "$WAKE" >> "$LOG"
     else

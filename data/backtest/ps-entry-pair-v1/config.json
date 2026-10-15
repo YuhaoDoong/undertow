@@ -5,7 +5,12 @@
  "opportunity": "price_structure.detect 的 A 型 episode（关键 LH/HL 被收盘突破，break_at）；每个机会只算一次，不按任一变体的占位删机会；重叠机会彼此不独立（已注明）",
  "slow_entry": "旧 U6 入场（ps-exit-v1 run5_v4 同口径）：2ATR 收盘之字形确认突破后的回踩点 HL₁（episode.status=signal）→ signal_at 下一根开盘；止损 = 极值 − STOP_BUF·ATR[signal_at−1]（原定义）；未入场原因按 episode.status 原样记（timeout_no_entry / invalidated_close_beyond_extreme / invalidated_new_extreme / open_at_end）",
  "fast_entry": "price_structure.fast_entry_causal（因果修复后）：bar / two / atr / limit 四种全部列出，tol 固定 0.5（ps-trigger-v2 原配置）；止损 = 极值 − STOP_BUF·ATR[entry_i−1]（原定义）；limit 开盘越过止损 → filled_through_stop（当根按开盘、0）",
- "methods": ["bar", "two", "atr", "limit"],
+ "methods": [
+  "bar",
+  "two",
+  "atr",
+  "limit"
+ ],
  "tolerance": "0.5",
  "exit": "两边同一出场：U6 慢离场（price_structure.POLICIES['U6']，2ATR 上膛式 LH、极值止损、250 根行政上限）；另列只拿着（同止损、无结构离场、250 根）作参照",
  "units": "主单位 = 突破根 ATR（atr[break_at]，突破时已知，两边共用），使不同入场价的收益可直接相减；另存各自入场 ATR 口径",
@@ -13,6 +18,34 @@
  "categories": "both（两边都入场）/ fast_only（快入场、慢没有：含慢因假突破失效而不入场的机会）/ slow_only / neither；每类都报，不只报 both",
  "occupancy": "主表按机会、不排占位；另报各变体按自身时间流占位（同方向同时一笔、entry_i > 上一笔 exit_i）下会被占用跳过的机会数，只作说明",
  "costs": "无费用、无滑点模型：只报价格路径，不声称可交易盈利",
- "groups": {"ETF": ["GLD", "SLV", "USO", "QQQ", "SPY"], "个股": ["GOOGL", "AAPL", "MSFT", "NVDA", "AMD", "INTC", "TSLA"], "连续期货": ["GC=F", "SI=F"]},
- "partition": "≤2015-12-31 设计集；不打开 2016 以后保留集"
+ "groups": {
+  "ETF": [
+   "GLD",
+   "SLV",
+   "USO",
+   "QQQ",
+   "SPY"
+  ],
+  "个股": [
+   "GOOGL",
+   "AAPL",
+   "MSFT",
+   "NVDA",
+   "AMD",
+   "INTC",
+   "TSLA"
+  ],
+  "连续期货": [
+   "GC=F",
+   "SI=F"
+  ]
+ },
+ "partition": "≤2015-12-31 设计集；不打开 2016 以后保留集",
+ "path_revision": {
+  "id": "path-v2-20261015",
+  "why": "Codex 048 §7：path-v1 取 [入场根, 出场根] 整根高低，开盘就离场那一根其后的日内高低也算进持仓（合成 100 入、次根 105 开盘出、该根 1000/1 → MAE −99/MFE +900，实际 −1/+5）",
+  "rule": "开盘出场只含出场根开盘价；盘中止损/目标根只确定开盘与成交价，另一侧极值只作上界；limit 盘中成交根的有利极值可能在成交前、只作上界；OHLC 定不了先后就给上下界、点值 None，不猜",
+  "scope": "只改路径指标（MAE/MFE）；入场、出场、收益 pnl、机会分类、占位一律不变 —— run2 与 run1 的这些字段须逐行相同，否则视为回归",
+  "kept": "run1 原样保留（path-v1 口径），追加状态说明"
+ }
 }

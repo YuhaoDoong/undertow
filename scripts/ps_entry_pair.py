@@ -52,16 +52,72 @@ def slow_trade(bars, atr, piv, ep, last_i) -> dict:
     return r
 
 
-def path(bars, ep, entry_i, entry, exit_i, A0) -> dict:
-    """持有期 [entry_i, exit_i] 内最大不利/有利（突破根 ATR）。"""
+PATH_VERSION = "path-v2-20261015"
+OPEN_EXITS = ("struct_exit", "gap_stop", "breakeven_gap_stop")      # 出场根开盘成交（k>0）
+STOP_EXITS = ("stop", "breakeven_stop")                               # 盘中按止损价（含 _both_touched）
+
+
+def _exit_kind(why: str | None) -> str:
+    w = why or ""
+    if w == "filled_through_stop":
+        return "through"
+    if any(w == x or w.startswith(x + "+") or w.endswith("+" + x) for x in OPEN_EXITS):
+        return "open"
+    if any(w == x or w.startswith(x + "_") for x in STOP_EXITS):
+        return "stop"
+    if w == "target":
+        return "target"
+    if w == "time_exit":
+        return "close"
+    return "unknown"
+
+
+def path(bars, ep, res, A0, *, intrabar_entry: bool = False) -> dict:
+    """持有期内最大有利/不利（突破根 ATR），path-v2（Codex 048 E）。
+
+    旧版（path-v1）取 [entry_i, exit_i] 整根最高/最低：开盘就离场的那一根，其后的日内高低也算进持仓 ——
+    合成 100 入、次根 105 开盘出、该根最高 1000 最低 1 → MAE −99 / MFE +900，实际持有到开盘只有 −1 / +5。
+    现在逐根区分「确定持有时成交过的价」C 与「可能持有时成交过的价」P（OHLC 不给日内先后，不猜）：
+    - 中间根：整根高低 ∈ C；
+    - 入场根：开盘入场 → 整根 ∈ C；limit 盘中成交（成交价 ≠ 开盘）→ 成交价、收盘、不利极值 ∈ C（价格先过挂单价才到更远处），
+      有利极值 ∈ P（可能在成交前）；
+    - 出场根：开盘出场 → 只有开盘价 ∈ C，该根其余全部排除；盘中止损 → 开盘、止损价 ∈ C，有利极值 ∈ P（止损外的不利价在出场后）；
+      盘中目标镜像；收盘时间出场 → 整根 ∈ C；filled_through_stop → 只有成交价；未知出场类型 → 开盘 ∈ C、高低 ∈ P。
+    MFE ∈ [max f(C), max f(C∪P)]，MAE ∈ [min f(C∪P), min f(C)]；上下界相等才给点值，否则点值 None、只给界。"""
     s = ps._sign(ep.direction)
-    hi = max(b[2] for b in bars[entry_i:exit_i + 1])
-    lo = min(b[3] for b in bars[entry_i:exit_i + 1])
-    fav, adv = (hi - entry, lo - entry) if s > 0 else (entry - lo, entry - hi)
-    return {"mfe_atr0": fav / A0, "mae_atr0": adv / A0}
+    ei, xi, e = res["entry_i"], res["exit_i"], res["entry"]
+    kind = _exit_kind(res.get("exit_reason"))
+    C, P = [e], []
+    if kind != "through":
+        for i in range(ei, xi + 1):
+            _, o, h, lo, c = bars[i]
+            fav_x, adv_x = (h, lo) if s > 0 else (lo, h)
+            first, last = i == ei, i == xi
+            if last and i > ei and kind == "open":
+                C.append(o)
+                break
+            if last and i > ei and kind == "unknown":
+                C.append(o); P += [h, lo]
+                break
+            start = e if (first and intrabar_entry) else o
+            C.append(start)
+            if last and kind in ("stop", "target"):
+                C.append(res["exit_price"])
+                P.append(fav_x if kind == "stop" else adv_x)
+            elif first and intrabar_entry:
+                C += [adv_x, c]
+                P.append(fav_x)
+            else:
+                C += [h, lo]
+    f = lambda px: s * (px - e) / A0
+    fc, fa = [f(x) for x in C], [f(x) for x in C + P]
+    mfe_lo, mfe_hi, mae_lo, mae_hi = max(fc), max(fa), min(fa), min(fc)
+    return {"mfe_atr0": mfe_lo if mfe_lo == mfe_hi else None, "mae_atr0": mae_hi if mae_lo == mae_hi else None,
+            "mfe_atr0_lo": mfe_lo, "mfe_atr0_hi": mfe_hi, "mae_atr0_lo": mae_lo, "mae_atr0_hi": mae_hi,
+            "path_exact": mfe_lo == mfe_hi and mae_lo == mae_hi, "path_version": PATH_VERSION}
 
 
-def leg(bars, atr, ep, res, A0) -> dict:
+def leg(bars, atr, ep, res, A0, *, intrabar_entry: bool = False) -> dict:
     if not res or res.get("status") not in DONE:
         return {"status": (res or {}).get("status")}
     s = ps._sign(ep.direction)
@@ -69,7 +125,7 @@ def leg(bars, atr, ep, res, A0) -> dict:
     return {"status": res["status"], "entry_i": ei, "entry_date": str(bars[ei][0]), "entry": res["entry"], "exit_i": res["exit_i"],
             "exit_date": str(bars[res["exit_i"]][0]), "exit_reason": res["exit_reason"], "stop": res.get("stop"),
             "pnl_atr0": s * (res["exit_price"] - res["entry"]) / A0, "pnl_own_atr": s * (res["exit_price"] - res["entry"]) / atr[ei - 1],
-            "days": res.get("days_held"), **path(bars, ep, ei, res["entry"], res["exit_i"], A0)}
+            "days": res.get("days_held"), "intrabar_entry": intrabar_entry, **path(bars, ep, res, A0, intrabar_entry=intrabar_entry)}
 
 
 def _hold(bars, piv, ep, entry_i, entry, stop, A0, last_i):
@@ -115,7 +171,8 @@ def run_symbol(sym, ref_dates) -> list:
                 fres = ex(e, fe) if fe["status"] == "entered" else {"status": fe["status"]}
                 if fres.get("status") in DONE:
                     fres.setdefault("entry_i", fe["entry_i"])
-                F, S = leg(bars, atr, e, fres, A0), leg(bars, atr, e, slow[id(e)], A0)
+                ib = (m == "limit" and fres.get("status") in DONE and fres["entry"] != bars[fres["entry_i"]][1])   # 盘中挂单成交
+                F, S = leg(bars, atr, e, fres, A0, intrabar_entry=ib), leg(bars, atr, e, slow[id(e)], A0)
                 row = {"symbol": sym, "seg": si, "direction": e.direction, "break": str(bars[e.break_at][0]), "break_i": e.break_at,
                        "method": m, "tol": pc.v2.TOL, "atr0": A0, "fast": F, "slow": S, "fast_entry_audit": fe.get("audit"),
                        "slow_decided_at": slow[id(e)].get("decided_at")}
@@ -147,6 +204,17 @@ def _d(xs):
             "min": r(q[0]), "max": r(q[-1]), "share_pos": r(sum(1 for x in xs if x > 0) / len(xs))}
 
 
+def _path_d(cr: list, key: str) -> dict:
+    """路径指标按界报：点值只在 OHLC 能定时有（path_exact）；界的分布覆盖全部入场腿，不因不可识别丢样本。
+    旧行（path-v1，无界字段）只有点值，原样报。"""
+    L = [r[key] for r in cr]
+    if L and all("mae_atr0_lo" in x for x in L):
+        return {f"{key}_mae_atr0_lo": _d([x["mae_atr0_lo"] for x in L]), f"{key}_mae_atr0_hi": _d([x["mae_atr0_hi"] for x in L]),
+                f"{key}_mfe_atr0_lo": _d([x["mfe_atr0_lo"] for x in L]), f"{key}_mfe_atr0_hi": _d([x["mfe_atr0_hi"] for x in L]),
+                f"{key}_path_exact_n": sum(1 for x in L if x["path_exact"]), f"{key}_path_n": len(L)}
+    return {f"{key}_mae_atr0": _d([x.get("mae_atr0") for x in L])}
+
+
 def summarize(rows: list, groups: dict) -> dict:
     out = {}
     gof = {s: g for g, ss in groups.items() for s in ss}
@@ -158,11 +226,11 @@ def summarize(rows: list, groups: dict) -> dict:
                 cr = [r for r in rs if r["category"] == c]
                 x = {"n": len(cr)}
                 if c in ("both", "fast_only"):
-                    x.update(fast_pnl_atr0=_d([r["fast"]["pnl_atr0"] for r in cr]), fast_mae_atr0=_d([r["fast"]["mae_atr0"] for r in cr]),
+                    x.update(fast_pnl_atr0=_d([r["fast"]["pnl_atr0"] for r in cr]), **_path_d(cr, "fast"),
                              fast_hold_atr0=_d([r["fast"].get("hold_atr0") for r in cr]),
                              fast_exit_reasons=_count(r["fast"]["exit_reason"] for r in cr))
                 if c in ("both", "slow_only"):
-                    x.update(slow_pnl_atr0=_d([r["slow"]["pnl_atr0"] for r in cr]), slow_mae_atr0=_d([r["slow"]["mae_atr0"] for r in cr]),
+                    x.update(slow_pnl_atr0=_d([r["slow"]["pnl_atr0"] for r in cr]), **_path_d(cr, "slow"),
                              slow_hold_atr0=_d([r["slow"].get("hold_atr0") for r in cr]))
                 if c == "both":
                     x.update(lead_bars=_d([r["pair"]["lead_bars"] for r in cr]), entry_px_adv_atr0=_d([r["pair"]["entry_px_adv_atr0"] for r in cr]),
@@ -205,7 +273,7 @@ def report(summ: dict, meta: dict) -> str:
                  f"{fp.get('mean', '—')} / {fp.get('median', '—')} | {sp.get('mean', '—')} | "
                  f"{v['per_opportunity_sum_atr0']['fast']} / {v['per_opportunity_sum_atr0']['slow']} |")
     L += ["", "只快入（慢没有入场）里包含慢入场因假突破失效而避开的机会：这部分的快收益就是更早入场付出的假突破代价，与两边都入的增量同屏看。",
-          "MAE/MFE、未入场原因、各自占位下会跳过的机会数见 summary.json。", "",
+          "MAE/MFE（path-v2：开盘出场不含该根其后高低；日内先后不可知时只给上下界）、未入场原因、各自占位下会跳过的机会数见 summary.json。", "",
           f"git {meta['git_head'][:8]} · config {meta['config_sha256'][:12]}"]
     return "\n".join(L) + "\n"
 

@@ -124,7 +124,7 @@ def _deleted_before(r: dict, kb: int, seq: int | None = None) -> bool:
 
 
 def trades(rows: list, bars: list, atr: list) -> dict:
-    """因果交易队列（配置 trades + engine_revision r2-047）。回看补入场另算两种反事实。
+    """因果交易队列（配置 trades + engine_revision r3-048：同根先离场后入场，按配置 bar_order 契约）。回看补入场另算两种反事实。
 
     时序：每条操作的知识边界 = 它的 seen_max（实际推进到的根）；决定在边界后的下一根开盘执行。
     - 删除的知识边界 = 删除操作的 seen_max。删除边界 == 决定根（未推进就删）→ 执行前取消；更晚 → 决定已可执行，
@@ -172,7 +172,13 @@ def trades(rows: list, bars: list, atr: list) -> dict:
         pos = None
 
     for i in range(last + 1):
-        for r in by_exec.get(i, []):
+        todo = by_exec.get(i, [])
+        # 契约 ①离场 ②入场（Codex 048 E：r2 实际按 seq 遍历 —— 已有多仓时同一决定根先标新空、再标离场，会先记 repeat_entry
+        # 再离场，少了按协议应有的新空仓）。离场一律先于入场，同类内按 seq。
+        ordered = sorted(todo, key=lambda r: (r["type"] != "离场", r["as_of_i"], r["seq"]))
+        if [x["seq"] for x in ordered] != [x["seq"] for x in todo]:
+            flags["same_bar_exit_reordered_before_entry"] += 1
+        for r in ordered:
             if r["type"] == "离场":
                 if pos is None:
                     flags["exit_without_position"] += 1

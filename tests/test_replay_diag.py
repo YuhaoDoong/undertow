@@ -202,3 +202,16 @@ def test_compare_aligns_trades_and_reports_counts_only():
     assert r["added"] == 1 and r["removed"] == 0 and r["same_trade_exit_changed"] == 1
     assert r["exit_reason_changes"] == ["stop→user_exit_next_open"] and r["atr_units_change"]["median"] == 3.0
     assert r["delay_rows_compared"] == 2 and r["delay_ref_point_changed"] == 1 and r["extreme_to_exec_change"]["median"] == -1
+
+
+def test_same_bar_exit_executes_before_new_entry_both_directions():
+    """Codex 048 E：已有多仓，同一决定根先标新空、再标离场 → 按契约 ①离场 ②入场：先平多、再开空，不记 repeat_entry。"""
+    for first, second, d1, d2 in (("入场做多", "入场做空", "long", "short"), ("入场做空", "入场做多", "short", "long")):
+        t = T([E("add", first, 15, 15), E("add", second, 20, 20), E("add", "离场", 20, 20)])
+        assert [(x["dir"], x["entry_i"]) for x in t["trades"]] == [(d1, 16), (d2, 21)]
+        assert t["trades"][0]["exit_i"] == 21 and t["trades"][0]["exit_reason"] == "user_exit_next_open"
+        assert "repeat_entry" not in t["flags"] and t["flags"]["same_bar_exit_reordered_before_entry"] == 1
+    t = T([E("add", "入场做多", 15, 15), E("add", "离场", 20, 20), E("add", "入场做空", 20, 20)])   # 已按契约顺序：不计重排
+    assert len(t["trades"]) == 2 and "same_bar_exit_reordered_before_entry" not in t["flags"]
+    t = T([E("add", "入场做多", 15, 15), E("add", "入场做多", 20, 20)])                          # 无离场的重复入场照旧
+    assert len(t["trades"]) == 1 and t["flags"]["repeat_entry"] == 1

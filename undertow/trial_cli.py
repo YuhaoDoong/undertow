@@ -5,6 +5,7 @@
   undertow trial fund --amount 500 --note "…"    # 记录用户在券商端已完成的到账；之后的正数=追加入金、负数=转出
   undertow trial trade --id … --pnl -12.4 --closed-at … --complete --note "…"   # 登记一笔逻辑持仓的含费净结果
   undertow trial verify-trades --note "…"        # 登记「截至现在所有已平逻辑交易都已登记」（对照券商成交核对后）
+  undertow trial reconcile [--apply --note "…"]  # 券商资金流水自动对账：默认只读提案，--apply 才登记并（条件满足时）推进覆盖时点
   undertow trial resume --note "…"               # 解除暂停：只按用户明确决定，记原话
 
 状态在 data/account/live_trial/state.json（gitignore）。所有写入走 trial_store.update（锁内读—算—写—回读）。
@@ -189,6 +190,79 @@ def cmd_verify_trades(args) -> int:
     print(f"已确认：截至 {now} 的已平逻辑交易都已登记（{len(st2['closed_trades'])} 条）"); return 0
 
 
+def _cash_flow_since(lb, start_iso: str, now_iso: str, chunk_days: int = 28) -> list[dict]:
+    """按 ≤28 天【互不重叠】分段读资金流水（长桥对长区间会报 internal server error，2026-10-15 实测）。任一段失败 → 抛出，不拼半截。
+    实测：start/end 是账户本地日期（新加坡时间），end 含当天 —— 所以首尾各多留一天，段与段之间不重叠，
+    不做整行去重（同一秒同金额的两笔真实成交会被去重误合并）。窗口外多读到的行由对账按时间自行判断。"""
+    from datetime import timedelta
+    d0, d1 = tc.ts(start_iso).date() - timedelta(days=1), tc.ts(now_iso).date() + timedelta(days=1)
+    rows, a = [], d0
+    while a <= d1:
+        b = min(a + timedelta(days=chunk_days - 1), d1)
+        rows += lb.fetch_cash_flow(start=a.isoformat(), end=b.isoformat())
+        a = b + timedelta(days=1)
+    return rows
+
+
+def cmd_reconcile(args) -> int:
+    """券商资金流水 → 逻辑交易的自动对账。默认只打印提案；--apply 才登记（需 --note 写用户原话）。"""
+    from undertow.analyze import trial_reconcile as tr
+    from undertow.collect import longbridge_account as lb
+    st, prob = ts.load()
+    if prob or st is None:
+        print(prob or "试行未建立"); return 1
+    if st["funded_at"] is None:
+        print("试行尚未到账（undertow trial fund）：没有对账起点"); return 1
+    now = _now()
+    cov = st["trade_coverage"]["through"]
+    try:
+        flows = _cash_flow_since(lb, st["funded_at"], now)
+        pos = [p.symbol for p in lb.fetch_positions()]
+        ex = lb.fetch_executions(start=tc.ts(cov).date().isoformat()) + lb.fetch_today_executions()
+    except Exception as e:                                     # noqa: BLE001 —— 读不到 = 没对账，不是没有交易
+        print(f"读不到券商数据，未对账、不登记、不推进：{str(e)[:200]}"); return 1
+    out = tr.reconcile(cash_flow=flows, positions=pos, executions=ex, coverage_through=cov,
+                       trial_start=st["funded_at"], now=now, known_trade_ids=set(st["closed_trades"]))
+    print(f"对账 {out['schema']} · 窗口 {st['funded_at']} → {now} · 覆盖时点 {cov}")
+    lab = {"open": "在场", "closed": "已平", "ambiguous": "⚠️ 不确定"}
+    for g in out["groups"]:
+        pnl = "" if g["net_pnl_usd"] is None else f" · 含费净 ${g['net_pnl_usd']:,.2f}"
+        fee = "" if g["state"] != "closed" else (" · 费用已入账" if g["fees_settled"] else " · 费用未入账")
+        print(f"  [{lab[g['state']]}] {g['underlying']} {','.join(g['expiries'])} {' / '.join(g['contracts'])}{pnl}{fee}")
+        for f in g["flags"]:
+            print(f"      {f}")
+    for x in out["external"]:
+        print(f"  外部现金流（请用 trial fund 登记美元到账额，本命令不自动登记）：{x['flow_name']} {x['currency']} {x['amount']:,.2f} @ {x['time']}")
+    for b in out["blockers"]:
+        print(f"  ✋ {b}")
+    new = [r for r in out["records"] if not r["already_recorded"]]
+    print(f"可登记 {len(new)} 笔 · 覆盖时点{'可' if out['can_advance_coverage'] else '不可'}推进")
+    if not args.apply:
+        print("（只读提案；确认后加 --apply --note \"用户原话\" 登记）"); return 0
+    if not (args.note or "").strip():
+        print("--apply 需要 --note（用户原话）"); return 1
+    manual = [k for k, t in st["closed_trades"].items() if t.get("source") != tr.SOURCE and tc.ts(t["closed_at"]) > tc.ts(cov)]
+    if manual and new:
+        print(f"覆盖时点之后已有人工登记 {manual[:3]}：自动登记可能重复计数，拒绝；请人工核对后再 verify-trades"); return 1
+
+    def fn(cur):
+        if cur["trade_coverage"]["through"] != cov:
+            raise ValueError("对账期间覆盖时点已被改动：请重跑")
+        s2 = cur
+        for r in new:
+            s2 = tc.record_trade(s2, trade_id=r["trade_id"], net_pnl_usd=r["net_pnl_usd"], closed_at=r["closed_at"],
+                                 complete=True, source=tr.SOURCE, note=args.note)
+        if out["can_advance_coverage"]:
+            s2 = tc.verify_trades(s2, through=now, verified_at=now, source=tr.SOURCE, note=args.note)
+        return s2
+    st2, err = _write(fn)
+    if err:
+        print(err); return 1
+    print(f"已登记 {len(new)} 笔；覆盖时点 {st2['trade_coverage']['through']}"
+          + ("" if out["can_advance_coverage"] else "（未推进：见 ✋ 项）"))
+    return 0
+
+
 def cmd_resume(args) -> int:
     st, prob = ts.load()
     if prob or st is None:
@@ -221,4 +295,7 @@ def register(sub):
     t.set_defaults(func=cmd_trade)
     v = ss.add_parser("verify-trades", help="确认截至现在所有已平逻辑交易都已登记"); v.add_argument("--note", required=True)
     v.set_defaults(func=cmd_verify_trades)
+    rc = ss.add_parser("reconcile", help="券商资金流水自动对账（默认只读提案；--apply 登记）")
+    rc.add_argument("--apply", action="store_true"); rc.add_argument("--note", default="")
+    rc.set_defaults(func=cmd_reconcile)
     r = ss.add_parser("resume"); r.add_argument("--note", required=True); r.set_defaults(func=cmd_resume)

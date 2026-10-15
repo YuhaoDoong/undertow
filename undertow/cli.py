@@ -995,7 +995,9 @@ def cmd_flow(args) -> int:
                     print(f"[提示] {inst.key} 期权数据与上一交易日逐行相同（休市重复），跳过落盘",
                           file=sys.stderr)
 
-            stored = store.latest_two("options", sym, on_or_before=today if replay else None)
+            # flow 没有 --as-of：始终取最新两份（46d92ddf 从 report 复制来的 `replay` 在这里未定义，
+            # 使 `undertow flow` 每个品种都抛 NameError、被 except 吞成「没有可用结果」）
+            stored = store.latest_two("options", sym)
             if stored:
                 curr_date, curr_payload = stored[-1]
                 curr = snapshot_from_payload(curr_payload, inst.key, sym)

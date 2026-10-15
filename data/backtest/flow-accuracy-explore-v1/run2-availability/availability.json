@@ -1,0 +1,2294 @@
+{
+ "version": "flow-accuracy-availability-v1-20261015",
+ "commit": "f58481be9a84616b12db41762f0e0754c232e575",
+ "bars_binding": "unknown（run 未封存日线；收益字段原样引用 run 产物）",
+ "signals": {
+  "gold": "a317b61e225fb97f103174aae65be348d14afd8e",
+  "silver": "47f05cae3ca95c80c34ae4d8d6a2132ff131c1be",
+  "wti": "7b20a8f3d8b12ccd6493c4b04926a2cbcd4e9ff9",
+  "qqq": "929cab9eeefeaaccd5d7c92a6c213bc68380afe0",
+  "tlt": "d1dd894c7df47e2984701e8ed41fcb579afadca4",
+  "spy": "062ccadb8febf94ba003a45feff1f484b6cc53b7",
+  "iwm": "3382e3da1854fe17aa3897c34cc4c1b7cff3bd48",
+  "tqqq": "268954b961827c44dbca263324e62aaa247e96fe"
+ },
+ "rows": [
+  {
+   "inst": "gold",
+   "D": "2026-09-28",
+   "T": "2026-09-28",
+   "prev_date": "2026-09-25",
+   "snapshots": [
+    {
+     "date": "2026-09-25",
+     "blob": "504b89770a5b937c122b664951a2230fe6d9bdd4",
+     "captured_at": "2026-09-25T10:00:07.333184+00:00"
+    },
+    {
+     "date": "2026-09-28",
+     "blob": "a9517ba48af3d8f42fad491590e015dd3b98217a",
+     "captured_at": "2026-09-28T10:00:06.989546+00:00"
+    }
+   ],
+   "open_et": "2026-09-28T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "gold",
+   "D": "2026-09-29",
+   "T": "2026-09-29",
+   "prev_date": "2026-09-28",
+   "snapshots": [
+    {
+     "date": "2026-09-28",
+     "blob": "a9517ba48af3d8f42fad491590e015dd3b98217a",
+     "captured_at": "2026-09-28T10:00:06.989546+00:00"
+    },
+    {
+     "date": "2026-09-29",
+     "blob": "61acb273e978e06a0f732f89e5a46bbfc6456c4e",
+     "captured_at": "2026-09-29T10:00:07.482024+00:00"
+    }
+   ],
+   "open_et": "2026-09-29T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "gold",
+   "D": "2026-09-30",
+   "T": "2026-09-30",
+   "prev_date": "2026-09-29",
+   "snapshots": [
+    {
+     "date": "2026-09-29",
+     "blob": "61acb273e978e06a0f732f89e5a46bbfc6456c4e",
+     "captured_at": "2026-09-29T10:00:07.482024+00:00"
+    },
+    {
+     "date": "2026-09-30",
+     "blob": "cb3663ba36129755e0270626e4f2be4f82dc9e53",
+     "captured_at": "2026-09-30T10:00:08.454390+00:00"
+    }
+   ],
+   "open_et": "2026-09-30T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "gold",
+   "D": "2026-10-01",
+   "T": "2026-10-01",
+   "prev_date": "2026-09-30",
+   "snapshots": [
+    {
+     "date": "2026-09-30",
+     "blob": "cb3663ba36129755e0270626e4f2be4f82dc9e53",
+     "captured_at": "2026-09-30T10:00:08.454390+00:00"
+    },
+    {
+     "date": "2026-10-01",
+     "blob": "d66e4a92104fd2c13f1c7f36469b74c663df20ac",
+     "captured_at": "2026-10-01T10:00:08.106996+00:00"
+    }
+   ],
+   "open_et": "2026-10-01T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "gold",
+   "D": "2026-10-02",
+   "T": "2026-10-02",
+   "prev_date": "2026-10-01",
+   "snapshots": [
+    {
+     "date": "2026-10-01",
+     "blob": "d66e4a92104fd2c13f1c7f36469b74c663df20ac",
+     "captured_at": "2026-10-01T10:00:08.106996+00:00"
+    },
+    {
+     "date": "2026-10-02",
+     "blob": "7f33e3e7823c5cbaa3fc188d0e14f7c556bac770",
+     "captured_at": "2026-10-02T10:00:07.828187+00:00"
+    }
+   ],
+   "open_et": "2026-10-02T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "gold",
+   "D": "2026-10-05",
+   "T": "2026-10-05",
+   "prev_date": "2026-10-02",
+   "snapshots": [
+    {
+     "date": "2026-10-02",
+     "blob": "7f33e3e7823c5cbaa3fc188d0e14f7c556bac770",
+     "captured_at": "2026-10-02T10:00:07.828187+00:00"
+    },
+    {
+     "date": "2026-10-05",
+     "blob": "f02a3b356a37c02c2d550ea56a28d9d0641ed708",
+     "captured_at": "2026-10-05T09:45:06.491711+00:00"
+    }
+   ],
+   "open_et": "2026-10-05T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "gold",
+   "D": "2026-10-06",
+   "T": "2026-10-06",
+   "prev_date": "2026-10-05",
+   "snapshots": [
+    {
+     "date": "2026-10-05",
+     "blob": "f02a3b356a37c02c2d550ea56a28d9d0641ed708",
+     "captured_at": "2026-10-05T09:45:06.491711+00:00"
+    },
+    {
+     "date": "2026-10-06",
+     "blob": "df2d6beda032e3b09f08d291e4d8e92bb9224db2",
+     "captured_at": "2026-10-06T09:45:06.593396+00:00"
+    }
+   ],
+   "open_et": "2026-10-06T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "gold",
+   "D": "2026-10-07",
+   "T": "2026-10-07",
+   "prev_date": "2026-10-06",
+   "snapshots": [
+    {
+     "date": "2026-10-06",
+     "blob": "df2d6beda032e3b09f08d291e4d8e92bb9224db2",
+     "captured_at": "2026-10-06T09:45:06.593396+00:00"
+    },
+    {
+     "date": "2026-10-07",
+     "blob": "78113a52c8f086b4b183af4e7c804c8956be04a5",
+     "captured_at": "2026-10-07T09:14:12.836838+00:00"
+    }
+   ],
+   "open_et": "2026-10-07T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "gold",
+   "D": "2026-10-08",
+   "T": "2026-10-08",
+   "prev_date": "2026-10-07",
+   "snapshots": [
+    {
+     "date": "2026-10-07",
+     "blob": "78113a52c8f086b4b183af4e7c804c8956be04a5",
+     "captured_at": "2026-10-07T09:14:12.836838+00:00"
+    },
+    {
+     "date": "2026-10-08",
+     "blob": "1d54da9bd6ce5c922d20361434fbb584ac9920ca",
+     "captured_at": "2026-10-08T09:35:33.235257+00:00"
+    }
+   ],
+   "open_et": "2026-10-08T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "gold",
+   "D": "2026-10-09",
+   "T": "2026-10-09",
+   "prev_date": "2026-10-08",
+   "snapshots": [
+    {
+     "date": "2026-10-08",
+     "blob": "1d54da9bd6ce5c922d20361434fbb584ac9920ca",
+     "captured_at": "2026-10-08T09:35:33.235257+00:00"
+    },
+    {
+     "date": "2026-10-09",
+     "blob": "24acd849d42e2ebe80ba8c90e3d617f406022865",
+     "captured_at": "2026-10-09T08:00:28.940767+00:00"
+    }
+   ],
+   "open_et": "2026-10-09T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "gold",
+   "D": "2026-10-12",
+   "T": "2026-10-12",
+   "prev_date": "2026-10-09",
+   "snapshots": [
+    {
+     "date": "2026-10-09",
+     "blob": "24acd849d42e2ebe80ba8c90e3d617f406022865",
+     "captured_at": "2026-10-09T08:00:28.940767+00:00"
+    },
+    {
+     "date": "2026-10-12",
+     "blob": "dbe48ef32494df98f016ba7c45d964b4d17e8b08",
+     "captured_at": "2026-10-12T07:21:51.687148+00:00"
+    }
+   ],
+   "open_et": "2026-10-12T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "gold",
+   "D": "2026-10-13",
+   "T": "2026-10-13",
+   "prev_date": "2026-10-12",
+   "snapshots": [
+    {
+     "date": "2026-10-12",
+     "blob": "dbe48ef32494df98f016ba7c45d964b4d17e8b08",
+     "captured_at": "2026-10-12T07:21:51.687148+00:00"
+    },
+    {
+     "date": "2026-10-13",
+     "blob": "4f62f543fd7d81ba249ac779e7f1dfe2878d8c1d",
+     "captured_at": "2026-10-13T09:16:19.909931+00:00"
+    }
+   ],
+   "open_et": "2026-10-13T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "gold",
+   "D": "2026-10-14",
+   "T": "2026-10-14",
+   "prev_date": "2026-10-13",
+   "snapshots": [
+    {
+     "date": "2026-10-13",
+     "blob": "4f62f543fd7d81ba249ac779e7f1dfe2878d8c1d",
+     "captured_at": "2026-10-13T09:16:19.909931+00:00"
+    },
+    {
+     "date": "2026-10-14",
+     "blob": "46da6fa8f34115df4553d2fe97b12e0a09734102",
+     "captured_at": "2026-10-14T09:06:51.853640+00:00"
+    }
+   ],
+   "open_et": "2026-10-14T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "silver",
+   "D": "2026-09-28",
+   "T": "2026-09-28",
+   "prev_date": "2026-09-25",
+   "snapshots": [
+    {
+     "date": "2026-09-25",
+     "blob": "071622efc8ede50aa228f9f4d6aa43863207fbcb",
+     "captured_at": "2026-09-25T10:00:08.781291+00:00"
+    },
+    {
+     "date": "2026-09-28",
+     "blob": "f49bc80955670931002b0a3a3b337ff396ef02ee",
+     "captured_at": "2026-09-28T08:00:07.385424+00:00"
+    }
+   ],
+   "open_et": "2026-09-28T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "silver",
+   "D": "2026-09-29",
+   "T": "2026-09-29",
+   "prev_date": "2026-09-28",
+   "snapshots": [
+    {
+     "date": "2026-09-28",
+     "blob": "f49bc80955670931002b0a3a3b337ff396ef02ee",
+     "captured_at": "2026-09-28T08:00:07.385424+00:00"
+    },
+    {
+     "date": "2026-09-29",
+     "blob": "afc91570340051dd859c196f5f41ca58eaeadbf7",
+     "captured_at": "2026-09-29T10:45:07.766155+00:00"
+    }
+   ],
+   "open_et": "2026-09-29T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "silver",
+   "D": "2026-09-30",
+   "T": "2026-09-30",
+   "prev_date": "2026-09-29",
+   "snapshots": [
+    {
+     "date": "2026-09-29",
+     "blob": "afc91570340051dd859c196f5f41ca58eaeadbf7",
+     "captured_at": "2026-09-29T10:45:07.766155+00:00"
+    },
+    {
+     "date": "2026-09-30",
+     "blob": "d59f0f88fe15aa5db605736b30c3275cb5f78cf7",
+     "captured_at": "2026-09-30T10:45:12.006892+00:00"
+    }
+   ],
+   "open_et": "2026-09-30T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "silver",
+   "D": "2026-10-01",
+   "T": "2026-10-01",
+   "prev_date": "2026-09-30",
+   "snapshots": [
+    {
+     "date": "2026-09-30",
+     "blob": "d59f0f88fe15aa5db605736b30c3275cb5f78cf7",
+     "captured_at": "2026-09-30T10:45:12.006892+00:00"
+    },
+    {
+     "date": "2026-10-01",
+     "blob": "afd8c30dd68f96f62bc5366a7d4b9384384a6141",
+     "captured_at": "2026-10-01T10:45:10.888781+00:00"
+    }
+   ],
+   "open_et": "2026-10-01T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "silver",
+   "D": "2026-10-02",
+   "T": "2026-10-02",
+   "prev_date": "2026-10-01",
+   "snapshots": [
+    {
+     "date": "2026-10-01",
+     "blob": "afd8c30dd68f96f62bc5366a7d4b9384384a6141",
+     "captured_at": "2026-10-01T10:45:10.888781+00:00"
+    },
+    {
+     "date": "2026-10-02",
+     "blob": "c3b571865ae634fe5d3d8b9ebe7c34f692750112",
+     "captured_at": "2026-10-02T10:45:12.656843+00:00"
+    }
+   ],
+   "open_et": "2026-10-02T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "silver",
+   "D": "2026-10-06",
+   "T": "2026-10-06",
+   "prev_date": "2026-10-02",
+   "snapshots": [
+    {
+     "date": "2026-10-02",
+     "blob": "c3b571865ae634fe5d3d8b9ebe7c34f692750112",
+     "captured_at": "2026-10-02T10:45:12.656843+00:00"
+    },
+    {
+     "date": "2026-10-06",
+     "blob": "e07a68ba0392c5f07b4635a401f9cce2e7940e0f",
+     "captured_at": "2026-10-06T09:45:08.315337+00:00"
+    }
+   ],
+   "open_et": "2026-10-06T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "silver",
+   "D": "2026-10-07",
+   "T": "2026-10-07",
+   "prev_date": "2026-10-06",
+   "snapshots": [
+    {
+     "date": "2026-10-06",
+     "blob": "e07a68ba0392c5f07b4635a401f9cce2e7940e0f",
+     "captured_at": "2026-10-06T09:45:08.315337+00:00"
+    },
+    {
+     "date": "2026-10-07",
+     "blob": "e46fcd7df32f14456474890f6729b38c29fd3e06",
+     "captured_at": "2026-10-07T09:54:37.436425+00:00"
+    }
+   ],
+   "open_et": "2026-10-07T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "silver",
+   "D": "2026-10-08",
+   "T": "2026-10-08",
+   "prev_date": "2026-10-07",
+   "snapshots": [
+    {
+     "date": "2026-10-07",
+     "blob": "e46fcd7df32f14456474890f6729b38c29fd3e06",
+     "captured_at": "2026-10-07T09:54:37.436425+00:00"
+    },
+    {
+     "date": "2026-10-08",
+     "blob": "7299b7e0b1a51c24bc8bb42db13e1fd8656f2f9a",
+     "captured_at": "2026-10-08T10:22:00.629337+00:00"
+    }
+   ],
+   "open_et": "2026-10-08T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "silver",
+   "D": "2026-10-09",
+   "T": "2026-10-09",
+   "prev_date": "2026-10-08",
+   "snapshots": [
+    {
+     "date": "2026-10-08",
+     "blob": "7299b7e0b1a51c24bc8bb42db13e1fd8656f2f9a",
+     "captured_at": "2026-10-08T10:22:00.629337+00:00"
+    },
+    {
+     "date": "2026-10-09",
+     "blob": "92511dca91cfbb9b5b55d2d160867b263708127c",
+     "captured_at": "2026-10-09T10:07:56.832591+00:00"
+    }
+   ],
+   "open_et": "2026-10-09T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "silver",
+   "D": "2026-10-12",
+   "T": "2026-10-12",
+   "prev_date": "2026-10-09",
+   "snapshots": [
+    {
+     "date": "2026-10-09",
+     "blob": "92511dca91cfbb9b5b55d2d160867b263708127c",
+     "captured_at": "2026-10-09T10:07:56.832591+00:00"
+    },
+    {
+     "date": "2026-10-12",
+     "blob": "634f60a56960617a2e595377ccab91a3e427652b",
+     "captured_at": "2026-10-12T10:18:33.807084+00:00"
+    }
+   ],
+   "open_et": "2026-10-12T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "silver",
+   "D": "2026-10-13",
+   "T": "2026-10-13",
+   "prev_date": "2026-10-12",
+   "snapshots": [
+    {
+     "date": "2026-10-12",
+     "blob": "634f60a56960617a2e595377ccab91a3e427652b",
+     "captured_at": "2026-10-12T10:18:33.807084+00:00"
+    },
+    {
+     "date": "2026-10-13",
+     "blob": "a41e5719fae03c1ea18d7ae2d8fb5058114e93d6",
+     "captured_at": "2026-10-13T10:31:20.009723+00:00"
+    }
+   ],
+   "open_et": "2026-10-13T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "silver",
+   "D": "2026-10-14",
+   "T": "2026-10-14",
+   "prev_date": "2026-10-13",
+   "snapshots": [
+    {
+     "date": "2026-10-13",
+     "blob": "a41e5719fae03c1ea18d7ae2d8fb5058114e93d6",
+     "captured_at": "2026-10-13T10:31:20.009723+00:00"
+    },
+    {
+     "date": "2026-10-14",
+     "blob": "a61fc90397f17473ff160afab89a67f3e99092d6",
+     "captured_at": "2026-10-14T09:50:14.194823+00:00"
+    }
+   ],
+   "open_et": "2026-10-14T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "wti",
+   "D": "2026-09-28",
+   "T": "2026-09-28",
+   "prev_date": "2026-09-25",
+   "snapshots": [
+    {
+     "date": "2026-09-25",
+     "blob": "d56747109fd4c1bf855ed02a276d27ab54622c2f",
+     "captured_at": "2026-09-25T10:45:10.082587+00:00"
+    },
+    {
+     "date": "2026-09-28",
+     "blob": "fc1a3d0f4f8d770b886d5b85a746857426a500e2",
+     "captured_at": "2026-09-28T08:00:08.887184+00:00"
+    }
+   ],
+   "open_et": "2026-09-28T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "wti",
+   "D": "2026-09-29",
+   "T": "2026-09-29",
+   "prev_date": "2026-09-28",
+   "snapshots": [
+    {
+     "date": "2026-09-28",
+     "blob": "fc1a3d0f4f8d770b886d5b85a746857426a500e2",
+     "captured_at": "2026-09-28T08:00:08.887184+00:00"
+    },
+    {
+     "date": "2026-09-29",
+     "blob": "8661916f04843e1551d8a8bd3a59e7caa017b09a",
+     "captured_at": "2026-09-29T10:45:09.081370+00:00"
+    }
+   ],
+   "open_et": "2026-09-29T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "wti",
+   "D": "2026-09-30",
+   "T": "2026-09-30",
+   "prev_date": "2026-09-29",
+   "snapshots": [
+    {
+     "date": "2026-09-29",
+     "blob": "8661916f04843e1551d8a8bd3a59e7caa017b09a",
+     "captured_at": "2026-09-29T10:45:09.081370+00:00"
+    },
+    {
+     "date": "2026-09-30",
+     "blob": "9457cafcd8d13fb89941cb85ebae1798edf6ebb4",
+     "captured_at": "2026-09-30T10:45:13.361136+00:00"
+    }
+   ],
+   "open_et": "2026-09-30T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "wti",
+   "D": "2026-10-01",
+   "T": "2026-10-01",
+   "prev_date": "2026-09-30",
+   "snapshots": [
+    {
+     "date": "2026-09-30",
+     "blob": "9457cafcd8d13fb89941cb85ebae1798edf6ebb4",
+     "captured_at": "2026-09-30T10:45:13.361136+00:00"
+    },
+    {
+     "date": "2026-10-01",
+     "blob": "4fcc680ec115c02313c0ab28867dbd1e8a1c2d46",
+     "captured_at": "2026-10-01T10:00:26.466690+00:00"
+    }
+   ],
+   "open_et": "2026-10-01T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "wti",
+   "D": "2026-10-02",
+   "T": "2026-10-02",
+   "prev_date": "2026-10-01",
+   "snapshots": [
+    {
+     "date": "2026-10-01",
+     "blob": "4fcc680ec115c02313c0ab28867dbd1e8a1c2d46",
+     "captured_at": "2026-10-01T10:00:26.466690+00:00"
+    },
+    {
+     "date": "2026-10-02",
+     "blob": "35c901e1ec4fb019aeb6d38ba07cca8c9ab03d10",
+     "captured_at": "2026-10-02T10:00:10.555068+00:00"
+    }
+   ],
+   "open_et": "2026-10-02T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "wti",
+   "D": "2026-10-06",
+   "T": "2026-10-06",
+   "prev_date": "2026-10-02",
+   "snapshots": [
+    {
+     "date": "2026-10-02",
+     "blob": "35c901e1ec4fb019aeb6d38ba07cca8c9ab03d10",
+     "captured_at": "2026-10-02T10:00:10.555068+00:00"
+    },
+    {
+     "date": "2026-10-06",
+     "blob": "fe3bdf93a3d7b439d25ca1b273d8f705b366422c",
+     "captured_at": "2026-10-06T07:00:11.979383+00:00"
+    }
+   ],
+   "open_et": "2026-10-06T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "wti",
+   "D": "2026-10-07",
+   "T": "2026-10-07",
+   "prev_date": "2026-10-06",
+   "snapshots": [
+    {
+     "date": "2026-10-06",
+     "blob": "fe3bdf93a3d7b439d25ca1b273d8f705b366422c",
+     "captured_at": "2026-10-06T07:00:11.979383+00:00"
+    },
+    {
+     "date": "2026-10-07",
+     "blob": "f97f16caf4ed7d362e8dd8fc4dcf42a53c2abaf5",
+     "captured_at": "2026-10-07T10:34:09.073890+00:00"
+    }
+   ],
+   "open_et": "2026-10-07T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "wti",
+   "D": "2026-10-08",
+   "T": "2026-10-08",
+   "prev_date": "2026-10-07",
+   "snapshots": [
+    {
+     "date": "2026-10-07",
+     "blob": "f97f16caf4ed7d362e8dd8fc4dcf42a53c2abaf5",
+     "captured_at": "2026-10-07T10:34:09.073890+00:00"
+    },
+    {
+     "date": "2026-10-08",
+     "blob": "ff4f335fab4e83ee19f9f2c151b689c13d3e5e2b",
+     "captured_at": "2026-10-08T09:35:35.982763+00:00"
+    }
+   ],
+   "open_et": "2026-10-08T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "wti",
+   "D": "2026-10-09",
+   "T": "2026-10-09",
+   "prev_date": "2026-10-08",
+   "snapshots": [
+    {
+     "date": "2026-10-08",
+     "blob": "ff4f335fab4e83ee19f9f2c151b689c13d3e5e2b",
+     "captured_at": "2026-10-08T09:35:35.982763+00:00"
+    },
+    {
+     "date": "2026-10-09",
+     "blob": "32420dfd2a8192628a91ee150ccd12b5df6d85b7",
+     "captured_at": "2026-10-09T09:25:40.092651+00:00"
+    }
+   ],
+   "open_et": "2026-10-09T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "wti",
+   "D": "2026-10-12",
+   "T": "2026-10-12",
+   "prev_date": "2026-10-09",
+   "snapshots": [
+    {
+     "date": "2026-10-09",
+     "blob": "32420dfd2a8192628a91ee150ccd12b5df6d85b7",
+     "captured_at": "2026-10-09T09:25:40.092651+00:00"
+    },
+    {
+     "date": "2026-10-12",
+     "blob": "cbf2d324099df555fa9e049f2354a92e2e242dc0",
+     "captured_at": "2026-10-12T09:34:24.974087+00:00"
+    }
+   ],
+   "open_et": "2026-10-12T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "wti",
+   "D": "2026-10-13",
+   "T": "2026-10-13",
+   "prev_date": "2026-10-12",
+   "snapshots": [
+    {
+     "date": "2026-10-12",
+     "blob": "cbf2d324099df555fa9e049f2354a92e2e242dc0",
+     "captured_at": "2026-10-12T09:34:24.974087+00:00"
+    },
+    {
+     "date": "2026-10-13",
+     "blob": "4679621fc8249abf093d4e0db76fb508219446c9",
+     "captured_at": "2026-10-13T09:16:23.970532+00:00"
+    }
+   ],
+   "open_et": "2026-10-13T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "wti",
+   "D": "2026-10-14",
+   "T": "2026-10-14",
+   "prev_date": "2026-10-13",
+   "snapshots": [
+    {
+     "date": "2026-10-13",
+     "blob": "4679621fc8249abf093d4e0db76fb508219446c9",
+     "captured_at": "2026-10-13T09:16:23.970532+00:00"
+    },
+    {
+     "date": "2026-10-14",
+     "blob": "f3a43a38a0de237f4714c3ba9cec43e03e5e4169",
+     "captured_at": "2026-10-14T09:50:15.777451+00:00"
+    }
+   ],
+   "open_et": "2026-10-14T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-09-28",
+   "T": "2026-09-28",
+   "prev_date": "2026-09-25",
+   "snapshots": [
+    {
+     "date": "2026-09-25",
+     "blob": "e51b38ad2fd06cc129b9658a97ea1ecdb60f89eb",
+     "captured_at": "2026-09-25T10:00:11.026383+00:00"
+    },
+    {
+     "date": "2026-09-28",
+     "blob": "477841c8010bcbf063ae894a3618188eb97d8441",
+     "captured_at": "2026-09-28T08:00:10.699172+00:00"
+    }
+   ],
+   "open_et": "2026-09-28T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-09-29",
+   "T": "2026-09-29",
+   "prev_date": "2026-09-28",
+   "snapshots": [
+    {
+     "date": "2026-09-28",
+     "blob": "477841c8010bcbf063ae894a3618188eb97d8441",
+     "captured_at": "2026-09-28T08:00:10.699172+00:00"
+    },
+    {
+     "date": "2026-09-29",
+     "blob": "00d462c6cb3182bf763e8403eee00c41c3bee0d9",
+     "captured_at": "2026-09-29T09:00:10.147556+00:00"
+    }
+   ],
+   "open_et": "2026-09-29T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-09-30",
+   "T": "2026-09-30",
+   "prev_date": "2026-09-29",
+   "snapshots": [
+    {
+     "date": "2026-09-29",
+     "blob": "00d462c6cb3182bf763e8403eee00c41c3bee0d9",
+     "captured_at": "2026-09-29T09:00:10.147556+00:00"
+    },
+    {
+     "date": "2026-09-30",
+     "blob": "07f4a7bef20e8479705ed995c9966da153136e0a",
+     "captured_at": "2026-09-30T10:00:11.968597+00:00"
+    }
+   ],
+   "open_et": "2026-09-30T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-10-01",
+   "T": "2026-10-01",
+   "prev_date": "2026-09-30",
+   "snapshots": [
+    {
+     "date": "2026-09-30",
+     "blob": "07f4a7bef20e8479705ed995c9966da153136e0a",
+     "captured_at": "2026-09-30T10:00:11.968597+00:00"
+    },
+    {
+     "date": "2026-10-01",
+     "blob": "32536d8770f01a71d20f7549740b84c700033016",
+     "captured_at": "2026-10-01T10:00:28.307342+00:00"
+    }
+   ],
+   "open_et": "2026-10-01T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-10-02",
+   "T": "2026-10-02",
+   "prev_date": "2026-10-01",
+   "snapshots": [
+    {
+     "date": "2026-10-01",
+     "blob": "32536d8770f01a71d20f7549740b84c700033016",
+     "captured_at": "2026-10-01T10:00:28.307342+00:00"
+    },
+    {
+     "date": "2026-10-02",
+     "blob": "18ac853dde04f48ac576c0e48faf23b975633ae4",
+     "captured_at": "2026-10-02T10:00:11.740389+00:00"
+    }
+   ],
+   "open_et": "2026-10-02T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-10-05",
+   "T": "2026-10-05",
+   "prev_date": "2026-10-02",
+   "snapshots": [
+    {
+     "date": "2026-10-02",
+     "blob": "18ac853dde04f48ac576c0e48faf23b975633ae4",
+     "captured_at": "2026-10-02T10:00:11.740389+00:00"
+    },
+    {
+     "date": "2026-10-05",
+     "blob": "bca9a10da9d1d054c7f97e2018322bccb2f5208a",
+     "captured_at": "2026-10-05T09:45:09.741191+00:00"
+    }
+   ],
+   "open_et": "2026-10-05T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-10-06",
+   "T": "2026-10-06",
+   "prev_date": "2026-10-05",
+   "snapshots": [
+    {
+     "date": "2026-10-05",
+     "blob": "bca9a10da9d1d054c7f97e2018322bccb2f5208a",
+     "captured_at": "2026-10-05T09:45:09.741191+00:00"
+    },
+    {
+     "date": "2026-10-06",
+     "blob": "d5f079b1dec64cb4cef767b38a0e4e3b8af8a42f",
+     "captured_at": "2026-10-06T09:45:10.715126+00:00"
+    }
+   ],
+   "open_et": "2026-10-06T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-10-07",
+   "T": "2026-10-07",
+   "prev_date": "2026-10-06",
+   "snapshots": [
+    {
+     "date": "2026-10-06",
+     "blob": "d5f079b1dec64cb4cef767b38a0e4e3b8af8a42f",
+     "captured_at": "2026-10-06T09:45:10.715126+00:00"
+    },
+    {
+     "date": "2026-10-07",
+     "blob": "bad5e017be282ef6723b7f4857e0024e70380206",
+     "captured_at": "2026-10-07T07:52:44.388000+00:00"
+    }
+   ],
+   "open_et": "2026-10-07T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-10-08",
+   "T": "2026-10-08",
+   "prev_date": "2026-10-07",
+   "snapshots": [
+    {
+     "date": "2026-10-07",
+     "blob": "bad5e017be282ef6723b7f4857e0024e70380206",
+     "captured_at": "2026-10-07T07:52:44.388000+00:00"
+    },
+    {
+     "date": "2026-10-08",
+     "blob": "ad2954bfd04baeb199111a5b666ba5c8e4db3c41",
+     "captured_at": "2026-10-08T08:50:26.505457+00:00"
+    }
+   ],
+   "open_et": "2026-10-08T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-10-09",
+   "T": "2026-10-09",
+   "prev_date": "2026-10-08",
+   "snapshots": [
+    {
+     "date": "2026-10-08",
+     "blob": "ad2954bfd04baeb199111a5b666ba5c8e4db3c41",
+     "captured_at": "2026-10-08T08:50:26.505457+00:00"
+    },
+    {
+     "date": "2026-10-09",
+     "blob": "dc68fdd00798f9a5411509589f001824330e6536",
+     "captured_at": "2026-10-09T09:25:41.992412+00:00"
+    }
+   ],
+   "open_et": "2026-10-09T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-10-12",
+   "T": "2026-10-12",
+   "prev_date": "2026-10-09",
+   "snapshots": [
+    {
+     "date": "2026-10-09",
+     "blob": "dc68fdd00798f9a5411509589f001824330e6536",
+     "captured_at": "2026-10-09T09:25:41.992412+00:00"
+    },
+    {
+     "date": "2026-10-12",
+     "blob": "8f2effc49d23d27e176131df2c262bc9c4e9180c",
+     "captured_at": "2026-10-12T09:34:26.003290+00:00"
+    }
+   ],
+   "open_et": "2026-10-12T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-10-13",
+   "T": "2026-10-13",
+   "prev_date": "2026-10-12",
+   "snapshots": [
+    {
+     "date": "2026-10-12",
+     "blob": "8f2effc49d23d27e176131df2c262bc9c4e9180c",
+     "captured_at": "2026-10-12T09:34:26.003290+00:00"
+    },
+    {
+     "date": "2026-10-13",
+     "blob": "4e0d9471aaa754fff555a0d0a6e9e4e86d34ffa4",
+     "captured_at": "2026-10-13T09:16:25.841157+00:00"
+    }
+   ],
+   "open_et": "2026-10-13T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "qqq",
+   "D": "2026-10-14",
+   "T": "2026-10-14",
+   "prev_date": "2026-10-13",
+   "snapshots": [
+    {
+     "date": "2026-10-13",
+     "blob": "4e0d9471aaa754fff555a0d0a6e9e4e86d34ffa4",
+     "captured_at": "2026-10-13T09:16:25.841157+00:00"
+    },
+    {
+     "date": "2026-10-14",
+     "blob": "fbf3bc24041e2e3531fecf8ef2af423116427992",
+     "captured_at": "2026-10-14T09:06:55.786163+00:00"
+    }
+   ],
+   "open_et": "2026-10-14T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-09-28",
+   "T": "2026-09-28",
+   "prev_date": "2026-09-25",
+   "snapshots": [
+    {
+     "date": "2026-09-25",
+     "blob": "485e19732be460cd5a96ba3fcce458a79d9f6790",
+     "captured_at": "2026-09-25T10:00:14.601053+00:00"
+    },
+    {
+     "date": "2026-09-28",
+     "blob": "df633d6d3e1dfdd91bebb048048d62b0a5a1930f",
+     "captured_at": "2026-09-28T08:00:13.292328+00:00"
+    }
+   ],
+   "open_et": "2026-09-28T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-09-29",
+   "T": "2026-09-29",
+   "prev_date": "2026-09-28",
+   "snapshots": [
+    {
+     "date": "2026-09-28",
+     "blob": "df633d6d3e1dfdd91bebb048048d62b0a5a1930f",
+     "captured_at": "2026-09-28T08:00:13.292328+00:00"
+    },
+    {
+     "date": "2026-09-29",
+     "blob": "d7275c2d86d03a93813296bbbb3349dab7dcf2e2",
+     "captured_at": "2026-09-29T10:00:12.825386+00:00"
+    }
+   ],
+   "open_et": "2026-09-29T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-09-30",
+   "T": "2026-09-30",
+   "prev_date": "2026-09-29",
+   "snapshots": [
+    {
+     "date": "2026-09-29",
+     "blob": "d7275c2d86d03a93813296bbbb3349dab7dcf2e2",
+     "captured_at": "2026-09-29T10:00:12.825386+00:00"
+    },
+    {
+     "date": "2026-09-30",
+     "blob": "e898aaf3bd16a6001e88a7d28b0b79ec68942f8f",
+     "captured_at": "2026-09-30T10:00:14.869934+00:00"
+    }
+   ],
+   "open_et": "2026-09-30T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-10-01",
+   "T": "2026-10-01",
+   "prev_date": "2026-09-30",
+   "snapshots": [
+    {
+     "date": "2026-09-30",
+     "blob": "e898aaf3bd16a6001e88a7d28b0b79ec68942f8f",
+     "captured_at": "2026-09-30T10:00:14.869934+00:00"
+    },
+    {
+     "date": "2026-10-01",
+     "blob": "14e67fc3174360728432343fd5a92ff70794eaaa",
+     "captured_at": "2026-10-01T10:00:31.724000+00:00"
+    }
+   ],
+   "open_et": "2026-10-01T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-10-02",
+   "T": "2026-10-02",
+   "prev_date": "2026-10-01",
+   "snapshots": [
+    {
+     "date": "2026-10-01",
+     "blob": "14e67fc3174360728432343fd5a92ff70794eaaa",
+     "captured_at": "2026-10-01T10:00:31.724000+00:00"
+    },
+    {
+     "date": "2026-10-02",
+     "blob": "9df3ca74d4cb158d038dcd91a7f509b8a13b61e4",
+     "captured_at": "2026-10-02T10:00:15.210168+00:00"
+    }
+   ],
+   "open_et": "2026-10-02T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-10-05",
+   "T": "2026-10-05",
+   "prev_date": "2026-10-02",
+   "snapshots": [
+    {
+     "date": "2026-10-02",
+     "blob": "9df3ca74d4cb158d038dcd91a7f509b8a13b61e4",
+     "captured_at": "2026-10-02T10:00:15.210168+00:00"
+    },
+    {
+     "date": "2026-10-05",
+     "blob": "1a27154b7c461f1b3bacc1a06aaf9793677745ad",
+     "captured_at": "2026-10-05T09:45:12.393828+00:00"
+    }
+   ],
+   "open_et": "2026-10-05T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-10-06",
+   "T": "2026-10-06",
+   "prev_date": "2026-10-05",
+   "snapshots": [
+    {
+     "date": "2026-10-05",
+     "blob": "1a27154b7c461f1b3bacc1a06aaf9793677745ad",
+     "captured_at": "2026-10-05T09:45:12.393828+00:00"
+    },
+    {
+     "date": "2026-10-06",
+     "blob": "a7b19311f2a9fa1ec157f0534eea60727a70eea3",
+     "captured_at": "2026-10-06T09:45:14.307187+00:00"
+    }
+   ],
+   "open_et": "2026-10-06T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-10-07",
+   "T": "2026-10-07",
+   "prev_date": "2026-10-06",
+   "snapshots": [
+    {
+     "date": "2026-10-06",
+     "blob": "a7b19311f2a9fa1ec157f0534eea60727a70eea3",
+     "captured_at": "2026-10-06T09:45:14.307187+00:00"
+    },
+    {
+     "date": "2026-10-07",
+     "blob": "a40cd0d2f8cf98a83ba05031f0f7d8b4c3077cec",
+     "captured_at": "2026-10-07T10:34:12.401245+00:00"
+    }
+   ],
+   "open_et": "2026-10-07T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-10-08",
+   "T": "2026-10-08",
+   "prev_date": "2026-10-07",
+   "snapshots": [
+    {
+     "date": "2026-10-07",
+     "blob": "a40cd0d2f8cf98a83ba05031f0f7d8b4c3077cec",
+     "captured_at": "2026-10-07T10:34:12.401245+00:00"
+    },
+    {
+     "date": "2026-10-08",
+     "blob": "592375782d37877b4c08cfdd4fcb4610f649397e",
+     "captured_at": "2026-10-08T09:35:39.936513+00:00"
+    }
+   ],
+   "open_et": "2026-10-08T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-10-09",
+   "T": "2026-10-09",
+   "prev_date": "2026-10-08",
+   "snapshots": [
+    {
+     "date": "2026-10-08",
+     "blob": "592375782d37877b4c08cfdd4fcb4610f649397e",
+     "captured_at": "2026-10-08T09:35:39.936513+00:00"
+    },
+    {
+     "date": "2026-10-09",
+     "blob": "16d2ae67742da8da7cce69e7534194dadc731df3",
+     "captured_at": "2026-10-09T10:08:01.402046+00:00"
+    }
+   ],
+   "open_et": "2026-10-09T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-10-12",
+   "T": "2026-10-12",
+   "prev_date": "2026-10-09",
+   "snapshots": [
+    {
+     "date": "2026-10-09",
+     "blob": "16d2ae67742da8da7cce69e7534194dadc731df3",
+     "captured_at": "2026-10-09T10:08:01.402046+00:00"
+    },
+    {
+     "date": "2026-10-12",
+     "blob": "4378f5536853c6cf3671ac99450aa16ef2992fcf",
+     "captured_at": "2026-10-12T10:18:38.650711+00:00"
+    }
+   ],
+   "open_et": "2026-10-12T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-10-13",
+   "T": "2026-10-13",
+   "prev_date": "2026-10-12",
+   "snapshots": [
+    {
+     "date": "2026-10-12",
+     "blob": "4378f5536853c6cf3671ac99450aa16ef2992fcf",
+     "captured_at": "2026-10-12T10:18:38.650711+00:00"
+    },
+    {
+     "date": "2026-10-13",
+     "blob": "00fa3f5dfbaaa0184c5dd711efe888f5e5d39765",
+     "captured_at": "2026-10-13T09:16:28.600280+00:00"
+    }
+   ],
+   "open_et": "2026-10-13T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tlt",
+   "D": "2026-10-14",
+   "T": "2026-10-14",
+   "prev_date": "2026-10-13",
+   "snapshots": [
+    {
+     "date": "2026-10-13",
+     "blob": "00fa3f5dfbaaa0184c5dd711efe888f5e5d39765",
+     "captured_at": "2026-10-13T09:16:28.600280+00:00"
+    },
+    {
+     "date": "2026-10-14",
+     "blob": "7061973615bfc35b38324dcb7bf1c7970cc9b805",
+     "captured_at": "2026-10-14T10:34:57.759170+00:00"
+    }
+   ],
+   "open_et": "2026-10-14T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-09-28",
+   "T": "2026-09-28",
+   "prev_date": "2026-09-25",
+   "snapshots": [
+    {
+     "date": "2026-09-25",
+     "blob": "c699388814d33376e6ab69ab9a5fa94043c4367c",
+     "captured_at": "2026-09-25T08:00:12.827834+00:00"
+    },
+    {
+     "date": "2026-09-28",
+     "blob": "daa28e69c91a137e02971f99af987cd63cccc084",
+     "captured_at": "2026-09-28T09:00:18.036237+00:00"
+    }
+   ],
+   "open_et": "2026-09-28T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-09-29",
+   "T": "2026-09-29",
+   "prev_date": "2026-09-28",
+   "snapshots": [
+    {
+     "date": "2026-09-28",
+     "blob": "daa28e69c91a137e02971f99af987cd63cccc084",
+     "captured_at": "2026-09-28T09:00:18.036237+00:00"
+    },
+    {
+     "date": "2026-09-29",
+     "blob": "6aa6a4673c73f088624e10ab484a8221518ac19f",
+     "captured_at": "2026-09-29T10:00:13.778494+00:00"
+    }
+   ],
+   "open_et": "2026-09-29T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-09-30",
+   "T": "2026-09-30",
+   "prev_date": "2026-09-29",
+   "snapshots": [
+    {
+     "date": "2026-09-29",
+     "blob": "6aa6a4673c73f088624e10ab484a8221518ac19f",
+     "captured_at": "2026-09-29T10:00:13.778494+00:00"
+    },
+    {
+     "date": "2026-09-30",
+     "blob": "9d02a4f6d9122bffd9a90daf3217410d33aec39b",
+     "captured_at": "2026-09-30T10:00:15.940478+00:00"
+    }
+   ],
+   "open_et": "2026-09-30T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-10-01",
+   "T": "2026-10-01",
+   "prev_date": "2026-09-30",
+   "snapshots": [
+    {
+     "date": "2026-09-30",
+     "blob": "9d02a4f6d9122bffd9a90daf3217410d33aec39b",
+     "captured_at": "2026-09-30T10:00:15.940478+00:00"
+    },
+    {
+     "date": "2026-10-01",
+     "blob": "ee7b2a9a455e2eb64f73989a43dd168a29b45edf",
+     "captured_at": "2026-10-01T10:00:33.410465+00:00"
+    }
+   ],
+   "open_et": "2026-10-01T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-10-02",
+   "T": "2026-10-02",
+   "prev_date": "2026-10-01",
+   "snapshots": [
+    {
+     "date": "2026-10-01",
+     "blob": "ee7b2a9a455e2eb64f73989a43dd168a29b45edf",
+     "captured_at": "2026-10-01T10:00:33.410465+00:00"
+    },
+    {
+     "date": "2026-10-02",
+     "blob": "cff2b4d86ed57b65067d8755719226e3d8d22700",
+     "captured_at": "2026-10-02T10:00:16.415986+00:00"
+    }
+   ],
+   "open_et": "2026-10-02T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-10-05",
+   "T": "2026-10-05",
+   "prev_date": "2026-10-02",
+   "snapshots": [
+    {
+     "date": "2026-10-02",
+     "blob": "cff2b4d86ed57b65067d8755719226e3d8d22700",
+     "captured_at": "2026-10-02T10:00:16.415986+00:00"
+    },
+    {
+     "date": "2026-10-05",
+     "blob": "86fd89a588919be191ebb5931d700dce52177e3b",
+     "captured_at": "2026-10-05T09:45:13.605528+00:00"
+    }
+   ],
+   "open_et": "2026-10-05T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-10-06",
+   "T": "2026-10-06",
+   "prev_date": "2026-10-05",
+   "snapshots": [
+    {
+     "date": "2026-10-05",
+     "blob": "86fd89a588919be191ebb5931d700dce52177e3b",
+     "captured_at": "2026-10-05T09:45:13.605528+00:00"
+    },
+    {
+     "date": "2026-10-06",
+     "blob": "7e80ed98a70a390e58b6269bba96714023291bc0",
+     "captured_at": "2026-10-06T09:45:15.265988+00:00"
+    }
+   ],
+   "open_et": "2026-10-06T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-10-07",
+   "T": "2026-10-07",
+   "prev_date": "2026-10-06",
+   "snapshots": [
+    {
+     "date": "2026-10-06",
+     "blob": "7e80ed98a70a390e58b6269bba96714023291bc0",
+     "captured_at": "2026-10-06T09:45:15.265988+00:00"
+    },
+    {
+     "date": "2026-10-07",
+     "blob": "7cafc38fb66b728d8cf159756b5e669b72c28ae9",
+     "captured_at": "2026-10-07T09:14:21.358385+00:00"
+    }
+   ],
+   "open_et": "2026-10-07T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-10-08",
+   "T": "2026-10-08",
+   "prev_date": "2026-10-07",
+   "snapshots": [
+    {
+     "date": "2026-10-07",
+     "blob": "7cafc38fb66b728d8cf159756b5e669b72c28ae9",
+     "captured_at": "2026-10-07T09:14:21.358385+00:00"
+    },
+    {
+     "date": "2026-10-08",
+     "blob": "a94f0f0243fb71dccda374354255922abe7d24f9",
+     "captured_at": "2026-10-08T08:50:30.320158+00:00"
+    }
+   ],
+   "open_et": "2026-10-08T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-10-09",
+   "T": "2026-10-09",
+   "prev_date": "2026-10-08",
+   "snapshots": [
+    {
+     "date": "2026-10-08",
+     "blob": "a94f0f0243fb71dccda374354255922abe7d24f9",
+     "captured_at": "2026-10-08T08:50:30.320158+00:00"
+    },
+    {
+     "date": "2026-10-09",
+     "blob": "bba4632f1a8e7ec727e77db8d331ca20aeeba01d",
+     "captured_at": "2026-10-09T08:44:46.284588+00:00"
+    }
+   ],
+   "open_et": "2026-10-09T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-10-12",
+   "T": "2026-10-12",
+   "prev_date": "2026-10-09",
+   "snapshots": [
+    {
+     "date": "2026-10-09",
+     "blob": "bba4632f1a8e7ec727e77db8d331ca20aeeba01d",
+     "captured_at": "2026-10-09T08:44:46.284588+00:00"
+    },
+    {
+     "date": "2026-10-12",
+     "blob": "68c439aa37de311f1ccc2d4be622369bf8a800c0",
+     "captured_at": "2026-10-12T09:34:30.528997+00:00"
+    }
+   ],
+   "open_et": "2026-10-12T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-10-13",
+   "T": "2026-10-13",
+   "prev_date": "2026-10-12",
+   "snapshots": [
+    {
+     "date": "2026-10-12",
+     "blob": "68c439aa37de311f1ccc2d4be622369bf8a800c0",
+     "captured_at": "2026-10-12T09:34:30.528997+00:00"
+    },
+    {
+     "date": "2026-10-13",
+     "blob": "361cf9447867f4a56f9fdd78e29b859cf49926c4",
+     "captured_at": "2026-10-13T09:16:29.543631+00:00"
+    }
+   ],
+   "open_et": "2026-10-13T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "spy",
+   "D": "2026-10-14",
+   "T": "2026-10-14",
+   "prev_date": "2026-10-13",
+   "snapshots": [
+    {
+     "date": "2026-10-13",
+     "blob": "361cf9447867f4a56f9fdd78e29b859cf49926c4",
+     "captured_at": "2026-10-13T09:16:29.543631+00:00"
+    },
+    {
+     "date": "2026-10-14",
+     "blob": "b8f61939bfc2c9cdd239c3b09af0dea080814e13",
+     "captured_at": "2026-10-14T09:06:59.807251+00:00"
+    }
+   ],
+   "open_et": "2026-10-14T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "iwm",
+   "D": "2026-09-28",
+   "T": "2026-09-28",
+   "prev_date": "2026-09-25",
+   "snapshots": [
+    {
+     "date": "2026-09-25",
+     "blob": "2889e1e4aeee43bc90eb02ad2e3cc33f9a1d4f6c",
+     "captured_at": "2026-09-25T10:00:16.273799+00:00"
+    },
+    {
+     "date": "2026-09-28",
+     "blob": "d0edc337080dbd3c0baed76e5922bc21312a4ae7",
+     "captured_at": "2026-09-28T10:00:16.214972+00:00"
+    }
+   ],
+   "open_et": "2026-09-28T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "iwm",
+   "D": "2026-09-29",
+   "T": "2026-09-29",
+   "prev_date": "2026-09-28",
+   "snapshots": [
+    {
+     "date": "2026-09-28",
+     "blob": "d0edc337080dbd3c0baed76e5922bc21312a4ae7",
+     "captured_at": "2026-09-28T10:00:16.214972+00:00"
+    },
+    {
+     "date": "2026-09-29",
+     "blob": "c462186f59cede4a46b21ca76567e31fbb6eef03",
+     "captured_at": "2026-09-29T10:45:17.461725+00:00"
+    }
+   ],
+   "open_et": "2026-09-29T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "iwm",
+   "D": "2026-09-30",
+   "T": "2026-09-30",
+   "prev_date": "2026-09-29",
+   "snapshots": [
+    {
+     "date": "2026-09-29",
+     "blob": "c462186f59cede4a46b21ca76567e31fbb6eef03",
+     "captured_at": "2026-09-29T10:45:17.461725+00:00"
+    },
+    {
+     "date": "2026-09-30",
+     "blob": "0c4426b9e48cbddcbd7ddd8f3073523d9c999dbe",
+     "captured_at": "2026-09-30T10:00:16.852055+00:00"
+    }
+   ],
+   "open_et": "2026-09-30T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "iwm",
+   "D": "2026-10-01",
+   "T": "2026-10-01",
+   "prev_date": "2026-09-30",
+   "snapshots": [
+    {
+     "date": "2026-09-30",
+     "blob": "0c4426b9e48cbddcbd7ddd8f3073523d9c999dbe",
+     "captured_at": "2026-09-30T10:00:16.852055+00:00"
+    },
+    {
+     "date": "2026-10-01",
+     "blob": "590ce422e1d04f4ac390db08de70883d806f5e93",
+     "captured_at": "2026-10-01T10:00:35.104037+00:00"
+    }
+   ],
+   "open_et": "2026-10-01T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "iwm",
+   "D": "2026-10-02",
+   "T": "2026-10-02",
+   "prev_date": "2026-10-01",
+   "snapshots": [
+    {
+     "date": "2026-10-01",
+     "blob": "590ce422e1d04f4ac390db08de70883d806f5e93",
+     "captured_at": "2026-10-01T10:00:35.104037+00:00"
+    },
+    {
+     "date": "2026-10-02",
+     "blob": "f203406d60ec50a7e9c02cd9775de40b9ae1473f",
+     "captured_at": "2026-10-02T10:00:18.029519+00:00"
+    }
+   ],
+   "open_et": "2026-10-02T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "iwm",
+   "D": "2026-10-06",
+   "T": "2026-10-06",
+   "prev_date": "2026-10-02",
+   "snapshots": [
+    {
+     "date": "2026-10-02",
+     "blob": "f203406d60ec50a7e9c02cd9775de40b9ae1473f",
+     "captured_at": "2026-10-02T10:00:18.029519+00:00"
+    },
+    {
+     "date": "2026-10-06",
+     "blob": "4fabae64a37cfcdbe897a7d52207b19f43032bcd",
+     "captured_at": "2026-10-06T07:00:17.751195+00:00"
+    }
+   ],
+   "open_et": "2026-10-06T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "iwm",
+   "D": "2026-10-07",
+   "T": "2026-10-07",
+   "prev_date": "2026-10-06",
+   "snapshots": [
+    {
+     "date": "2026-10-06",
+     "blob": "4fabae64a37cfcdbe897a7d52207b19f43032bcd",
+     "captured_at": "2026-10-06T07:00:17.751195+00:00"
+    },
+    {
+     "date": "2026-10-07",
+     "blob": "059da8a87704fa75297aa2bac6003eb1ac9b587f",
+     "captured_at": "2026-10-07T09:54:46.456982+00:00"
+    }
+   ],
+   "open_et": "2026-10-07T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "iwm",
+   "D": "2026-10-08",
+   "T": "2026-10-08",
+   "prev_date": "2026-10-07",
+   "snapshots": [
+    {
+     "date": "2026-10-07",
+     "blob": "059da8a87704fa75297aa2bac6003eb1ac9b587f",
+     "captured_at": "2026-10-07T09:54:46.456982+00:00"
+    },
+    {
+     "date": "2026-10-08",
+     "blob": "6f4c3bac35ad8e20fa246816e09096320b83b5e4",
+     "captured_at": "2026-10-08T08:50:32.034022+00:00"
+    }
+   ],
+   "open_et": "2026-10-08T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "iwm",
+   "D": "2026-10-09",
+   "T": "2026-10-09",
+   "prev_date": "2026-10-08",
+   "snapshots": [
+    {
+     "date": "2026-10-08",
+     "blob": "6f4c3bac35ad8e20fa246816e09096320b83b5e4",
+     "captured_at": "2026-10-08T08:50:32.034022+00:00"
+    },
+    {
+     "date": "2026-10-09",
+     "blob": "d7b614c9303a2c1f0b5cba27386679f520c6f49c",
+     "captured_at": "2026-10-09T10:08:04.512615+00:00"
+    }
+   ],
+   "open_et": "2026-10-09T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "iwm",
+   "D": "2026-10-12",
+   "T": "2026-10-12",
+   "prev_date": "2026-10-09",
+   "snapshots": [
+    {
+     "date": "2026-10-09",
+     "blob": "d7b614c9303a2c1f0b5cba27386679f520c6f49c",
+     "captured_at": "2026-10-09T10:08:04.512615+00:00"
+    },
+    {
+     "date": "2026-10-12",
+     "blob": "9b61e895598a7ccaa2f3128282c67ad053ba1e09",
+     "captured_at": "2026-10-12T10:18:41.438363+00:00"
+    }
+   ],
+   "open_et": "2026-10-12T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "iwm",
+   "D": "2026-10-13",
+   "T": "2026-10-13",
+   "prev_date": "2026-10-12",
+   "snapshots": [
+    {
+     "date": "2026-10-12",
+     "blob": "9b61e895598a7ccaa2f3128282c67ad053ba1e09",
+     "captured_at": "2026-10-12T10:18:41.438363+00:00"
+    },
+    {
+     "date": "2026-10-13",
+     "blob": "8eedaa88e5c7a7a79c113e11af67cd74c6975c3f",
+     "captured_at": "2026-10-13T09:16:30.533431+00:00"
+    }
+   ],
+   "open_et": "2026-10-13T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "iwm",
+   "D": "2026-10-14",
+   "T": "2026-10-14",
+   "prev_date": "2026-10-13",
+   "snapshots": [
+    {
+     "date": "2026-10-13",
+     "blob": "8eedaa88e5c7a7a79c113e11af67cd74c6975c3f",
+     "captured_at": "2026-10-13T09:16:30.533431+00:00"
+    },
+    {
+     "date": "2026-10-14",
+     "blob": "95966941ec31b70f1bb95ddb6f773e80229df542",
+     "captured_at": "2026-10-14T09:50:21.738457+00:00"
+    }
+   ],
+   "open_et": "2026-10-14T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tqqq",
+   "D": "2026-09-28",
+   "T": "2026-09-28",
+   "prev_date": "2026-09-25",
+   "snapshots": [
+    {
+     "date": "2026-09-25",
+     "blob": "a117818b9712c2724ba5b0e67862d27347209611",
+     "captured_at": "2026-09-25T10:45:13.252522+00:00"
+    },
+    {
+     "date": "2026-09-28",
+     "blob": "9d01d46b5d0eeebf973d24830be57cdf1e007f0d",
+     "captured_at": "2026-09-28T10:45:12.435971+00:00"
+    }
+   ],
+   "open_et": "2026-09-28T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tqqq",
+   "D": "2026-09-29",
+   "T": "2026-09-29",
+   "prev_date": "2026-09-28",
+   "snapshots": [
+    {
+     "date": "2026-09-28",
+     "blob": "9d01d46b5d0eeebf973d24830be57cdf1e007f0d",
+     "captured_at": "2026-09-28T10:45:12.435971+00:00"
+    },
+    {
+     "date": "2026-09-29",
+     "blob": "cf4fe937d6ad7bb60156e4382850256a5a34774e",
+     "captured_at": "2026-09-29T10:00:11.682665+00:00"
+    }
+   ],
+   "open_et": "2026-09-29T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "tqqq",
+   "D": "2026-09-30",
+   "T": "2026-09-30",
+   "prev_date": "2026-09-29",
+   "snapshots": [
+    {
+     "date": "2026-09-29",
+     "blob": "cf4fe937d6ad7bb60156e4382850256a5a34774e",
+     "captured_at": "2026-09-29T10:00:11.682665+00:00"
+    },
+    {
+     "date": "2026-09-30",
+     "blob": "a1588c4365698df354e26ad365c858d7597ad92f",
+     "captured_at": "2026-09-30T10:00:12.728612+00:00"
+    }
+   ],
+   "open_et": "2026-09-30T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "tqqq",
+   "D": "2026-10-01",
+   "T": "2026-10-01",
+   "prev_date": "2026-09-30",
+   "snapshots": [
+    {
+     "date": "2026-09-30",
+     "blob": "a1588c4365698df354e26ad365c858d7597ad92f",
+     "captured_at": "2026-09-30T10:00:12.728612+00:00"
+    },
+    {
+     "date": "2026-10-01",
+     "blob": "95403a1d7372be0a8b10c9f6b0418027468b3e47",
+     "captured_at": "2026-10-01T10:00:30.288447+00:00"
+    }
+   ],
+   "open_et": "2026-10-01T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tqqq",
+   "D": "2026-10-02",
+   "T": "2026-10-02",
+   "prev_date": "2026-10-01",
+   "snapshots": [
+    {
+     "date": "2026-10-01",
+     "blob": "95403a1d7372be0a8b10c9f6b0418027468b3e47",
+     "captured_at": "2026-10-01T10:00:30.288447+00:00"
+    },
+    {
+     "date": "2026-10-02",
+     "blob": "8e5c0f7bcb49f54b039d9129e15ccb0c62333984",
+     "captured_at": "2026-10-02T10:00:14.022627+00:00"
+    }
+   ],
+   "open_et": "2026-10-02T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "tqqq",
+   "D": "2026-10-06",
+   "T": "2026-10-06",
+   "prev_date": "2026-10-02",
+   "snapshots": [
+    {
+     "date": "2026-10-02",
+     "blob": "8e5c0f7bcb49f54b039d9129e15ccb0c62333984",
+     "captured_at": "2026-10-02T10:00:14.022627+00:00"
+    },
+    {
+     "date": "2026-10-06",
+     "blob": "b0a947fcaadbd107e5d7c2228a3a192deab63309",
+     "captured_at": "2026-10-06T09:45:13.210255+00:00"
+    }
+   ],
+   "open_et": "2026-10-06T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "tqqq",
+   "D": "2026-10-07",
+   "T": "2026-10-07",
+   "prev_date": "2026-10-06",
+   "snapshots": [
+    {
+     "date": "2026-10-06",
+     "blob": "b0a947fcaadbd107e5d7c2228a3a192deab63309",
+     "captured_at": "2026-10-06T09:45:13.210255+00:00"
+    },
+    {
+     "date": "2026-10-07",
+     "blob": "ea10b53453e3770c09bf5252bbb2ce1024234a3b",
+     "captured_at": "2026-10-07T09:14:18.585416+00:00"
+    }
+   ],
+   "open_et": "2026-10-07T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tqqq",
+   "D": "2026-10-08",
+   "T": "2026-10-08",
+   "prev_date": "2026-10-07",
+   "snapshots": [
+    {
+     "date": "2026-10-07",
+     "blob": "ea10b53453e3770c09bf5252bbb2ce1024234a3b",
+     "captured_at": "2026-10-07T09:14:18.585416+00:00"
+    },
+    {
+     "date": "2026-10-08",
+     "blob": "4b4071cca8046c954e5f9d8e0f7aafe3a239e75c",
+     "captured_at": "2026-10-08T10:22:05.084113+00:00"
+    }
+   ],
+   "open_et": "2026-10-08T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tqqq",
+   "D": "2026-10-09",
+   "T": "2026-10-09",
+   "prev_date": "2026-10-08",
+   "snapshots": [
+    {
+     "date": "2026-10-08",
+     "blob": "4b4071cca8046c954e5f9d8e0f7aafe3a239e75c",
+     "captured_at": "2026-10-08T10:22:05.084113+00:00"
+    },
+    {
+     "date": "2026-10-09",
+     "blob": "07cb1df7a396967a21bb5ff77bfd6782749cb5d1",
+     "captured_at": "2026-10-09T10:08:00.265538+00:00"
+    }
+   ],
+   "open_et": "2026-10-09T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "tqqq",
+   "D": "2026-10-12",
+   "T": "2026-10-12",
+   "prev_date": "2026-10-09",
+   "snapshots": [
+    {
+     "date": "2026-10-09",
+     "blob": "07cb1df7a396967a21bb5ff77bfd6782749cb5d1",
+     "captured_at": "2026-10-09T10:08:00.265538+00:00"
+    },
+    {
+     "date": "2026-10-12",
+     "blob": "d02ff84b7b0b698a6cef2ac8280b34ee02e92251",
+     "captured_at": "2026-10-12T09:34:27.378807+00:00"
+    }
+   ],
+   "open_et": "2026-10-12T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏多"
+  },
+  {
+   "inst": "tqqq",
+   "D": "2026-10-13",
+   "T": "2026-10-13",
+   "prev_date": "2026-10-12",
+   "snapshots": [
+    {
+     "date": "2026-10-12",
+     "blob": "d02ff84b7b0b698a6cef2ac8280b34ee02e92251",
+     "captured_at": "2026-10-12T09:34:27.378807+00:00"
+    },
+    {
+     "date": "2026-10-13",
+     "blob": "7bb430be377efdd7742b63edb28caa9879b1f974",
+     "captured_at": "2026-10-13T10:31:23.436359+00:00"
+    }
+   ],
+   "open_et": "2026-10-13T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  },
+  {
+   "inst": "tqqq",
+   "D": "2026-10-14",
+   "T": "2026-10-14",
+   "prev_date": "2026-10-13",
+   "snapshots": [
+    {
+     "date": "2026-10-13",
+     "blob": "7bb430be377efdd7742b63edb28caa9879b1f974",
+     "captured_at": "2026-10-13T10:31:23.436359+00:00"
+    },
+    {
+     "date": "2026-10-14",
+     "blob": "1bcb05bd8ba6e8f7155f995626e1b0c1d54e79f1",
+     "captured_at": "2026-10-14T09:50:18.579437+00:00"
+    }
+   ],
+   "open_et": "2026-10-14T09:30:00-04:00",
+   "availability": "preopen",
+   "call_code_sha": "31057c35f587532f",
+   "dir": "偏空"
+  }
+ ],
+ "counts": {
+  "gold": {
+   "preopen": 13,
+   "after_open": 0,
+   "unknown": 0,
+   "open_to_close_preopen_only": {
+    "hits": 8,
+    "n": 13
+   }
+  },
+  "silver": {
+   "preopen": 12,
+   "after_open": 0,
+   "unknown": 0,
+   "open_to_close_preopen_only": {
+    "hits": 6,
+    "n": 12
+   }
+  },
+  "wti": {
+   "preopen": 12,
+   "after_open": 0,
+   "unknown": 0,
+   "open_to_close_preopen_only": {
+    "hits": 5,
+    "n": 12
+   }
+  },
+  "qqq": {
+   "preopen": 13,
+   "after_open": 0,
+   "unknown": 0,
+   "open_to_close_preopen_only": {
+    "hits": 10,
+    "n": 13
+   }
+  },
+  "tlt": {
+   "preopen": 13,
+   "after_open": 0,
+   "unknown": 0,
+   "open_to_close_preopen_only": {
+    "hits": 8,
+    "n": 13
+   }
+  },
+  "spy": {
+   "preopen": 13,
+   "after_open": 0,
+   "unknown": 0,
+   "open_to_close_preopen_only": {
+    "hits": 7,
+    "n": 13
+   }
+  },
+  "iwm": {
+   "preopen": 12,
+   "after_open": 0,
+   "unknown": 0,
+   "open_to_close_preopen_only": {
+    "hits": 3,
+    "n": 12
+   }
+  },
+  "tqqq": {
+   "preopen": 12,
+   "after_open": 0,
+   "unknown": 0,
+   "open_to_close_preopen_only": {
+    "hits": 7,
+    "n": 12
+   }
+  }
+ },
+ "run": "run2",
+ "run_result_blob": "0d9e3183daa363cf5e5e3b37bb8949981e27b4a8",
+ "script_sha256": "9c81d5dcfae7effdb848d33ce49dcfe4ec8c40e5ea5f0db93f85efce354cf367"
+}

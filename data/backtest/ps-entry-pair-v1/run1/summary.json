@@ -1,0 +1,2914 @@
+{
+ "bar|全部": {
+  "opportunities": 210,
+  "categories": {
+   "both": {
+    "n": 126,
+    "fast_pnl_atr0": {
+     "n": 126,
+     "mean": 1.5881,
+     "median": -0.3265,
+     "p10": -5.2478,
+     "p90": 9.482,
+     "min": -9.6228,
+     "max": 79.8825,
+     "share_pos": 0.4683
+    },
+    "fast_mae_atr0": {
+     "n": 126,
+     "mean": -3.1645,
+     "median": -2.6212,
+     "p10": -5.928,
+     "p90": -0.5628,
+     "min": -10.1656,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 126,
+     "mean": 3.4836,
+     "median": -3.0821,
+     "p10": -8.5594,
+     "p90": 19.3268,
+     "min": -12.7771,
+     "max": 86.9212,
+     "share_pos": 0.4127
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 102,
+     "stop": 17,
+     "gap_stop": 4,
+     "time_exit": 2,
+     "struct_exit+gap_stop": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 126,
+     "mean": 1.7698,
+     "median": -0.937,
+     "p10": -6.4655,
+     "p90": 9.1135,
+     "min": -20.9656,
+     "max": 85.5165,
+     "share_pos": 0.4365
+    },
+    "slow_mae_atr0": {
+     "n": 126,
+     "mean": -3.674,
+     "median": -3.1161,
+     "p10": -7.4213,
+     "p90": -0.5107,
+     "min": -21.0321,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 126,
+     "mean": 3.183,
+     "median": -2.9457,
+     "p10": -8.0754,
+     "p90": 22.8947,
+     "min": -20.9656,
+     "max": 85.5165,
+     "share_pos": 0.4127
+    },
+    "lead_bars": {
+     "n": 126,
+     "mean": 17.373,
+     "median": 15.5,
+     "p10": 1,
+     "p90": 39,
+     "min": -10,
+     "max": 51,
+     "share_pos": 0.9048
+    },
+    "entry_px_adv_atr0": {
+     "n": 126,
+     "mean": 0.5529,
+     "median": 0.3593,
+     "p10": -1.6905,
+     "p90": 3.107,
+     "min": -6.5834,
+     "max": 17.1325,
+     "share_pos": 0.5873
+    },
+    "pnl_diff_atr0": {
+     "n": 126,
+     "mean": -0.1817,
+     "median": 0.6249,
+     "p10": -3.3181,
+     "p90": 3.6994,
+     "min": -88.7389,
+     "max": 37.4353,
+     "share_pos": 0.619
+    }
+   },
+   "fast_only": {
+    "n": 51,
+    "fast_pnl_atr0": {
+     "n": 51,
+     "mean": -2.2354,
+     "median": -3.4009,
+     "p10": -6.5034,
+     "p90": 3.3841,
+     "min": -14.4463,
+     "max": 33.7747,
+     "share_pos": 0.1373
+    },
+    "fast_mae_atr0": {
+     "n": 51,
+     "mean": -4.1765,
+     "median": -3.9877,
+     "p10": -6.9305,
+     "p90": -1.198,
+     "min": -15.0126,
+     "max": -0.1307,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 51,
+     "mean": -2.4974,
+     "median": -3.7552,
+     "p10": -6.5034,
+     "p90": 1.6337,
+     "min": -14.4463,
+     "max": 21.1698,
+     "share_pos": 0.1373
+    },
+    "fast_exit_reasons": {
+     "stop": 30,
+     "struct_exit": 13,
+     "gap_stop": 8
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 38,
+     "timeout_no_entry": 13
+    }
+   },
+   "slow_only": {
+    "n": 0,
+    "slow_pnl_atr0": {
+     "n": 0
+    },
+    "slow_mae_atr0": {
+     "n": 0
+    },
+    "slow_hold_atr0": {
+     "n": 0
+    },
+    "fast_not_entered_reason": {}
+   },
+   "neither": {
+    "n": 33
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": 86.097,
+   "slow": 222.99,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 6,
+   "slow": 13
+  }
+ },
+ "bar|ETF": {
+  "opportunities": 68,
+  "categories": {
+   "both": {
+    "n": 40,
+    "fast_pnl_atr0": {
+     "n": 40,
+     "mean": 0.3632,
+     "median": -1.0105,
+     "p10": -5.2971,
+     "p90": 9.7589,
+     "min": -7.0954,
+     "max": 17.3666,
+     "share_pos": 0.425
+    },
+    "fast_mae_atr0": {
+     "n": 40,
+     "mean": -3.0579,
+     "median": -2.6303,
+     "p10": -5.8837,
+     "p90": -0.7108,
+     "min": -9.6352,
+     "max": -0.1412,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 40,
+     "mean": 4.0295,
+     "median": -2.8543,
+     "p10": -6.9054,
+     "p90": 26.8093,
+     "min": -10.9832,
+     "max": 52.7824,
+     "share_pos": 0.45
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 33,
+     "stop": 6,
+     "time_exit": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 40,
+     "mean": -0.3516,
+     "median": -1.4541,
+     "p10": -5.9981,
+     "p90": 8.665,
+     "min": -9.6755,
+     "max": 13.7389,
+     "share_pos": 0.35
+    },
+    "slow_mae_atr0": {
+     "n": 40,
+     "mean": -3.8248,
+     "median": -3.264,
+     "p10": -7.1337,
+     "p90": -0.4366,
+     "min": -9.7965,
+     "max": -0.0773,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 40,
+     "mean": 3.702,
+     "median": -3.0661,
+     "p10": -7.2413,
+     "p90": 26.197,
+     "min": -9.7419,
+     "max": 51.4407,
+     "share_pos": 0.425
+    },
+    "lead_bars": {
+     "n": 40,
+     "mean": 20.225,
+     "median": 19.5,
+     "p10": 2,
+     "p90": 41,
+     "min": 0,
+     "max": 48,
+     "share_pos": 0.925
+    },
+    "entry_px_adv_atr0": {
+     "n": 40,
+     "mean": 0.5835,
+     "median": 0.2143,
+     "p10": -1.2244,
+     "p90": 3.107,
+     "min": -3.9702,
+     "max": 3.8922,
+     "share_pos": 0.625
+    },
+    "pnl_diff_atr0": {
+     "n": 40,
+     "mean": 0.7148,
+     "median": 0.8719,
+     "p10": -1.485,
+     "p90": 3.6994,
+     "min": -11.8407,
+     "max": 10.199,
+     "share_pos": 0.65
+    }
+   },
+   "fast_only": {
+    "n": 20,
+    "fast_pnl_atr0": {
+     "n": 20,
+     "mean": -2.4542,
+     "median": -3.77,
+     "p10": -4.878,
+     "p90": 7.5236,
+     "min": -12.299,
+     "max": 11.1579,
+     "share_pos": 0.15
+    },
+    "fast_mae_atr0": {
+     "n": 20,
+     "mean": -4.1985,
+     "median": -4.0771,
+     "p10": -5.2838,
+     "p90": -1.5107,
+     "min": -12.8699,
+     "max": -0.1307,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 20,
+     "mean": -3.4391,
+     "median": -4.3572,
+     "p10": -6.5034,
+     "p90": 1.6337,
+     "min": -12.299,
+     "max": 15.7752,
+     "share_pos": 0.1
+    },
+    "fast_exit_reasons": {
+     "stop": 12,
+     "struct_exit": 5,
+     "gap_stop": 3
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 15,
+     "timeout_no_entry": 5
+    }
+   },
+   "slow_only": {
+    "n": 0,
+    "slow_pnl_atr0": {
+     "n": 0
+    },
+    "slow_mae_atr0": {
+     "n": 0
+    },
+    "slow_hold_atr0": {
+     "n": 0
+    },
+    "fast_not_entered_reason": {}
+   },
+   "neither": {
+    "n": 8
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": -34.556,
+   "slow": -14.064,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 3,
+   "slow": 6
+  }
+ },
+ "bar|个股": {
+  "opportunities": 106,
+  "categories": {
+   "both": {
+    "n": 64,
+    "fast_pnl_atr0": {
+     "n": 64,
+     "mean": 2.8402,
+     "median": 0.544,
+     "p10": -4.5468,
+     "p90": 9.6959,
+     "min": -7.0642,
+     "max": 79.8825,
+     "share_pos": 0.5156
+    },
+    "fast_mae_atr0": {
+     "n": 64,
+     "mean": -2.9715,
+     "median": -2.4672,
+     "p10": -5.6846,
+     "p90": -0.5256,
+     "min": -10.1656,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 64,
+     "mean": 4.7315,
+     "median": -1.7897,
+     "p10": -7.2338,
+     "p90": 25.2386,
+     "min": -12.7771,
+     "max": 86.9212,
+     "share_pos": 0.4531
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 53,
+     "stop": 8,
+     "struct_exit+gap_stop": 1,
+     "time_exit": 1,
+     "gap_stop": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 64,
+     "mean": 3.8609,
+     "median": 0.6436,
+     "p10": -5.4915,
+     "p90": 9.6652,
+     "min": -20.9656,
+     "max": 85.5165,
+     "share_pos": 0.5312
+    },
+    "slow_mae_atr0": {
+     "n": 64,
+     "mean": -3.2932,
+     "median": -2.6434,
+     "p10": -7.1371,
+     "p90": -0.5107,
+     "min": -21.0321,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 64,
+     "mean": 4.2851,
+     "median": -1.7696,
+     "p10": -7.7155,
+     "p90": 25.3991,
+     "min": -20.9656,
+     "max": 85.5165,
+     "share_pos": 0.4688
+    },
+    "lead_bars": {
+     "n": 64,
+     "mean": 16.5625,
+     "median": 14.5,
+     "p10": 0,
+     "p90": 36,
+     "min": -3,
+     "max": 51,
+     "share_pos": 0.8906
+    },
+    "entry_px_adv_atr0": {
+     "n": 64,
+     "mean": 0.6166,
+     "median": 0.43,
+     "p10": -1.5989,
+     "p90": 3.2384,
+     "min": -6.5834,
+     "max": 17.1325,
+     "share_pos": 0.5938
+    },
+    "pnl_diff_atr0": {
+     "n": 64,
+     "mean": -1.0208,
+     "median": 0.4876,
+     "p10": -2.8114,
+     "p90": 3.6798,
+     "min": -88.7389,
+     "max": 37.4353,
+     "share_pos": 0.6094
+    }
+   },
+   "fast_only": {
+    "n": 26,
+    "fast_pnl_atr0": {
+     "n": 26,
+     "mean": -1.5416,
+     "median": -3.2332,
+     "p10": -6.5703,
+     "p90": 3.3841,
+     "min": -9.0334,
+     "max": 33.7747,
+     "share_pos": 0.1538
+    },
+    "fast_mae_atr0": {
+     "n": 26,
+     "mean": -3.9413,
+     "median": -3.8596,
+     "p10": -7.0347,
+     "p90": -0.6579,
+     "min": -9.6048,
+     "max": -0.5115,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 26,
+     "mean": -1.2979,
+     "median": -3.2332,
+     "p10": -6.2685,
+     "p90": 6.5064,
+     "min": -9.0334,
+     "max": 21.1698,
+     "share_pos": 0.1923
+    },
+    "fast_exit_reasons": {
+     "stop": 14,
+     "struct_exit": 8,
+     "gap_stop": 4
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 18,
+     "timeout_no_entry": 8
+    }
+   },
+   "slow_only": {
+    "n": 0,
+    "slow_pnl_atr0": {
+     "n": 0
+    },
+    "slow_mae_atr0": {
+     "n": 0
+    },
+    "slow_hold_atr0": {
+     "n": 0
+    },
+    "fast_not_entered_reason": {}
+   },
+   "neither": {
+    "n": 16
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": 141.69,
+   "slow": 247.1,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 3,
+   "slow": 3
+  }
+ },
+ "bar|连续期货": {
+  "opportunities": 36,
+  "categories": {
+   "both": {
+    "n": 22,
+    "fast_pnl_atr0": {
+     "n": 22,
+     "mean": 0.1728,
+     "median": -1.8378,
+     "p10": -5.7976,
+     "p90": 4.1459,
+     "min": -9.6228,
+     "max": 41.4891,
+     "share_pos": 0.4091
+    },
+    "fast_mae_atr0": {
+     "n": 22,
+     "mean": -3.9201,
+     "median": -3.9126,
+     "p10": -6.4516,
+     "p90": -1.1614,
+     "min": -9.9012,
+     "max": -0.1451,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 22,
+     "mean": -1.1391,
+     "median": -5.3636,
+     "p10": -9.207,
+     "p90": 11.1838,
+     "min": -9.6336,
+     "max": 43.4472,
+     "share_pos": 0.2273
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 16,
+     "gap_stop": 3,
+     "stop": 3
+    },
+    "slow_pnl_atr0": {
+     "n": 22,
+     "mean": -0.4567,
+     "median": -3.8333,
+     "p10": -7.9997,
+     "p90": 4.3874,
+     "min": -8.627,
+     "max": 41.6073,
+     "share_pos": 0.3182
+    },
+    "slow_mae_atr0": {
+     "n": 22,
+     "mean": -4.5075,
+     "median": -4.531,
+     "p10": -8.1828,
+     "p90": -0.5162,
+     "min": -8.9315,
+     "max": -0.2994,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 22,
+     "mean": -0.9667,
+     "median": -4.5187,
+     "p10": -8.627,
+     "p90": 12.1951,
+     "min": -10.5708,
+     "max": 53.7202,
+     "share_pos": 0.2273
+    },
+    "lead_bars": {
+     "n": 22,
+     "mean": 14.5455,
+     "median": 11.5,
+     "p10": 1,
+     "p90": 29,
+     "min": -10,
+     "max": 50,
+     "share_pos": 0.9091
+    },
+    "entry_px_adv_atr0": {
+     "n": 22,
+     "mean": 0.3122,
+     "median": 0.2609,
+     "p10": -2.9047,
+     "p90": 2.8389,
+     "min": -3.3181,
+     "max": 8.1189,
+     "share_pos": 0.5
+    },
+    "pnl_diff_atr0": {
+     "n": 22,
+     "mean": 0.6295,
+     "median": 0.8062,
+     "p10": -3.3181,
+     "p90": 5.3271,
+     "min": -12.4192,
+     "max": 9.5556,
+     "share_pos": 0.5909
+    }
+   },
+   "fast_only": {
+    "n": 5,
+    "fast_pnl_atr0": {
+     "n": 5,
+     "mean": -4.968,
+     "median": -3.354,
+     "p10": -14.4463,
+     "p90": -0.75,
+     "min": -14.4463,
+     "max": -0.75,
+     "share_pos": 0.0
+    },
+    "fast_mae_atr0": {
+     "n": 5,
+     "mean": -5.3117,
+     "median": -3.9245,
+     "p10": -15.0126,
+     "p90": -1.198,
+     "min": -15.0126,
+     "max": -1.198,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 5,
+     "mean": -4.968,
+     "median": -3.354,
+     "p10": -14.4463,
+     "p90": -0.75,
+     "min": -14.4463,
+     "max": -0.75,
+     "share_pos": 0.0
+    },
+    "fast_exit_reasons": {
+     "stop": 4,
+     "gap_stop": 1
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 5
+    }
+   },
+   "slow_only": {
+    "n": 0,
+    "slow_pnl_atr0": {
+     "n": 0
+    },
+    "slow_mae_atr0": {
+     "n": 0
+    },
+    "slow_hold_atr0": {
+     "n": 0
+    },
+    "fast_not_entered_reason": {}
+   },
+   "neither": {
+    "n": 9
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": -21.037,
+   "slow": -10.047,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 0,
+   "slow": 4
+  }
+ },
+ "two|全部": {
+  "opportunities": 210,
+  "categories": {
+   "both": {
+    "n": 58,
+    "fast_pnl_atr0": {
+     "n": 58,
+     "mean": 1.5141,
+     "median": -0.0967,
+     "p10": -4.6272,
+     "p90": 10.5542,
+     "min": -13.4067,
+     "max": 33.8147,
+     "share_pos": 0.4828
+    },
+    "fast_mae_atr0": {
+     "n": 58,
+     "mean": -3.1451,
+     "median": -2.5003,
+     "p10": -6.8166,
+     "p90": -0.5403,
+     "min": -14.143,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 58,
+     "mean": 3.9925,
+     "median": -1.5051,
+     "p10": -8.046,
+     "p90": 25.6697,
+     "min": -13.4067,
+     "max": 38.5604,
+     "share_pos": 0.5
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 52,
+     "stop": 4,
+     "gap_stop": 2
+    },
+    "slow_pnl_atr0": {
+     "n": 58,
+     "mean": 0.7191,
+     "median": 0.036,
+     "p10": -6.9009,
+     "p90": 9.1135,
+     "min": -20.9656,
+     "max": 32.7398,
+     "share_pos": 0.5
+    },
+    "slow_mae_atr0": {
+     "n": 58,
+     "mean": -3.8282,
+     "median": -3.0752,
+     "p10": -7.6674,
+     "p90": -0.5162,
+     "min": -21.0321,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 58,
+     "mean": 4.2006,
+     "median": -1.9665,
+     "p10": -7.7155,
+     "p90": 26.197,
+     "min": -20.9656,
+     "max": 51.4407,
+     "share_pos": 0.4828
+    },
+    "lead_bars": {
+     "n": 58,
+     "mean": 19.4138,
+     "median": 19.0,
+     "p10": 1,
+     "p90": 44,
+     "min": -9,
+     "max": 51,
+     "share_pos": 0.9138
+    },
+    "entry_px_adv_atr0": {
+     "n": 58,
+     "mean": 0.6911,
+     "median": 0.5798,
+     "p10": -2.3004,
+     "p90": 3.0918,
+     "min": -9.2136,
+     "max": 17.1325,
+     "share_pos": 0.6207
+    },
+    "pnl_diff_atr0": {
+     "n": 58,
+     "mean": 0.795,
+     "median": 1.0273,
+     "p10": -5.3636,
+     "p90": 4.3136,
+     "min": -17.7942,
+     "max": 37.4353,
+     "share_pos": 0.6724
+    }
+   },
+   "fast_only": {
+    "n": 18,
+    "fast_pnl_atr0": {
+     "n": 18,
+     "mean": 0.5474,
+     "median": -3.0214,
+     "p10": -4.8783,
+     "p90": 12.219,
+     "min": -5.021,
+     "max": 27.3915,
+     "share_pos": 0.2778
+    },
+    "fast_mae_atr0": {
+     "n": 18,
+     "mean": -3.1459,
+     "median": -3.5298,
+     "p10": -5.5166,
+     "p90": -0.4496,
+     "min": -5.8649,
+     "max": -0.2613,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 18,
+     "mean": 0.0818,
+     "median": -3.6996,
+     "p10": -5.021,
+     "p90": 19.4382,
+     "min": -6.3412,
+     "max": 23.6544,
+     "share_pos": 0.2222
+    },
+    "fast_exit_reasons": {
+     "stop": 8,
+     "struct_exit": 6,
+     "gap_stop": 4
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 12,
+     "timeout_no_entry": 6
+    }
+   },
+   "slow_only": {
+    "n": 68,
+    "slow_pnl_atr0": {
+     "n": 68,
+     "mean": 2.6659,
+     "median": -1.338,
+     "p10": -6.4655,
+     "p90": 9.6652,
+     "min": -8.627,
+     "max": 85.5165,
+     "share_pos": 0.3824
+    },
+    "slow_mae_atr0": {
+     "n": 68,
+     "mean": -3.5425,
+     "median": -3.1596,
+     "p10": -7.1598,
+     "p90": -0.4886,
+     "min": -11.3727,
+     "max": -0.0773,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 68,
+     "mean": 2.315,
+     "median": -3.2022,
+     "p10": -8.0788,
+     "p90": 19.5459,
+     "min": -16.0391,
+     "max": 85.5165,
+     "share_pos": 0.3529
+    },
+    "fast_not_entered_reason": {
+     "timeout_no_entry": 55,
+     "invalidated_close_beyond_extreme": 13
+    }
+   },
+   "neither": {
+    "n": 66
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": 97.67,
+   "slow": 222.99,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 3,
+   "slow": 13
+  }
+ },
+ "two|ETF": {
+  "opportunities": 68,
+  "categories": {
+   "both": {
+    "n": 29,
+    "fast_pnl_atr0": {
+     "n": 29,
+     "mean": 0.1979,
+     "median": -1.1716,
+     "p10": -5.3618,
+     "p90": 9.482,
+     "min": -6.1867,
+     "max": 15.8976,
+     "share_pos": 0.3103
+    },
+    "fast_mae_atr0": {
+     "n": 29,
+     "mean": -3.236,
+     "median": -2.9072,
+     "p10": -7.2724,
+     "p90": -0.6924,
+     "min": -7.9017,
+     "max": -0.3738,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 29,
+     "mean": 4.8673,
+     "median": -3.2154,
+     "p10": -8.8136,
+     "p90": 26.197,
+     "min": -9.4297,
+     "max": 38.5604,
+     "share_pos": 0.4828
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 27,
+     "stop": 2
+    },
+    "slow_pnl_atr0": {
+     "n": 29,
+     "mean": -0.2615,
+     "median": -1.4173,
+     "p10": -6.9009,
+     "p90": 9.695,
+     "min": -9.6755,
+     "max": 13.7389,
+     "share_pos": 0.3793
+    },
+    "slow_mae_atr0": {
+     "n": 29,
+     "mean": -4.1195,
+     "median": -3.358,
+     "p10": -7.6674,
+     "p90": -0.4366,
+     "min": -9.7965,
+     "max": -0.1073,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 29,
+     "mean": 5.6139,
+     "median": -2.3154,
+     "p10": -8.3299,
+     "p90": 35.4968,
+     "min": -9.7419,
+     "max": 51.4407,
+     "share_pos": 0.4828
+    },
+    "lead_bars": {
+     "n": 29,
+     "mean": 21.8966,
+     "median": 21,
+     "p10": 2,
+     "p90": 43,
+     "min": 0,
+     "max": 49,
+     "share_pos": 0.9655
+    },
+    "entry_px_adv_atr0": {
+     "n": 29,
+     "mean": 0.4049,
+     "median": 0.6455,
+     "p10": -3.0322,
+     "p90": 2.4872,
+     "min": -3.9823,
+     "max": 4.4668,
+     "share_pos": 0.6552
+    },
+    "pnl_diff_atr0": {
+     "n": 29,
+     "mean": 0.4594,
+     "median": 1.152,
+     "p10": -6.7315,
+     "p90": 4.4668,
+     "min": -11.6677,
+     "max": 8.7941,
+     "share_pos": 0.7241
+    }
+   },
+   "fast_only": {
+    "n": 10,
+    "fast_pnl_atr0": {
+     "n": 10,
+     "mean": -0.8213,
+     "median": -3.0214,
+     "p10": -4.4368,
+     "p90": 12.219,
+     "min": -4.5983,
+     "max": 12.219,
+     "share_pos": 0.2
+    },
+    "fast_mae_atr0": {
+     "n": 10,
+     "mean": -3.144,
+     "median": -3.6195,
+     "p10": -4.5203,
+     "p90": -0.4496,
+     "min": -4.8653,
+     "max": -0.4496,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 10,
+     "mean": -3.2988,
+     "median": -3.759,
+     "p10": -4.5983,
+     "p90": 2.4416,
+     "min": -6.3412,
+     "max": 2.4416,
+     "share_pos": 0.1
+    },
+    "fast_exit_reasons": {
+     "stop": 6,
+     "struct_exit": 3,
+     "gap_stop": 1
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 7,
+     "timeout_no_entry": 3
+    }
+   },
+   "slow_only": {
+    "n": 11,
+    "slow_pnl_atr0": {
+     "n": 11,
+     "mean": -0.5891,
+     "median": -2.0416,
+     "p10": -4.9049,
+     "p90": 6.6317,
+     "min": -5.23,
+     "max": 7.0388,
+     "share_pos": 0.2727
+    },
+    "slow_mae_atr0": {
+     "n": 11,
+     "mean": -3.048,
+     "median": -2.9289,
+     "p10": -5.2988,
+     "p90": -0.9887,
+     "min": -5.5806,
+     "max": -0.0773,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 11,
+     "mean": -1.3386,
+     "median": -3.1737,
+     "p10": -5.7316,
+     "p90": 7.1591,
+     "min": -6.3527,
+     "max": 7.7345,
+     "share_pos": 0.2727
+    },
+    "fast_not_entered_reason": {
+     "timeout_no_entry": 9,
+     "invalidated_close_beyond_extreme": 2
+    }
+   },
+   "neither": {
+    "n": 18
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": -2.474,
+   "slow": -14.064,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 2,
+   "slow": 6
+  }
+ },
+ "two|个股": {
+  "opportunities": 106,
+  "categories": {
+   "both": {
+    "n": 26,
+    "fast_pnl_atr0": {
+     "n": 26,
+     "mean": 3.8682,
+     "median": 2.5754,
+     "p10": -3.515,
+     "p90": 12.7001,
+     "min": -4.6272,
+     "max": 33.8147,
+     "share_pos": 0.6923
+    },
+    "fast_mae_atr0": {
+     "n": 26,
+     "mean": -2.5098,
+     "median": -1.8132,
+     "p10": -5.8632,
+     "p90": -0.3108,
+     "min": -8.2293,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 26,
+     "mean": 4.3828,
+     "median": 4.2367,
+     "p10": -6.9478,
+     "p90": 20.7515,
+     "min": -10.7465,
+     "max": 30.1811,
+     "share_pos": 0.5769
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 24,
+     "gap_stop": 1,
+     "stop": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 26,
+     "mean": 1.9166,
+     "median": 2.4686,
+     "p10": -7.7155,
+     "p90": 9.1135,
+     "min": -20.9656,
+     "max": 32.7398,
+     "share_pos": 0.6154
+    },
+    "slow_mae_atr0": {
+     "n": 26,
+     "mean": -3.5786,
+     "median": -2.2835,
+     "p10": -8.2015,
+     "p90": -0.5809,
+     "min": -21.0321,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 26,
+     "mean": 3.6492,
+     "median": 1.2947,
+     "p10": -7.7155,
+     "p90": 25.3991,
+     "min": -20.9656,
+     "max": 30.8627,
+     "share_pos": 0.5385
+    },
+    "lead_bars": {
+     "n": 26,
+     "mean": 18.6154,
+     "median": 12.5,
+     "p10": 1,
+     "p90": 46,
+     "min": -1,
+     "max": 51,
+     "share_pos": 0.9231
+    },
+    "entry_px_adv_atr0": {
+     "n": 26,
+     "mean": 1.4507,
+     "median": 1.0273,
+     "p10": -1.4732,
+     "p90": 4.877,
+     "min": -4.6471,
+     "max": 17.1325,
+     "share_pos": 0.6538
+    },
+    "pnl_diff_atr0": {
+     "n": 26,
+     "mean": 1.9517,
+     "median": 1.1153,
+     "p10": -3.2965,
+     "p90": 4.2005,
+     "min": -8.1325,
+     "max": 37.4353,
+     "share_pos": 0.6923
+    }
+   },
+   "fast_only": {
+    "n": 7,
+    "fast_pnl_atr0": {
+     "n": 7,
+     "mean": 2.67,
+     "median": -3.7674,
+     "p10": -5.021,
+     "p90": 27.3915,
+     "min": -5.021,
+     "max": 27.3915,
+     "share_pos": 0.4286
+    },
+    "fast_mae_atr0": {
+     "n": 7,
+     "mean": -3.4611,
+     "median": -3.9298,
+     "p10": -5.8649,
+     "p90": -0.2613,
+     "min": -5.8649,
+     "max": -0.2613,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 7,
+     "mean": 5.0122,
+     "median": -3.7674,
+     "p10": -5.021,
+     "p90": 23.6544,
+     "min": -5.021,
+     "max": 23.6544,
+     "share_pos": 0.4286
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 3,
+     "gap_stop": 3,
+     "stop": 1
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 4,
+     "timeout_no_entry": 3
+    }
+   },
+   "slow_only": {
+    "n": 38,
+    "slow_pnl_atr0": {
+     "n": 38,
+     "mean": 5.1913,
+     "median": -0.6269,
+     "p10": -5.4915,
+     "p90": 11.2948,
+     "min": -8.1489,
+     "max": 85.5165,
+     "share_pos": 0.4737
+    },
+    "slow_mae_atr0": {
+     "n": 38,
+     "mean": -3.0979,
+     "median": -2.8006,
+     "p10": -6.1701,
+     "p90": -0.4886,
+     "min": -11.3727,
+     "max": -0.177,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 38,
+     "mean": 4.7201,
+     "median": -2.5152,
+     "p10": -8.0788,
+     "p90": 34.1626,
+     "min": -16.0391,
+     "max": 85.5165,
+     "share_pos": 0.4211
+    },
+    "fast_not_entered_reason": {
+     "timeout_no_entry": 34,
+     "invalidated_close_beyond_extreme": 4
+    }
+   },
+   "neither": {
+    "n": 35
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": 119.264,
+   "slow": 247.1,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 1,
+   "slow": 3
+  }
+ },
+ "two|连续期货": {
+  "opportunities": 36,
+  "categories": {
+   "both": {
+    "n": 3,
+    "fast_pnl_atr0": {
+     "n": 3,
+     "mean": -6.1655,
+     "median": -5.1747,
+     "p10": -13.4067,
+     "p90": 0.085,
+     "min": -13.4067,
+     "max": 0.085,
+     "share_pos": 0.3333
+    },
+    "fast_mae_atr0": {
+     "n": 3,
+     "mean": -7.7715,
+     "median": -5.1747,
+     "p10": -14.143,
+     "p90": -3.9967,
+     "min": -14.143,
+     "max": -3.9967,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 3,
+     "mean": -7.8473,
+     "median": -5.1747,
+     "p10": -13.4067,
+     "p90": -4.9604,
+     "min": -13.4067,
+     "max": -4.9604,
+     "share_pos": 0.0
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 1,
+     "stop": 1,
+     "gap_stop": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 3,
+     "mean": -0.1795,
+     "median": 0.085,
+     "p10": -5.0111,
+     "p90": 4.3874,
+     "min": -5.0111,
+     "max": 4.3874,
+     "share_pos": 0.6667
+    },
+    "slow_mae_atr0": {
+     "n": 3,
+     "mean": -3.1746,
+     "median": -3.9967,
+     "p10": -5.0111,
+     "p90": -0.5162,
+     "min": -5.0111,
+     "max": -0.5162,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 3,
+     "mean": -4.6828,
+     "median": -4.9604,
+     "p10": -5.0111,
+     "p90": -4.077,
+     "min": -5.0111,
+     "max": -4.077,
+     "share_pos": 0.0
+    },
+    "lead_bars": {
+     "n": 3,
+     "mean": 2.3333,
+     "median": 0,
+     "p10": -9,
+     "p90": 16,
+     "min": -9,
+     "max": 16,
+     "share_pos": 0.3333
+    },
+    "entry_px_adv_atr0": {
+     "n": 3,
+     "mean": -3.1257,
+     "median": -0.1636,
+     "p10": -9.2136,
+     "p90": 0.0,
+     "min": -9.2136,
+     "max": 0.0,
+     "share_pos": 0.0
+    },
+    "pnl_diff_atr0": {
+     "n": 3,
+     "mean": -5.9859,
+     "median": -0.1636,
+     "p10": -17.7942,
+     "p90": 0.0,
+     "min": -17.7942,
+     "max": 0.0,
+     "share_pos": 0.0
+    }
+   },
+   "fast_only": {
+    "n": 1,
+    "fast_pnl_atr0": {
+     "n": 1,
+     "mean": -0.6241,
+     "median": -0.6241,
+     "p10": -0.6241,
+     "p90": -0.6241,
+     "min": -0.6241,
+     "max": -0.6241,
+     "share_pos": 0.0
+    },
+    "fast_mae_atr0": {
+     "n": 1,
+     "mean": -0.958,
+     "median": -0.958,
+     "p10": -0.958,
+     "p90": -0.958,
+     "min": -0.958,
+     "max": -0.958,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 1,
+     "mean": -0.6241,
+     "median": -0.6241,
+     "p10": -0.6241,
+     "p90": -0.6241,
+     "min": -0.6241,
+     "max": -0.6241,
+     "share_pos": 0.0
+    },
+    "fast_exit_reasons": {
+     "stop": 1
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 1
+    }
+   },
+   "slow_only": {
+    "n": 19,
+    "slow_pnl_atr0": {
+     "n": 19,
+     "mean": -0.5004,
+     "median": -3.9076,
+     "p10": -8.0754,
+     "p90": 10.0779,
+     "min": -8.627,
+     "max": 41.6073,
+     "share_pos": 0.2632
+    },
+    "slow_mae_atr0": {
+     "n": 19,
+     "mean": -4.718,
+     "median": -4.8581,
+     "p10": -8.2378,
+     "p90": -0.4608,
+     "min": -8.9315,
+     "max": -0.2994,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 19,
+     "mean": -0.3799,
+     "median": -4.0503,
+     "p10": -10.3559,
+     "p90": 12.765,
+     "min": -10.5708,
+     "max": 53.7202,
+     "share_pos": 0.2632
+    },
+    "fast_not_entered_reason": {
+     "timeout_no_entry": 12,
+     "invalidated_close_beyond_extreme": 7
+    }
+   },
+   "neither": {
+    "n": 13
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": -19.12,
+   "slow": -10.047,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 0,
+   "slow": 4
+  }
+ },
+ "atr|全部": {
+  "opportunities": 210,
+  "categories": {
+   "both": {
+    "n": 126,
+    "fast_pnl_atr0": {
+     "n": 126,
+     "mean": 1.3315,
+     "median": -0.8404,
+     "p10": -4.8679,
+     "p90": 9.0699,
+     "min": -10.3931,
+     "max": 76.4815,
+     "share_pos": 0.4286
+    },
+    "fast_mae_atr0": {
+     "n": 126,
+     "mean": -3.3163,
+     "median": -3.0743,
+     "p10": -6.3668,
+     "p90": -0.6269,
+     "min": -11.1234,
+     "max": 0.0,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 126,
+     "mean": 3.651,
+     "median": -3.0883,
+     "p10": -7.926,
+     "p90": 20.0861,
+     "min": -12.7771,
+     "max": 90.7219,
+     "share_pos": 0.4127
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 101,
+     "stop": 18,
+     "time_exit": 3,
+     "gap_stop": 3,
+     "struct_exit+gap_stop": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 126,
+     "mean": 1.7698,
+     "median": -0.937,
+     "p10": -6.4655,
+     "p90": 9.1135,
+     "min": -20.9656,
+     "max": 85.5165,
+     "share_pos": 0.4365
+    },
+    "slow_mae_atr0": {
+     "n": 126,
+     "mean": -3.674,
+     "median": -3.1161,
+     "p10": -7.4213,
+     "p90": -0.5107,
+     "min": -21.0321,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 126,
+     "mean": 3.183,
+     "median": -2.9457,
+     "p10": -8.0754,
+     "p90": 22.8947,
+     "min": -20.9656,
+     "max": 85.5165,
+     "share_pos": 0.4127
+    },
+    "lead_bars": {
+     "n": 126,
+     "mean": 18.6111,
+     "median": 17.5,
+     "p10": 2,
+     "p90": 41,
+     "min": -8,
+     "max": 54,
+     "share_pos": 0.9365
+    },
+    "entry_px_adv_atr0": {
+     "n": 126,
+     "mean": 0.4549,
+     "median": 0.218,
+     "p10": -1.9113,
+     "p90": 2.9115,
+     "min": -6.194,
+     "max": 17.5198,
+     "share_pos": 0.5635
+    },
+    "pnl_diff_atr0": {
+     "n": 126,
+     "mean": -0.4383,
+     "median": 0.524,
+     "p10": -3.6577,
+     "p90": 4.3272,
+     "min": -87.6648,
+     "max": 37.8226,
+     "share_pos": 0.5952
+    }
+   },
+   "fast_only": {
+    "n": 55,
+    "fast_pnl_atr0": {
+     "n": 55,
+     "mean": -2.5034,
+     "median": -3.935,
+     "p10": -6.2685,
+     "p90": 3.3841,
+     "min": -13.8137,
+     "max": 33.7747,
+     "share_pos": 0.1455
+    },
+    "fast_mae_atr0": {
+     "n": 55,
+     "mean": -4.3669,
+     "median": -4.324,
+     "p10": -6.5156,
+     "p90": -0.6579,
+     "min": -14.3828,
+     "max": -0.0719,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 55,
+     "mean": -2.6684,
+     "median": -4.0355,
+     "p10": -6.2685,
+     "p90": 1.6337,
+     "min": -13.8137,
+     "max": 21.1698,
+     "share_pos": 0.1273
+    },
+    "fast_exit_reasons": {
+     "stop": 33,
+     "struct_exit": 13,
+     "gap_stop": 9
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 42,
+     "timeout_no_entry": 13
+    }
+   },
+   "slow_only": {
+    "n": 0,
+    "slow_pnl_atr0": {
+     "n": 0
+    },
+    "slow_mae_atr0": {
+     "n": 0
+    },
+    "slow_hold_atr0": {
+     "n": 0
+    },
+    "fast_not_entered_reason": {}
+   },
+   "neither": {
+    "n": 29
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": 30.074,
+   "slow": 222.99,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 8,
+   "slow": 13
+  }
+ },
+ "atr|ETF": {
+  "opportunities": 68,
+  "categories": {
+   "both": {
+    "n": 40,
+    "fast_pnl_atr0": {
+     "n": 40,
+     "mean": 0.3153,
+     "median": -1.1748,
+     "p10": -4.8211,
+     "p90": 9.7589,
+     "min": -5.6441,
+     "max": 15.9772,
+     "share_pos": 0.425
+    },
+    "fast_mae_atr0": {
+     "n": 40,
+     "mean": -2.9882,
+     "median": -2.6767,
+     "p10": -5.8837,
+     "p90": -0.4607,
+     "min": -8.3786,
+     "max": -0.1412,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 40,
+     "mean": 4.1499,
+     "median": -2.8543,
+     "p10": -6.0016,
+     "p90": 26.8093,
+     "min": -10.9832,
+     "max": 53.7216,
+     "share_pos": 0.45
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 34,
+     "stop": 5,
+     "time_exit": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 40,
+     "mean": -0.3516,
+     "median": -1.4541,
+     "p10": -5.9981,
+     "p90": 8.665,
+     "min": -9.6755,
+     "max": 13.7389,
+     "share_pos": 0.35
+    },
+    "slow_mae_atr0": {
+     "n": 40,
+     "mean": -3.8248,
+     "median": -3.264,
+     "p10": -7.1337,
+     "p90": -0.4366,
+     "min": -9.7965,
+     "max": -0.0773,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 40,
+     "mean": 3.702,
+     "median": -3.0661,
+     "p10": -7.2413,
+     "p90": 26.197,
+     "min": -9.7419,
+     "max": 51.4407,
+     "share_pos": 0.425
+    },
+    "lead_bars": {
+     "n": 40,
+     "mean": 21.375,
+     "median": 20.0,
+     "p10": 3,
+     "p90": 41,
+     "min": 0,
+     "max": 48,
+     "share_pos": 0.975
+    },
+    "entry_px_adv_atr0": {
+     "n": 40,
+     "mean": 0.6225,
+     "median": 0.4875,
+     "p10": -1.2448,
+     "p90": 2.9387,
+     "min": -3.9702,
+     "max": 3.8922,
+     "share_pos": 0.65
+    },
+    "pnl_diff_atr0": {
+     "n": 40,
+     "mean": 0.6669,
+     "median": 1.1117,
+     "p10": -3.6577,
+     "p90": 4.0314,
+     "min": -11.8407,
+     "max": 10.199,
+     "share_pos": 0.7
+    }
+   },
+   "fast_only": {
+    "n": 19,
+    "fast_pnl_atr0": {
+     "n": 19,
+     "mean": -2.0839,
+     "median": -3.7119,
+     "p10": -5.8086,
+     "p90": 7.5236,
+     "min": -12.299,
+     "max": 12.8485,
+     "share_pos": 0.2105
+    },
+    "fast_mae_atr0": {
+     "n": 19,
+     "mean": -3.8784,
+     "median": -4.1094,
+     "p10": -6.1485,
+     "p90": -0.1307,
+     "min": -12.8699,
+     "max": -0.0719,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 19,
+     "mean": -3.1209,
+     "median": -4.2775,
+     "p10": -5.8086,
+     "p90": 1.6337,
+     "min": -12.299,
+     "max": 15.7752,
+     "share_pos": 0.1053
+    },
+    "fast_exit_reasons": {
+     "stop": 11,
+     "struct_exit": 5,
+     "gap_stop": 3
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 14,
+     "timeout_no_entry": 5
+    }
+   },
+   "slow_only": {
+    "n": 0,
+    "slow_pnl_atr0": {
+     "n": 0
+    },
+    "slow_mae_atr0": {
+     "n": 0
+    },
+    "slow_hold_atr0": {
+     "n": 0
+    },
+    "fast_not_entered_reason": {}
+   },
+   "neither": {
+    "n": 9
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": -26.982,
+   "slow": -14.064,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 2,
+   "slow": 6
+  }
+ },
+ "atr|个股": {
+  "opportunities": 106,
+  "categories": {
+   "both": {
+    "n": 64,
+    "fast_pnl_atr0": {
+     "n": 64,
+     "mean": 2.6997,
+     "median": -0.4044,
+     "p10": -4.2221,
+     "p90": 9.6959,
+     "min": -7.0642,
+     "max": 76.4815,
+     "share_pos": 0.4531
+    },
+    "fast_mae_atr0": {
+     "n": 64,
+     "mean": -3.0476,
+     "median": -2.7255,
+     "p10": -5.6949,
+     "p90": -1.0306,
+     "min": -8.7134,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 64,
+     "mean": 5.1275,
+     "median": -1.3519,
+     "p10": -7.2338,
+     "p90": 25.2386,
+     "min": -12.7771,
+     "max": 90.7219,
+     "share_pos": 0.4531
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 52,
+     "stop": 9,
+     "struct_exit+gap_stop": 1,
+     "time_exit": 1,
+     "gap_stop": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 64,
+     "mean": 3.8609,
+     "median": 0.6436,
+     "p10": -5.4915,
+     "p90": 9.6652,
+     "min": -20.9656,
+     "max": 85.5165,
+     "share_pos": 0.5312
+    },
+    "slow_mae_atr0": {
+     "n": 64,
+     "mean": -3.2932,
+     "median": -2.6434,
+     "p10": -7.1371,
+     "p90": -0.5107,
+     "min": -21.0321,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 64,
+     "mean": 4.2851,
+     "median": -1.7696,
+     "p10": -7.7155,
+     "p90": 25.3991,
+     "min": -20.9656,
+     "max": 85.5165,
+     "share_pos": 0.4688
+    },
+    "lead_bars": {
+     "n": 64,
+     "mean": 18.8125,
+     "median": 16.5,
+     "p10": 3,
+     "p90": 42,
+     "min": 0,
+     "max": 54,
+     "share_pos": 0.9531
+    },
+    "entry_px_adv_atr0": {
+     "n": 64,
+     "mean": 0.6135,
+     "median": 0.325,
+     "p10": -1.9113,
+     "p90": 2.7444,
+     "min": -5.1312,
+     "max": 17.5198,
+     "share_pos": 0.5625
+    },
+    "pnl_diff_atr0": {
+     "n": 64,
+     "mean": -1.1612,
+     "median": 0.3982,
+     "p10": -3.3617,
+     "p90": 4.3272,
+     "min": -87.6648,
+     "max": 37.8226,
+     "share_pos": 0.5625
+    }
+   },
+   "fast_only": {
+    "n": 28,
+    "fast_pnl_atr0": {
+     "n": 28,
+     "mean": -2.0117,
+     "median": -3.9852,
+     "p10": -6.2685,
+     "p90": 3.3841,
+     "min": -9.0334,
+     "max": 33.7747,
+     "share_pos": 0.1429
+    },
+    "fast_mae_atr0": {
+     "n": 28,
+     "mean": -4.2628,
+     "median": -4.1408,
+     "p10": -6.5156,
+     "p90": -0.6579,
+     "min": -9.6048,
+     "max": -0.5115,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 28,
+     "mean": -1.6322,
+     "median": -3.9015,
+     "p10": -6.2685,
+     "p90": 7.6321,
+     "min": -9.0334,
+     "max": 21.1698,
+     "share_pos": 0.1786
+    },
+    "fast_exit_reasons": {
+     "stop": 15,
+     "struct_exit": 8,
+     "gap_stop": 5
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 20,
+     "timeout_no_entry": 8
+    }
+   },
+   "slow_only": {
+    "n": 0,
+    "slow_pnl_atr0": {
+     "n": 0
+    },
+    "slow_mae_atr0": {
+     "n": 0
+    },
+    "slow_hold_atr0": {
+     "n": 0
+    },
+    "fast_not_entered_reason": {}
+   },
+   "neither": {
+    "n": 14
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": 116.452,
+   "slow": 247.1,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 3,
+   "slow": 3
+  }
+ },
+ "atr|连续期货": {
+  "opportunities": 36,
+  "categories": {
+   "both": {
+    "n": 22,
+    "fast_pnl_atr0": {
+     "n": 22,
+     "mean": -0.8014,
+     "median": -2.8833,
+     "p10": -6.946,
+     "p90": 1.4802,
+     "min": -10.3931,
+     "max": 39.8528,
+     "share_pos": 0.3636
+    },
+    "fast_mae_atr0": {
+     "n": 22,
+     "mean": -4.6947,
+     "median": -4.4887,
+     "p10": -8.0127,
+     "p90": -1.7833,
+     "min": -11.1234,
+     "max": 0.0,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 22,
+     "mean": -1.5514,
+     "median": -5.379,
+     "p10": -9.3818,
+     "p90": 11.1838,
+     "min": -11.7759,
+     "max": 43.4045,
+     "share_pos": 0.2273
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 15,
+     "stop": 4,
+     "gap_stop": 2,
+     "time_exit": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 22,
+     "mean": -0.4567,
+     "median": -3.8333,
+     "p10": -7.9997,
+     "p90": 4.3874,
+     "min": -8.627,
+     "max": 41.6073,
+     "share_pos": 0.3182
+    },
+    "slow_mae_atr0": {
+     "n": 22,
+     "mean": -4.5075,
+     "median": -4.531,
+     "p10": -8.1828,
+     "p90": -0.5162,
+     "min": -8.9315,
+     "max": -0.2994,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 22,
+     "mean": -0.9667,
+     "median": -4.5187,
+     "p10": -8.627,
+     "p90": 12.1951,
+     "min": -10.5708,
+     "max": 53.7202,
+     "share_pos": 0.2273
+    },
+    "lead_bars": {
+     "n": 22,
+     "mean": 13,
+     "median": 8.5,
+     "p10": -4,
+     "p90": 29,
+     "min": -8,
+     "max": 50,
+     "share_pos": 0.8182
+    },
+    "entry_px_adv_atr0": {
+     "n": 22,
+     "mean": -0.3113,
+     "median": -0.1076,
+     "p10": -3.313,
+     "p90": 2.4312,
+     "min": -6.194,
+     "max": 6.7579,
+     "share_pos": 0.4091
+    },
+    "pnl_diff_atr0": {
+     "n": 22,
+     "mean": -0.3447,
+     "median": 0.0716,
+     "p10": -3.3489,
+     "p90": 5.3271,
+     "min": -14.7805,
+     "max": 9.5556,
+     "share_pos": 0.5
+    }
+   },
+   "fast_only": {
+    "n": 8,
+    "fast_pnl_atr0": {
+     "n": 8,
+     "mean": -5.2208,
+     "median": -4.2734,
+     "p10": -13.8137,
+     "p90": -0.75,
+     "min": -13.8137,
+     "max": -0.75,
+     "share_pos": 0.0
+    },
+    "fast_mae_atr0": {
+     "n": 8,
+     "mean": -5.8911,
+     "median": -4.6761,
+     "p10": -14.3828,
+     "p90": -1.198,
+     "min": -14.3828,
+     "max": -1.198,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 8,
+     "mean": -5.2208,
+     "median": -4.2734,
+     "p10": -13.8137,
+     "p90": -0.75,
+     "min": -13.8137,
+     "max": -0.75,
+     "share_pos": 0.0
+    },
+    "fast_exit_reasons": {
+     "stop": 7,
+     "gap_stop": 1
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 8
+    }
+   },
+   "slow_only": {
+    "n": 0,
+    "slow_pnl_atr0": {
+     "n": 0
+    },
+    "slow_mae_atr0": {
+     "n": 0
+    },
+    "slow_hold_atr0": {
+     "n": 0
+    },
+    "fast_not_entered_reason": {}
+   },
+   "neither": {
+    "n": 6
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": -59.396,
+   "slow": -10.047,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 3,
+   "slow": 4
+  }
+ },
+ "limit|全部": {
+  "opportunities": 210,
+  "categories": {
+   "both": {
+    "n": 118,
+    "fast_pnl_atr0": {
+     "n": 118,
+     "mean": 2.1241,
+     "median": 0.1196,
+     "p10": -4.0173,
+     "p90": 9.0045,
+     "min": -11.2696,
+     "max": 79.3018,
+     "share_pos": 0.5085
+    },
+    "fast_mae_atr0": {
+     "n": 118,
+     "mean": -2.698,
+     "median": -2.5238,
+     "p10": -5.0448,
+     "p90": -0.5325,
+     "min": -11.5835,
+     "max": -0.0195,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 118,
+     "mean": 3.8463,
+     "median": -2.7592,
+     "p10": -6.8815,
+     "p90": 25.1682,
+     "min": -11.9452,
+     "max": 96.0925,
+     "share_pos": 0.3814
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 93,
+     "stop": 17,
+     "gap_stop": 4,
+     "time_exit": 3,
+     "struct_exit+gap_stop": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 118,
+     "mean": 1.7718,
+     "median": -0.9891,
+     "p10": -6.4655,
+     "p90": 9.1135,
+     "min": -20.9656,
+     "max": 85.5165,
+     "share_pos": 0.4237
+    },
+    "slow_mae_atr0": {
+     "n": 118,
+     "mean": -3.6777,
+     "median": -3.1161,
+     "p10": -7.4213,
+     "p90": -0.5107,
+     "min": -21.0321,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 118,
+     "mean": 2.8308,
+     "median": -2.9801,
+     "p10": -7.9997,
+     "p90": 22.8947,
+     "min": -20.9656,
+     "max": 85.5165,
+     "share_pos": 0.3983
+    },
+    "lead_bars": {
+     "n": 118,
+     "mean": 21.6695,
+     "median": 20.0,
+     "p10": 5,
+     "p90": 44,
+     "min": -11,
+     "max": 56,
+     "share_pos": 0.9576
+    },
+    "entry_px_adv_atr0": {
+     "n": 118,
+     "mean": 1.1656,
+     "median": 0.8019,
+     "p10": -1.2244,
+     "p90": 3.6958,
+     "min": -4.163,
+     "max": 16.9437,
+     "share_pos": 0.7119
+    },
+    "pnl_diff_atr0": {
+     "n": 118,
+     "mean": 0.3523,
+     "median": 1.0518,
+     "p10": -2.6427,
+     "p90": 6.1203,
+     "min": -87.9127,
+     "max": 37.2466,
+     "share_pos": 0.6949
+    }
+   },
+   "fast_only": {
+    "n": 68,
+    "fast_pnl_atr0": {
+     "n": 68,
+     "mean": -2.0652,
+     "median": -3.3839,
+     "p10": -5.2744,
+     "p90": 3.7524,
+     "min": -6.2865,
+     "max": 36.2796,
+     "share_pos": 0.1324
+    },
+    "fast_mae_atr0": {
+     "n": 68,
+     "mean": -3.8239,
+     "median": -3.967,
+     "p10": -5.7023,
+     "p90": -1.6603,
+     "min": -8.2436,
+     "max": -0.2558,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 68,
+     "mean": -2.2106,
+     "median": -3.4666,
+     "p10": -5.4518,
+     "p90": -1.6831,
+     "min": -6.2865,
+     "max": 31.5931,
+     "share_pos": 0.0735
+    },
+    "fast_exit_reasons": {
+     "stop": 41,
+     "gap_stop": 17,
+     "struct_exit": 10
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 57,
+     "timeout_no_entry": 11
+    }
+   },
+   "slow_only": {
+    "n": 8,
+    "slow_pnl_atr0": {
+     "n": 8,
+     "mean": 1.7398,
+     "median": 2.9618,
+     "p10": -8.5523,
+     "p90": 13.7389,
+     "min": -8.5523,
+     "max": 13.7389,
+     "share_pos": 0.625
+    },
+    "slow_mae_atr0": {
+     "n": 8,
+     "mean": -3.6187,
+     "median": -2.8889,
+     "p10": -8.7996,
+     "p90": -0.4366,
+     "min": -8.7996,
+     "max": -0.4366,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 8,
+     "mean": 8.3778,
+     "median": 12.1075,
+     "p10": -10.3559,
+     "p90": 34.6396,
+     "min": -10.3559,
+     "max": 34.6396,
+     "share_pos": 0.625
+    },
+    "fast_not_entered_reason": {
+     "timeout_no_entry": 8
+    }
+   },
+   "neither": {
+    "n": 16
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": 110.205,
+   "slow": 222.99,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 9,
+   "slow": 13
+  }
+ },
+ "limit|ETF": {
+  "opportunities": 68,
+  "categories": {
+   "both": {
+    "n": 37,
+    "fast_pnl_atr0": {
+     "n": 37,
+     "mean": 1.0257,
+     "median": 0.2077,
+     "p10": -3.5121,
+     "p90": 8.4038,
+     "min": -8.0362,
+     "max": 13.7466,
+     "share_pos": 0.5405
+    },
+    "fast_mae_atr0": {
+     "n": 37,
+     "mean": -2.2573,
+     "median": -1.8882,
+     "p10": -3.8601,
+     "p90": -0.2794,
+     "min": -8.2891,
+     "max": -0.0195,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 37,
+     "mean": 4.0996,
+     "median": -2.7056,
+     "p10": -5.8856,
+     "p90": 28.8593,
+     "min": -8.0362,
+     "max": 37.8359,
+     "share_pos": 0.3784
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 30,
+     "stop": 6,
+     "time_exit": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 37,
+     "mean": -0.8062,
+     "median": -1.4909,
+     "p10": -6.3379,
+     "p90": 8.4795,
+     "min": -9.6755,
+     "max": 9.8384,
+     "share_pos": 0.3243
+    },
+    "slow_mae_atr0": {
+     "n": 37,
+     "mean": -3.8521,
+     "median": -3.17,
+     "p10": -7.4213,
+     "p90": -0.9611,
+     "min": -9.7965,
+     "max": -0.0773,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 37,
+     "mean": 3.48,
+     "median": -3.1737,
+     "p10": -7.3791,
+     "p90": 26.197,
+     "min": -9.7419,
+     "max": 51.4407,
+     "share_pos": 0.4054
+    },
+    "lead_bars": {
+     "n": 37,
+     "mean": 22.4595,
+     "median": 24,
+     "p10": 5,
+     "p90": 44,
+     "min": -10,
+     "max": 52,
+     "share_pos": 0.9189
+    },
+    "entry_px_adv_atr0": {
+     "n": 37,
+     "mean": 1.4412,
+     "median": 1.4935,
+     "p10": -1.4422,
+     "p90": 3.2736,
+     "min": -2.0125,
+     "max": 7.1349,
+     "share_pos": 0.8108
+    },
+    "pnl_diff_atr0": {
+     "n": 37,
+     "mean": 1.8319,
+     "median": 1.772,
+     "p10": -2.0125,
+     "p90": 6.7079,
+     "min": -10.7531,
+     "max": 12.9006,
+     "share_pos": 0.7838
+    }
+   },
+   "fast_only": {
+    "n": 24,
+    "fast_pnl_atr0": {
+     "n": 24,
+     "mean": -2.1497,
+     "median": -3.1219,
+     "p10": -5.2744,
+     "p90": 4.4926,
+     "min": -5.5527,
+     "max": 12.906,
+     "share_pos": 0.1667
+    },
+    "fast_mae_atr0": {
+     "n": 24,
+     "mean": -3.7356,
+     "median": -3.9451,
+     "p10": -5.7023,
+     "p90": -1.3255,
+     "min": -6.1236,
+     "max": -0.3093,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 24,
+     "mean": -2.9487,
+     "median": -3.2701,
+     "p10": -5.4518,
+     "p90": -2.7373,
+     "min": -5.6446,
+     "max": 16.2233,
+     "share_pos": 0.0417
+    },
+    "fast_exit_reasons": {
+     "stop": 14,
+     "gap_stop": 6,
+     "struct_exit": 4
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 19,
+     "timeout_no_entry": 5
+    }
+   },
+   "slow_only": {
+    "n": 3,
+    "slow_pnl_atr0": {
+     "n": 3,
+     "mean": 5.2555,
+     "median": 4.5209,
+     "p10": -2.4931,
+     "p90": 13.7389,
+     "min": -2.4931,
+     "max": 13.7389,
+     "share_pos": 0.6667
+    },
+    "slow_mae_atr0": {
+     "n": 3,
+     "mean": -3.488,
+     "median": -4.3358,
+     "p10": -5.6916,
+     "p90": -0.4366,
+     "min": -5.6916,
+     "max": -0.4366,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 3,
+     "mean": 6.4397,
+     "median": 11.9853,
+     "p10": -4.8959,
+     "p90": 12.2298,
+     "min": -4.8959,
+     "max": 12.2298,
+     "share_pos": 0.6667
+    },
+    "fast_not_entered_reason": {
+     "timeout_no_entry": 3
+    }
+   },
+   "neither": {
+    "n": 4
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": -13.642,
+   "slow": -14.064,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 3,
+   "slow": 6
+  }
+ },
+ "limit|个股": {
+  "opportunities": 106,
+  "categories": {
+   "both": {
+    "n": 61,
+    "fast_pnl_atr0": {
+     "n": 61,
+     "mean": 3.9003,
+     "median": 0.776,
+     "p10": -3.771,
+     "p90": 12.9738,
+     "min": -7.5162,
+     "max": 79.3018,
+     "share_pos": 0.541
+    },
+    "fast_mae_atr0": {
+     "n": 61,
+     "mean": -2.6817,
+     "median": -2.483,
+     "p10": -4.9626,
+     "p90": -0.7361,
+     "min": -8.1125,
+     "max": -0.1216,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 61,
+     "mean": 5.2516,
+     "median": -2.336,
+     "p10": -7.13,
+     "p90": 25.1682,
+     "min": -11.9452,
+     "max": 96.0925,
+     "share_pos": 0.459
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 50,
+     "stop": 8,
+     "struct_exit+gap_stop": 1,
+     "time_exit": 1,
+     "gap_stop": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 61,
+     "mean": 4.0332,
+     "median": 0.5146,
+     "p10": -4.7071,
+     "p90": 9.6652,
+     "min": -20.9656,
+     "max": 85.5165,
+     "share_pos": 0.5246
+    },
+    "slow_mae_atr0": {
+     "n": 61,
+     "mean": -3.2858,
+     "median": -2.6895,
+     "p10": -6.1701,
+     "p90": -0.5107,
+     "min": -21.0321,
+     "max": -0.0469,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 61,
+     "mean": 3.7533,
+     "median": -1.9216,
+     "p10": -7.71,
+     "p90": 22.8947,
+     "min": -20.9656,
+     "max": 85.5165,
+     "share_pos": 0.459
+    },
+    "lead_bars": {
+     "n": 61,
+     "mean": 22.8689,
+     "median": 20,
+     "p10": 7,
+     "p90": 44,
+     "min": 3,
+     "max": 56,
+     "share_pos": 1.0
+    },
+    "entry_px_adv_atr0": {
+     "n": 61,
+     "mean": 1.0911,
+     "median": 0.4771,
+     "p10": -0.9375,
+     "p90": 4.0939,
+     "min": -4.163,
+     "max": 16.9437,
+     "share_pos": 0.6721
+    },
+    "pnl_diff_atr0": {
+     "n": 61,
+     "mean": -0.1329,
+     "median": 0.7443,
+     "p10": -2.2093,
+     "p90": 4.2825,
+     "min": -87.9127,
+     "max": 37.2466,
+     "share_pos": 0.6557
+    }
+   },
+   "fast_only": {
+    "n": 33,
+    "fast_pnl_atr0": {
+     "n": 33,
+     "mean": -1.4109,
+     "median": -3.4891,
+     "p10": -4.5552,
+     "p90": 3.7524,
+     "min": -5.9829,
+     "max": 36.2796,
+     "share_pos": 0.1515
+    },
+    "fast_mae_atr0": {
+     "n": 33,
+     "mean": -3.6887,
+     "median": -3.9853,
+     "p10": -5.2944,
+     "p90": -1.7025,
+     "min": -6.432,
+     "max": -0.2558,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 33,
+     "mean": -1.1294,
+     "median": -3.4891,
+     "p10": -4.5552,
+     "p90": 4.813,
+     "min": -5.9829,
+     "max": 31.5931,
+     "share_pos": 0.1212
+    },
+    "fast_exit_reasons": {
+     "stop": 19,
+     "gap_stop": 8,
+     "struct_exit": 6
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 27,
+     "timeout_no_entry": 6
+    }
+   },
+   "slow_only": {
+    "n": 3,
+    "slow_pnl_atr0": {
+     "n": 3,
+     "mean": 0.3584,
+     "median": 2.9341,
+     "p10": -8.5523,
+     "p90": 6.6933,
+     "min": -8.5523,
+     "max": 6.6933,
+     "share_pos": 0.6667
+    },
+    "slow_mae_atr0": {
+     "n": 3,
+     "mean": -3.4442,
+     "median": -0.8321,
+     "p10": -8.7996,
+     "p90": -0.7011,
+     "min": -8.7996,
+     "max": -0.7011,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 3,
+     "mean": 15.0982,
+     "median": 19.5459,
+     "p10": -8.891,
+     "p90": 34.6396,
+     "min": -8.891,
+     "max": 34.6396,
+     "share_pos": 0.6667
+    },
+    "fast_not_entered_reason": {
+     "timeout_no_entry": 3
+    }
+   },
+   "neither": {
+    "n": 9
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": 191.36,
+   "slow": 247.1,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 3,
+   "slow": 3
+  }
+ },
+ "limit|连续期货": {
+  "opportunities": 36,
+  "categories": {
+   "both": {
+    "n": 20,
+    "fast_pnl_atr0": {
+     "n": 20,
+     "mean": -1.2616,
+     "median": -1.0464,
+     "p10": -4.2032,
+     "p90": 4.1726,
+     "min": -11.2696,
+     "max": 7.1747,
+     "share_pos": 0.35
+    },
+    "fast_mae_atr0": {
+     "n": 20,
+     "mean": -3.5634,
+     "median": -3.3036,
+     "p10": -5.2449,
+     "p90": -1.213,
+     "min": -11.5835,
+     "max": -0.6773,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 20,
+     "mean": -0.9084,
+     "median": -3.7869,
+     "p10": -6.8815,
+     "p90": 9.2434,
+     "min": -11.2696,
+     "max": 44.978,
+     "share_pos": 0.15
+    },
+    "fast_exit_reasons": {
+     "struct_exit": 13,
+     "gap_stop": 3,
+     "stop": 3,
+     "time_exit": 1
+    },
+    "slow_pnl_atr0": {
+     "n": 20,
+     "mean": -0.3562,
+     "median": -3.8333,
+     "p10": -7.9997,
+     "p90": 10.0779,
+     "min": -8.627,
+     "max": 41.6073,
+     "share_pos": 0.3
+    },
+    "slow_mae_atr0": {
+     "n": 20,
+     "mean": -4.5506,
+     "median": -4.531,
+     "p10": -8.1828,
+     "p90": -0.4608,
+     "min": -8.9315,
+     "max": -0.2994,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 20,
+     "mean": -1.1838,
+     "median": -4.5187,
+     "p10": -8.0754,
+     "p90": 12.1951,
+     "min": -10.5708,
+     "max": 53.7202,
+     "share_pos": 0.2
+    },
+    "lead_bars": {
+     "n": 20,
+     "mean": 16.55,
+     "median": 14.5,
+     "p10": 4,
+     "p90": 49,
+     "min": -11,
+     "max": 54,
+     "share_pos": 0.9
+    },
+    "entry_px_adv_atr0": {
+     "n": 20,
+     "mean": 0.8831,
+     "median": 0.8959,
+     "p10": -1.8528,
+     "p90": 3.9065,
+     "min": -2.652,
+     "max": 3.9599,
+     "share_pos": 0.65
+    },
+    "pnl_diff_atr0": {
+     "n": 20,
+     "mean": -0.9055,
+     "median": 0.8959,
+     "p10": -3.3023,
+     "p90": 9.9265,
+     "min": -42.5599,
+     "max": 10.1156,
+     "share_pos": 0.65
+    }
+   },
+   "fast_only": {
+    "n": 11,
+    "fast_pnl_atr0": {
+     "n": 11,
+     "mean": -3.8437,
+     "median": -3.7788,
+     "p10": -6.0536,
+     "p90": -2.0332,
+     "min": -6.2865,
+     "max": -1.6831,
+     "share_pos": 0.0
+    },
+    "fast_mae_atr0": {
+     "n": 11,
+     "mean": -4.4222,
+     "median": -4.3675,
+     "p10": -6.1801,
+     "p90": -2.4777,
+     "min": -8.2436,
+     "max": -2.2675,
+     "share_pos": 0.0
+    },
+    "fast_hold_atr0": {
+     "n": 11,
+     "mean": -3.8437,
+     "median": -3.7788,
+     "p10": -6.0536,
+     "p90": -2.0332,
+     "min": -6.2865,
+     "max": -1.6831,
+     "share_pos": 0.0
+    },
+    "fast_exit_reasons": {
+     "stop": 8,
+     "gap_stop": 3
+    },
+    "slow_not_entered_reason": {
+     "invalidated_close_beyond_extreme": 11
+    }
+   },
+   "slow_only": {
+    "n": 2,
+    "slow_pnl_atr0": {
+     "n": 2,
+     "mean": -1.4618,
+     "median": -1.4618,
+     "p10": -5.9132,
+     "p90": 2.9896,
+     "min": -5.9132,
+     "max": 2.9896,
+     "share_pos": 0.5
+    },
+    "slow_mae_atr0": {
+     "n": 2,
+     "mean": -4.0765,
+     "median": -4.0765,
+     "p10": -6.711,
+     "p90": -1.442,
+     "min": -6.711,
+     "max": -1.442,
+     "share_pos": 0.0
+    },
+    "slow_hold_atr0": {
+     "n": 2,
+     "mean": 1.2045,
+     "median": 1.2045,
+     "p10": -10.3559,
+     "p90": 12.765,
+     "min": -10.3559,
+     "max": 12.765,
+     "share_pos": 0.5
+    },
+    "fast_not_entered_reason": {
+     "timeout_no_entry": 2
+    }
+   },
+   "neither": {
+    "n": 3
+   }
+  },
+  "per_opportunity_sum_atr0": {
+   "fast": -67.513,
+   "slow": -10.047,
+   "note": "每机会未入场计 0、各一笔、不排占位、无费用；重叠机会不独立"
+  },
+  "own_sched_skipped": {
+   "fast": 3,
+   "slow": 4
+  }
+ }
+}

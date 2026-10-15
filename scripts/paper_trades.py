@@ -1284,22 +1284,82 @@ def alert_id(thesis_id: str, e: dict) -> str:
     return event_id(thesis_id, e) + (f"|{e['slot']}" if e.get("slot") else "")
 
 
-def _alert_seen(path: Path) -> set:
-    seen = set()
+def _acks_path() -> Path:
+    return LEDGER.with_name("alerts_ack.jsonl")         # 私有：已确认投递（兜底已落盘）的 alert_id，只追加
+
+
+def _jsonl_rows(path: Path, key: str) -> list[dict]:
+    """逐行解析；任一行坏 → 抛错（发件箱/确认账损坏必须显式失败，不静默重发或漏发）。"""
+    rows = []
     if path.exists():
         for i, line in enumerate(path.read_text("utf-8").splitlines(), 1):
             if line.strip():
                 try:
-                    seen.add(json.loads(line)["alert_id"])
-                except (ValueError, KeyError) as e:
+                    r = json.loads(line)
+                    r[key]
+                except (ValueError, KeyError, TypeError) as e:
                     raise RuntimeError(f"{path.name} 第 {i} 行损坏：{e}")
-    return seen
+                rows.append(r)
+    return rows
 
 
-def collect_alerts(j: dict, *, bootstrap: bool = False) -> list[dict]:
-    """把 journal 里尚未升级过的关键事件写进私有发件箱 alerts.jsonl 并返回（只追加、按 alert_id 去重）。
-    在 journal 落盘之后调用：中途崩溃时事件已在 journal、下次唤醒补发，不会丢也不会重复。
-    bootstrap=True：发件箱首次建立时，把已有的历史事件记为 bootstrap、不返回（上线时不把旧账一次性全报出来）。"""
+def _alert_seen(path: Path) -> set:
+    return {r["alert_id"] for r in _jsonl_rows(path, "alert_id")}
+
+
+def pending_alerts() -> list[dict]:
+    """发件箱里尚未确认投递的告警（Codex 048 D）。「写进发件箱」只是持久化，不等于已送达：
+    每轮都重新给出全部未确认项，直到兜底落盘后 ack。bootstrap 记录 = 上线时显式迁移的旧账，不待投递。
+    同一 alert_id 只取第一条（发件箱只追加、按 id 去重写入，正常不会重复）。"""
+    acked = {r["alert_id"] for r in _jsonl_rows(_acks_path(), "alert_id")}
+    out, seen = [], set()
+    for r in _jsonl_rows(_alerts_path(), "alert_id"):
+        if r.get("bootstrap") or r["alert_id"] in acked or r["alert_id"] in seen:
+            continue
+        seen.add(r["alert_id"])
+        out.append(r)
+    return out
+
+
+def ack_alerts(ids, *, via: str, at: str | None = None) -> int:
+    """确认投递：只在持久兜底已写成功之后调用（调度脚本）。锁内读—补写—fsync；已确认的不重复写，
+    发件箱里没有的 id 拒绝（不凭空确认）。返回新确认条数。"""
+    path = _acks_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    known = _alert_seen(_alerts_path())
+    bad = [i for i in ids if i not in known]
+    if bad:
+        raise RuntimeError(f"确认的告警不在发件箱：{len(bad)} 条")
+    at = at or datetime.now(timezone.utc).isoformat()
+    with open(path.with_name(path.name + ".lock"), "a+") as lk:
+        fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
+        done = {r["alert_id"] for r in _jsonl_rows(path, "alert_id")}
+        new = [i for i in dict.fromkeys(ids) if i not in done]
+        if new:
+            with open(path, "a", encoding="utf-8") as f:
+                for i in new:
+                    f.write(json.dumps({"alert_id": i, "acked_at": at, "via": via}, ensure_ascii=False) + "\n")
+                f.flush(); os.fsync(f.fileno())
+    return len(new)
+
+
+def bootstrap_alerts(j: dict) -> int:
+    """显式一次性迁移（Codex 048 D）：发件箱首次建立时，把已有的历史事件记为 bootstrap（不待投递）。
+    发件箱已存在 → 拒绝；tick 不再自动 bootstrap —— 发件箱丢失不能成为静默吞掉历史告警的理由（丢了就全部重新待投递）。"""
+    if _alerts_path().exists():
+        raise RuntimeError("发件箱已存在：bootstrap 只能在首次建立时显式执行一次")
+    _alerts_path().parent.mkdir(parents=True, exist_ok=True)
+    return len(_collect(j, bootstrap=True))
+
+
+def collect_alerts(j: dict) -> list[dict]:
+    """把 journal 里尚未进发件箱的关键事件写进私有发件箱 alerts.jsonl（只追加、按 alert_id 去重），返回本次新写入的。
+    在 journal 落盘之后调用：崩溃在此之前 → 事件仍在 journal，下次唤醒补写。写进发件箱 ≠ 已送达：
+    送达看 pending_alerts / ack_alerts（Codex 048 D：落箱后、分发前崩溃，旧版下一轮返回 0，告警丢失）。"""
+    return _collect(j, bootstrap=False)
+
+
+def _collect(j: dict, *, bootstrap: bool) -> list[dict]:
     path = _alerts_path()
     seen = _alert_seen(path)
     new = []
@@ -1321,7 +1381,7 @@ def collect_alerts(j: dict, *, bootstrap: bool = False) -> list[dict]:
             for r in new:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
             f.flush(); os.fsync(f.fileno())
-    return [] if bootstrap else new
+    return new
 
 
 def alert_summary(status_file: Path) -> dict:
@@ -1335,7 +1395,9 @@ def alert_summary(status_file: Path) -> dict:
     kinds = {}
     for a in r["alerts"]:
         kinds[a["kind"]] = kinds.get(a["kind"], 0) + 1
-    return {"status": "alert" if kinds else "ok", "n": sum(kinds.values()), "kinds": kinds}
+    import hashlib                                       # 批次指纹：公开兜底按它去重/对账，不泄露仓位 id
+    dig = hashlib.sha256("\n".join(sorted(a["alert_id"] for a in r["alerts"])).encode()).hexdigest()[:12] if kinds else ""
+    return {"status": "alert" if kinds else "ok", "n": sum(kinds.values()), "kinds": kinds, "digest": dig}
 
 
 def sync_ledger(j: dict, ledger: Path | None = None) -> int:
@@ -1483,8 +1545,6 @@ def tick_result(now: datetime | None = None, *, depth=None) -> dict:
     with open(LOCK, "a+") as lk:
         fcntl.flock(lk.fileno(), fcntl.LOCK_EX)
         j = json.loads(JOURNAL.read_text("utf-8"))
-        if not _alerts_path().exists():
-            collect_alerts(j, bootstrap=True)
         changed = False
         for t in j.get("theses", []):
             p = t.get("paper")
@@ -1519,9 +1579,13 @@ def tick_result(now: datetime | None = None, *, depth=None) -> dict:
         if changed:
             _write_journal(j)
         sync_ledger(j)                                   # journal 落盘之后再投影；每次都核对补齐
-        alerts = collect_alerts(j)                       # 同上：落盘之后，按 alert_id 只升级一次
+        fresh = collect_alerts(j)                        # 同上：落盘之后进发件箱，按 alert_id 只写一次
+        alerts = pending_alerts()                        # 结果 = 全部未确认项（含以前落箱后没送达的），直到兜底后 ack
         fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
-    for al in alerts:                                    # 人读输出也带上（同一 id:动作 只列一次）
+    new_ids = {a["alert_id"] for a in fresh}
+    for al in alerts:
+        al["new"] = al["alert_id"] in new_ids
+    for al in fresh:                                     # 人读输出只带本次新事件（同一 id:动作 只列一次）
         tok = f"{al['thesis_id']}:{al['action']}"
         if tok not in out:
             out.append(tok)
@@ -1593,6 +1657,20 @@ def main():
         return 1 if any(a.endswith(":error") for a in acts) else 0
     if cmd == "alert-summary":                           # alert-summary PATH → 一行 JSON（调度脚本用，不含仓位内容）
         print(json.dumps(alert_summary(Path(sys.argv[2])), ensure_ascii=False))
+        return 0
+    if cmd == "alert-ack":                               # alert-ack PATH：兜底已落盘后，确认该结果文件里的全部告警
+        try:
+            r = json.loads(Path(sys.argv[2]).read_text("utf-8"))
+            if r.get("schema") != TICK_SCHEMA or not isinstance(r.get("alerts"), list):
+                raise ValueError("schema")
+            n = ack_alerts([a["alert_id"] for a in r["alerts"]], via="fallback_file")
+        except (OSError, ValueError, KeyError, RuntimeError) as e:
+            print(f"ack 失败（下轮重发）：{type(e).__name__}", file=sys.stderr)
+            return 1
+        print(n)
+        return 0
+    if cmd == "alerts-bootstrap":                        # 显式一次性迁移：发件箱首次建立时把历史事件记为 bootstrap
+        print(bootstrap_alerts(json.loads(JOURNAL.read_text("utf-8"))))
         return 0
     j = json.loads(JOURNAL.read_text("utf-8"))
     for t in j.get("theses", []):

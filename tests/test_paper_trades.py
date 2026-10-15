@@ -1087,11 +1087,17 @@ def test_unknown_advisory_alerts_even_when_step_returns_mark(tmp_path, monkeypat
     assert r["schema"] == pt.TICK_SCHEMA and "A:mark" in r["tokens"] and "A:advisory_config_error" in r["tokens"]
     assert [(a["action"], a["kind"]) for a in r["alerts"]] == [("advisory_config_error", "config_error")]
     assert r["alerts"][0]["schema"] == pt.ALERT_SCHEMA and r["alerts"][0]["alert_id"].startswith("A|advisory_config_error|")
+    r1b = pt.tick_result(datetime(2026, 9, 30, 9, 50, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))
+    assert [a["alert_id"] for a in r1b["alerts"]] == [r["alerts"][0]["alert_id"]]          # 未确认 → 下一轮照给（048 D）
+    assert r1b["alerts"][0]["new"] is False and "A:advisory_config_error" not in r1b["tokens"]  # 人读只报一次
+    pt.ack_alerts([r["alerts"][0]["alert_id"]], via="test")
     r2 = pt.tick_result(datetime(2026, 9, 30, 15, 46, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))
-    assert r2["alerts"] == [] and "A:advisory_config_error" not in r2["tokens"]            # 重复运行只升级一次
+    assert r2["alerts"] == [] and "A:advisory_config_error" not in r2["tokens"]            # 确认后不再升级
     assert load()["A"]["paper"]["state"] == "entered"
     sf = tmp_path / "res.json"; sf.write_text(__import__("json").dumps(r))
-    assert pt.alert_summary(sf) == {"status": "alert", "n": 1, "kinds": {"config_error": 1}}
+    sm = pt.alert_summary(sf)
+    assert {k: sm[k] for k in ("status", "n", "kinds")} == {"status": "alert", "n": 1, "kinds": {"config_error": 1}}
+    assert len(sm["digest"]) == 12 and "A|" not in sm["digest"]
 
 
 def test_old_track_window_unresolved_while_current_window_succeeds(tmp_path, monkeypatch):
@@ -1113,6 +1119,7 @@ def test_only_track_unresolved_and_multiple_slots_same_wake_get_distinct_ids(tmp
     r = pt.tick_result(datetime(2026, 10, 2, 16, 30, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1))
     ids = [a["alert_id"] for a in r["alerts"] if a["action"] == "track_unresolved"]
     assert len(ids) == 3 and len(set(ids)) == 3 and "S:track_unresolved" in r["tokens"]
+    pt.ack_alerts([a["alert_id"] for a in r["alerts"]], via="test")
     assert pt.tick_result(datetime(2026, 10, 2, 16, 40, tzinfo=ET), depth=q(3.0, 3.1, 13.0, 13.1))["alerts"] == []
 
 
@@ -1125,13 +1132,19 @@ def test_normal_tick_and_non_trading_time_do_not_alert(tmp_path, monkeypatch):
     assert pt.tick_result(datetime(2026, 10, 3, 11, 0, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))["alerts"] == []   # 周六
 
 
-def test_alert_outbox_bootstrap_does_not_replay_history(tmp_path, monkeypatch):
+def test_alert_bootstrap_is_explicit_and_lost_outbox_does_not_swallow_history(tmp_path, monkeypatch):
+    """048 D：tick 不再自动 bootstrap。发件箱缺失 → 历史事件全部待投递（不静默吞掉）；
+    bootstrap 只能显式执行一次，发件箱已存在则拒绝；发件箱损坏 → 显式失败。"""
+    import json as _j
     p = _entered(); p["events"].append({"at": "2026-09-29T11:00:00-04:00", "action": "exit_unresolved", "slot": "2026-09-29 10:45"})
     _env(tmp_path, monkeypatch, [{"id": "A", "execution": "模拟", "paper": p}])
     r = pt.tick_result(datetime(2026, 9, 29, 12, 0, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))
-    assert r["alerts"] == []
-    rows = [__import__("json").loads(x) for x in (tmp_path / "alerts.jsonl").read_text().splitlines()]
-    assert len(rows) == 1 and rows[0]["bootstrap"] is True
+    assert [a["action"] for a in r["alerts"]] == ["exit_unresolved"]                       # 不吞历史
+    with pytest.raises(RuntimeError):
+        pt.bootstrap_alerts(_j.loads((tmp_path / "journal.json").read_text()))             # 已有发件箱 → 拒绝
+    (tmp_path / "alerts.jsonl").unlink()
+    assert pt.bootstrap_alerts(_j.loads((tmp_path / "journal.json").read_text())) == 1      # 显式迁移
+    assert pt.pending_alerts() == []
     (tmp_path / "alerts.jsonl").write_text("{坏行\n")
     with pytest.raises(RuntimeError):                                                      # 发件箱损坏：显式失败，不静默重发/漏发
         pt.tick_result(datetime(2026, 9, 29, 12, 5, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))
@@ -1144,12 +1157,11 @@ def test_alert_summary_crashed_states(tmp_path):
     (tmp_path / "old.json").write_text('{"schema": "x", "alerts": []}')
     assert pt.alert_summary(tmp_path / "old.json")["status"] == "crashed"
     (tmp_path / "ok.json").write_text('{"schema": "%s", "alerts": []}' % pt.TICK_SCHEMA)
-    assert pt.alert_summary(tmp_path / "ok.json") == {"status": "ok", "n": 0, "kinds": {}}
+    assert pt.alert_summary(tmp_path / "ok.json") == {"status": "ok", "n": 0, "kinds": {}, "digest": ""}
 
 
-def test_cli_tick_writes_status_file_and_shell_dispatch_smoke(tmp_path, monkeypatch):
-    """端到端：CLI tick 写 typed 结果 → 调度脚本里的 dispatch_alerts 读它 → 通知（桩）+ 公开兜底只含类别计数。"""
-    import json as _j, subprocess
+def test_cli_tick_writes_status_file(tmp_path, monkeypatch):
+    import json as _j
     p = _entered(); p.update(advisory_rule="no-such-rule", mark_slots_et=["09:45"], expiry="2026-10-16")
     _env(tmp_path, monkeypatch, [{"id": "SECRET-ID", "execution": "模拟", "paper": p}])
     monkeypatch.setattr(pt, "SLOT_AUDIT_FROM", date(2026, 9, 30))
@@ -1159,17 +1171,137 @@ def test_cli_tick_writes_status_file_and_shell_dispatch_smoke(tmp_path, monkeypa
     sf = tmp_path / ".tick_result.json"
     monkeypatch.setattr(sys, "argv", ["paper_trades.py", "tick", "--status-file", str(sf)])
     assert pt.main() == 0 and _j.loads(sf.read_text())["alerts"][0]["action"] == "advisory_config_error"
+
+
+# ---- Codex 048 D：可靠投递 —— 沙盒里跑真实 paper_tick.sh（复制脚本，ROOT 指向沙盒；通知写文件、不弹窗）----
+
+def _sandbox(tmp_path, events=({"at": "2026-10-14T10:00:00-04:00", "action": "exit_rule_config_error"},)):
+    import json as _j, shutil
     root = Path(__file__).resolve().parents[1]
-    sh = (root / "scripts" / "paper_tick.sh").read_text("utf-8")
+    w = tmp_path / "w"
+    (w / "scripts").mkdir(parents=True)
+    for f in ("paper_trades.py", "paper_tick.sh"):
+        shutil.copy(root / "scripts" / f, w / "scripts" / f)
+    (w / "undertow").symlink_to(root / "undertow")
+    for d in ("data/soul", "data/paper", "data/reports", "data/logs"):
+        (w / d).mkdir(parents=True, exist_ok=True)
+    th = {"id": "SECRET-ID", "execution": "模拟", "paper": {"state": "skipped", "events": list(events)}}
+    (w / "data/soul/journal.json").write_text(_j.dumps({"theses": [th]}, ensure_ascii=False))
+    return w
+
+
+def _run_tick(w, **extra):
+    import os as _o, subprocess
+    env = {**_o.environ, "PAPER_TICK_TEST_ANYDAY": "1", "PAPER_TICK_NOTIFY_LOG": str(w / "notified"),
+           "PYTHON": sys.executable, **extra}
+    env.pop("PAPER_TICK_LOCKED", None)
+    return subprocess.run(["/bin/zsh", str(w / "scripts/paper_tick.sh")], env=env, capture_output=True, text=True, timeout=60)
+
+
+def _lines(f):
+    return [x for x in f.read_text().splitlines() if x.strip()] if f.exists() else []
+
+
+def _fail_file(w):
+    fs = list((w / "data/reports").glob("FAILURE_*.txt")) if (w / "data/reports").is_dir() else []
+    return fs[0] if fs else w / "data/reports/none"
+
+
+def test_tick_sh_dispatch_then_ack_and_no_repeat(tmp_path):
+    w = _sandbox(tmp_path)
+    assert _run_tick(w).returncode == 0
+    note, fail = _lines(w / "notified"), _lines(_fail_file(w))
+    assert len(note) == 1 and "config_error×1" in note[0] and len(fail) == 1 and "批次 " in fail[0]
+    assert "SECRET-ID" not in fail[0] and "SECRET-ID" not in note[0]                     # 公开兜底不含仓位 id
+    assert len(_lines(w / "data/paper/alerts_ack.jsonl")) == 1
+    assert _run_tick(w).returncode == 0                                                   # 已确认：不再通知、不再写兜底
+    assert len(_lines(w / "notified")) == 1 and len(_lines(_fail_file(w))) == 1
+
+
+def test_crash_after_outbox_before_dispatch_is_redelivered(tmp_path):
+    """Codex 048 探针：落箱后、结果文件/分发前崩溃 → 下一轮仍然投递（旧版返回 0 条）。"""
+    import subprocess
+    w = _sandbox(tmp_path)
+    code = ("import json,sys; sys.path.insert(0,'scripts'); import paper_trades as pt; "
+            "pt.collect_alerts(json.loads(pt.JOURNAL.read_text()))")
+    subprocess.run([sys.executable, "-c", code], cwd=w, check=True)                      # 只写了发件箱就「崩溃」
+    assert len(_lines(w / "data/paper/alerts.jsonl")) == 1 and not (w / "notified").exists()
+    (w / "data/paper/.tick_result.4242.json").write_text("{")                            # 死掉的旧轮留下的半截结果
+    assert _run_tick(w).returncode == 0
+    assert len(_lines(w / "notified")) == 1 and len(_lines(w / "data/paper/alerts_ack.jsonl")) == 1
+    assert not (w / "data/paper/.tick_result.4242.json").exists()                        # 锁内清理死轮遗留
+
+
+def test_fallback_write_failure_is_not_acked_and_retried(tmp_path):
+    """通知「成功」（launchd 下不能证明弹出）但兜底写失败 → 不 ack；修好后下一轮整批重发并确认。"""
+    import shutil
+    w = _sandbox(tmp_path)
+    shutil.rmtree(w / "data/reports"); (w / "data/reports").write_text("不是目录")
+    assert _run_tick(w).returncode == 0
+    assert len(_lines(w / "notified")) == 1 and not (w / "data/paper/alerts_ack.jsonl").exists()
+    assert "兜底写失败" in "".join(_lines(next((w / "data/paper").glob("paper_tick_*.log"))))
+    (w / "data/reports").unlink(); (w / "data/reports").mkdir()
+    assert _run_tick(w).returncode == 0
+    assert len(_lines(w / "notified")) == 2 and len(_lines(_fail_file(w))) == 1
+    assert len(_lines(w / "data/paper/alerts_ack.jsonl")) == 1
+
+
+def test_ack_failure_redelivers_same_batch_digest(tmp_path):
+    w = _sandbox(tmp_path)
+    (w / "data/paper/alerts_ack.jsonl.lock").mkdir()                                     # ack 拿不到锁 → 写不进去（读确认账不受影响）
+    assert _run_tick(w).returncode == 0
+    assert not (w / "data/paper/alerts_ack.jsonl").exists() and "alert-ack 失败" in "".join(
+        _lines(next((w / "data/paper").glob("paper_tick_*.log"))))
+    (w / "data/paper/alerts_ack.jsonl.lock").rmdir()
+    assert _run_tick(w).returncode == 0
+    fail = _lines(_fail_file(w))
+    assert len(fail) == 2 and fail[0].split("批次 ")[1][:12] == fail[1].split("批次 ")[1][:12]   # 同一批次指纹，可对账去重
+    assert len(_lines(w / "data/paper/alerts_ack.jsonl")) == 1
+    assert _run_tick(w).returncode == 0 and len(_lines(_fail_file(w))) == 2
+
+
+def test_crash_before_outbox_event_only_in_journal_is_delivered(tmp_path):
+    """journal 已落盘、发件箱还没写就崩溃：事件仍在 journal，下一轮照常进发件箱并投递。"""
+    w = _sandbox(tmp_path)
+    assert not (w / "data/paper/alerts.jsonl").exists()
+    assert _run_tick(w).returncode == 0 and len(_lines(w / "notified")) == 1
+
+
+def test_busy_wake_touches_nothing_and_lifecycle_is_locked(tmp_path):
+    """另一轮持锁（含分发与 ack）时：busy 唤醒不删、不读任何结果文件，不投递；锁释放后下一轮正常。"""
+    import subprocess, time
+    w = _sandbox(tmp_path)
+    keep = w / "data/paper/.tick_result.777.json"; keep.write_text("{}")
+    lock = w / "data/logs/.paper_tick.lock"
+    holder = subprocess.Popen(["lockf", "-k", str(lock), "sleep", "4"])
+    try:
+        time.sleep(0.5)
+        assert _run_tick(w).returncode == 0
+        assert keep.exists() and not (w / "notified").exists()
+        assert '"rc": 75' in (w / "data/paper/.status_paper.json").read_text()
+    finally:
+        holder.wait(timeout=10)
+    assert _run_tick(w).returncode == 0 and not keep.exists() and len(_lines(w / "notified")) == 1
+    sh = (w / "scripts/paper_tick.sh").read_text()
     lines = sh.splitlines()
     d = next(i for i, ln in enumerate(lines) if ln.startswith("dispatch_alerts() {"))
-    assert all(i > d for i, ln in enumerate(lines) if "dispatch_alerts \"" in ln)              # 定义在调用之前
-    assert '--status-file "$TRES"' in sh
-    fn = "\n".join(lines[d:next(i for i in range(d, len(lines)) if lines[i] == "}") + 1])
-    w = tmp_path / "w"; (w / "data" / "reports").mkdir(parents=True); (w / "scripts").symlink_to(root / "scripts")
-    script = (f'PY={sys.executable}; WAKE=W; ET_DATE=2026-09-30\nnotify() {{ printf "%s|%s\\n" "$1" "$2" >> notified; }}\n{fn}\n'
-              f'dispatch_alerts "{sf}"\ndispatch_alerts "{tmp_path}/missing.json"\n')
-    subprocess.run(["zsh", "-c", script], cwd=w, check=True)
-    note = (w / "notified").read_text(); fail = (w / "data" / "reports" / "FAILURE_2026-09-30.txt").read_text()
-    assert "config_error×1" in note and "crashed" in fail and "config_error×1" in fail
-    assert "SECRET-ID" not in fail and "SECRET-ID" not in note                                # 公开兜底不含仓位 id
+    assert all(i > d for i, ln in enumerate(lines) if "dispatch_alerts \"" in ln)             # 定义在调用之前
+    lk = next(i for i, ln in enumerate(lines) if "lockf -t 0" in ln)
+    rm = next(i for i, ln in enumerate(lines) if ln.startswith("rm -f") and "tick_result" in ln)
+    assert lk < rm                                                                          # 删除只在锁内
+
+
+def test_ack_rejects_unknown_ids_and_lost_outbox_with_acks_does_not_redeliver(tmp_path, monkeypatch):
+    p = _entered(); p["events"].append({"at": "2026-09-29T11:00:00-04:00", "action": "exit_unresolved", "slot": "2026-09-29 10:45"})
+    _env(tmp_path, monkeypatch, [{"id": "A", "execution": "模拟", "paper": p}])
+    r = pt.tick_result(datetime(2026, 9, 29, 12, 0, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))
+    with pytest.raises(RuntimeError):
+        pt.ack_alerts(["not-in-outbox"], via="test")
+    assert pt.ack_alerts([r["alerts"][0]["alert_id"]], via="test") == 1
+    assert pt.ack_alerts([r["alerts"][0]["alert_id"]], via="test") == 0                   # 幂等
+    (tmp_path / "alerts.jsonl").unlink()                                                   # 发件箱丢了、确认账还在
+    r2 = pt.tick_result(datetime(2026, 9, 29, 12, 5, tzinfo=ET), depth=q(0.5, 0.55, 0.2, 0.25))
+    assert r2["alerts"] == []                                                              # 已确认送达的不重发
+    (tmp_path / "alerts_ack.jsonl").write_text("{坏\n")
+    with pytest.raises(RuntimeError):
+        pt.pending_alerts()

@@ -1292,12 +1292,17 @@ def _ledger_events(j: dict) -> list[tuple[dict, dict, dict, str, str]]:
 def ledger_id_map(j: dict, rows: list[dict]) -> dict:
     """旧台账行（无 event_id_v2）→ v2 身份的兼容映射。纯函数、确定性：同一台账 + journal 重算结果相同（幂等）。旧行原样保留。
 
-    每个旧 id：候选 = journal 里同旧 id、v2 尚未被新式行占用的事件；
-    - 候选 1 个、旧行 1 行 → 映射；
-    - 否则逐行用 evidence 与事件全等匹配：每行恰好匹配一个且互不重复 → 映射，其余候选是当年撞号丢掉的事件（之后按 v2 补写）；
-    - 匹配不唯一（例如两条内容完全相同的事件）→ 歧义：该旧 id 的全部候选都隔离（不补写、不吞），列入报告等人工核对；
-    - journal 里找不到 → 孤行（只报告）。
-    → {"mapped": {v2: 行号}, "blocked": [v2…], "ambiguous": [{旧 id, 行号, 候选数}], "orphans": [{旧 id, 行号}]}"""
+    证据优先（Codex 051 B）：旧行带 evidence 时，先与 journal 里【同旧 id 的全部事件】（含 v2 已被新式行占用的）逐一全等比对，
+    「只剩一个未占用候选」不能凌驾于证据 —— 旧版先排除已占用再一候选直接映射，混合存量（旧 A + v2 A）会把证据是 A 的旧行认成 B，
+    B 被当成已覆盖、永不补写。分类：
+    - 证据唯一匹配一个未占用事件、且没有别的旧行争同一事件 → 映射；
+    - 证据匹配的事件已被 v2 行占用 → duplicate（旧行与 v2 行重复）：不映射、不占任何候选，其余候选照常按 v2 补写；
+    - 证据与同旧 id 的任何事件都不相等 → conflict；证据同时匹配多个未占用事件（内容完全相同）或多行争同一事件 → ambiguous：
+      这两类都把该旧 id 的未占用候选全部隔离（不补写、不猜）；
+    - 旧行没有 evidence（无证据，区别于「有证据但不符」）→ 只在 1 行 1 个未占用候选时按旧兼容规则映射（记 no_evidence），否则 ambiguous；
+    - journal 里找不到该旧 id → orphan（只报告）。
+    → {"mapped": {v2: 行号}, "blocked": [v2…], "ambiguous": [...], "conflicts": [...], "duplicates": [...],
+       "orphans": [...], "no_evidence": [行号…]}"""
     evs = _ledger_events(j)
     by_old: dict = {}
     for _, _, e, old, v2 in evs:
@@ -1307,24 +1312,58 @@ def ledger_id_map(j: dict, rows: list[dict]) -> dict:
     for i, r in enumerate(rows, 1):
         if not r.get("event_id_v2"):
             legacy.setdefault(r["event_id"], []).append((i, r))
-    out = {"mapped": {}, "blocked": [], "ambiguous": [], "orphans": []}
+    out = {"mapped": {}, "blocked": [], "ambiguous": [], "conflicts": [], "duplicates": [], "orphans": [], "no_evidence": []}
     for old, lines in sorted(legacy.items()):
-        cands = [(e, v2) for e, v2 in by_old.get(old, []) if v2 not in taken]
-        if not by_old.get(old):
+        allc = by_old.get(old, [])
+        if not allc:
             out["orphans"] += [{"event_id": old, "line": i} for i, _ in lines]
             continue
-        if len(cands) == 1 and len(lines) == 1:
-            out["mapped"][cands[0][1]] = lines[0][0]
+        free = [(e, v2) for e, v2 in allc if v2 not in taken]
+        claims, bad, nolines = {}, None, []
+        for i, r in lines:
+            ev = r.get("evidence")
+            if not isinstance(ev, dict):
+                nolines.append(i)
+                continue
+            hit = [v2 for e, v2 in allc if e == ev]
+            if not hit:
+                bad = bad or "conflicts"
+                continue
+            free_hit = [v2 for v2 in hit if v2 not in taken]
+            if not free_hit:
+                out["duplicates"].append({"event_id": old, "line": i, "duplicate_of": hit})
+                continue
+            if len(free_hit) > 1:
+                bad = "ambiguous"
+                continue
+            claims.setdefault(free_hit[0], []).append(i)
+        if any(len(v) > 1 for v in claims.values()):
+            bad = "ambiguous"
+        if nolines:
+            rest = [v2 for _, v2 in free if v2 not in claims]
+            if bad is None and len(nolines) == 1 and len(rest) == 1:
+                claims[rest[0]] = nolines
+                out["no_evidence"].append(nolines[0])
+            else:
+                bad = bad or "ambiguous"
+        if bad:
+            out["blocked"] += [v2 for _, v2 in free]
+            out[bad].append({"event_id": old, "lines": [i for i, _ in lines], "candidates": len(free)})
             continue
-        hit = [[v2 for e, v2 in cands if e == r.get("evidence")] for _, r in lines]
-        flat = [h[0] for h in hit if len(h) == 1]
-        if all(len(h) == 1 for h in hit) and len(set(flat)) == len(flat):
-            for (i, _), v2 in zip(lines, flat):
-                out["mapped"][v2] = i
-        else:
-            out["blocked"] += [v2 for _, v2 in cands]
-            out["ambiguous"].append({"event_id": old, "lines": [i for i, _ in lines], "candidates": len(cands)})
+        for v2, ls in claims.items():
+            out["mapped"][v2] = ls[0]
     return out
+
+
+def ledger_integrity(m: dict) -> list[dict]:
+    """映射结果里需要人工核对的问题（Codex 051 B）→ [{"category", "event_id", "lines"}]，按类别与旧 id 稳定排序。
+    同一未解决问题每次重算得到同一身份（进发件箱按 alert_id 只写一次、送达后 ack，未送达每轮重发）。"""
+    out = []
+    for cat in ("ambiguous", "conflicts", "duplicates", "orphans"):
+        for x in m.get(cat, []):
+            lines = x.get("lines") or [x.get("line")]
+            out.append({"category": cat, "event_id": x["event_id"], "lines": lines})
+    return sorted(out, key=lambda x: (x["category"], x["event_id"], x["lines"]))
 
 
 # 需要用户当场知道的事件（Codex 047 C）：typed、带 schema，按稳定 alert_id 只升级一次，与本轮 step 返回什么无关。
@@ -1464,11 +1503,17 @@ def alert_summary(status_file: Path) -> dict:
 
 
 def sync_ledger(j: dict, ledger: Path | None = None) -> int:
+    return _sync_ledger(j, ledger)[0]
+
+
+def _sync_ledger(j: dict, ledger: Path | None = None) -> tuple[int, dict]:
     """paper-discretionary 研究台账 = journal 关键事件的只追加投影（Codex 025/026）。
     在 journal 原子替换【之后】调用；按 event_id_v2 去重 —— 中途崩溃后下次唤醒补齐，重复运行不重复写。
     旧行（只有 v1 event_id）经 ledger_id_map 兼容映射，不改写；歧义旧 id 的候选隔离不补写，写报告并提示（Codex 049/050）。
     新行仍带 v1 event_id 字段（兼容旧读者；撞号补回的行与旧行 v1 相同，去重请用 event_id_v2）。
-    台账某行解析失败 → 抛错（不静默跳过、不覆盖）。返回本次追加条数。"""
+    台账某行解析失败 → 抛错（不静默跳过、不覆盖）。返回 (本次追加条数, 映射结果)。
+    Codex 051 B：完整性问题（歧义/冲突/重复/孤行）的明细写私有报告；用户可见性走 tick 的 typed 告警（collect_integrity_alerts），
+    不靠 stderr —— stderr 只是附带的人读提示。"""
     ledger = ledger or LEDGER
     rows = []
     if ledger.exists():
@@ -1501,11 +1546,45 @@ def sync_ledger(j: dict, ledger: Path | None = None) -> int:
             for r in new:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
             f.flush(); os.fsync(f.fileno())
-    if m["ambiguous"]:
-        _atomic_json(ledger.with_name("ledger_id_ambiguous.json"), {"schema": "ledger-id-ambiguous-v1", **m})
-        print(f"⚠️ 研究台账有 {len(m['ambiguous'])} 个旧 id 歧义、{len(m['blocked'])} 条事件隔离未补写："
+    issues = ledger_integrity(m)
+    if issues:
+        _atomic_json(ledger.with_name("ledger_id_ambiguous.json"), {"schema": "ledger-id-ambiguous-v2", "issues": issues, **m})
+        print(f"⚠️ 研究台账有 {len(issues)} 个完整性问题、{len(m['blocked'])} 条事件隔离未补写："
               f"见私有 {ledger.with_name('ledger_id_ambiguous.json').name}", file=sys.stderr)
-    return len(new)
+    return len(new), m
+
+
+LEDGER_INTEGRITY_KIND = "ledger_integrity"
+LEDGER_INTEGRITY_MSG = {
+    "ambiguous": "研究台账旧行无法唯一对应事件：相关事件隔离未补写，需人工核对",
+    "conflicts": "研究台账旧行证据与 journal 事件不符：相关事件隔离未补写，需人工核对",
+    "duplicates": "研究台账旧行与新式行重复：未删改，需人工核对",
+    "orphans": "研究台账旧行在 journal 里找不到对应事件：只报告，需人工核对",
+}
+
+
+def collect_integrity_alerts(m: dict) -> list[dict]:
+    """把台账完整性问题写进同一个私有发件箱（只追加、按 alert_id 去重），返回本次新写入的（Codex 051 B）。
+    走 pending/ack：typed 结果不再是 ok，兜底落盘后才确认；同一未解决问题身份稳定，不会每轮重复入箱。
+    公开兜底只见类别计数与批次指纹（alert_summary），明细留在私有报告。"""
+    path = _alerts_path()
+    seen = _alert_seen(path)
+    new = []
+    for x in ledger_integrity(m):
+        aid = f"ledger-integrity|{x['category']}|{x['event_id']}|{','.join(str(i) for i in x['lines'])}"
+        if aid in seen:
+            continue
+        new.append({"schema": ALERT_SCHEMA, "alert_id": aid, "thesis_id": x["event_id"].split("|")[0],
+                    "action": f"ledger_{x['category']}", "kind": LEDGER_INTEGRITY_KIND, "message": LEDGER_INTEGRITY_MSG[x["category"]],
+                    "event_at": None, "slot": None, "detail": {"category": x["category"], "lines": x["lines"]}, "bootstrap": False})
+        seen.add(aid)
+    if new:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
+            for r in new:
+                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+            f.flush(); os.fsync(f.fileno())
+    return new
 
 
 def _atomic_json(path: Path, obj) -> None:
@@ -1517,18 +1596,18 @@ def _atomic_json(path: Path, obj) -> None:
 
 
 def fallback_append(path: Path, line: str) -> None:
-    """公开兜底文件追加一行并 fsync（文件 + 新建时的目录）。alert-ack 只在它返回后才执行 ——
+    """公开兜底文件追加一行并 fsync（文件 + 父目录，每次）。alert-ack 只在它返回后才执行 ——
     「已送达」承诺的故障模型因此覆盖到进程崩溃与断电（以文件系统遵守 fsync 为前提）；通知弹窗仍只是尽力而为。"""
-    new = not path.exists()
     with open(path, "a", encoding="utf-8") as f:
         f.write(line.rstrip("\n") + "\n")
         f.flush(); os.fsync(f.fileno())
-    if new:
-        dfd = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(dfd)
-        finally:
-            os.close(dfd)
+    # Codex 051 C：每次成功返回前都 fsync 父目录。旧版只在「本次新建」时同步目录：首次目录 fsync 失败后文件已留下，
+    # 重试时 new=False 跳过目录同步却返回成功 → 可以 ack，而新目录项从未确认落盘。任一步失败都抛出（调用方不 ack）。
+    dfd = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(dfd)
+    finally:
+        os.close(dfd)
 
 
 def judgment_id(j: dict, t: dict) -> str:
@@ -1670,8 +1749,9 @@ def tick_result(now: datetime | None = None, *, depth=None) -> dict:
                 out.append(f"{t['id']}:{a}")
         if changed:
             _write_journal(j)
-        sync_ledger(j)                                   # journal 落盘之后再投影；每次都核对补齐
+        _, lm = _sync_ledger(j)                          # journal 落盘之后再投影；每次都核对补齐
         fresh = collect_alerts(j)                        # 同上：落盘之后进发件箱，按 alert_id 只写一次
+        fresh += collect_integrity_alerts(lm)            # 台账完整性问题同走发件箱（Codex 051 B：旧版只有 stderr，typed 结果仍 ok）
         alerts = pending_alerts()                        # 结果 = 全部未确认项（含以前落箱后没送达的），直到兜底后 ack
         fcntl.flock(lk.fileno(), fcntl.LOCK_UN)
     new_ids = {a["alert_id"] for a in fresh}
@@ -1775,7 +1855,8 @@ def main():
         _atomic_json(LEDGER.with_name("ledger_id_map.json"), {"schema": "ledger-id-map-v1", **m})
         print(json.dumps({"rows": len(rows), "legacy_rows": sum(not r.get("event_id_v2") for r in rows),
                           "mapped": len(m["mapped"]), "blocked": len(m["blocked"]), "ambiguous": len(m["ambiguous"]),
-                          "orphans": len(m["orphans"]),
+                          "orphans": len(m["orphans"]), "conflicts": len(m["conflicts"]), "duplicates": len(m["duplicates"]),
+                          "no_evidence": len(m["no_evidence"]),
                           "would_append": sum(1 for *_, v2 in _ledger_events(j)
                                               if v2 not in set(m["mapped"]) | set(m["blocked"])
                                               | {r["event_id_v2"] for r in rows if r.get("event_id_v2")})}))

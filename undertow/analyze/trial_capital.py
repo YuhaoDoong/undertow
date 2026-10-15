@@ -11,6 +11,8 @@
 - 连续亏损按【完整】逻辑持仓的含费净实现结果计；部分平仓不提前计胜负；同一 campaign 的分批照样各算一笔。
   Codex 044 P1-3：结果没有来源时空字典不能当「0 笔」。trade_coverage.through = 「截至此刻所有已平逻辑交易都已登记」
   的时间点（到账时为起点；之后由用户核对后登记）。没有 coverage、或券商在 coverage 之后还有成交 → 连续亏损【不可判定】，冻结新增。
+  Codex 051：覆盖证据类型也要可信 —— 只有人工核查（manual_verified）或到账起点（funding_start，且覆盖点 = 到账点）能推出笔数；
+  自动推定/来源不明 → 不可判定（不是 0），已有 latch 不因此解除。
 - 暂停 latch：亏损比例 ≥ 50% 或连续 4 笔亏损 → 锁定；重启、刷新、入金都不解除，只有用户明确决定（resume，记原话）才解除。
   resume 沿用原起始基准：若仍在暂停线以下，下一次核查会立即重锁（不清零亏损）。新风险阶段（新基准）需用户另行明确决定，
   尚未实现，不在这里隐含重置。
@@ -108,6 +110,9 @@ def verify_trades(state: dict, *, through: str, verified_at: str, source: str, n
     _need_ts(through, "through"); _need_ts(verified_at, "verified_at")
     if kind not in COVERAGE_KINDS:
         raise ValueError(f"覆盖证据类型必须是 {COVERAGE_KINDS} 之一：{kind!r}")
+    # Codex 051 A：funding_start 只证明「到账那一刻之前没有试行交易」，不能被挪到之后的时点去背书到账后的区间
+    if kind == "funding_start" and not _same_instant(through, state.get("funded_at")):
+        raise ValueError("funding_start 只能对应到账时刻（through 必须与 funded_at 同一瞬间）；之后的区间须人工核查（manual_verified）")
     if not (isinstance(note, str) and note.strip()):
         raise ValueError("核对登记需要说明（谁、对照了什么）")
     cur = ts(state["trade_coverage"]["through"])
@@ -118,10 +123,26 @@ def verify_trades(state: dict, *, through: str, verified_at: str, source: str, n
     return s
 
 
+def _same_instant(a, b) -> bool:
+    ta, tb = ts(a), ts(b)
+    return ta is not None and tb is not None and ta == tb
+
+
 def coverage_kind(state: dict) -> str:
-    """覆盖证据类型；缺字段/不认识的值 → unknown（旧状态不猜）。"""
-    k = (state.get("trade_coverage") or {}).get("kind")
-    return k if k in COVERAGE_KINDS else "unknown"
+    """覆盖证据类型；缺字段/不认识的值 → unknown（旧状态不猜）。
+    Codex 051 A：标签不是证据 —— funding_start 只在 through 与 funded_at 是同一瞬间时成立，否则按 unknown（不改原件）。
+    CLI 把这里的返回值传给对账（规则 11 历史豁免），所以豁免也随之校验到账点一致。"""
+    cov = state.get("trade_coverage") or {}
+    k = cov.get("kind")
+    if k not in COVERAGE_KINDS:
+        return "unknown"
+    if k == "funding_start" and not _same_instant(cov.get("through"), state.get("funded_at")):
+        return "unknown"
+    return k
+
+
+# 能支撑「连续亏损可判定」的覆盖证据（Codex 051 A）：自动推定/来源不明不能推出「零笔连续亏损」
+TRUSTED_COVERAGE_KINDS = frozenset({"funding_start", "manual_verified"})
 
 
 def consecutive_losses(state: dict, *, latest_fill_at=..., ) -> tuple[int | None, str]:
@@ -132,6 +153,10 @@ def consecutive_losses(state: dict, *, latest_fill_at=..., ) -> tuple[int | None
     cov = ts(state["trade_coverage"]["through"])
     if cov is None:
         return None, "交易结果尚无覆盖起点（试行未到账或未登记）"
+    kind = coverage_kind(state)
+    if kind not in TRUSTED_COVERAGE_KINDS:
+        return None, (f"交易结果覆盖的证据类型是 {kind}（非人工核查/到账起点）→ 连续亏损不可判定，需人工核对后 "
+                      "undertow trial verify-trades；已有暂停不因此解除")
     if latest_fill_at is ...:
         return None, "未核查券商成交记录 → 连续亏损不可判定"
     if latest_fill_at is not None and ts(latest_fill_at) is not None and ts(latest_fill_at) > cov:

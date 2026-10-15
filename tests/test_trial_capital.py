@@ -292,3 +292,54 @@ def test_store_slow_response_after_deposit_no_false_latch(tmp_path):
     ts.update(lambda cur: ev(cur, 500.0, T("10-14", 1))[0], f)
     back, _ = ts.load(f)
     assert back["pause_latched"] is False and [h["asof"] for h in back["equity_history"]] == [T("10-14", 3)]
+
+
+# —— Codex 051 A：覆盖证据类型贯彻到消费端 ——
+
+def _with_cov(s, kind, through):
+    s = dict(s)
+    s["trade_coverage"] = {**s["trade_coverage"], "through": through}
+    if kind is None:
+        s["trade_coverage"] = {k: v for k, v in s["trade_coverage"].items() if k != "kind"}
+    else:
+        s["trade_coverage"]["kind"] = kind
+    return s
+
+
+@pytest.mark.parametrize("kind", ["automatic", "unknown", None, "garbage"])
+def test_codex_051_untrusted_coverage_is_not_zero(kind):
+    """051 探针：覆盖推到 10-16、核查后无新增成交，旧版四种来源都返回 0 —— 自动/未知/缺字段不能推出「零笔连续亏损」。"""
+    s = _with_cov(funded(), kind, T("10-16", 1))
+    n, why = tc.consecutive_losses(s, latest_fill_at=None)
+    assert n is None and "需人工核对" in why
+    _, v = ev(s, 500.0, T("10-16", 2))
+    assert v["consecutive_losses"] is None and v["pause"] is None          # 不可判定 → 冻结新增，不生成新的暂停决策
+
+
+def test_codex_051_untrusted_coverage_keeps_existing_latch():
+    s, v = ev(funded(), 200.0, T("10-15"))                                 # 亏 60% → latch
+    assert v["pause"]["latched"] is True
+    s = _with_cov(s, "automatic", T("10-16", 1))
+    s, v = ev(s, 500.0, T("10-16", 2))
+    assert s["pause_latched"] is True and v["pause"]["latched"] is True and v["consecutive_losses"] is None
+
+
+def test_codex_051_funding_start_only_at_funded_instant():
+    f = funded()
+    assert tc.consecutive_losses(f, latest_fill_at=None) == (0, "")       # 真实到账起点、无后续成交 → 0
+    assert tc.consecutive_losses(f, latest_fill_at=T("10-15"))[0] is None  # 有后续未覆盖成交仍不可判定
+    moved = _with_cov(f, "funding_start", T("10-16"))                     # 手改/恢复出的后移 funding_start
+    assert tc.coverage_kind(moved) == "unknown" and tc.consecutive_losses(moved, latest_fill_at=None)[0] is None
+    same = _with_cov(f, "funding_start", "2026-10-14T08:00:00+08:00")     # 同一瞬间、不同 offset 仍成立
+    assert tc.coverage_kind(same) == "funding_start"
+    with pytest.raises(ValueError, match="funding_start"):
+        tc.verify_trades(f, through=T("10-16"), verified_at=T("10-16"), source="x", note="后移", kind="funding_start")
+    ok = tc.verify_trades(f, through=f["funded_at"], verified_at=T("10-16"), source="x", note="重申到账点", kind="funding_start")
+    assert tc.coverage_kind(ok) == "funding_start"
+
+
+def test_codex_051_manual_verify_restores_determinable():
+    s = _with_cov(funded(), "automatic", T("10-16", 1))
+    assert tc.consecutive_losses(s, latest_fill_at=None)[0] is None
+    s = tc.verify_trades(s, through=T("10-16", 3), verified_at=T("10-16", 3), source="人工核对", note="对过流水", kind="manual_verified")
+    assert tc.consecutive_losses(s, latest_fill_at=None) == (0, "")

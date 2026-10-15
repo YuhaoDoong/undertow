@@ -572,3 +572,17 @@ def test_fifo_equal_fees_or_forced_order_passes():
     f2, e2 = cycle049(20, sell_px=1.05, fee_day=22, fee_amt=-9.0)
     out = run(f1 + f2, e1 + e2, now="2026-10-23T12:00:00+00:00")
     assert out["can_advance_coverage"] and [g["net_pnl_usd"] for g in out["groups"]] == [3.0, -13.0]
+
+
+def test_codex_051_history_exemption_checks_funding_point():
+    """funding_start 标签只在覆盖点 = 到账点时豁免；纯函数自己核，不只信调用方传来的标签。"""
+    flows, exs = bull_call()
+    cov = "2026-10-20T00:00:00+00:00"
+    extra = _unknown_before("2026-10-16T12:00:00+00:00")
+    rec = run(flows, exs)["records"][0]
+    known = {rec["trade_id"]: {"net_pnl_usd": rec["net_pnl_usd"], "closed_at": rec["closed_at"], "source": "人工登记"}}
+    rows = flows + [extra]
+    o = tr.reconcile(cash_flow=rows, positions={}, executions=exs, coverage_through=cov, trial_start=START,
+                     now=NOW, known_trades=known, reads=full_reads(rows, exs, end=NOW[:10]), coverage_kind="funding_start")
+    assert not o["can_advance_coverage"] and o["evidence"]["history_exemption"] is False
+    assert any("funding_start 不成立" in b for b in o["blockers"])

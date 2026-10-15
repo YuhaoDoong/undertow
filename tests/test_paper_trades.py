@@ -1366,7 +1366,7 @@ def test_identical_duplicate_events_are_ambiguous_isolated_not_swallowed(tmp_pat
     import json as _j
     r = _j.loads(rep.read_text())
     assert r["ambiguous"] == [{"event_id": pt.event_id("T1", e), "lines": [1], "candidates": 2}] and len(r["blocked"]) == 2
-    assert "歧义" in capsys.readouterr().err                             # 当场提示，不只写文件
+    assert "完整性问题" in capsys.readouterr().err                       # 附带的人读提示；用户可见性看 typed 告警（051 B 测试）
     first = rep.read_bytes()
     assert pt.sync_ledger(j, led) == 0 and rep.read_bytes() == first     # 重跑结果一致
 
@@ -1385,7 +1385,7 @@ def test_orphan_legacy_row_reported_not_dropped(tmp_path):
     assert pt.sync_ledger(_jr([]), led) == 0 and len(led.read_text().splitlines()) == 1
 
 
-def test_fallback_append_fsyncs_file_and_new_dir_entry(tmp_path, monkeypatch):
+def test_fallback_append_fsyncs_file_and_dir_every_time(tmp_path, monkeypatch):
     import os as _o
     calls = []
     real = _o.fsync
@@ -1394,6 +1394,101 @@ def test_fallback_append_fsyncs_file_and_new_dir_entry(tmp_path, monkeypatch):
     pt.fallback_append(f, "一行")
     assert f.read_text() == "一行\n" and len(calls) == 2               # 新建：文件 + 目录
     pt.fallback_append(f, "二行\n")
-    assert f.read_text() == "一行\n二行\n" and len(calls) == 3
+    assert f.read_text() == "一行\n二行\n" and len(calls) == 4               # 051 C：追加也同步目录（每次都 文件 + 目录）
     monkeypatch.setattr(sys, "argv", ["paper_trades.py", "fallback-append", str(tmp_path / "nodir" / "f.txt"), "x"])
     assert pt.main() == 1
+
+
+# ---- Codex 051 B：台账完整性问题走 typed 告警；证据优先，不把旧 A 改认成 B ----
+
+def _jr_skipped(events):
+    return [{"id": "T1", "execution": "模拟", "paper": {"state": "skipped", "events": events}}]
+
+
+def test_codex_051_ambiguity_reaches_typed_alert_and_is_acked_once(tmp_path, monkeypatch):
+    """051 探针：两个完全相同的事件 + 一条旧行 → 仍不补写，但 tick 的 typed 结果不再是 ok；送达后 ack，重跑不重复入箱。"""
+    e = {"at": AT, "action": "track_mark", "slot": "10:00"}
+    _env(tmp_path, monkeypatch, _jr_skipped([dict(e), dict(e)]))
+    led = tmp_path / "ledger.jsonl"
+    _write_rows(led, _legacy_rows(_jr([e]), [e]))
+    raw0 = led.read_bytes()
+    r = pt.tick_result(datetime(2026, 10, 15, 11, 0, tzinfo=ET))
+    assert led.read_bytes() == raw0                                          # 歧义仍隔离，不补写
+    assert [(a["kind"], a["action"]) for a in r["alerts"]] == [("ledger_integrity", "ledger_ambiguous")]
+    sf = tmp_path / "res.json"; sf.write_text(__import__("json").dumps(r))
+    sm = pt.alert_summary(sf)
+    assert sm["status"] == "alert" and sm["kinds"] == {"ledger_integrity": 1} and "T1" not in sm["digest"]
+    r2 = pt.tick_result(datetime(2026, 10, 15, 11, 5, tzinfo=ET))           # 未确认 → 下一轮照给（不重复入箱）
+    assert [a["alert_id"] for a in r2["alerts"]] == [r["alerts"][0]["alert_id"]] and r2["alerts"][0]["new"] is False
+    assert len((tmp_path / "alerts.jsonl").read_text().splitlines()) == 1
+    pt.ack_alerts([r["alerts"][0]["alert_id"]], via="test")
+    r3 = pt.tick_result(datetime(2026, 10, 15, 11, 10, tzinfo=ET))
+    assert r3["alerts"] == [] and led.read_bytes() == raw0
+
+
+def test_codex_051_normal_migration_no_integrity_alert(tmp_path, monkeypatch):
+    ev = [{"at": AT, "action": "track_mark", "slot": "10:00"}, {"at": AT, "action": "track_mark", "slot": "10:45"}]
+    _env(tmp_path, monkeypatch, _jr_skipped(ev))
+    led = tmp_path / "ledger.jsonl"
+    _write_rows(led, _legacy_rows(_jr(ev), ev))
+    r = pt.tick_result(datetime(2026, 10, 15, 11, 0, tzinfo=ET))
+    assert r["alerts"] == [] and len(led.read_text().splitlines()) == 2      # 撞号的 10:45 补回一次
+    r = pt.tick_result(datetime(2026, 10, 15, 11, 5, tzinfo=ET))
+    assert r["alerts"] == [] and len(led.read_text().splitlines()) == 2      # 再跑 0
+
+
+def test_codex_051_mixed_legacy_a_and_v2_a_does_not_cover_b(tmp_path):
+    """051 探针：journal A(10:00)/B(10:45) 同 v1；台账有旧 A + v2 A。旧版把证据是 A 的旧行映射成 B → B 永不补写。"""
+    a = {"at": AT, "action": "track_mark", "slot": "10:00"}
+    b = {"at": AT, "action": "track_mark", "slot": "10:45"}
+    j, led = _jr([a, b]), tmp_path / "ledger.jsonl"
+    old_a = _legacy_rows(j, [a])[0]
+    v2_a = {**old_a, "event_id_v2": pt.event_id_v2("T1", a, 0)}
+    m = pt.ledger_id_map(j, [old_a, v2_a])
+    vb = pt.event_id_v2("T1", b, 0)                                       # 序号按 (action, at, slot) 分组
+    assert vb not in m["mapped"] and vb not in m["blocked"]                  # B 未被当成已覆盖
+    assert m["duplicates"] == [{"event_id": old_a["event_id"], "line": 1, "duplicate_of": [pt.event_id_v2("T1", a, 0)]}]
+    _write_rows(led, [old_a, v2_a])
+    raw0 = led.read_bytes()
+    assert pt.sync_ledger(j, led) == 1 and led.read_bytes().startswith(raw0)  # 补写 B 一次，旧行原样
+    import json as _j
+    assert _j.loads(led.read_text().splitlines()[-1])["event_id_v2"] == vb
+    assert pt.sync_ledger(j, led) == 0
+
+
+def test_codex_051_evidence_mismatch_is_conflict_not_guessed(tmp_path):
+    a = {"at": AT, "action": "track_mark", "slot": "10:00"}
+    j = _jr([a])
+    row = {**_legacy_rows(j, [a])[0], "evidence": {**a, "slot": "09:00"}}   # 同旧 id，证据却对不上任何事件
+    m = pt.ledger_id_map(j, [row])
+    assert m["mapped"] == {} and m["conflicts"] and m["blocked"] == [pt.event_id_v2("T1", a, 0)]
+
+
+def test_codex_051_no_evidence_legacy_keeps_old_compat(tmp_path):
+    a = {"at": AT, "action": "track_mark", "slot": "10:00"}
+    j = _jr([a])
+    row = {k: v for k, v in _legacy_rows(j, [a])[0].items() if k != "evidence"}
+    m = pt.ledger_id_map(j, [row])
+    assert m["mapped"] == {pt.event_id_v2("T1", a, 0): 1} and m["no_evidence"] == [1]
+
+
+def test_codex_051_fallback_dir_fsync_failure_never_acks_until_recovered(tmp_path, monkeypatch):
+    """051 探针：首次 文件 fsync 成功、目录 fsync 失败 → 文件已留下；旧版重试 new=False 只同步文件就返回成功。"""
+    import os as _o
+    real, state = _o.fsync, {"dir_fail": True}
+    f = tmp_path / "FAILURE_x.txt"
+
+    def fake(fd):
+        if _o.path.isdir(f"/dev/fd/{fd}") and state["dir_fail"]:
+            raise OSError("dir fsync")
+        return real(fd)
+    monkeypatch.setattr(pt.os, "fsync", fake)
+    with pytest.raises(OSError):
+        pt.fallback_append(f, "一行")
+    assert f.exists()
+    with pytest.raises(OSError):                                              # 重试时目录仍失败 → 继续失败（不 ack）
+        pt.fallback_append(f, "一行")
+    monkeypatch.setattr(sys, "argv", ["paper_trades.py", "fallback-append", str(f), "一行"])
+    assert pt.main() == 1
+    state["dir_fail"] = False
+    pt.fallback_append(f, "一行")                                             # 恢复后才成功

@@ -574,7 +574,10 @@ def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict],
 
     live = [g for g in groups if g["state"] != "closed" or _ts(g["closed_at"]) > cov]
     live_cs = {c for g in live for c in g["contracts"]}
-    exempt_ok = coverage_kind in HISTORY_EXEMPT_KINDS
+    # Codex 051 A：funding_start 的豁免还要求覆盖点就是到账点（调用方传的是 trial_capital.coverage_kind，已校验；这里再核一次，
+    # 纯函数不能只信调用方给的标签）
+    exempt_ok = coverage_kind in HISTORY_EXEMPT_KINDS and not (
+        coverage_kind == "funding_start" and (cov is None or start is None or cov != start))
     blocking, history, denied = [], [], 0
     for p in problems:
         if p["hard"] or p["t"] is None or p["t"] > cov or set(p["contracts"]) & live_cs:
@@ -584,7 +587,9 @@ def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict],
         else:
             blocking.append(p["msg"]); denied += 1
     if denied:
-        blocking.append(f"覆盖证据类型是 {coverage_kind}（非人工核查/到账起点）：覆盖时点之前的 {denied} 个问题不豁免（规则 11）")
+        why = ("覆盖点不是到账点，funding_start 不成立" if coverage_kind == "funding_start"
+               else "非人工核查/到账起点")
+        blocking.append(f"覆盖证据类型是 {coverage_kind}（{why}）：覆盖时点之前的 {denied} 个问题不豁免（规则 11）")
     blockers = blocking + out["conflicts"]
     blockers += [f"{g['trade_id']}：{'；'.join(g['flags'])}" for g in live if g["state"] == "ambiguous"]
     blockers += [f"{g['trade_id']}：费用未齐（{', '.join(g['fees_pending'])}）" for g in live

@@ -34,6 +34,16 @@ class NonLoopbackBind(ValueError):
     """拒绝非回环绑定：本服务读取私有持仓与纪律档案，没有认证。"""
 
 
+def host_header_is_loopback(hv: str | None) -> bool:
+    """HTTP Host 头是否指向本机（防 DNS 重绑定）。bar_drill_serve 等本机服务共用这一份判定。"""
+    hv = (hv or "").strip().lower()
+    if hv.startswith("["):
+        name = hv[1:hv.find("]")] if "]" in hv else hv
+    else:
+        name = hv.rsplit(":", 1)[0] if hv.count(":") == 1 else hv
+    return name in LOOPBACK
+
+
 def check_host(host: str) -> str:
     h = (host or "").strip().strip("[]").lower()
     if h not in LOOPBACK:
@@ -62,12 +72,7 @@ def make_handler(build_packet, build_positions):
         timeout = REQUEST_TIMEOUT
 
         def _host_ok(self) -> bool:
-            hv = (self.headers.get("Host") or "").strip().lower()
-            if hv.startswith("["):
-                name = hv[1:hv.find("]")] if "]" in hv else hv
-            else:
-                name = hv.rsplit(":", 1)[0] if hv.count(":") == 1 else hv
-            return name in LOOPBACK
+            return host_header_is_loopback(self.headers.get("Host"))
 
         def _send(self, code, obj, *, text=False):
             body = (obj if text else json.dumps(obj, ensure_ascii=False, indent=2)).encode("utf-8")

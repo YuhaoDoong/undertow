@@ -110,3 +110,45 @@ def test_mirror_matches_ps_mirror_and_pick_is_reproducible():
     ref = mirror(seg)                                            # K = 首根收盘² = 100²
     for a, b in zip(w[299:], ref):
         assert all(abs(x - y) < 1e-6 * y for x, y in zip(a[1:5], b[1:5]))
+
+
+def test_serve_roundtrip_guard_and_quarantine(tmp_path):
+    import threading
+    import urllib.error
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+    from scripts import bar_drill_serve as sv
+    store = tmp_path / "drill" / "bar_drill_v1.json"
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), sv.make_handler(b"<html>page</html>", store))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{srv.server_address[1]}"
+
+    def call(method, path, obj=None):
+        req = urllib.request.Request(base + path, method=method, data=None if obj is None else json.dumps(obj).encode(),
+                                     headers={"Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req) as r:
+                return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+    try:
+        assert call("GET", "/")[1] == b"<html>page</html>"
+        assert call("GET", "/records")[0] == 404
+        rec = {"version": "bar-drill-v1", "questions": [{"id": 1, "seed": 11}, {"id": 2, "seed": 22}]}
+        code, body = call("POST", "/records", rec)
+        assert code == 200 and json.loads(body)["questions"] == 2
+        assert json.loads(call("GET", "/records")[1])["questions"] == rec["questions"]
+        # 空浏览器提交会丢题 → 拒绝，文件不变
+        code, body = call("POST", "/records", {"version": "bar-drill-v1", "questions": []})
+        assert code == 409 and json.loads(store.read_text("utf-8"))["questions"] == rec["questions"]
+        # 加题可以；当天第一次覆盖前留了备份
+        rec["questions"].append({"id": 3, "seed": 33})
+        assert call("POST", "/records", rec)[0] == 200
+        assert list((store.parent / "history").glob("bar_drill_v1_*.json"))
+        assert call("POST", "/records", {"version": "x", "questions": []})[0] == 400
+        # 损坏 → 隔离保留，报冲突，不当成空记录
+        store.write_text("{坏", "utf-8")
+        assert call("GET", "/records")[0] == 409
+        assert not store.exists() and list(store.parent.glob("bar_drill_v1.json.corrupt-*"))
+    finally:
+        srv.shutdown()

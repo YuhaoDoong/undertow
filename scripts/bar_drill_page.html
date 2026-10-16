@@ -27,7 +27,7 @@ textarea{width:100%;min-height:44px;background:transparent;color:var(--fg);borde
     <span class="mut">镜像概率</span><select id="mprob"><option value="0.5">50%</option><option value="0">不镜像</option><option value="1">全部镜像</option></select>
     <span class="mut">背景</span><select id="left"><option value="150">150 根</option><option value="300" selected>300 根</option><option value="500">500 根</option></select>
     <span class="mut">往后</span><select id="right"><option value="100">100 根</option><option value="150" selected>150 根</option><option value="250">250 根</option></select>
-    <button id="exp">导出记录</button></div>
+    <button id="exp">导出记录</button><span id="saved" class="mut"></span></div>
   <div class="row">
     <span class="grp"><button id="next" class="big">下一根 →</button><button id="next5">+5 根</button><button id="endq">结束本题</button></span>
     <span class="grp"><span class="mut">交易</span><button id="long">做多</button><button id="short">做空</button><button id="flat">平仓</button>
@@ -42,7 +42,7 @@ textarea{width:100%;min-height:44px;background:transparent;color:var(--fg);borde
   <b>看图：</b>在图上<b>按住左右拖动</b>看更早的 K 线，触控板左右滑也能平移；滚轮（或触控板上下滑）缩放显示的根数，「回到最新」或按 End 回到当前这根。拖动只能看已经出现的 K 线。<br>
   <b>标注：</b>HH/HL/LH/LL 自动贴最高价或最低价，支撑线/压力线按点的高度画水平线；「删除」点在标记附近。<br>
   <b>快捷键：</b>→ 或空格 下一根，Shift+→ 前进 5 根，B 做多，S 做空，X 平仓，← 往前拖 20 根，End 回到最新，Esc 取消点图模式。<br>
-  记录存在本机浏览器里；「导出记录」下载 JSON。请不要翻看页面源码（后面的走势在里面）。</details>
+  <b>保存：</b>每一步都自动保存。用 <code>python3 scripts/bar_drill_serve.py</code> 打开（http://127.0.0.1:8788/）时，还会自动写进私有文件 data/soul/drill/，换浏览器也不丢；直接双击打开的话只存在这个浏览器里。请不要翻看页面源码（后面的走势在里面）。</details>
 </div>
 <div class="tip mut" id="tip">按住图表左右拖动可看历史；鼠标移到 K 线上看价格</div>
 <div id="chart"></div>
@@ -59,7 +59,25 @@ const ETF = POOL.meta.etf, STOCK = POOL.meta.stock;
 const MARKS = [["HH","hi","var(--hi)"],["HL","lo","var(--lo)"],["LH","hi","var(--hi)"],["LL","lo","var(--lo)"],["支撑线","line","var(--sup)"],["压力线","line","var(--res)"],["删除","del",""]];
 let DB = {questions: [], cur: null, settings: {pool: "all", mprob: "0.5", left: "300", right: "150"}};
 try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && s.questions) DB = s; } catch (e) {}
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} };
+// 自动保存：每次操作都写浏览器本地；经 scripts/bar_drill_serve.py 打开时，另外自动写进私有文件 data/soul/drill/。
+const SERVER = location.protocol.startsWith("http");
+let saveT = null;
+function saveStatus(t, bad){ const el = $("saved"); if (el) { el.textContent = t; el.className = bad ? "warn" : "mut"; } }
+const save = () => { DB.updated_at = new Date().toISOString(); try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
+  if (SERVER) { clearTimeout(saveT); saveT = setTimeout(push, 400); } };
+async function push(){
+  try { const r = await fetch("records", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({...DB, version: "bar-drill-v1"})});
+    const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
+    saveStatus(`已自动保存到本机文件 ${new Date().toLocaleTimeString()}（${j.questions} 题）`, false);
+  } catch (e) { saveStatus(`自动保存失败：${e.message}。记录还在浏览器里，可先「导出记录」`, true); } }
+function merge(srv){                                   // 服务端为准；本机多出来的题（按种子认）接在后面重新编号
+  if (!srv || !Array.isArray(srv.questions)) return;
+  const has = (list, q) => list.some(x => x.seed === q.seed);
+  const localNewer = DB.updated_at && srv.updated_at && DB.updated_at > srv.updated_at && srv.questions.every(q => has(DB.questions, q));
+  const base = localNewer ? DB : srv, extra = DB.questions.filter(q => !has(base.questions, q));
+  let id = base.questions.reduce((m, q) => Math.max(m, q.id), 0); extra.forEach(q => { q.id = ++id; });
+  DB = {...base, questions: [...base.questions, ...extra], settings: DB.settings || base.settings};
+  if (!DB.questions.some(q => q.id === DB.cur)) DB.cur = DB.questions.length ? DB.questions[DB.questions.length - 1].id : null; }
 const cache = {};
 const Q = () => DB.questions.find(q => q.id === DB.cur);
 const barsOf = q => cache[q.id] || (cache[q.id] = Drill.window(POOL.series[q.sym], q));
@@ -241,5 +259,11 @@ document.addEventListener("keydown", e => { if (["TEXTAREA", "SELECT", "INPUT"].
   else if (e.key === "b" || e.key === "B") order("long"); else if (e.key === "s" || e.key === "S") order("short"); else if (e.key === "x" || e.key === "X") order("exit"); });
 $("exp").onclick = () => { const out = {version: "bar-drill-v1", data_sha256: POOL.meta.sha256, exported_at: new Date().toISOString(), ...DB};
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], {type: "application/json"})); a.download = "bar_drill_v1.json"; a.click(); };
-render();
+(async () => {
+  if (SERVER) { try { const r = await fetch("records"); const j = await r.json();
+      if (r.ok) merge(j); else if (r.status !== 404) throw new Error(j.error || r.status);
+      saveStatus("已连上本机文件，操作会自动保存", false);
+    } catch (e) { saveStatus(`读取本机记录失败：${e.message}`, true); } }
+  else saveStatus("只存在这个浏览器里（用 bar_drill_serve.py 打开可自动存文件）", true);
+  render(); })();
 </script></body></html>

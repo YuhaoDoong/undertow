@@ -71,6 +71,7 @@ description: >-
 | `docs/skill/methodology.md` | 分析品种价值、数据源与诚实边界、解读要点、交易哲学、当日决策研判 |
 | `docs/skill/account.md` | 实盘持仓评价、实时报价分级、账户快照、consult/serve 接口 |
 | `docs/skill/research.md` | 研究纪律、台账、模块地图与待模块化清单 |
+| `docs/skill/glossary.md` | 术语表：增仓方向 / 增仓强信号 / 逐行权买卖方 / 墙位等固定名称（对用户说话统一用这些名字） |
 | `AGENTS.md` | 改代码的约定：分层、静默失败、统计口径、金融语义、提交流程 |
 | `undertow/*/README.md` | 各层逐文件职责与已知边界 |
 

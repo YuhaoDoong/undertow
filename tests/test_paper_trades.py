@@ -1492,3 +1492,13 @@ def test_codex_051_fallback_dir_fsync_failure_never_acks_until_recovered(tmp_pat
     assert pt.main() == 1
     state["dir_fail"] = False
     pt.fallback_append(f, "一行")                                             # 恢复后才成功
+
+
+def test_help_and_unknown_command_do_not_read_private_journal(tmp_path, monkeypatch, capsys):
+    """052 I5：缺私有日记时 --help 曾直接崩溃（先读文件再解析参数）；未知命令曾静默当成 status 跑。"""
+    import scripts.paper_trades as ptm
+    monkeypatch.setattr(ptm, "JOURNAL", tmp_path / "missing" / "journal.json")
+    for argv, rc in ((["--help"], 0), (["help"], 0), (["stauts"], 2), (["status"], 1), ([], 1)):
+        monkeypatch.setattr(sys, "argv", ["paper_trades.py", *argv])
+        assert ptm.main() == rc, argv
+    assert "用法" in capsys.readouterr().out

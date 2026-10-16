@@ -1788,8 +1788,30 @@ def size_report(theses: list) -> dict:
     return out
 
 
+COMMANDS = ("status", "tick", "report", "close", "correct-exit-rule", "track", "void-exit", "alert-summary", "alert-ack",
+            "fallback-append", "ledger-ids", "alerts-bootstrap")
+USAGE = """用法：python3 scripts/paper_trades.py <命令> [参数]
+  status（默认）            列出模拟仓状态
+  tick [--status-file P]    到点才做事（session 钩子每 5 分钟调用）
+  report                    主表与挂单量子集统计
+  close <id> "用户原话"      手动平仓        track <id> "用户原话"         开始跟踪
+  correct-exit-rule <id> "用户原话"         void-exit <id> "用户原话" "作废理由"
+  alert-summary P / alert-ack P / fallback-append P LINE   调度脚本用
+  ledger-ids / alerts-bootstrap             研究台账映射审计 / 发件箱一次性迁移
+私有数据：data/soul/journal.json、data/paper/；从不下单。"""
+
+
 def main():
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
+    if cmd in ("-h", "--help", "help"):                  # 先解析参数，不读私有文件（052 I5：缺日记时 --help 曾直接崩溃）
+        print(USAGE)
+        return 0
+    if cmd not in COMMANDS:                              # 原来未知命令会静默当成 status 跑
+        print(f"未知命令：{cmd}\n{USAGE}", file=sys.stderr)
+        return 2
+    if cmd in ("status", "report", "ledger-ids", "alerts-bootstrap") and not JOURNAL.exists():
+        print(f"缺私有日记 {JOURNAL}：本机没有模拟仓数据（私有文件不入库）", file=sys.stderr)
+        return 1
     if cmd == "close":                                   # python3 scripts/paper_trades.py close <id> "用户原话"
         r = manual_close(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "")
         print(json.dumps(r, ensure_ascii=False))

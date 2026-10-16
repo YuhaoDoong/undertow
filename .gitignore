@@ -5,12 +5,15 @@ data/history/events/watch*.log
 # ── 实盘账户敏感数据：持仓/资金/盈亏，只本地保留，永不入公开仓库 ──
 # undertow 是公开仓库；`undertow account` 生成的评价 HTML 与任何账户快照落此目录。
 data/account/
+data/account
 
 # ── 交易灵魂档案：个人交易体系/纪律/心理弱点/亏损史，属敏感个人内容 ──
 # 模块代码（undertow/soul/）进公开仓库，但【档案本身】只本地保留。
 data/soul/
+data/soul
 # 模拟仓数据（用户 2026-09-30：「模拟仓数据单独建立一个文件夹」）：含用户的交易判断与模拟成交，只本地保留。
 data/paper/
+data/paper
 
 # Python
 __pycache__/

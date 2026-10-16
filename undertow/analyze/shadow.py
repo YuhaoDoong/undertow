@@ -73,6 +73,7 @@ CONFIG = {
                          "https://www.optionseducation.org/referencelibrary/faq/options-exercise）；"
                          "假设无相反指令、券商按此处置，实际未核实（actual_confirmed=None）",
         "itm_at_expiry": "未知：会被自动行权成标的仓位，券商处置、费用与隔夜风险未核实 → 损益下界 None，上界 = 内在值",
+        # 用户 2026-10-15 实测：长桥组合单可分腿平，须先平卖腿（spread_pricing.BROKER_NOTES）。本串属预登记 CONFIG（config_hash），不改值。
         "permission": "未核实：组合单是否允许单独买回短腿取决于券商与入场方式（AGENTS.md 组合单 vs 分腿）",
         "fees": "仍按 $3.20 往返预算"},
     "estimates": {"primary": "bounds（点值或 [下界, 上界]；任一配对无界 → A−B 判定为未决）",

@@ -588,6 +588,20 @@ def _greeks_text(g, capital=None) -> str:
     return (" · " + " · ".join(out)) if out else ""
 
 
+def account_cash_lines(assets) -> list[str]:
+    """净资产/购买力 + 分币种现金（两位小数）；任一币种为负单列警示。
+    起因：多币种账户里入金币种与期权结算币种不同时，买入后结算币种现金可能为负（相当于借入该币种），
+    旧版只按 0 位小数把各币种混在一行里、不点破。
+    外币负余额是否计息、如何计息未核实，只提示不断言。"""
+    cash = "、".join(f"{k} {v:,.2f}" for k, v in assets.cash_by_ccy.items()) or "—"
+    out = [f"- 账户：净资产 ${assets.net_assets:,.2f} · 购买力 ${assets.buy_power:,.2f} · 可用现金 {cash}"]
+    neg = {k: v for k, v in assets.cash_by_ccy.items() if v < 0}
+    if neg:
+        out.append("- ⚠️ 负现金：" + "、".join(f"{k} {v:,.2f}" for k, v in neg.items())
+                   + " —— 相当于借入该币种；是否计息未核实，可在券商端换汇补正")
+    return out
+
+
 def render_account_md(review, assets=None, health=None) -> str:
     """实盘持仓评价 终端 Markdown。review=PortfolioReview, assets=AccountAssets|None,
     health=list[HealthFinding]|None（持仓体检）。"""
@@ -601,8 +615,7 @@ def render_account_md(review, assets=None, health=None) -> str:
         return "\n".join(L)
     L.append(f"**{review.headline}**  ·  基准日 {review.asof.isoformat()}")
     if assets is not None:
-        cash = "、".join(f"{k} {v:,.0f}" for k, v in assets.cash_by_ccy.items()) or "—"
-        L.append(f"- 账户：净资产 ${assets.net_assets:,.0f} · 购买力 ${assets.buy_power:,.0f} · 可用现金 {cash}")
+        L += account_cash_lines(assets)
     L.append("")
     if health:
         n_hi = sum(1 for f in health if f.severity == "高")

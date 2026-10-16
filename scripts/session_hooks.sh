@@ -294,12 +294,66 @@ close_backup() {
     fi
   fi
 }
+# ⑯ 盘中持仓风险巡检（用户 2026-10-15：「以后每天需要评估一下持仓风险（实盘和模拟仓都要）。每天盘中定时检查风险，
+#    有需要提示的再通知我，正常情况不用提示。」）：交易日 ET 09:45 起每 30 分钟一个桶，到核心收市窗口（shadow windows 的 close 行）
+#    末分钟为止（常规日 15:45、半日市 12:45）。`undertow riskwatch run` 只读实盘 + 模拟仓 + 账户。
+#    投递闭环（Codex 052 I1）：run 把新告警先写进私有发件箱（持久 pending），结果文件 = 发件箱里全部未确认项；
+#    有待投递 → 通知（尽力）→ `riskwatch deliver`（私有收件箱追加 + fsync 成功才写确认账）。告警不依赖下一轮条件仍在：
+#    第一轮没送达、第二轮条件消失，第二轮结果里照样带着它。
+#    本桶成功哨兵只在【三者同时成立】时写：run rc=0 且 overall=complete；typed 结果可读（不是 crashed）；
+#    有待投递时 deliver 确认成功。原错（052 审查实测）：只看 run 的 rc/overall —— deliver 失败照样写哨兵，同桶不再重试；
+#    run 返回 0 但结果文件缺失/损坏也写哨兵，告警没分发就被记成正常桶。
+#    失败 → 不写哨兵（本桶内下次唤醒重试）；当天累计 3 次 → 通知 + 公开兜底 FAILURE（只写类别与批次指纹，不写仓位）。
+#    本日志会入库：只记成败与条数，不记仓位内容（仓位与提醒原文在私有 data/account/riskwatch/）。
+#    放在影子账长任务之前调用：session 进程被长任务占住时，巡检不排在后面（模拟仓拆独立任务的同一教训）。
+riskwatch_bucket() {  # $1=窗口起(分) $2=最后一个桶的起点上限(分)
+  (( ET_MIN < $1 || ET_MIN > $2 + 14 )) && return
+  local B=$(( (ET_MIN - $1) / 30 ))
+  (( $1 + B * 30 > $2 )) && return
+  local OKF="$LOG_DIR/.riskwatch_${ET_DATE}_b${B}.ok" FAILF="$LOG_DIR/.riskwatch_fail_${ET_DATE}"
+  [[ -f "$OKF" ]] && return
+  mkdir -p data/account/riskwatch
+  local RESF="data/account/riskwatch/.result.$$.json"
+  rm -f "$RESF"
+  run_bound "riskwatch" "riskwatch run" riskwatch run --result-file "$RESF"
+  local RES="$RB_RES" RC=$RB_RC OV="$RB_OV"
+  if [[ "$OV" == "busy" ]]; then hb "⑯风险巡检 b${B}：上一轮仍在跑（锁），跳过"; return; fi
+  local NT NST NTITLE NBODY DRC=0 DONE=1
+  NT=$("$PY" -m undertow.cli riskwatch notify-text "$RESF" 2>/dev/null)
+  NST=$(printf '%s\n' "$NT" | sed -n 1p); NTITLE=$(printf '%s\n' "$NT" | sed -n 2p); NBODY=$(printf '%s\n' "$NT" | sed -n 3p)
+  [[ "$NST" == "ok" || "$NST" == "alert" ]] || NST="crashed"     # 结果缺失/损坏/输出不认识 = crashed，不是「没事」
+  if [[ "$NST" == "alert" ]]; then
+    notify "$NTITLE" "$NBODY"
+    "$PY" -m undertow.cli riskwatch deliver "$RESF" >/dev/null 2>&1; DRC=$?
+    if (( DRC == 0 )); then hb "⑯风险巡检 b${B}：待投递提醒已送达（原文见私有收件箱）"
+    else DONE=0; hb "⑯风险巡检 b${B}：⚠️ 送达未确认（rc=$DRC；告警仍在私有发件箱），下次唤醒重试"; fi
+  elif [[ "$NST" == "crashed" ]]; then
+    DONE=0
+  fi
+  rm -f "$RESF"                                                   # 待投递内容在发件箱里，结果文件只是本轮视图
+  if (( RC == 0 )) && [[ "$OV" == "complete" ]] && (( DONE == 1 )); then
+    : > "$OKF"; hb "⑯风险巡检 b${B}：✅"
+  else
+    printf 'x' >> "$FAILF"
+    hb "⑯风险巡检 b${B}：⏳ rc=$RC overall=$(ov_text "$OV") result=$NST delivered=$( (( DONE == 1 )) && echo yes || echo no)，下次唤醒重试"
+    if [[ $(wc -c < "$FAILF") -eq 3 ]]; then
+      notify "⚠️ 持仓风险巡检连续未完成" "rc=$RC overall=$OV result=$NST"
+      printf '%s | ET %s | ⚠️ 持仓风险巡检当天 3 次未完成（rc=%s overall=%s result=%s delivered=%s），详见私有 data/account/riskwatch/\n' \
+        "$(date '+%F %H:%M %z')" "$(TZ=America/New_York date +%H:%M)" "$RC" "$OV" "$NST" "$DONE" >> "data/reports/FAILURE_${ET_DATE}.txt"
+    fi
+  fi
+}
+# ⑯ end
 # ⑫ 模拟仓：2026-10-02 起由独立任务 scripts/paper_tick.sh（launchd com.yuhaodoong.undertow.paper，60 秒）主控（Codex 032 O1）。
 # 原先在这里每次唤醒先跑一次，但 9/30 入场窗口里 10:07/10:12/10:22 的唤醒被本进程的长任务占住，30 分钟只取了 3 次价。
 # 本脚本不再调用模拟仓，避免两个调度器同时主控；旧事件里的 sched 标记（session-hook-v2）保留，供分层统计。
 # 本脚本未开 set -e；分开捕获 rc（AGENTS.md 静默失败第 5 条：不用 `|| true`）
 SHW=$("$PY" -m undertow.cli shadow windows 2>&1); SHW_RC=$?
 if (( SHW_RC == 0 )); then
+  # ⑯ 窗口只取自 shadow windows（不写死钟点）：起点 = sample 行起点（开盘后 15 分钟），终点 = close 行末分钟
+  _RW_LO=$(printf '%s\n' "$SHW" | awk '$1=="sample"{print $2}'); _RW_HI=$(printf '%s\n' "$SHW" | awk '$1=="close"{print $3}')
+  if [[ -n "$_RW_LO" && -n "$_RW_HI" ]]; then riskwatch_bucket "$_RW_LO" "$_RW_HI"   # ⑯ 先于影子账长任务
+  elif [[ -n "$SHW" ]]; then hb "⑯风险巡检：今日窗口缺 sample/close 行，未执行"; fi
   while read -r _W _LO _HI; do
     [[ -z "$_W" ]] && continue
     if [[ "$_W" == "open" ]]; then shadow_window open "$_LO" "$_HI" "④影子开盘窗"; fi

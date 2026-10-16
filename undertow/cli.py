@@ -222,8 +222,8 @@ def cmd_chain(args) -> int:
     2026-09-17 用户：「OI 变化是什么？我要看的是期权报价啊。」
     —— 墙位看 OI，选腿要看【价】，这是两件事。
 
-    ⚠️ 本账户无 OPRA 订阅，长桥 option quote / depth 均返回 no quote access，
-    **拿不到实时期权盘口**。因此这里给两列，口径必须分清：
+    ⚠️ 本命令只用 CBOE 快照，不取实时期权盘口（早期账户无 OPRA，长桥 option depth 返回 no quote access；
+    2026-10-15 实测长桥 depth 已能返回期权买一/卖一 → 实时整单定价用 `undertow spread-quote`）。这里给两列，口径必须分清：
         bid/ask —— CBOE 快照，**昨收口径**（早上 ET06:45 抓的前一日收盘），
                    标的一动就过时；且实测 CBOE 点差比真实宽一倍以上。
         BS 理论 —— 用【实时标的价】+ 快照 IV 重算，反映今天的价位，
@@ -293,7 +293,7 @@ def cmd_chain(args) -> int:
         print(f"{c.strike:>7g}{c.bid:>7.2f}{c.ask:>7.2f}{sp:>7.2f}{th:>8.2f}"
               f"{dl:>+7.3f}{iv * 100:>6.1f}%{c.open_interest:>9,}"
               f"{(w.d_oi if w else 0):>+9,}  {tag}")
-    print("\n⚠️ 无 OPRA 订阅 → 无实时期权盘口。bid/ask 是昨收、BS 理论是中值不含点差；"
+    print("\n⚠️ 本表 bid/ask 是 CBOE 快照昨收、BS 理论是中值不含点差；实时整单定价用 `undertow spread-quote`；"
           "\n   下单价以券商端实际盘口为准。")
     return 0
 
@@ -373,13 +373,15 @@ def cmd_walls(args) -> int:
         if args.commodity and inst.commodity:
             try:
                 from undertow.collect.yahoo_futures import YahooFuturesSource
-                fut, _ = YahooFuturesSource().fetch_quote(inst.commodity.symbol)
-                mult = fut / spot if spot else None
+                # use_cache=False：比值必须与 ETF 现价同一时刻；默认 6 小时缓存会拿旧期货价配新 ETF 价（2026-10-15 发现）
+                fut, fut_asof = YahooFuturesSource().fetch_quote(inst.commodity.symbol, use_cache=False)
+                from undertow.analyze.spread_pricing import realtime_ratio as _rr
+                mult = _rr(fut, spot)
                 stat = inst.options.approx_commodity_multiplier if inst.options else None
                 drift = (f"　配置静态值 {stat:g}（漂移 {(mult / stat - 1) * 100:+.1f}%）"
                          if stat and mult else "")
-                print(f"   商品口径：{inst.commodity.symbol} {fut:,.2f}"
-                      f"　实时乘数 {mult:.4f}{drift}")
+                print(f"   商品口径：{inst.commodity.symbol} {fut:,.2f}（{_et_stamp(fut_asof) if fut_asof else '报价时刻未知'}）"
+                      f"　参考乘数 {mult:.4f}{drift}（ETF 与期货两腿是否同一时刻未核实）")
                 print("   ⚠️ ETF 跟踪现货、期货含基差，映射仅定性，不可当精确换算")
             except Exception as e:
                 print(f"   [提示] 期货报价不可用：{type(e).__name__}", file=sys.stderr)
@@ -445,9 +447,75 @@ def cmd_quote(args) -> int:
         base = q.freshest_prev or q.prev_close
         print(f"{q.symbol:<10}{base:>10.2f}{q.freshest:>10.2f}"
               f"{q.freshest_kind:>7}{q.change_pct * 100:>+8.2f}%")
+    if getattr(args, "sessions", False) or getattr(args, "commodity", False) or getattr(args, "level", None):
+        _quote_panel(args, cfg, syms, quotes)
     print("\n⛔ 注意：盘前 open_interest 是【前一天】的值，GLD 约 09:39ET、"
           "SLV 约 09:44ET 才刷新到位 —— 盘前不可用于 OI/墙位结构分析。")
     return 0
+
+
+def _et_stamp(ts: str) -> str:
+    """长桥时段时间戳（UTC ISO）→ 美东 HH:MM（带日期）。解析不了原样返回。"""
+    from zoneinfo import ZoneInfo
+    from datetime import datetime as _dt
+    try:
+        d = _dt.fromisoformat(ts.replace("Z", "+00:00"))
+        if d.tzinfo is None:
+            return ts
+        return d.astimezone(ZoneInfo("America/New_York")).strftime("%m-%d %H:%M ET")
+    except ValueError:
+        return ts or "时刻未知"
+
+
+def _quote_panel(args, cfg, syms, quotes) -> None:
+    """事前判断现价面板（用户 2026-10-15「你怎么不看现价」「你应该看现价」）：
+    各时段价与美东时刻并列；--commodity 附商品价与参考比值（两腿同步未核实；比值 ≠ 每份持有量）；--level 双向换算位点。
+    计算在 analyze/spread_pricing（realtime_ratio / convert_level），取数在 desk_cli（Yahoo 不读缓存）。"""
+    from undertow.analyze import spread_pricing as _spp
+    from undertow import desk_cli as _desk
+    levels = []
+    for lv in getattr(args, "level", None) or []:
+        try:
+            name, val = lv.split("=")
+            levels.append((name.strip(), float(val)))
+        except ValueError:
+            print(f"[跳过] --level 格式应为 名称=数值，如 brent=100 或 USO=150：{lv}", file=sys.stderr)
+    alias = {"brent": "BZ=F", "wti": "CL=F", "gold": "GC=F", "silver": "SI=F"}
+    for sym in syms:
+        q = quotes.get(sym)
+        if not q:
+            continue
+        root = sym.split(".")[0]
+        print(f"\n── {root} 各时段 ──")
+        for label, last, ts, prev in q.sessions:
+            chg = f"{(last / prev - 1) * 100:+.2f}%" if prev else "—"
+            # 长桥常规段不带时间戳：标「取数时刻」，不冒充成交时刻
+            when = _et_stamp(ts) if ts else f"取数 {_desk._et_now():%m-%d %H:%M} ET（源无成交时刻）"
+            print(f"   {label:<4}{last:>10.2f}  {chg:>8}  {when}")
+        if not (getattr(args, "commodity", False) or levels):
+            continue
+        key, _root, inst = _desk.resolve(root)
+        rows = _desk.ratios_for(key, inst, q.freshest)
+        for csym, lab, px, ratio, asof in rows:
+            if px is None:
+                print(f"   {csym}（{lab}）：unknown（取数失败，不阻断）")
+            else:
+                print(f"   {csym}（{lab}）：{px:,.2f}（{_et_stamp(asof) if asof else '报价时刻未知'}）· 参考比值 {csym}/{root} = "
+                      f"{ratio:.4f}（按 {root} {q.freshest:.2f}·{q.freshest_kind}）")
+        if any(px is not None for _, _, px, _, _ in rows):
+            print(f"   （{_desk.SYNC_NOTE}）")
+        for name, val in levels:
+            tgt = alias.get(name.lower(), name.upper())
+            if tgt.split(".")[0] == root:
+                conv = [f"{c} {_spp.convert_level(val, r, to_commodity=True):,.2f}" for c, _, _, r, _ in rows if r]
+                print(f"   位点 {root} {val:g} ≈ " + ("；".join(conv) or "unknown"))
+            else:
+                hit = [(c, r) for c, _, _, r, _ in rows if c == tgt]
+                if hit and hit[0][1]:
+                    print(f"   位点 {tgt} {val:g} ≈ {root} {_spp.convert_level(val, hit[0][1], to_commodity=False):,.2f}")
+                elif hit:
+                    print(f"   位点 {tgt} {val:g} → {root}：unknown（比值不可得）")
+    print("   ⚠️ 比值是此刻两个报价之比，随基差/费率/展期漂移；不是每份 ETF 的持有量。COMEX 期货 ≠ 伦敦现货。")
 
 
 def cmd_cal_spread(args) -> int:
@@ -3088,6 +3156,11 @@ def cmd_account(args) -> int:
         return 2
     if bundle["review"] is None:
         print("账户当前无持仓。")
+        try:                                             # 无持仓也要看到资金与负现金（只读）
+            from undertow.report.markdown import account_cash_lines
+            print("\n".join(account_cash_lines(lb.fetch_assets())))
+        except lb.LongbridgeUnavailable as e:
+            print(f"[资金未读到] {e}", file=sys.stderr)
         return 0
     positions = bundle["positions"]
     review, health, assets = bundle["review"], bundle["health"], bundle["assets"]
@@ -4162,6 +4235,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     pq = sub.add_parser("quote", help="实时报价（含夜盘/盘后/盘前）——查价一律走这里")
     pq.add_argument("symbols", nargs="*", help="标的，如 SLV GLD 或 SLV.US（留空=配置里全部）")
+    pq.add_argument("--sessions", action="store_true", help="列出常规/盘前/盘后/夜盘各时段价与美东时刻")
+    pq.add_argument("--commodity", action="store_true", help="附商品价（COMEX/NYMEX/布伦特）与参考比值（两腿同步未核实）")
+    pq.add_argument("--level", action="append", help="位点双向换算，如 --level brent=100 / --level USO=150（可多次）")
     pq.set_defaults(func=cmd_quote)
 
     plv = sub.add_parser("live", help="持仓实时体检：长桥实时盘口 → 真实可平仓价（只读）")
@@ -4173,6 +4249,10 @@ def build_parser() -> argparse.ArgumentParser:
     _trial_register(sub)
     from undertow.dirledger_cli import register as _dir_register
     _dir_register(sub)
+    from undertow.desk_cli import register as _desk_register
+    _desk_register(sub)
+    from undertow.riskwatch_cli import register as _riskwatch_register
+    _riskwatch_register(sub)
 
     psig = sub.add_parser("signals",
                           help="强信号台账：重建/回填/统计（这层从未回测过，靠向前累积）")

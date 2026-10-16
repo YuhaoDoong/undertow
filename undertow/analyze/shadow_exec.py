@@ -21,6 +21,7 @@ from undertow.analyze import shadow as sh
 VERSION = "shadow-exec-v2-20260926"
 PRIMARY_ARM = "A"
 DISPOSITION = {
+    # 用户 2026-10-15 实测：长桥组合单可分腿平，须先平卖腿（spread_pricing.BROKER_NOTES）。本串随 exec v2 写进每行记录，不改值以免同版本前后不一。
     "short_only_permission": "未核实：组合单能否单独买回短腿取决于券商与入场方式",
     "itm_residual": "长桥条款：实值≥0.01 自动行权成正股；资金不足可能被强平 —— 小账户处置成本未知",
     "vertical_margin": "未核实：长桥组合保证金只列 covered call/put，垂直价差实际占用未知",

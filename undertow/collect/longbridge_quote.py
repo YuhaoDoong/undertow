@@ -97,6 +97,9 @@ class StockQuote:
     # 拿夜盘价 57.95 除以 60.73 得 −4.58%，除以 58.16 才是真实的 −0.36%。
     # **混用两个时段的基准会把涨跌幅放大一个数量级**，而建仓判断直接吃这个数。
     freshest_prev: float = 0.0
+    # 各时段原样（事前判断面板要把常规/盘前/盘后/夜盘各自的价与时刻并列，用户 2026-10-15「你应该看现价」）：
+    # ((时段, last, 时间戳, 该时段基准), ...)；缺的时段不出现。
+    sessions: tuple = ()
 
     @property
     def change_pct(self) -> float:
@@ -165,6 +168,18 @@ def _freshest(r: dict, now=None) -> tuple[float, str]:
     return last, "常规", _f(r, "prev_close")
 
 
+def _sessions(r: dict) -> tuple:
+    """各时段 (标签, last, 时间戳, 基准)。常规段时间戳取顶层 timestamp（可能缺）。last ≤ 0 的时段略去。"""
+    out = []
+    if _f(r, "last") > 0:
+        out.append(("常规", _f(r, "last"), str(r.get("timestamp") or ""), _f(r, "prev_close")))
+    for key, label in (("pre_market", "盘前"), ("post_market", "盘后"), ("overnight", "夜盘")):
+        sess = r.get(key)
+        if isinstance(sess, dict) and _f(sess, "last") > 0:
+            out.append((label, _f(sess, "last"), str(sess.get("timestamp") or ""), _f(sess, "prev_close")))
+    return tuple(out)
+
+
 def fetch_stock_quotes(symbols: list[str]) -> dict[str, StockQuote]:
     """ETF/股票实时报价。symbol 形如 `SLV.US`。失败抛 LiveQuotesUnavailable。"""
     if not symbols:
@@ -178,7 +193,7 @@ def fetch_stock_quotes(symbols: list[str]) -> dict[str, StockQuote]:
         out[r["symbol"]] = StockQuote(
             symbol=r["symbol"], last=_f(r, "last"), prev_close=_f(r, "prev_close"),
             freshest=fresh, freshest_kind=kind, freshest_prev=fresh_prev,
-            timestamp=str(r.get("timestamp", "")))
+            timestamp=str(r.get("timestamp", "")), sessions=_sessions(r))
     return out
 
 

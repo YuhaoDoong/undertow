@@ -33,7 +33,7 @@
 ## 二、跑起来
 
 ```bash
-python3 -m pytest -q                 # 应全绿（当前 272 项）
+python3 -m pytest -q                 # 应全绿（项数随功能增长，不在此写死）
 python3 -m undertow list             # 品种清单
 python3 -m undertow report gold      # 综合研判 → data/reports/*.html
 python3 -m undertow live             # 持仓实时体检（需长桥 CLI）
@@ -41,8 +41,7 @@ python3 -m undertow live             # 持仓实时体检（需长桥 CLI）
 
 品种：`gold silver wti dxy qqq tqqq tlt spy iwm`
   交易 `gold silver qqq tqqq` ／ 分析 `wti dxy tlt spy` ／ 观察 `iwm`（为将来攒链，非独立信息源）
-命令：`analyze gamma vol snapshot flow expiry fib backtest report list account
-consult serve soul journal event plan tech live backtest-stretch news calendar trial`
+命令全表：`python3 -m undertow --help`；按工作流程的用法见 `SKILL.md`，逐条说明见 `docs/skill/commands.md`。
 
 ---
 
@@ -56,6 +55,7 @@ report/    markdown / html / viz（只吃 analyze 结果）
 consult/   AI 接入层：上下文包 + 本地只读 HTTP
 soul/      用户的交易体系 / 计划 / 日记（数据私有，代码公开）
 cli.py     命令编排（唯一允许把 collect 与 analyze 接起来的地方）
+*_cli.py   分领域命令（shadow / trial / dirledger / riskwatch / desk），与 cli.py 同层，只做编排
 ```
 
 各层另有 `README.md` 讲清每个文件的职责与已知边界，**改动请同步更新**。
@@ -333,8 +333,7 @@ StartCalendarInterval 只留给条目少、且错过一次无所谓的任务**�
   - 旧双层 10%/20%（`POLICY` v1）冻结，只用于历史研究记录与影子账研究预算的复现。
   - 每个入口显式传政策版本；政策预算通过 ≠ 券商能开（权限、组合占用、指派处置另行核实）。
 - **手续费按张计**，不按合约代码数。
-- **组合单 vs 分腿建仓决定出场机制**：组合单进 → 券商锁腿、只能整体平；
-  分腿进 → 不认作组合、必须逐腿手动且**永远先买回短腿**（否则留下裸卖）。
+- **组合单 vs 分腿建仓与出场**：长桥组合单建仓后**既可整组平，也可分腿平**（用户 2026-10-15 实测更正；此前「券商锁腿、只能整体平」是未核实的推测，已撤回）；分腿进 → 不认作组合、逐腿手动。**无论哪种，分腿平都必须先买回短腿（卖腿）、再卖出长腿**，否则留下裸卖。
 
 ---
 

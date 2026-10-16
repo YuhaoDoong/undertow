@@ -37,8 +37,9 @@ textarea{width:100%;min-height:44px;background:transparent;color:var(--fg);borde
     <button id="latest">回到最新 ⇥</button></div>
   <div class="row"><span class="pos" id="posline"></span><span id="msg" class="warn"></span></div>
   <details class="mut"><summary>怎么用</summary>
-  <b>出题：</b>「新题目」随机挑一个品种和一段历史（2015 年及以前的日线），先给背景 K 线，再一根根往后放。按「镜像概率」把整段 K 线上下颠倒（涨变跌、跌变涨，波幅与形态不变），做完这题才揭晓品种、日期和有没有颠倒。价格按起点收盘 = 100 换算，日期隐去。<br>
-  <b>交易：</b>「做多 / 做空 / 平仓」在当前这根收盘后下单，<b>下一根开盘成交</b>；反方向开仓会先平掉原来的仓。「止损 / 止盈」按钮选中后在图上点价位（持仓或挂着开仓单时才能设）。止损止盈按之后每根的最高最低价判定；跳空越过按开盘价成交；同一根两个都碰到按止损算。1R = 开仓价到第一次设的止损的距离。不计手续费与滑点。<br>
+  <b>出题：</b>「新题目」随机挑一个品种和一段历史（2015 年及以前的日线），先给背景 K 线，再一根根往后放。按「镜像概率」把整段 K 线上下颠倒（涨变跌、跌变涨，波幅与形态不变），做完这题才揭晓品种、日期和有没有颠倒。价格按起点收盘 = 100 换算，日期隐去。颠倒用的是 P' = 10000/P：对数涨跌正好对调，但简单收益与 R 不对称（原始 100→110 的多单 +10%，镜像里对应的空单只有 +9.09%）。<br>
+  <b>交易：</b>「做多 / 做空 / 平仓」在当前这根收盘后下单，<b>下一根开盘成交</b>；反方向开仓会先平掉原来的仓。「止损 / 止盈」按钮选中后在图上点价位（持仓或挂着开仓单时才能设）。止损止盈按之后每根的最高最低价判定；跳空越过按开盘价成交；同一根两个都碰到按止损算。1R = 开仓价到第一个止损的距离：<b>想让 R 算作事前风险，要在开仓单成交前就把止损挂上</b>；成交后才设第一个止损的，R 标「迟设」、单独统计。不计手续费与滑点。<br>
+  <b>结束本题：</b>和其它操作一样是看完当前收盘才决定，持仓在<b>下一根开盘</b>平掉（正常成交）；挂着的开仓单作废。已经是最后一根、或本题自然走到头时还持仓，只能按最后收盘平——这叫「行政平仓」，单列，不计入胜率和收益之和。<br>
   <b>看图：</b>在图上<b>按住左右拖动</b>看更早的 K 线，触控板左右滑也能平移；滚轮（或触控板上下滑）缩放显示的根数，「回到最新」或按 End 回到当前这根。拖动只能看已经出现的 K 线。<br>
   <b>标注：</b>HH/HL/LH/LL 自动贴最高价或最低价，支撑线/压力线按点的高度画水平线；「删除」点在标记附近。<br>
   <b>快捷键：</b>→ 或空格 下一根，Shift+→ 前进 5 根，B 做多，S 做空，X 平仓，← 往前拖 20 根，End 回到最新，Esc 取消点图模式。<br>
@@ -240,17 +241,21 @@ function order(type){
 function advance(k){
   const q = Q(); if (!q || q.done) return; const bars = barsOf(q); let fills = [];
   for (let n = 0; n < k && q.cursor < bars.length - 1; n++) fills = fills.concat(Drill.step(q, bars));
-  if (fills.length) act(q, "fills", {fills: fills.map(f => f.reason ? {close: f.reason, px: f.exit} : f)});
-  if (q.cursor >= bars.length - 1) { Drill.finish(q, bars, "本题结束，按最后收盘平仓"); act(q, "finish"); }
+  if (fills.length) act(q, "fills", {fills: fills.map(f => f.reason ? {close: f.reason, px: f.exit, kind: f.exit_kind} : f)});
+  if (q.cursor >= bars.length - 1) { act(q, "finish"); const t = Drill.finish(q, bars, false); if (t) { fills.push(t); act(q, "fills", {fills: [{close: t.reason, px: t.exit, kind: t.exit_kind}]}); } }
   viewEnd = null; save(); render();
-  const closed = fills.filter(f => f.reason); if (closed.length) msg(closed.map(f => `${f.reason} @ ${f.exit.toFixed(2)}（${f.ret_pct >= 0 ? "+" : ""}${f.ret_pct.toFixed(2)}%${f.r != null ? "，" + f.r.toFixed(2) + "R" : ""}）`).join("；"));
+  const closed = fills.filter(f => f.reason); if (closed.length) msg(closed.map(fillText).join("；"));
 }
-function endQ(){ const q = Q(); if (!q || q.done) return; Drill.finish(q, barsOf(q), "提前结束本题，按当前收盘平仓"); act(q, "finish_early"); save(); render(); }
+const fillText = f => `${f.reason} @ ${f.exit.toFixed(2)}（${f.ret_pct >= 0 ? "+" : ""}${f.ret_pct.toFixed(2)}%${f.r != null ? "，" + f.r.toFixed(2) + "R" + (f.stop0_late === false ? "" : "·迟设") : ""}${f.exit_kind === "admin" ? "，行政平仓不计入统计" : ""}）`;
+function endQ(){ const q = Q(); if (!q || q.done) return;
+  act(q, "finish_early"); const t = Drill.finish(q, barsOf(q), true);
+  if (t) act(q, "fills", {fills: [{close: t.reason, px: t.exit, kind: t.exit_kind}]});
+  viewEnd = null; save(); render(); if (t) msg(fillText(t)); }
 function posLine(q, bars){
   if (!q) return "";
   const c = bars[q.cursor][4], parts = [`已推进 ${q.cursor - q.left + 1}/${q.right} 根`];
   if (q.pos) { const p = q.pos, pct = p.side * (c / p.entry - 1) * 100, r = p.stop0 != null && p.stop0 !== p.entry ? p.side * (c - p.entry) / Math.abs(p.entry - p.stop0) : null;
-    parts.push(`持${p.side > 0 ? "多" : "空"} @ ${fx(p.entry)} · 止损 ${fx(p.stop)} · 止盈 ${fx(p.target)} · 浮动 ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%${r != null ? "（" + r.toFixed(2) + "R）" : ""}`); }
+    parts.push(`持${p.side > 0 ? "多" : "空"} @ ${fx(p.entry)} · 止损 ${fx(p.stop)} · 止盈 ${fx(p.target)} · 浮动 ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%${r != null ? "（" + r.toFixed(2) + "R" + (p.stop0_late === false ? "" : "，止损迟设") + "）" : ""}`); }
   else parts.push("空仓");
   if (q.pending) parts.push(`下一根开盘：${{long: "做多", short: "做空", exit: "平仓"}[q.pending.type]}`);
   if (q.done) parts.push("本题已结束");
@@ -258,17 +263,30 @@ function posLine(q, bars){
 }
 function tradesTable(trades){
   if (!trades.length) return "（无）";
-  return `<table><tr><th>#</th><th>方向</th><th>开仓</th><th>平仓</th><th>持有</th><th>收益</th><th>R</th><th>离场原因</th></tr>` + trades.map((t, k) =>
-    `<tr><td>${k + 1}</td><td>${t.side > 0 ? "多" : "空"}</td><td>${fx(t.entry)}</td><td>${fx(t.exit)}</td><td>${t.exit_i - t.entry_i + 1} 根</td><td>${t.ret_pct >= 0 ? "+" : ""}${t.ret_pct.toFixed(2)}%</td><td>${t.r == null ? "无止损" : t.r.toFixed(2)}</td><td>${t.reason}</td></tr>`).join("") + "</table>";
+  const rTxt = t => t.r == null ? "无止损" : t.r.toFixed(2) + (t.stop0_late === false ? "" : t.stop0_late ? "（迟设）" : "（未知）");
+  const kind = t => t.exit_kind === "admin" ? "行政平仓" : t.exit_kind === "fill" ? "成交" : "旧口径";
+  return `<div style="overflow-x:auto"><table><tr><th>#</th><th>方向</th><th>开仓</th><th>平仓</th><th>持有</th><th>收益</th><th>R</th><th>类型</th><th>离场原因</th></tr>` + trades.map((t, k) =>
+    `<tr><td>${k + 1}</td><td>${t.side > 0 ? "多" : "空"}</td><td>${fx(t.entry)}</td><td>${fx(t.exit)}</td><td>${t.exit_i - t.entry_i + 1} 根</td><td>${t.ret_pct >= 0 ? "+" : ""}${t.ret_pct.toFixed(2)}%</td><td>${rTxt(t)}</td><td>${kind(t)}</td><td>${t.reason}</td></tr>`).join("") + "</table></div>";
 }
+// 只统计用当前撮合引擎做完的题；别的引擎版本（含没有记引擎的旧题）原样保留、不重判、不计入。
+const curEngine = q => q.engine && q.engine.sha256 === POOL.meta.engine_sha256;
 function overall(){
-  const done = DB.questions.filter(q => q.done), rows = [["全部", () => true], ["原始 K 线", q => !q.mirror], ["镜像（颠倒）", q => q.mirror]];
+  const doneAll = DB.questions.filter(q => q.done), done = doneAll.filter(curEngine), other = doneAll.length - done.length;
+  const rows = [["全部", () => true], ["原始 K 线", q => !q.mirror], ["镜像（颠倒）", q => q.mirror]];
   const sides = [["做多", t => t.side > 0], ["做空", t => t.side < 0]];
-  const line = (lab, nq, s) => `<tr><td>${lab}</td><td>${nq}</td><td>${s.n}</td><td>${s.win_rate == null ? "—" : (s.win_rate * 100).toFixed(0) + "%"}</td><td>${s.sum_pct >= 0 ? "+" : ""}${s.sum_pct.toFixed(2)}%</td><td>${s.avg_r == null ? "—" : s.avg_r.toFixed(2)}</td><td>${s.n_r ? s.sum_r.toFixed(2) : "—"}</td></tr>`;
-  let h = `<table><tr><th></th><th>题数</th><th>交易</th><th>胜率</th><th>合计收益</th><th>平均 R</th><th>合计 R</th></tr>`;
+  const sg = (v, k = 2, u = "") => v == null ? "—" : (v >= 0 ? "+" : "") + v.toFixed(k) + u;
+  const line = (lab, nq, s) => `<tr><td>${lab}</td><td>${nq}</td><td>${s.n}</td><td>${s.win_rate == null ? "—" : (s.win_rate * 100).toFixed(0) + "%"}</td><td>${s.n ? sg(s.sum_pct, 2, "%") : "—"}</td>` +
+    `<td>${s.n_r}</td><td>${s.n_r ? sg(s.avg_r) : "—"}</td><td>${s.n_r ? sg(s.sum_r) : "—"}</td><td>${s.n_r_late}</td><td>${s.n_r_late ? sg(s.avg_r_late) : "—"}</td>` +
+    `<td>${s.n_admin}</td><td>${s.n_admin ? sg(s.sum_pct_admin, 2, "%") : "—"}</td></tr>`;
+  let h = `<div style="overflow-x:auto"><table><tr><th></th><th>题数</th><th>成交笔数</th><th>胜率</th><th>简单收益之和</th><th>事前止损 R 笔数</th><th>平均 R</th><th>合计 R</th><th>迟设止损 R 笔数</th><th>迟设平均 R</th><th>行政平仓笔数</th><th>行政平仓收益和</th></tr>`;
   rows.forEach(([lab, f]) => { const qs = done.filter(f); h += line(lab, qs.length, Drill.stats(qs.flatMap(q => q.trades))); });
   sides.forEach(([lab, f]) => h += line(lab, "", Drill.stats(done.flatMap(q => q.trades).filter(f))));
-  return h + `</table><div class="mut">平均 R 只算设了止损的交易。原始与镜像成绩差得多，说明可能带着方向偏好（比如习惯做多）。</div>`;
+  return h + `</table></div><div class="mut">胜率与「简单收益之和」只算正常成交（下一根开盘、止损止盈、反手、手动平仓、提前结束后下一根开盘）；` +
+    `走到头或已无下一根时按最后收盘平掉的是「行政平仓」，单列、不计入。「简单收益之和」= 每笔百分比直接相加，不是复利，也不是资金曲线。` +
+    `「事前止损 R」只算开仓单成交前就挂着止损的交易；成交后才设第一个止损的列为「迟设」（看过走势才定的风险，不是事前风险），不混算。没设止损的不算 R。<br>` +
+    `原始与镜像的成绩差异可能有多种原因：镜像本身的不对称（P' = 10000/P 下，原始 100→110 多单止损 95 是 +10%、2R，镜像对应空单只有 +9.09%、1.727R）、` +
+    `题目不同、练习顺序与熟练度、样本太少等，不能直接当作方向偏好。练习不计手续费与滑点，页面源码里有后面的走势，成绩只作自我练习参考。` +
+    (other ? `<br>另有 ${other} 道已结束的题是旧版撮合引擎做的（例如旧版提前结束按已知的当前收盘平仓），原样保留、不重判、不计入上表。` : "") + `</div>`;
 }
 function render(){
   const q = Q();
@@ -282,7 +300,7 @@ function render(){
   if (q && q.done) { const raw = POOL.series[q.sym], a = q.i0 - q.left + 1, b = q.i0 + q.right, s = Drill.stats(q.trades), d = i => String(raw.d[i]).replace(/(\d{4})(\d\d)(\d\d)/, "$1-$2-$3");
     $("reveal").hidden = false;
     $("reveal").innerHTML = `<b>揭晓：</b>${q.sym} 日线 · 背景 ${d(a)} 起 · 第 0 根 = ${d(q.i0)} · 结束 ${d(b)} · <b>${q.mirror ? "镜像（上下颠倒，真实走势与你看到的相反）" : "原始 K 线"}</b><br>
-      本题 ${s.n} 笔，胜 ${s.win}，合计 ${s.sum_pct >= 0 ? "+" : ""}${s.sum_pct.toFixed(2)}%${s.n_r ? "，合计 " + s.sum_r.toFixed(2) + "R" : ""}`; }
+      本题成交 ${s.n} 笔，胜 ${s.win}，简单收益之和 ${s.sum_pct >= 0 ? "+" : ""}${s.sum_pct.toFixed(2)}%${s.n_r ? "，事前止损合计 " + s.sum_r.toFixed(2) + "R" : ""}${s.n_r_late ? "，迟设止损 " + s.n_r_late + " 笔合计 " + s.sum_r_late.toFixed(2) + "R" : ""}${s.n_admin ? "；行政平仓 " + s.n_admin + " 笔 " + (s.sum_pct_admin >= 0 ? "+" : "") + s.sum_pct_admin.toFixed(2) + "%（不计入）" : ""}${curEngine(q) ? "" : "<br><span class=\"warn\">这题是旧版撮合引擎做的，成交按当时口径原样保留，不计入累计成绩。</span>"}`; }
   else $("reveal").hidden = true;
   $("overall").innerHTML = overall();
   draw();

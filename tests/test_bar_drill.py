@@ -103,6 +103,60 @@ def test_set_level_rejects_wrong_side():
     assert out[0] and out[1] and out[2] is None and out[3] == 98
 
 
+def test_finish_early_exits_next_open_else_admin_mark():
+    """Codex 053 E：主动结束也是看完当前收盘才决定 → 下一根开盘平（正常成交）；没有下一根 / 自然走到头 → 行政盯市单列。"""
+    out = _node("""
+      const B = [[0,100,101,99,100,1],[1,110,111,109,110,1],[2,80,81,79,80,1]];
+      const a = {cursor: 0, max_cursor: 0, pos: null, pending: {type: "long"}, trades: []};
+      Drill.step(a, B); const ta = Drill.finish(a, B, true);              // 当前收 110、下一根开 80 → 记 80，不是 110
+      const b = {cursor: 0, max_cursor: 0, pos: null, pending: {type: "long"}, trades: []};
+      Drill.step(b, B); Drill.step(b, B); const tb = Drill.finish(b, B, true);   // 已在最后一根 → 行政盯市
+      const c = {cursor: 0, max_cursor: 0, pos: null, pending: {type: "long"}, trades: []};
+      Drill.step(c, B); Drill.step(c, B); const tc = Drill.finish(c, B, false);  // 自然走到头
+      const d = {cursor: 0, max_cursor: 0, pos: null, pending: {type: "long"}, trades: []};
+      const td = Drill.finish(d, B, true);                                // 空仓挂着开仓单 → 作废，不成交
+      return {ta, a_cursor: a.cursor, tb, tc, td, d_pending: d.pending, d_trades: d.trades.length, done: [a.done, b.done, c.done, d.done],
+              st: Drill.stats([...a.trades, ...b.trades]), version: Drill.VERSION};""")
+    assert out["version"] == "bar-drill-engine-2"
+    assert out["ta"]["exit"] == 80 and out["ta"]["exit_i"] == 2 and out["ta"]["exit_kind"] == "fill" and out["a_cursor"] == 2
+    assert out["tb"]["exit"] == 80 and out["tb"]["exit_kind"] == "admin" and "行政" in out["tb"]["reason"]
+    assert out["tc"]["exit_kind"] == "admin" and "行政" in out["tc"]["reason"]
+    assert out["td"] is None and out["d_pending"] is None and out["d_trades"] == 0 and all(out["done"])
+    st = out["st"]
+    assert st["n"] == 1 and st["n_admin"] == 1 and abs(st["sum_pct"] - (80 / 110 - 1) * 100) < 1e-9   # 行政平仓不进收益之和
+    assert abs(st["sum_pct_admin"] - (80 / 110 - 1) * 100) < 1e-9
+
+
+def test_late_stop_r_kept_apart_from_pre_entry_stop():
+    out = _node(BARS + """
+      st.pending = {type: "long", stop: 99}; Drill.step(st, B);          // 开仓单带止损 → 事前风险
+      st.pending = {type: "exit"}; Drill.step(st, B);                       // 第 2 根开 101 平
+      st.pending = {type: "long"}; Drill.step(st, B);                       // 第 3 根开 102 无止损成交
+      Drill.setLevel(st, B, "stop", 97.5);                                  // 成交后才设第一个止损 → 迟设
+      Drill.step(st, B);                                                    // 第 4 根低 96 → 止损 97.5
+      return {t: st.trades, s: Drill.stats(st.trades)};""")
+    t, s = out["t"], out["s"]
+    assert t[0]["stop0_late"] is False and abs(t[0]["r"] - 1) < 1e-9
+    assert t[1]["stop0_late"] is True and t[1]["exit"] == 97.5 and abs(t[1]["r"] + 1) < 1e-9
+    assert s["n"] == 2 and s["n_r"] == 1 and abs(s["sum_r"] - 1) < 1e-9 and s["n_r_late"] == 1 and abs(s["sum_r_late"] + 1) < 1e-9
+
+
+def test_inverse_mirror_is_not_symmetric_in_simple_return_or_r():
+    """页面文案依据：逆数镜像下同一路径的反向交易，简单收益与 R 都比原始小（不能把原始/镜像差直接读成方向偏好）。"""
+    out = _node("""
+      const tr = (side, entry, exit, stop) => Drill.closeTrade({pos: {side, entry, entry_i: 0, stop0: stop, stop0_late: false}, trades: []}, exit, 1, "x");
+      return [tr(1, 100, 110, 95), tr(-1, 100, 10000 / 110, 10000 / 95)];""")
+    raw, mir = out
+    assert abs(raw["ret_pct"] - 10) < 1e-9 and abs(raw["r"] - 2) < 1e-9
+    assert abs(mir["ret_pct"] - 100 / 11) < 1e-9 and abs(mir["r"] - 1.727272727) < 1e-6
+
+
+def test_page_text_drops_direction_bias_claim():
+    page = (ROOT / "scripts/bar_drill_page.html").read_text("utf-8")
+    assert "说明可能带着方向偏好" not in page and "按当前收盘平仓" not in page
+    assert "不能直接当作方向偏好" in page and "简单收益之和" in page and "行政平仓" in page and "迟设" in page
+
+
 def test_mirror_matches_ps_mirror_and_pick_is_reproducible():
     from scripts.ps_trigger_v2 import mirror
     s, _ = bd.load_series("SLV")

@@ -5,6 +5,7 @@
   python3 scripts/bar_drill_serve.py --recovery-status          # 记录损坏后：看隔离件与恢复状态
   python3 scripts/bar_drill_serve.py --recover-from <备份文件>   # 用备份（history/ 下按天副本或导出件）恢复
   python3 scripts/bar_drill_serve.py --recovery-ack             # 确认不恢复，下次保存从空记录开始
+  python3 scripts/bar_drill_serve.py --check                    # 只读：已存记录能否通过当前结构校验（不打印内容）
 
 记录在 data/soul/drill/bar_drill_v1.json（私有、不入库）。Codex 053 审查后的保护（原版只按题目种子防丢题）：
 - **同题不许倒退**：服务端记录带 revision，页面提交时带 base_revision（CAS），落后就 409；即使版本号对上，
@@ -18,7 +19,12 @@
   （旧标签页刷新后才能写）。每题创建时另记 engine/data_sha256，旧题原样保留、不按新引擎重判。
 - **127.0.0.1 不是鉴权**：Host 头必须是本机名（防 DNS 重绑定，与 consult 服务共用判定）；/records 读写都要页面里
   注入的随机写入凭据（X-Drill-Token）；写入要求 Origin 与 Host 同源、Content-Type 为 application/json、
-  有 Content-Length 且不超上限；JSON 结构逐项校验；连接超时 30 秒。
+  有 Content-Length 且不超上限；连接超时 30 秒。
+- **题目结构完整校验（Codex 054 B2）**：带 engine 的新题逐字段校验——身份（品种在数据池、起点/背景/往后的边界、
+  镜像是布尔）、进度范围、持仓/挂单/成交/动作/标注的类型与数值，拒绝 NaN/Infinity（JSON 里的 1e400 也算）、题号重复、
+  未知顶层字段；坏题 400、原件不动。没有 engine 的旧版题（053 之前的页面建的）按 legacy 宽松分流：只卡身份/进度类型与
+  有限数值，其余字段（含不认识的字段）原样保留、不删。读入与 --recover-from 用同一套校验；已存文件不合格时 409 停写，
+  不改名、不隔离（它不是坏 JSON，可能只是校验比旧页面严），由用户用 --check 查看原因。
 直接双击 data/drill/index.html 也能用，但那样只存在浏览器里，页面顶部会标明。
 """
 from __future__ import annotations
@@ -27,6 +33,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+import math
 import os
 import secrets
 import shutil
@@ -57,6 +64,11 @@ CLIENT_KEYS = {"version", "questions", "cur", "settings", "updated_at", "base_re
 APPEND_ONLY = ("actions", "trades", "marks")                 # 只许在末尾追加，不许删改
 IDENTITY = ("sym", "i0", "mirror", "left", "right", "engine", "data_sha256")   # 题目身份，存下后不许改
 TOKEN_HEADER = "X-Drill-Token"
+# 当前页面（engine-2 起）建题时写的全部顶层字段；带 engine 的新题不许出现别的顶层字段
+NEW_Q_KEYS = {"id", "seed", "sym", "i0", "mirror", "left", "right", "cursor", "max_cursor", "pos", "pending", "trades", "marks",
+              "actions", "note", "done", "created_at", "version", "engine", "data_sha256", "reopened_from"}
+MAX_SPAN = 5000                                              # 背景/往后根数上限（页面选项最多 500/250）
+MAX_LIST = 100_000                                           # 单题动作/成交/标注条数上限
 
 
 class Conflict(Exception):
@@ -122,8 +134,13 @@ def _recovery_msg(info: dict) -> str:
             "② 确认不恢复、从空记录重新开始：python3 scripts/bar_drill_serve.py --recovery-ack。处理后在页面点「重新读取」（服务不用重启）。")
 
 
-def _load_unlocked(store: Path) -> dict | None:
-    """无文件 → None；恢复未决或损坏 → RecoveryPending（损坏时先落标记再隔离，不当成空记录）。"""
+class InvalidStore(Conflict):
+    """已存记录是合法 JSON、但没通过当前结构校验：停写、不改名不隔离（可能只是校验比写它的旧页面严）。"""
+
+
+def _load_unlocked(store: Path, meta: dict | None = None) -> dict | None:
+    """无文件 → None；恢复未决或损坏 → RecoveryPending（损坏时先落标记再隔离，不当成空记录）；
+    结构校验不过 → InvalidStore（原件不动）。"""
     mk = _marker(store)
     if mk.exists():
         try:
@@ -134,61 +151,187 @@ def _load_unlocked(store: Path) -> dict | None:
     if not store.exists():
         return None
     try:
-        d = json.loads(store.read_text("utf-8"))
+        d = loads(store.read_text("utf-8"))
         if not isinstance(d, dict) or not isinstance(d.get("questions"), list):
             raise ValueError("缺 questions 列表")
-        return d
     except (ValueError, UnicodeDecodeError) as e:
         bad = store.with_name(store.name + ".corrupt-" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ"))
         info = {"quarantined": bad.name, "error": str(e)[:300], "at": _now()}
         write_atomic(mk, json.dumps(info, ensure_ascii=False, indent=1).encode("utf-8"))   # 标记先落盘，再隔离
         store.rename(bad)
         raise RecoveryPending(_recovery_msg(info), recovery_pending=True)
+    try:
+        validate_body({k: v for k, v in d.items() if k != "base_revision"}, meta)
+    except ValueError as e:
+        raise InvalidStore(f"已存记录没通过结构校验（{e}）。原件未动、未隔离；为免在坏结构上继续写，自动保存已暂停。"
+                           "在终端运行 python3 scripts/bar_drill_serve.py --check 查看", invalid_store=True)
+    return d
 
 
-def load(store: Path) -> dict | None:
+def load(store: Path, meta: dict | None = None) -> dict | None:
     with locked(store):
-        return _load_unlocked(store)
+        return _load_unlocked(store, meta)
 
 
 def _int(x) -> bool:
     return type(x) is int
 
 
-def validate(rec) -> None:
-    """页面提交的结构校验（宽松接受旧版题目的多余字段，只卡住会影响防回退判断的那些）。"""
-    if not isinstance(rec, dict):
-        raise ValueError("记录不是 JSON 对象")
+def _num(x) -> bool:
+    return type(x) in (int, float) and math.isfinite(x)
+
+
+def _pos(x) -> bool:
+    return _num(x) and x > 0
+
+
+def _opt(x, f) -> bool:
+    return x is None or f(x)
+
+
+def _bool_or_none(x) -> bool:
+    return x is None or type(x) is bool
+
+
+def _hex64(x) -> bool:
+    return isinstance(x, str) and len(x) == 64 and all(c in "0123456789abcdef" for c in x)
+
+
+def _reject_constant(name: str):
+    raise ValueError(f"记录含非有限数 {name}")
+
+
+def loads(raw) -> object:
+    """JSON 解析：拒绝 NaN / Infinity / -Infinity 字面量（Python 默认接受）。1e400 这类溢出成 inf 的由 _finite 拦。"""
+    return json.loads(raw, parse_constant=_reject_constant)
+
+
+def _finite(x, where: str, depth: int = 0) -> None:
+    if depth > 12:
+        raise ValueError(f"{where} 嵌套过深")
+    if type(x) is float and not math.isfinite(x):
+        raise ValueError(f"{where} 含非有限数")
+    if isinstance(x, dict):
+        for v in x.values():
+            _finite(v, where, depth + 1)
+    elif isinstance(x, list):
+        for v in x:
+            _finite(v, where, depth + 1)
+
+
+def _check(ok: bool, msg: str) -> None:
+    if not ok:
+        raise ValueError(msg)
+
+
+def _validate_new_question(q: dict, tag: str, meta: dict | None) -> None:
+    """带 engine 的新题：逐字段校验（Codex 054 B2）。meta 有数据池时品种必须在池里；数据版本与当前一致时再卡窗口不越过数据末尾。"""
+    extra = set(q) - NEW_Q_KEYS
+    _check(not extra, f"{tag}含未知字段 {sorted(extra)[:5]}")
+    eng = q.get("engine")
+    _check(isinstance(eng, dict) and isinstance(eng.get("version"), str) and _hex64(eng.get("sha256")), f"{tag}的 engine 不完整")
+    _check(_hex64(q.get("data_sha256")), f"{tag}的 data_sha256 不是 sha256")
+    _check(q.get("version") == VERSION, f"{tag}的 version 不对")
+    sym = q.get("sym")
+    _check(isinstance(sym, str) and 0 < len(sym) <= 16, f"{tag}的品种不是文本")
+    pool = (meta or {}).get("data_sha256")
+    if pool is not None:
+        _check(sym in pool, f"{tag}的品种 {sym!r} 不在数据池")
+    left, right, i0 = q.get("left"), q.get("right"), q.get("i0")
+    _check(_int(left) and 1 <= left <= MAX_SPAN and _int(right) and 1 <= right <= MAX_SPAN, f"{tag}的背景/往后根数不对")
+    _check(_int(i0) and i0 >= left - 1, f"{tag}的起点 i0 不对（窗口会越过数据开头）")
+    n = ((meta or {}).get("series_n") or {}).get(sym)
+    if n is not None and pool is not None and q["data_sha256"] == pool.get(sym):
+        _check(i0 + right <= n - 1, f"{tag}的窗口越过数据末尾")
+    _check(type(q.get("mirror")) is bool, f"{tag}的 mirror 不是布尔")
+    _check(type(q.get("done")) is bool, f"{tag}的 done 不是布尔")
+    last = left + right - 1                                    # 窗口内最后一根的下标
+    cur, mx = q.get("cursor"), q.get("max_cursor")
+    _check(_int(cur) and left - 1 <= cur <= last, f"{tag}的 cursor 越界")
+    _check(_int(mx) and cur <= mx <= last, f"{tag}的 max_cursor 越界")
+    _check(isinstance(q.get("note"), str) and len(q["note"]) <= MAX_NOTE, f"{tag}的备注不是文本或过长")
+    _check(isinstance(q.get("created_at"), str), f"{tag}缺 created_at")
+    idx = lambda x: _int(x) and 0 <= x <= last                # noqa: E731
+    p = q.get("pos")
+    if p is not None:
+        _check(isinstance(p, dict) and p.get("side") in (1, -1) and _pos(p.get("entry")) and idx(p.get("entry_i"))
+               and all(_opt(p.get(k), _pos) for k in ("stop", "stop0", "target")) and _bool_or_none(p.get("stop0_late"))
+               and _opt(p.get("stop0_set_i"), idx), f"{tag}的持仓不对")
+    pd = q.get("pending")
+    if pd is not None:
+        _check(isinstance(pd, dict) and pd.get("type") in ("long", "short", "exit")
+               and _opt(pd.get("stop"), _pos) and _opt(pd.get("target"), _pos), f"{tag}的挂单不对")
+    for f in APPEND_ONLY:
+        _check(isinstance(q.get(f), list) and len(q[f]) <= MAX_LIST, f"{tag}的 {f} 不是列表或过多")
+    for t in q["trades"]:
+        _check(isinstance(t, dict) and t.get("side") in (1, -1) and _pos(t.get("entry")) and _pos(t.get("exit"))
+               and idx(t.get("entry_i")) and idx(t.get("exit_i")) and t["entry_i"] <= t["exit_i"]
+               and isinstance(t.get("reason"), str) and t.get("exit_kind", "fill") in ("fill", "admin")
+               and _opt(t.get("stop0"), _pos) and _bool_or_none(t.get("stop0_late"))
+               and _num(t.get("ret_pct")) and _opt(t.get("r"), _num), f"{tag}的成交记录不对")
+    for a in q["actions"]:
+        _check(isinstance(a, dict) and isinstance(a.get("type"), str) and _opt(a.get("as_of"), idx), f"{tag}的动作记录不对")
+    for m in q["marks"]:
+        _check(isinstance(m, dict) and m.get("action") in ("add", "delete"), f"{tag}的标注不对")
+        if m["action"] == "add":
+            _check(isinstance(m.get("id"), str) and isinstance(m.get("type"), str) and idx(m.get("i")) and _num(m.get("price")),
+                   f"{tag}的标注不对")
+        else:
+            _check(isinstance(m.get("target"), str), f"{tag}的删除标注不对")
+    rf = q.get("reopened_from")
+    if rf is not None:
+        _check(isinstance(rf, dict) and _int(rf.get("seed")) and _int(rf.get("cursor")), f"{tag}的 reopened_from 不对")
+
+
+def _validate_legacy_question(q: dict, tag: str) -> None:
+    """没有 engine 的旧版题：只卡会影响防回退判断的字段；其余（含不认识的字段）原样保留。"""
+    for f in APPEND_ONLY:
+        _check(isinstance(q.get(f, []), list), f"{tag}的 {f} 不是列表")
+    if "done" in q:
+        _check(isinstance(q["done"], bool), f"{tag}的 done 不是布尔")
+    if "note" in q:
+        _check(isinstance(q["note"], str) and len(q["note"]) <= MAX_NOTE, f"{tag}的备注不是文本或过长")
+    if "max_cursor" in q:
+        _check(_int(q["max_cursor"]), f"{tag}的 max_cursor 不是整数")
+
+
+def validate_body(rec, meta: dict | None = None) -> None:
+    """记录主体（提交、读入、恢复共用）：顶层字段、每道题（新题完整、旧题宽松）、题号/种子唯一、冲突副本、设置。"""
+    _check(isinstance(rec, dict), "记录不是 JSON 对象")
     extra = set(rec) - CLIENT_KEYS - SERVER_KEYS
-    if extra:
-        raise ValueError(f"记录含未知字段 {sorted(extra)[:5]}")
-    if rec.get("version") != VERSION:
-        raise ValueError(f"不是 {VERSION} 记录")
+    _check(not extra, f"记录含未知字段 {sorted(extra)[:5]}")
+    _check(rec.get("version") == VERSION, f"不是 {VERSION} 记录")
+    _finite(rec, "记录")
+    qs = rec.get("questions")
+    _check(isinstance(qs, list) and len(qs) <= MAX_QUESTIONS, "questions 不是列表或过多")
+    seeds, ids = set(), set()
+    for k, q in enumerate(qs):
+        _check(isinstance(q, dict), f"第 {k} 项题目不是对象")
+        _check(_int(q.get("seed")) and 0 <= q["seed"] < 2 ** 32 and _int(q.get("id")) and _int(q.get("cursor")) and q["cursor"] >= 0,
+               f"第 {k} 项题目缺 seed/id/cursor 或类型不对")
+        _check(q["seed"] not in seeds, f"种子 {q['seed']} 重复")
+        _check(q["id"] not in ids, f"题号 {q['id']} 重复")
+        seeds.add(q["seed"])
+        ids.add(q["id"])
+        tag = f"第 {q['id']} 题"
+        if "engine" in q:
+            _validate_new_question(q, tag, meta)
+        else:
+            _validate_legacy_question(q, tag)
+    cc = rec.get("conflict_copies", [])
+    _check(isinstance(cc, list), "conflict_copies 不是列表")
+    for c in cc:                                              # 存档副本只卡外形，内容原样保留（它本来就是分叉出来的那份）
+        _check(isinstance(c, dict) and isinstance(c.get("question"), dict) and _int(c["question"].get("seed")), "冲突副本不对")
+    _check(isinstance(rec.get("settings", {}), dict), "settings 不是对象")
+    _check(rec.get("cur") is None or _int(rec.get("cur")), "cur 不是题号")
+    _check(rec.get("updated_at") is None or isinstance(rec.get("updated_at"), str), "updated_at 不是文本")
+
+
+def validate(rec, meta: dict | None = None) -> None:
+    """页面提交：主体校验 + 必须带 base_revision。"""
+    validate_body(rec, meta)
     if not (_int(rec.get("base_revision")) and rec["base_revision"] >= 0):
         raise ValueError("缺 base_revision（页面过旧？请刷新）")
-    qs = rec.get("questions")
-    if not isinstance(qs, list) or len(qs) > MAX_QUESTIONS:
-        raise ValueError("questions 不是列表或过多")
-    seeds = set()
-    for k, q in enumerate(qs):
-        if not isinstance(q, dict):
-            raise ValueError(f"第 {k} 项题目不是对象")
-        if not (_int(q.get("seed")) and 0 <= q["seed"] < 2 ** 32) or not _int(q.get("id")) or not _int(q.get("cursor")):
-            raise ValueError(f"第 {k} 项题目缺 seed/id/cursor 或类型不对")
-        if q["seed"] in seeds:
-            raise ValueError(f"种子 {q['seed']} 重复")
-        seeds.add(q["seed"])
-        for f in APPEND_ONLY:
-            if not isinstance(q.get(f, []), list):
-                raise ValueError(f"第 {q['id']} 题的 {f} 不是列表")
-        if "done" in q and not isinstance(q["done"], bool):
-            raise ValueError(f"第 {q['id']} 题的 done 不是布尔")
-        if "note" in q and not (isinstance(q["note"], str) and len(q["note"]) <= MAX_NOTE):
-            raise ValueError(f"第 {q['id']} 题的备注不是文本或过长")
-    if not isinstance(rec.get("conflict_copies", []), list):
-        raise ValueError("conflict_copies 不是列表")
-    if not isinstance(rec.get("settings", {}), dict):
-        raise ValueError("settings 不是对象")
 
 
 def check_progress(old: dict, new: dict) -> None:
@@ -225,12 +368,12 @@ def check_progress(old: dict, new: dict) -> None:
 
 
 def save(store: Path, rec: dict, page_meta: dict | None = None) -> dict:
-    validate(rec)
+    validate(rec, page_meta)
     if page_meta is not None and (rec.get("page_engine_sha256") != page_meta["engine_sha256"]
                                   or rec.get("data_sha256") != page_meta["data_sha256"]):
         raise Conflict("页面版本与本机服务不一致（撮合引擎或数据已更新），这个标签页不能再写；请刷新页面", stale_page=True)
     with locked(store):
-        old = _load_unlocked(store)
+        old = _load_unlocked(store, page_meta)
         cur = 0 if old is None else old.get("revision", 0)
         if not _int(cur):
             raise OSError("服务端记录的 revision 不是整数")
@@ -271,7 +414,7 @@ def recovery_ack(store: Path) -> str:
         if not mk.exists():
             return "没有未决的恢复，什么也没做"
         if store.exists():
-            d = json.loads(store.read_text("utf-8"))
+            d = loads(store.read_text("utf-8"))
             if not isinstance(d, dict) or not isinstance(d.get("questions"), list):
                 raise ValueError(f"{store.name} 存在但不是有效记录，先移走它")
         _log_recovery(store, {"action": "ack", "marker": mk.read_text("utf-8"), "store_exists": store.exists()})
@@ -279,16 +422,17 @@ def recovery_ack(store: Path) -> str:
     return "已确认：恢复标记已清除，隔离件原样保留；" + ("沿用现有记录文件" if store.exists() else "下次保存从空记录开始")
 
 
-def recover_from(store: Path, src: Path) -> str:
-    """用备份恢复：只在原路径没有文件时写入（不覆盖任何东西），写完清标记。"""
+def recover_from(store: Path, src: Path, meta: dict | None = None) -> str:
+    """用备份恢复：只在原路径没有文件时写入（不覆盖任何东西），写完清标记。备份要过同一套结构校验。"""
     raw = src.read_bytes()
-    d = json.loads(raw)
+    d = loads(raw)
     if not isinstance(d, dict) or d.get("version") != VERSION or not isinstance(d.get("questions"), list):
         raise ValueError(f"{src} 不是 {VERSION} 记录")
+    rec = {k: v for k, v in d.items() if k in CLIENT_KEYS | SERVER_KEYS and k != "base_revision"}
+    validate_body(rec, meta)
     with locked(store):
         if store.exists():
             raise ValueError(f"{store} 已存在，不覆盖；如确要用备份替换，先手动把它移走")
-        rec = {k: v for k, v in d.items() if k in CLIENT_KEYS | SERVER_KEYS and k != "base_revision"}
         rec["revision"] = (d.get("revision") if _int(d.get("revision")) else 0) + 1
         rec["saved_at"] = _now()
         write_atomic(store, json.dumps(rec, ensure_ascii=False, indent=1).encode("utf-8"))
@@ -297,6 +441,32 @@ def recover_from(store: Path, src: Path) -> str:
                               "questions": len(rec["questions"]), "had_marker": mk.exists()})
         mk.unlink(missing_ok=True)
     return f"已用 {src.name} 恢复 {len(rec['questions'])} 题（第 {rec['revision']} 版）；隔离件原样保留"
+
+
+def page_meta(pool: dict) -> dict:
+    """服务端校验用的页面身份：撮合引擎与数据 sha256，以及各品种日线根数（卡窗口不越过数据末尾）。"""
+    return {"engine_sha256": pool["meta"]["engine_sha256"], "data_sha256": pool["meta"]["sha256"],
+            "series_n": {s: len(v["c"]) for s, v in pool["series"].items()}}
+
+
+def check_store(store: Path, meta: dict | None) -> int:
+    """只读检查，不改名、不隔离、不打印记录内容：0 = 通过或没有记录，1 = 不通过（原因只写字段位置）。"""
+    if _marker(store).exists():
+        print("恢复未决：先运行 --recovery-status")
+        return 1
+    if not store.exists():
+        print("还没有记录文件")
+        return 0
+    try:
+        d = loads(store.read_text("utf-8"))
+        _check(isinstance(d, dict), "记录不是 JSON 对象")
+        validate_body({k: v for k, v in d.items() if k != "base_revision"}, meta)
+    except (ValueError, UnicodeDecodeError) as e:
+        print(f"不通过：{e}")
+        return 1
+    n_new = sum(1 for q in d["questions"] if "engine" in q)
+    print(f"通过：{len(d['questions'])} 题（带引擎身份 {n_new}，旧版 {len(d['questions']) - n_new}），冲突副本 {len(d.get('conflict_copies') or [])} 份")
+    return 0
 
 
 def make_handler(page: bytes, store: Path, *, token: str, page_meta: dict):
@@ -346,7 +516,7 @@ def make_handler(page: bytes, store: Path, *, token: str, page_meta: dict):
                 if (g := self._guard(write=False)):
                     return self._json(g[0], {"error": g[1]})
                 try:
-                    d = load(store)
+                    d = load(store, page_meta)
                 except Conflict as e:
                     return self._json(409, {"error": str(e), **e.extra})
                 return self._json(200, d) if d is not None else self._json(404, {"error": "还没有记录", "revision": 0})
@@ -372,7 +542,7 @@ def make_handler(page: bytes, store: Path, *, token: str, page_meta: dict):
                 self.close_connection = True
                 return self._json(413, {"error": f"记录超过 {MAX_BODY} 字节"})
             try:
-                rec = json.loads(self.rfile.read(n).decode("utf-8"))
+                rec = loads(self.rfile.read(n).decode("utf-8"))
                 return self._json(200, save(store, rec, page_meta))
             except Conflict as e:
                 return self._json(409, {"error": str(e), **e.extra})
@@ -394,21 +564,24 @@ def main() -> int:
     ap.add_argument("--recovery-status", action="store_true")
     ap.add_argument("--recover-from", metavar="FILE")
     ap.add_argument("--recovery-ack", action="store_true")
+    ap.add_argument("--check", action="store_true", help="只读：已存记录能否通过当前结构校验")
     a = ap.parse_args()
     store = Path(a.store).resolve()
     if a.recovery_status:
         print(json.dumps(recovery_status(store), ensure_ascii=False, indent=1))
         return 0
+    pool = bd.build()
+    page = bd.render(pool).encode("utf-8")          # render 把撮合引擎 sha256 写进 pool["meta"]
+    meta = page_meta(pool)
+    if a.check:
+        return check_store(store, meta)
     if a.recover_from or a.recovery_ack:
         try:
-            print(recover_from(store, Path(a.recover_from)) if a.recover_from else recovery_ack(store))
+            print(recover_from(store, Path(a.recover_from), meta) if a.recover_from else recovery_ack(store))
         except (ValueError, OSError) as e:
             print(f"恢复失败：{e}", file=sys.stderr)
             return 2
         return 0
-    pool = bd.build()
-    page = bd.render(pool).encode("utf-8")          # render 把撮合引擎 sha256 写进 pool["meta"]
-    meta = {"engine_sha256": pool["meta"]["engine_sha256"], "data_sha256": pool["meta"]["sha256"]}
     srv = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(page, store, token=secrets.token_urlsafe(24), page_meta=meta))
     url = f"http://127.0.0.1:{a.port}/"
     shown = store.relative_to(ROOT) if store.is_relative_to(ROOT) else store

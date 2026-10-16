@@ -423,3 +423,225 @@ def test_recover_from_backup_never_overwrites(tmp_path):
 
 def test_real_page_template_accepts_token_injection():
     sv.make_handler(bd.render(_tiny_pool()).encode("utf-8"), Path("/nonexistent/x.json"), token=TOKEN, page_meta=META)
+
+
+# ---- Codex 054 B1：合并后题号重排、本机冲突副本、首次写入失败后再合并 ----
+
+def test_bars_cache_follows_window_not_question_id():
+    """Codex 054 反例：两个标签页的新题都是第 2 题，合并后本页那题改成第 3 题；按题号缓存会把 A 的价格（120）显示成 B 的（80）。
+    取页面里原样的 barsOf 定义，在合并前后、选择与推进时都与直接 Drill.window 一致。"""
+    page = (ROOT / "scripts/bar_drill_page.html").read_text("utf-8")
+    decl = next(s for s in page.split("\n") if s.startswith("const barsOf = "))
+    out = _node_page(f"""
+      const rawA = {{d:[1,2,3],o:[100,100,120],h:[101,101,121],l:[99,99,119],c:[100,100,120],v:[1,1,1]}};
+      const rawB = {{...rawA, o:[100,100,80], h:[101,101,81], l:[99,99,79], c:[100,100,80]}};
+      const q0 = {{cursor:1, max_cursor:1, actions:[], trades:[], marks:[], pos:null, pending:null}};
+      const a = {{...q0, seed:2, id:2, sym:'A', i0:1, left:2, right:1, mirror:false}};
+      const b = {{...q0, seed:3, id:2, sym:'B', i0:1, left:2, right:1, mirror:false}};
+      const POOL = {{series: {{A: rawA, B: rawB}}}};
+      const cache = {{}};
+      {decl}
+      barsOf(a);                                                 // 本页先缓存了 A（第 2 题）
+      const m = DrillSync.merge({{questions: [a]}}, {{questions: [b]}}, 'T');
+      const qb = m.questions.find(q => q.seed === 3), qa = m.questions.find(q => q.seed === 2);
+      const shown = [barsOf(qb)[2][4], barsOf(qa)[2][4]];
+      const st = JSON.parse(JSON.stringify(qb)); st.pending = {{type: 'long'}};
+      Drill.step(st, barsOf(qb));                                // 推进也用同一份缓存
+      return {{ids: m.questions.map(q => [q.seed, q.id]), shown, truth: [Drill.window(rawB, b)[2][4], Drill.window(rawA, a)[2][4]],
+              entry: st.pos.entry, entry_truth: Drill.window(rawB, b)[2][1]}};""")
+    assert out["ids"] == [[3, 2], [2, 3]]
+    assert out["shown"] == out["truth"] == [80, 120]
+    assert out["entry"] == out["entry_truth"] == 80
+
+
+def _node_page(js):
+    if not shutil.which("node"):
+        pytest.skip("没有 node")
+    code = (f"const Drill = require({json.dumps(str(ENGINE))});\nconst DrillSync = require({json.dumps(str(SYNC))});\n"
+            f"const out = (() => {{ {js} }})();\nconsole.log(JSON.stringify(out));")
+    r = subprocess.run(["node", "-e", code], capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+def test_merge_keeps_local_only_conflict_copies_and_is_idempotent():
+    out = _node_sync("""
+      const q = {seed: 1, id: 1, cursor: 5, max_cursor: 5, actions: [{a: 1}], trades: [], marks: []};
+      const copy = {stashed_at: 'T', seed: 1, question: {...q, actions: [{a: 2}]}};
+      const srvCopy = {stashed_at: 'S', seed: 1, question: {...q, actions: [{a: 9}]}};
+      const m1 = DrillSync.merge({questions: [q], conflict_copies: [copy]}, {questions: [q], conflict_copies: []}, 'T2');
+      const m2 = DrillSync.merge(m1, {questions: [q], conflict_copies: []}, 'T3');          // 再读一次（首次写入失败）
+      const m3 = DrillSync.merge({questions: [q], conflict_copies: [copy, srvCopy]}, {questions: [q], conflict_copies: [srvCopy]}, 'T4');
+      const fork = {...q, cursor: 6, max_cursor: 6, actions: [{a: 1}, {a: 3}]}, ahead = {...q, cursor: 6, max_cursor: 6, actions: [{a: 1}, {a: 4}]};
+      const f1 = DrillSync.merge({questions: [fork]}, {questions: [ahead]}, 'A');
+      const f2 = DrillSync.merge({questions: [fork], conflict_copies: f1.conflict_copies}, {questions: [ahead]}, 'B');   // 本页没采用合并结果又合一次
+      return {m1: [m1.conflict_copies.length, m1.changed], m2: [m2.conflict_copies.length, JSON.stringify(m2.conflict_copies) === JSON.stringify(m1.conflict_copies)],
+              m3: m3.conflict_copies.map(c => c.stashed_at), f: [f1.conflict_copies.length, f2.conflict_copies.length]};""")
+    assert out["m1"] == [1, True]                       # 本机 1 份、服务端 0 份 → 不减，且要写
+    assert out["m2"] == [1, True]                       # 重复合并幂等
+    assert out["m3"] == ["S", "T"]                      # 服务端已有的是前缀，本机独有的追加在后
+    assert out["f"] == [1, 1]                           # 同一份分叉不会因为重复合并存两次
+
+
+def test_fork_then_first_post_fails_then_remerge_saves_both_branches(tmp_path, monkeypatch):
+    """分叉 → 存档 → 第一次写文件失败 → 重新读取再合并 → 写成：两条动作分支都在（文件那份在题目里，本页那份在冲突副本里）。
+    走真实 sv.save（CAS + 只许追加），失败用一次性 OSError 模拟。"""
+    store = tmp_path / "bar_drill_v1.json"
+    a1, a2, b2 = {"type": "long", "as_of": 300}, {"type": "next", "as_of": 300}, {"type": "short", "as_of": 300}
+    base = _q(1, 300, actions=[a1])
+    sv.save(store, _rec(0, [base]), META)
+    sv.save(store, _rec(1, [{**base, "cursor": 301, "max_cursor": 301, "actions": [a1, a2]}]), META)   # 标签页甲写成第 2 版
+    tab = {"questions": [{**base, "cursor": 301, "max_cursor": 301, "actions": [a1, b2]}], "conflict_copies": []}   # 标签页乙
+    with pytest.raises(sv.Conflict):
+        sv.save(store, _rec(1, tab["questions"]), META)                   # 乙迟到 → 409
+    srv = sv.load(store)
+    m = _merge(tab, srv)
+    assert m["diverged"] == 1
+    tab = {"questions": m["questions"], "conflict_copies": m["conflict_copies"]}      # 页面采用合并结果（并写浏览器本地）
+    real = sv.write_atomic
+    def boom(path, body):
+        monkeypatch.setattr(sv, "write_atomic", real)
+        raise OSError("磁盘写入失败（模拟）")
+    monkeypatch.setattr(sv, "write_atomic", boom)
+    with pytest.raises(OSError):
+        sv.save(store, _rec(srv["revision"], tab["questions"], conflict_copies=tab["conflict_copies"]), META)
+    assert sv.load(store)["revision"] == 2 and not sv.load(store).get("conflict_copies")
+    srv = sv.load(store)                                                  # 再读一次、再合并
+    m = _merge(tab, srv)
+    assert m["changed"] and len(m["conflict_copies"]) == 1
+    sv.save(store, _rec(srv["revision"], m["questions"], conflict_copies=m["conflict_copies"]), META)
+    d = sv.load(store)
+    assert d["questions"][0]["actions"] == [a1, a2]
+    assert [c["question"]["actions"] for c in d["conflict_copies"]] == [[a1, b2]]
+    m2 = _merge({"questions": d["questions"], "conflict_copies": d["conflict_copies"]}, d)            # 写成后再读：没有新改动
+    assert not m2["changed"]
+
+
+# ---- Codex 054 B2：新题完整结构校验；读入与恢复同校验；旧题宽松分流 ----
+
+META_N = {**META, "series_n": {"GLD": 1000}}
+
+
+def _nq(seed, cursor=299, *, qid=1, **kw):
+    q = {"id": qid, "seed": seed, "sym": "GLD", "i0": 400, "mirror": False, "left": 300, "right": 150,
+         "cursor": cursor, "max_cursor": cursor, "pos": None, "pending": None, "trades": [], "marks": [], "actions": [],
+         "note": "", "done": False, "created_at": "2026-10-16T00:00:00Z", "version": "bar-drill-v1",
+         "engine": {"version": "bar-drill-engine-2", "sha256": "e" * 64}, "data_sha256": "d" * 64}
+    q.update(kw)
+    return q
+
+
+GOOD_TRADE = {"side": 1, "entry": 100.0, "entry_i": 300, "exit": 104.0, "exit_i": 320, "reason": "止盈", "exit_kind": "fill",
+              "stop0": 98.0, "stop0_late": False, "ret_pct": 4.0, "r": 2.0}
+
+
+@pytest.mark.parametrize("bad", [
+    {"sym": None}, {"sym": "XXX"}, {"i0": "broken"}, {"i0": 100}, {"i0": 900}, {"mirror": "false"}, {"cursor": -9},
+    {"cursor": 450, "max_cursor": 450}, {"max_cursor": 10}, {"left": 0}, {"done": "no"}, {"evil": 1}, {"engine": {"version": "x"}},
+    {"data_sha256": None}, {"pos": {"side": 2, "entry": 100, "entry_i": 300}}, {"pending": {"type": "buy"}},
+    {"trades": [{**GOOD_TRADE, "exit_i": 999}]}, {"trades": [{**GOOD_TRADE, "exit_kind": "magic"}]}, {"actions": [{"as_of": 3}]},
+    {"marks": [{"action": "add", "id": "m", "type": "HH", "i": 5000, "price": 1}]},
+])
+def test_bad_new_question_rejected_and_store_untouched(tmp_path, bad):
+    store = tmp_path / "bar_drill_v1.json"
+    sv.save(store, _rec(0, [_nq(1)]), META_N)
+    before = store.read_bytes()
+    with pytest.raises(ValueError):
+        sv.save(store, _rec(1, [_nq(1), _nq(2, qid=2, **bad)]), META_N)
+    assert store.read_bytes() == before
+
+
+def test_non_finite_numbers_and_duplicate_ids_rejected(tmp_path):
+    store = tmp_path / "bar_drill_v1.json"
+    ok = json.dumps(_rec(0, [_nq(1, trades=[GOOD_TRADE])]))
+    for raw in (ok.replace('"ret_pct": 4.0', '"ret_pct": NaN'), ok.replace('"ret_pct": 4.0', '"ret_pct": Infinity'),
+                ok.replace('"ret_pct": 4.0', '"ret_pct": 1e400')):
+        with pytest.raises(ValueError):
+            sv.save(store, sv.loads(raw), META_N)
+    with pytest.raises(ValueError):
+        sv.save(store, _rec(0, [_nq(1), _nq(2)]), META_N)                     # 题号重复
+    with pytest.raises(ValueError):
+        sv.save(store, _rec(0, [{**_q(1, 3), "seed": 5, "trades": [{"x": float("inf")}]}]), META_N)   # 旧题里的 inf 也拦
+    assert not store.exists()
+    full = _nq(1, cursor=320, max_cursor=330, trades=[GOOD_TRADE], pending={"type": "long", "stop": 95.0},
+               pos={"side": -1, "entry": 101.0, "entry_i": 321, "stop": 105.0, "stop0": 105.0, "target": None, "stop0_late": True, "stop0_set_i": 322},
+               actions=[{"type": "long", "as_of": 300, "as_of_bar": 0, "at": "t"}],
+               marks=[{"action": "add", "id": "m1", "type": "HH", "i": 310, "bar": 10, "price": 103.5, "as_of": 310, "at": "t"},
+                      {"action": "delete", "target": "m1", "as_of": 311, "at": "t"}],
+               reopened_from={"seed": 9, "id": 3, "cursor": 320})
+    assert sv.save(store, _rec(0, [full], cur=1, settings={"pool": "all"}), META_N)["revision"] == 1
+
+
+def test_legacy_question_keeps_unknown_fields(tmp_path):
+    """没有 engine 的旧版题按 legacy 宽松分流：不认识的字段原样保留，不删、不因缺新字段被拒。"""
+    store = tmp_path / "bar_drill_v1.json"
+    old = {**_q(7, 12), "some_old_field": {"k": [1, 2]}}
+    sv.save(store, _rec(0, [old, _nq(8, qid=2)]), META_N)
+    assert sv.load(store, META_N)["questions"][0]["some_old_field"] == {"k": [1, 2]}
+
+
+def test_load_and_recover_validate_without_quarantine(tmp_path):
+    store = tmp_path / "bar_drill_v1.json"
+    sv.save(store, _rec(0, [_nq(1)]), META_N)
+    d = json.loads(store.read_text("utf-8"))
+    d["questions"][0]["mirror"] = "false"
+    store.write_text(json.dumps(d), "utf-8")
+    before = store.read_bytes()
+    with pytest.raises(sv.InvalidStore):
+        sv.load(store, META_N)
+    with pytest.raises(sv.InvalidStore):
+        sv.save(store, _rec(1, [_nq(1)]), META_N)
+    assert store.read_bytes() == before and not list(tmp_path.glob("*.corrupt-*"))     # 不改名、不隔离
+    assert sv.check_store(store, META_N) == 1
+    bad_backup = tmp_path / "backup.json"
+    bad_backup.write_bytes(before)
+    store.unlink()
+    with pytest.raises(ValueError):
+        sv.recover_from(store, bad_backup, META_N)
+    assert not store.exists()
+
+
+CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+
+
+def test_page_legacy_unfinished_question_is_read_only_and_reopens(tmp_path):
+    """执行路径（无头 Chrome，file:// 只存浏览器）：旧引擎未完题点推进/下单/结束都不动它；另开的新题带当前引擎身份、
+    同一段 K 线、从已看到的位置空仓开始，且能用当前引擎推进。"""
+    if not CHROME.exists():
+        pytest.skip("没有 Chrome")
+    n = 20
+    c = [100 + i for i in range(n)]
+    pool = {"meta": {"etf": ["GLD"], "stock": [], "sha256": {"GLD": "d" * 64}},
+            "series": {"GLD": {"d": [20000103 + i for i in range(n)], "o": c, "h": [x + 1 for x in c], "l": [x - 1 for x in c], "c": c, "v": [1] * n}}}
+    html = bd.render(pool)
+    legacy = {"id": 1, "seed": 5, "sym": "GLD", "i0": 9, "mirror": False, "left": 5, "right": 5, "cursor": 6, "max_cursor": 7,
+              "pos": {"side": 1, "entry": 105, "entry_i": 5, "stop": None, "stop0": None, "target": None}, "pending": None,
+              "trades": [], "marks": [], "actions": [], "note": "", "done": False}
+    seed = f'<script>localStorage.setItem("bar_drill_v1", {json.dumps(json.dumps({"questions": [legacy], "cur": 1}))});</script>'
+    probe = """<script>
+      const out = {}; const q = Q(); const snap = JSON.stringify(q);
+      out.banner = !$("legacy").hidden; out.next_disabled = $("next").disabled;
+      advance(1); order("short"); endQ(); $("cancel").onclick();
+      out.untouched = JSON.stringify(DB.questions.find(x => x.seed === 5)) === snap;
+      $("reopen").onclick();
+      const nq = Q(); out.new = {id: nq.id, cur_engine: curEngine(nq), data: nq.data_sha256, sym: nq.sym, i0: nq.i0, cursor: nq.cursor,
+                                pos: nq.pos, from: nq.reopened_from, banner: !$("legacy").hidden};
+      advance(1); out.new_cursor_after = Q().cursor; out.n = DB.questions.length;
+      document.body.setAttribute("data-probe", JSON.stringify(out));
+    </script>"""
+    assert html.count("<script>") == 1 and html.count("</body></html>") == 1
+    html = html.replace("<script>", seed + "<script>", 1).replace("</body></html>", probe + "</body></html>")
+    f = tmp_path / "page.html"
+    f.write_text(html, "utf-8")
+    r = subprocess.run([str(CHROME), "--headless=new", "--disable-gpu", f"--user-data-dir={tmp_path / 'prof'}", "--dump-dom", f.as_uri()],
+                       capture_output=True, text=True, timeout=90)
+    import html as _h
+    import re
+    m = re.search(r'data-probe="([^"]*)"', r.stdout)
+    assert m, r.stdout[-500:] + r.stderr[-500:]
+    out = json.loads(_h.unescape(m.group(1)))
+    assert out["banner"] and out["next_disabled"] and out["untouched"]
+    nw = out["new"]
+    assert nw["id"] == 2 and nw["cur_engine"] and nw["data"] == "d" * 64 and (nw["sym"], nw["i0"]) == ("GLD", 9)
+    assert nw["cursor"] == 7 and nw["pos"] is None and nw["from"]["seed"] == 5 and not nw["banner"]
+    assert out["new_cursor_after"] == 8 and out["n"] == 2

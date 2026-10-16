@@ -36,6 +36,7 @@ textarea{width:100%;min-height:44px;background:transparent;color:var(--fg);borde
     <span class="grp"><span class="mut">筹码</span><select id="chip"><option value="off">不显示</option><option value="stack">K 线堆叠</option></select></span>
     <button id="latest">回到最新 ⇥</button></div>
   <div class="row"><span class="pos" id="posline"></span><span id="msg" class="warn"></span></div>
+  <div class="row" id="legacy" hidden><span class="warn" id="legacytxt"></span><button id="reopen">以当前引擎另开新题（同一段 K 线，从已看到的位置空仓接着做）</button></div>
   <details class="mut"><summary>怎么用</summary>
   <b>出题：</b>「新题目」随机挑一个品种和一段历史（2015 年及以前的日线），先给背景 K 线，再一根根往后放。按「镜像概率」把整段 K 线上下颠倒（涨变跌、跌变涨，波幅与形态不变），做完这题才揭晓品种、日期和有没有颠倒。价格按起点收盘 = 100 换算，日期隐去。颠倒用的是 P' = 10000/P：对数涨跌正好对调，但简单收益与 R 不对称（原始 100→110 的多单 +10%，镜像里对应的空单只有 +9.09%）。<br>
   <b>交易：</b>「做多 / 做空 / 平仓」在当前这根收盘后下单，<b>下一根开盘成交</b>；反方向开仓会先平掉原来的仓。「止损 / 止盈」按钮选中后在图上点价位（持仓或挂着开仓单时才能设）。止损止盈按之后每根的最高最低价判定；跳空越过按开盘价成交；同一根两个都碰到按止损算。1R = 开仓价到第一个止损的距离：<b>想让 R 算作事前风险，要在开仓单成交前就把止损挂上</b>；成交后才设第一个止损的，R 标「迟设」、单独统计。不计手续费与滑点。<br>
@@ -43,7 +44,7 @@ textarea{width:100%;min-height:44px;background:transparent;color:var(--fg);borde
   <b>看图：</b>在图上<b>按住左右拖动</b>看更早的 K 线，触控板左右滑也能平移；滚轮（或触控板上下滑）缩放显示的根数，「回到最新」或按 End 回到当前这根。拖动只能看已经出现的 K 线。<br>
   <b>标注：</b>HH/HL/LH/LL 自动贴最高价或最低价，支撑线/压力线按点的高度画水平线；「删除」点在标记附近。<br>
   <b>快捷键：</b>→ 或空格 下一根，Shift+→ 前进 5 根，B 做多，S 做空，X 平仓，← 往前拖 20 根，End 回到最新，Esc 取消点图模式。<br>
-  <b>保存：</b>每一步都自动保存。用 <code>python3 scripts/bar_drill_serve.py</code> 打开（http://127.0.0.1:8788/）时，还会自动写进私有文件 data/soul/drill/，换浏览器也不丢；直接双击打开的话只存在这个浏览器里。保存状态显示在顶部：<b>开了两个标签页</b>同时做时，晚到的那个会被拒绝（不会覆盖先存的进度），点「重新载入并合并」即可——同一题两边都往下做过的，保留文件里那份，本页那份原样存档。记录文件损坏时服务会把它隔离并暂停写入，按顶部提示在终端处理。服务重启后已开的页面要刷新。请不要翻看页面源码（后面的走势在里面）。</details>
+  <b>保存：</b>每一步都自动保存。用 <code>python3 scripts/bar_drill_serve.py</code> 打开（http://127.0.0.1:8788/）时，还会自动写进私有文件 data/soul/drill/，换浏览器也不丢；直接双击打开的话只存在这个浏览器里。保存状态显示在顶部：<b>开了两个标签页</b>同时做时，晚到的那个会被拒绝（不会覆盖先存的进度），点「重新载入并合并」即可——同一题两边都往下做过的，保留文件里那份，本页那份原样存档。记录文件损坏时服务会把它隔离并暂停写入，按顶部提示在终端处理。旧版撮合引擎或旧数据做的未完题只能查看，不能接着推进（当前引擎会按新口径撮合，等于改判旧题）；可点「以当前引擎另开新题」，同一段 K 线从已看到的位置空仓接着做，旧题原样保留。服务重启后已开的页面要刷新。请不要翻看页面源码（后面的走势在里面）。</details>
 </div>
 <div class="tip mut" id="tip">按住图表左右拖动可看历史；鼠标移到 K 线上看价格</div>
 <div id="chart"></div>
@@ -88,8 +89,9 @@ function syncStatus(){
   const b = $("remerge"); b.hidden = !(SERVER && (SYNC.conflict || SYNC.blocked));
   b.textContent = SYNC.stale ? "刷新页面" : SYNC.conflict ? "重新载入并合并" : "重新读取";
 }
+const persistLocal = () => { try { localStorage.setItem(KEY, JSON.stringify(DB)); SYNC.localErr = null; } catch (e) { SYNC.localErr = "写入失败：" + e.message; } };
 const save = () => { DB.updated_at = new Date().toISOString(); SYNC.chg++;
-  try { localStorage.setItem(KEY, JSON.stringify(DB)); SYNC.localErr = null; } catch (e) { SYNC.localErr = "写入失败：" + e.message; }
+  persistLocal();
   if (SERVER && !SYNC.blocked && !SYNC.conflict) { clearTimeout(saveT); saveT = setTimeout(push, 400); }
   syncStatus(); };
 const payload = () => ({version: "bar-drill-v1", base_revision: REV, page_engine_sha256: POOL.meta.engine_sha256, data_sha256: POOL.meta.sha256,
@@ -124,10 +126,17 @@ function adopt(srv){
   DB = {...DB, questions: m.questions, conflict_copies: m.conflict_copies};
   const c = DB.questions.find(q => q.seed === curSeed); DB.cur = c ? c.id : DB.questions.length ? DB.questions[DB.questions.length - 1].id : null;
   if (m.diverged) msg(`有 ${m.diverged} 题在别的标签页也做过、两边分叉：已采用本机文件里那份，本页那份原样存进 conflict_copies（导出记录里可见）`);
-  if (m.changed) SYNC.chg++; }
+  // 合并结果（含本页独有的冲突副本）先写进浏览器本地，再由调用方串行推给本机文件；本地写失败照常显示在顶部（Codex 054 B1）
+  for (const k in cache) delete cache[k];
+  if (m.changed) { SYNC.chg++; DB.updated_at = new Date().toISOString(); }
+  persistLocal(); }
+// K 线缓存按题目窗口身份认（DrillSync.windowKey），不按题号：合并会重排题号（Codex 054 B1）
 const cache = {};
 const Q = () => DB.questions.find(q => q.id === DB.cur);
-const barsOf = q => cache[q.id] || (cache[q.id] = Drill.window(POOL.series[q.sym], q));
+const barsOf = q => { const k = DrillSync.windowKey(q); return cache[k] || (cache[k] = Drill.window(POOL.series[q.sym], q)); };
+// 旧引擎或旧数据身份的未完题只读：不能用当前撮合器接着推进它（Codex 054 B2）；可从已看到的位置另开一道新题
+const curData = q => q.data_sha256 != null && q.data_sha256 === POOL.meta.sha256[q.sym];
+const frozen = q => !!q && !q.done && !(curEngine(q) && curData(q));
 let mode = null, viewEnd = null, viewN = 200, drag = null, msgT = null;
 const $ = id => document.getElementById(id);
 const fx = (v, k = 2) => v == null ? "—" : (+v).toFixed(k);
@@ -140,11 +149,22 @@ function newQuestion(){
   const seed = (crypto.getRandomValues(new Uint32Array(1))[0]) >>> 0;
   const p = Drill.pick(pool, seed, {left: +st.left, right: +st.right, mirrorProb: +st.mprob, syms: Object.keys(pool)});
   if (!p) { msg("品种池里没有足够长的数据"); return; }
-  const id = (DB.questions.reduce((m, q) => Math.max(m, q.id), 0)) + 1;
-  const q = {id, ...p, cursor: p.left - 1, max_cursor: p.left - 1, pos: null, pending: null, trades: [], marks: [], actions: [], note: "", done: false,
-             created_at: new Date().toISOString(), version: "bar-drill-v1",
-             engine: {version: Drill.VERSION, sha256: POOL.meta.engine_sha256}, data_sha256: POOL.meta.sha256[p.sym]};   // 绑定撮合引擎与输入数据；旧题没有这两项，原样保留、不重判
-  DB.questions.push(q); DB.cur = id; viewEnd = null; mode = null; save(); render();
+  const q = {id: nextId(), ...p, cursor: p.left - 1, max_cursor: p.left - 1, pos: null, pending: null, trades: [], marks: [], actions: [], note: "", done: false,
+             created_at: new Date().toISOString(), version: "bar-drill-v1", ...identity(p.sym)};   // 绑定撮合引擎与输入数据；旧题没有这两项，原样保留、不重判
+  DB.questions.push(q); DB.cur = q.id; viewEnd = null; mode = null; save(); render();
+}
+const nextId = () => DB.questions.reduce((m, q) => Math.max(m, q.id), 0) + 1;
+const identity = sym => ({engine: {version: Drill.VERSION, sha256: POOL.meta.engine_sha256}, data_sha256: POOL.meta.sha256[sym]});
+// 旧题另开：同一段 K 线、当前引擎与数据身份、新种子与新题号，从旧题已经看到的位置空仓开始（看过的 K 线不再重做）；旧题原样保留
+function reopen(){
+  const old = Q(); if (!frozen(old)) return;
+  const L = old.left + old.right, start = Math.min(Math.max(old.max_cursor ?? old.cursor, old.left - 1), L - 1);
+  if (start >= L - 1) { msg("旧题已经看到最后一根，没有可以接着做的 K 线了"); return; }
+  let seed; do { seed = crypto.getRandomValues(new Uint32Array(1))[0] >>> 0; } while (DB.questions.some(q => q.seed === seed));
+  const q = {id: nextId(), seed, sym: old.sym, i0: old.i0, mirror: !!old.mirror, left: old.left, right: old.right, cursor: start, max_cursor: start,
+             pos: null, pending: null, trades: [], marks: [], actions: [], note: "", done: false, created_at: new Date().toISOString(), version: "bar-drill-v1",
+             ...identity(old.sym), reopened_from: {seed: old.seed, id: old.id, cursor: start}};
+  DB.questions.push(q); DB.cur = q.id; viewEnd = null; mode = null; save(); render(); msg(`已另开第 ${q.id} 题：同一段 K 线，从第 ${start - q.left + 1} 根接着做，空仓开始`);
 }
 function geom(q, bars){
   const end = viewEnd == null ? q.cursor : Math.min(viewEnd, q.cursor), n = Math.max(30, Math.min(viewN, end + 1));
@@ -214,7 +234,7 @@ function bind(q, bars){
     viewN = Math.max(40, Math.min(q.cursor + 1, Math.round(viewN * (ev.deltaY > 0 ? 1.12 : 1 / 1.12)))); draw(); }, {passive: false});
 }
 function click(ev, q, bars){
-  if (!mode) return;
+  if (!mode || frozen(q)) return;
   const p = locate(ev, q, bars);
   if (mode === "止损" || mode === "止盈") {
     const px = +p.price.toFixed(3), err = Drill.setLevel(q, bars, mode === "止损" ? "stop" : "target", px);
@@ -232,14 +252,14 @@ function click(ev, q, bars){
   save(); render();
 }
 function order(type){
-  const q = Q(); if (!q || q.done) return;
+  const q = Q(); if (!q || q.done || frozen(q)) return;
   if (type === "exit" && !q.pos) { msg("没有持仓"); return; }
   if ((type === "long" && q.pos && q.pos.side > 0) || (type === "short" && q.pos && q.pos.side < 0)) { msg("已经持有同方向仓位"); return; }
   const keep = q.pending && q.pending.type === type ? q.pending : null;
   q.pending = keep || {type}; act(q, type); save(); render();
 }
 function advance(k){
-  const q = Q(); if (!q || q.done) return; const bars = barsOf(q); let fills = [];
+  const q = Q(); if (!q || q.done || frozen(q)) return; const bars = barsOf(q); let fills = [];
   for (let n = 0; n < k && q.cursor < bars.length - 1; n++) fills = fills.concat(Drill.step(q, bars));
   if (fills.length) act(q, "fills", {fills: fills.map(f => f.reason ? {close: f.reason, px: f.exit, kind: f.exit_kind} : f)});
   if (q.cursor >= bars.length - 1) { act(q, "finish"); const t = Drill.finish(q, bars, false); if (t) { fills.push(t); act(q, "fills", {fills: [{close: t.reason, px: t.exit, kind: t.exit_kind}]}); } }
@@ -247,7 +267,7 @@ function advance(k){
   const closed = fills.filter(f => f.reason); if (closed.length) msg(closed.map(fillText).join("；"));
 }
 const fillText = f => `${f.reason} @ ${f.exit.toFixed(2)}（${f.ret_pct >= 0 ? "+" : ""}${f.ret_pct.toFixed(2)}%${f.r != null ? "，" + f.r.toFixed(2) + "R" + (f.stop0_late === false ? "" : "·迟设") : ""}${f.exit_kind === "admin" ? "，行政平仓不计入统计" : ""}）`;
-function endQ(){ const q = Q(); if (!q || q.done) return;
+function endQ(){ const q = Q(); if (!q || q.done || frozen(q)) return;
   act(q, "finish_early"); const t = Drill.finish(q, barsOf(q), true);
   if (t) act(q, "fills", {fills: [{close: t.reason, px: t.exit, kind: t.exit_kind}]});
   viewEnd = null; save(); render(); if (t) msg(fillText(t)); }
@@ -294,7 +314,10 @@ function render(){
   const bars = q ? barsOf(q) : null;
   $("posline").textContent = posLine(q, bars);
   document.querySelectorAll("[data-m]").forEach(b => b.classList.toggle("on", b.dataset.m === mode));
-  ["next", "next5", "endq", "long", "short", "flat", "cancel"].forEach(id => $(id).disabled = !q || q.done);
+  ["next", "next5", "endq", "long", "short", "flat", "cancel"].forEach(id => $(id).disabled = !q || q.done || frozen(q));
+  document.querySelectorAll("[data-m]").forEach(b => b.disabled = frozen(q));
+  $("legacy").hidden = !frozen(q);
+  if (frozen(q)) $("legacytxt").textContent = `这题是${curEngine(q) ? "旧版数据" : "旧版撮合引擎"}做的（${q.engine ? q.engine.version : "没有记录引擎版本"}），只能查看，不能用当前引擎接着推进；成交按当时口径原样保留。`;
   $("trades").innerHTML = q ? tradesTable(q.trades) : "（无）";
   $("note").value = q ? q.note || "" : "";
   if (q && q.done) { const raw = POOL.series[q.sym], a = q.i0 - q.left + 1, b = q.i0 + q.right, s = Drill.stats(q.trades), d = i => String(raw.d[i]).replace(/(\d{4})(\d\d)(\d\d)/, "$1-$2-$3");
@@ -309,10 +332,10 @@ MARKS.forEach(([n]) => { const b = document.createElement("button"); b.dataset.m
 document.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { mode = mode === b.dataset.m ? null : b.dataset.m; render(); });
 ["pool", "mprob", "left", "right", "chip"].forEach(k => { const el = $(k); if (DB.settings[k]) el.value = DB.settings[k]; el.onchange = () => { DB.settings[k] = el.value; save(); render(); }; });
 $("qsel").onchange = () => { DB.cur = +$("qsel").value; viewEnd = null; mode = null; save(); render(); };
-$("newq").onclick = newQuestion;
+$("newq").onclick = newQuestion; $("reopen").onclick = reopen;
 $("next").onclick = () => advance(1); $("next5").onclick = () => advance(5); $("endq").onclick = endQ;
 $("long").onclick = () => order("long"); $("short").onclick = () => order("short"); $("flat").onclick = () => order("exit");
-$("cancel").onclick = () => { const q = Q(); if (q && q.pending) { q.pending = null; act(q, "cancel"); save(); render(); } };
+$("cancel").onclick = () => { const q = Q(); if (q && q.pending && !frozen(q)) { q.pending = null; act(q, "cancel"); save(); render(); } };
 $("latest").onclick = () => { viewEnd = null; draw(); };
 $("note").addEventListener("input", e => { const q = Q(); if (q) { q.note = e.target.value; save(); } });
 document.addEventListener("keydown", e => { if (["TEXTAREA", "SELECT", "INPUT"].includes(e.target.tagName)) return;

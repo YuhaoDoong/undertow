@@ -1,0 +1,36 @@
+{
+ "schema": 1,
+ "command": "expiry",
+ "argv": [
+  "expiry",
+  "silver"
+ ],
+ "pid": 10070,
+ "started_at": "2026-10-16T13:49:12.981841+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/SLV/2026-10-16",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SLV/2026-10-16.json.gz",
+   "sha256": "6e1c24cae72b4924459a82b652ac91974cf0b3c58e86cdc88ea86d12112ddd81",
+   "captured_at": 1792146094.15607,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SLV/2026-10-15",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SLV/2026-10-15.json.gz",
+   "sha256": "d98b3d19d892fc123025a7ce31bb194d5dd6a4825fd2e9c7b1ee198703ffaee4",
+   "captured_at": 1792057968.3265522,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-16T13:49:13.098565+00:00",
+ "rc": 0,
+ "git_head": "e68927e9259b535020ae17c0fff0d2b24c3ee9f7"
+}

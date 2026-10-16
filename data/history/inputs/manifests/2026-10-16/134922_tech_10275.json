@@ -1,0 +1,40 @@
+{
+ "schema": 1,
+ "command": "tech",
+ "argv": [
+  "tech",
+  "silver"
+ ],
+ "pid": 10275,
+ "started_at": "2026-10-16T13:49:21.818247+00:00",
+ "items": [
+  {
+   "kind": "cache",
+   "key": "yahoo_SI_F_2y",
+   "status": "fresh_fetch",
+   "size": 56939,
+   "sha256": "3f678f8a0d2d21c35687e1647b9b909124596e2af31d9a31aa3f5c85a9d733a9",
+   "fetched_at": "2026-10-16T13:49:21.966015+00:00",
+   "age_s": 0.0,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 0
+  },
+  {
+   "kind": "cache",
+   "key": "yahoo_SI_F_5d",
+   "status": "cache_hit",
+   "size": 1849,
+   "sha256": "17c57c98f4ca201fa275a98fe7570c072860d43a532ab12b3701e77cac0921e8",
+   "fetched_at": "2026-10-16T13:48:57.432435+00:00",
+   "age_s": 24.5,
+   "ttl_s": 21600,
+   "stored": true,
+   "seq": 1
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-16T13:49:21.984196+00:00",
+ "rc": 0,
+ "git_head": "e68927e9259b535020ae17c0fff0d2b24c3ee9f7"
+}

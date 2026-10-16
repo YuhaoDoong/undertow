@@ -11,6 +11,7 @@
 | `positioning.py` | 净头寸 / 周变化分解 / 历史分位 / z-score / 大户集中度。<br>Net positioning, weekly-change decomposition, percentiles, concentration. |
 | `signals.py` | 把 `PositioningAnalysis` 翻译成规则化带方向提示：拥挤反指、聪明钱背离、互换商压力（阈值集中在文件顶部，回测后可调）。<br>Rule-based COT signals; thresholds tunable at file top. |
 | `price_structure.py` | 道氏结构（HH/HL）状态机：收盘之字形（m·ATR）、下降/上涨结构保持到突破、fresh 结构、A 型与 H2 episode、交易模拟（跳空/双触及/开盘越止损）、收盘屏障。纯计算，探索阶段（ps-explore-v0.3，未冻结；编排见 `scripts/ps_explore.py`）。<br>Dow-structure state machine (exploratory, unfrozen). |
+| `directional_zones.py` | 按来向区分的压力/支撑区间（外部作者二读法的可检验版本）：下跌途中第一段横盘 = 向上时压力（R 区），起涨大阳线实体中段 = 向下时支撑（S 区）；启用、首次触及、首次通过结果、±2ATR 安慰剂、去重。纯计算，探索口径 dz-explore-v1（未经 Codex 审，只跑 ≤2015；编排见 `scripts/dz_explore.py`）。<br>Direction-aware supply/demand zones (exploratory). |
 
 ## Options microstructure / 期权微观结构
 

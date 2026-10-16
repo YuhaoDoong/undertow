@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from scripts.dz_explore import load, sign_p, wilson_lo  # noqa: E402
+from scripts.dz_explore import load, pb_z, wilson_lo  # noqa: E402
 from undertow.analyze import price_structure as ps  # noqa: E402
 from undertow.analyze import wedge as wg  # noqa: E402
 
@@ -59,8 +59,9 @@ def summarize(rows: list) -> dict:
     br = [r for r in rows if r["direction"] in ("up", "down")]
     up = [r for r in br if r["direction"] == "up"]
     dn = [r for r in br if r["direction"] == "down"]
-    diffs = [(r["direction"] == "up") - r["placebo_up"] for r in br if r.get("placebo_up") is not None]
-    pos, neg = sum(x > 0 for x in diffs), sum(x < 0 for x in diffs)
+    pr = [((r["direction"] == "up") * 1, r["placebo_up"]) for r in br if r.get("placebo_up") is not None]
+    diffs = [a - b for a, b in pr]
+    z, zp = pb_z([a for a, _ in pr], [b for _, b in pr])
 
     def rate(rs, key):
         c = [r for r in rs if r.get("complete")]
@@ -73,8 +74,8 @@ def summarize(rows: list) -> dict:
         "up": len(up), "down": len(dn), "up_share": None if not br else round(len(up) / len(br), 4),
         "up_ci": None if not br else [round(wilson_lo(len(up), len(br)), 4), round(wilson_hi(len(up), len(br)), 4)],
         "placebo_up_mean": None if not pl else round(sum(pl) / len(pl), 4),
-        "paired_mean": None if not diffs else round(sum(diffs) / len(diffs), 4), "sign_pos": pos, "sign_neg": neg,
-        "sign_p": None if sign_p(pos, neg) is None else round(sign_p(pos, neg), 5),
+        "paired_mean": None if not diffs else round(sum(diffs) / len(diffs), 4),
+        "pb_z": None if z is None else round(z, 2), "pb_p": None if zp is None else round(zp, 5),
         "fail5_up": rate(up, "fail5"), "fail5_down": rate(dn, "fail5"),
         "throwback_up": rate(up, "throwback"), "pullback_down": rate(dn, "throwback"),
         "target_up": rate(up, "target_hit"), "target_down": rate(dn, "target_hit"),
@@ -93,15 +94,16 @@ def report_md(res: dict) -> str:
         for mode in ("descriptive", "causal"):
             L.append(f"## {var} · {mode}")
             L.append("")
-            L.append("| 组 | 识别 | 未突破 | 认出前已破 | 上 | 下 | 向上占比 [95%] | 安慰剂向上 | 配对差 | 符号 p | 失败率 上/下 | 回抽 上/下 | 达标 上/下 | 突破位置中位 |")
-            L.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+            L.append("| 组 | 识别 | 未突破 | 认出前已破 | 上 | 下 | 向上占比 [95%] | 安慰剂向上 | 配对差 | z（对安慰剂） | p | 失败率 上/下 | 回抽 上/下 | 达标 上/下 | 突破位置中位 |")
+            L.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
             for g, s in res["results"][var][mode]["groups"].items():
                 ci = "" if not s["up_ci"] else f" [{pct(s['up_ci'][0])}–{pct(s['up_ci'][1])}]"
                 L.append(f"| {g} | {s['detected']} | {s['no_break']} | {s['broke_before_known']} | {s['up']} | {s['down']} | {pct(s['up_share'])}{ci} | "
-                         f"{pct(s['placebo_up_mean'])} | {s['paired_mean']} | {s['sign_p']} | {pct(s['fail5_up'])}/{pct(s['fail5_down'])} | "
+                         f"{pct(s['placebo_up_mean'])} | {s['paired_mean']} | {s['pb_z']} | {s['pb_p']} | {pct(s['fail5_up'])}/{pct(s['fail5_down'])} | "
                          f"{pct(s['throwback_up'])}/{pct(s['pullback_down'])} | {pct(s['target_up'])}/{pct(s['target_down'])} | {s['break_pos_median']} |")
             L.append("")
-    L.append("安慰剂 = 同一对轨道与起点价，换本品种其它日期的收盘路径（ATR% 缩放）各 50 条；配对差 = 真实向上(0/1) − 安慰剂向上占比。跨品种同日不独立，合并数只作描述。")
+    L.append("安慰剂 = 同一对轨道与起点价，换本品种其它日期的收盘路径（ATR% 缩放）各 50 条；配对差 = 真实向上(0/1) − 安慰剂向上占比。"
+             "z = Σ(真实 − 安慰剂概率)/√Σp(1−p)，以安慰剂概率为零假设（run1 的符号检验用错，见研究决策日志）。跨品种同日不独立，合并的 z 偏乐观，只作描述。")
     return "\n".join(L) + "\n"
 
 

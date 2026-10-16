@@ -120,3 +120,12 @@ def test_zones_prefix_invariant():
         part = dz.find_zones(bc, ac, ps.zigzag(bc, ac))
         key = lambda zs: [(z.kind, round(z.lo, 9), round(z.hi, 9), z.active) for z in zs]  # noqa: E731
         assert key(part) == key([z for z in full if z.active < cut])
+
+
+def test_pb_z_null_is_placebo_not_half():
+    from scripts.dz_explore import pb_z
+    # 真实成功率正好等于安慰剂概率 0.7 → z≈0；旧符号检验会把 70% 当成显著高于 50%
+    z, p = pb_z([1] * 70 + [0] * 30, [0.7] * 100)
+    assert abs(z) < 1e-9 and p > 0.99
+    z, p = pb_z([1] * 90 + [0] * 10, [0.7] * 100)
+    assert z > 4 and p < 1e-4

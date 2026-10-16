@@ -7,7 +7,8 @@
 按设定概率把整段 K 线上下颠倒（P' = 100²/P，与 ps_trigger_v2.mirror 同口径），做完才揭晓品种、日期与是否颠倒；
 可下单（下一根开盘成交）、设止损止盈（盘中判定、跳空按开盘），统计胜率与 R，并分原始/镜像、多/空对比。
 数据：ps-explore-v0.3 已存的 Yahoo 日线（≤2015-12-31，逐个与首次记录的 sha256 核对），2016 年起不进练习，留给研究确认集。
-纯逻辑在 scripts/bar_drill_engine.js（页面与 node 单测共用）；页面模板 scripts/bar_drill_page.html。
+纯逻辑在 scripts/bar_drill_engine.js（撮合，页面与 node 单测共用，文件 sha256 即引擎版本）与 scripts/bar_drill_sync.js
+（与本机文件同步时的合并规则）；页面模板 scripts/bar_drill_page.html；本机自动保存服务 scripts/bar_drill_serve.py。
 """
 from __future__ import annotations
 
@@ -62,10 +63,15 @@ def build() -> dict:
 
 
 def render(pool: dict) -> str:
+    """嵌入撮合引擎、同步合并逻辑与数据。撮合引擎文件的 sha256 写进 pool["meta"]["engine_sha256"]（就地，唯一来源），
+    页面据此给每道新题记引擎版本，本机服务据此拒绝旧页面的写入。"""
     page = (ROOT / "scripts/bar_drill_page.html").read_text("utf-8")
-    engine = (ROOT / "scripts/bar_drill_engine.js").read_text("utf-8")
-    assert page.count("__ENGINE__") == 1 and page.count("__DATA__") == 1
-    return page.replace("__ENGINE__", engine).replace("__DATA__", json.dumps(pool, ensure_ascii=False, separators=(",", ":")))
+    engine_raw = (ROOT / "scripts/bar_drill_engine.js").read_bytes()
+    sync = (ROOT / "scripts/bar_drill_sync.js").read_text("utf-8")
+    pool["meta"]["engine_sha256"] = hashlib.sha256(engine_raw).hexdigest()
+    assert page.count("__ENGINE__") == 1 and page.count("__SYNC__") == 1 and page.count("__DATA__") == 1
+    return (page.replace("__ENGINE__", engine_raw.decode("utf-8")).replace("__SYNC__", sync)
+            .replace("__DATA__", json.dumps(pool, ensure_ascii=False, separators=(",", ":"))))
 
 
 def main() -> int:
@@ -76,7 +82,7 @@ def main() -> int:
     out.parent.mkdir(parents=True, exist_ok=True)
     html = render(build())
     out.write_text(html, "utf-8")
-    print(f"{out.relative_to(ROOT)}（{len(html) / 1e6:.1f} MB）")
+    print(f"{out.relative_to(ROOT) if out.is_relative_to(ROOT) else out}（{len(html) / 1e6:.1f} MB）")
     return 0
 
 

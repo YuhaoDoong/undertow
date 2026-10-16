@@ -27,7 +27,7 @@ textarea{width:100%;min-height:44px;background:transparent;color:var(--fg);borde
     <span class="mut">镜像概率</span><select id="mprob"><option value="0.5">50%</option><option value="0">不镜像</option><option value="1">全部镜像</option></select>
     <span class="mut">背景</span><select id="left"><option value="150">150 根</option><option value="300" selected>300 根</option><option value="500">500 根</option></select>
     <span class="mut">往后</span><select id="right"><option value="100">100 根</option><option value="150" selected>150 根</option><option value="250">250 根</option></select>
-    <button id="exp">导出记录</button><span id="saved" class="mut"></span></div>
+    <button id="exp">导出记录</button><span id="saved" class="mut"></span><button id="remerge" hidden>重新载入并合并</button></div>
   <div class="row">
     <span class="grp"><button id="next" class="big">下一根 →</button><button id="next5">+5 根</button><button id="endq">结束本题</button></span>
     <span class="grp"><span class="mut">交易</span><button id="long">做多</button><button id="short">做空</button><button id="flat">平仓</button>
@@ -42,7 +42,7 @@ textarea{width:100%;min-height:44px;background:transparent;color:var(--fg);borde
   <b>看图：</b>在图上<b>按住左右拖动</b>看更早的 K 线，触控板左右滑也能平移；滚轮（或触控板上下滑）缩放显示的根数，「回到最新」或按 End 回到当前这根。拖动只能看已经出现的 K 线。<br>
   <b>标注：</b>HH/HL/LH/LL 自动贴最高价或最低价，支撑线/压力线按点的高度画水平线；「删除」点在标记附近。<br>
   <b>快捷键：</b>→ 或空格 下一根，Shift+→ 前进 5 根，B 做多，S 做空，X 平仓，← 往前拖 20 根，End 回到最新，Esc 取消点图模式。<br>
-  <b>保存：</b>每一步都自动保存。用 <code>python3 scripts/bar_drill_serve.py</code> 打开（http://127.0.0.1:8788/）时，还会自动写进私有文件 data/soul/drill/，换浏览器也不丢；直接双击打开的话只存在这个浏览器里。请不要翻看页面源码（后面的走势在里面）。</details>
+  <b>保存：</b>每一步都自动保存。用 <code>python3 scripts/bar_drill_serve.py</code> 打开（http://127.0.0.1:8788/）时，还会自动写进私有文件 data/soul/drill/，换浏览器也不丢；直接双击打开的话只存在这个浏览器里。保存状态显示在顶部：<b>开了两个标签页</b>同时做时，晚到的那个会被拒绝（不会覆盖先存的进度），点「重新载入并合并」即可——同一题两边都往下做过的，保留文件里那份，本页那份原样存档。记录文件损坏时服务会把它隔离并暂停写入，按顶部提示在终端处理。服务重启后已开的页面要刷新。请不要翻看页面源码（后面的走势在里面）。</details>
 </div>
 <div class="tip mut" id="tip">按住图表左右拖动可看历史；鼠标移到 K 线上看价格</div>
 <div id="chart"></div>
@@ -53,31 +53,77 @@ textarea{width:100%;min-height:44px;background:transparent;color:var(--fg);borde
 </div>
 <script>
 __ENGINE__
+__SYNC__
 const POOL = __DATA__;
 const KEY = "bar_drill_v1";
 const ETF = POOL.meta.etf, STOCK = POOL.meta.stock;
 const MARKS = [["HH","hi","var(--hi)"],["HL","lo","var(--lo)"],["LH","hi","var(--hi)"],["LL","lo","var(--lo)"],["支撑线","line","var(--sup)"],["压力线","line","var(--res)"],["删除","del",""]];
-let DB = {questions: [], cur: null, settings: {pool: "all", mprob: "0.5", left: "300", right: "150"}};
-try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && s.questions) DB = s; } catch (e) {}
-// 自动保存：每次操作都写浏览器本地；经 scripts/bar_drill_serve.py 打开时，另外自动写进私有文件 data/soul/drill/。
+const DEFAULT_SETTINGS = {pool: "all", mprob: "0.5", left: "300", right: "150"};
+let DB = {questions: [], conflict_copies: [], cur: null, settings: {...DEFAULT_SETTINGS}};
+// 保存状态全部如实显示在顶部（Codex 053 B）：浏览器本地失败、服务端冲突、恢复未决、尚未落文件，都不许被一句「已保存」盖住。
+const SYNC = {inflight: false, again: false, conflict: null, blocked: null, stale: false, err: null, localErr: null, lastOk: null, chg: 0, saved: 0};
+try { const s = JSON.parse(localStorage.getItem(KEY) || "null");
+  if (s && Array.isArray(s.questions)) DB = {questions: s.questions, conflict_copies: s.conflict_copies || [], cur: s.cur ?? null, settings: {...DEFAULT_SETTINGS, ...(s.settings || {})}, updated_at: s.updated_at};
+} catch (e) { SYNC.localErr = "读取失败：" + e.message; }
+// 自动保存：每次操作都写浏览器本地；经 scripts/bar_drill_serve.py 打开时，另外串行写进私有文件 data/soul/drill/：
+// 同一时刻只有一个在途请求，期间的新改动等它回来再合并成一次提交；提交带 base_revision，服务端版本变了就 409，不覆盖。
 const SERVER = location.protocol.startsWith("http");
-let saveT = null;
-function saveStatus(t, bad){ const el = $("saved"); if (el) { el.textContent = t; el.className = bad ? "warn" : "mut"; } }
-const save = () => { DB.updated_at = new Date().toISOString(); try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {}
-  if (SERVER) { clearTimeout(saveT); saveT = setTimeout(push, 400); } };
+const TOKEN = (document.querySelector('meta[name="drill-token"]') || {}).content || "";
+let REV = null, saveT = null;
+const unsaved = () => SERVER && (saveT != null || SYNC.inflight || SYNC.saved !== SYNC.chg);
+function syncStatus(){
+  const el = $("saved"); if (!el) return;
+  const parts = []; let bad = false;
+  if (SYNC.localErr) { parts.push(`浏览器本地保存失败（${SYNC.localErr}）`); bad = true; }
+  if (!SERVER) { parts.push(SYNC.localErr ? "也没有连本机文件：关闭或刷新页面会丢掉这些操作，请先「导出记录」" : "只存在这个浏览器里（用 bar_drill_serve.py 打开可自动存文件）"); bad = true; }
+  else if (SYNC.blocked) { parts.push(SYNC.blocked); bad = true; }
+  else if (SYNC.conflict) { parts.push(`没有保存：${SYNC.conflict}`); bad = true; }
+  else if (SYNC.err) { parts.push(`自动保存失败：${SYNC.err}。` + (SYNC.localErr ? "浏览器里也没存上，请先「导出记录」" : "记录暂存在浏览器里，可先「导出记录」")); bad = true; }
+  else if (unsaved()) parts.push("有改动正在写进本机文件…");
+  else if (SYNC.lastOk) parts.push(`已保存到本机文件（第 ${REV} 版，${SYNC.lastOk}，${DB.questions.length} 题）`);
+  else parts.push("已连上本机文件，操作会自动保存");
+  if (SERVER && SYNC.localErr && (SYNC.blocked || SYNC.conflict || SYNC.err)) parts.push("浏览器里和本机文件都没存上：关闭或刷新页面会丢掉本页的操作，请先「导出记录」");
+  el.textContent = parts.join("；"); el.className = bad ? "warn" : "mut";
+  const b = $("remerge"); b.hidden = !(SERVER && (SYNC.conflict || SYNC.blocked));
+  b.textContent = SYNC.stale ? "刷新页面" : SYNC.conflict ? "重新载入并合并" : "重新读取";
+}
+const save = () => { DB.updated_at = new Date().toISOString(); SYNC.chg++;
+  try { localStorage.setItem(KEY, JSON.stringify(DB)); SYNC.localErr = null; } catch (e) { SYNC.localErr = "写入失败：" + e.message; }
+  if (SERVER && !SYNC.blocked && !SYNC.conflict) { clearTimeout(saveT); saveT = setTimeout(push, 400); }
+  syncStatus(); };
+const payload = () => ({version: "bar-drill-v1", base_revision: REV, page_engine_sha256: POOL.meta.engine_sha256, data_sha256: POOL.meta.sha256,
+  questions: DB.questions, conflict_copies: DB.conflict_copies || [], cur: DB.cur, settings: DB.settings, updated_at: DB.updated_at});
 async function push(){
-  try { const r = await fetch("records", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({...DB, version: "bar-drill-v1"})});
-    const j = await r.json(); if (!r.ok) throw new Error(j.error || r.status);
-    saveStatus(`已自动保存到本机文件 ${new Date().toLocaleTimeString()}（${j.questions} 题）`, false);
-  } catch (e) { saveStatus(`自动保存失败：${e.message}。记录还在浏览器里，可先「导出记录」`, true); } }
-function merge(srv){                                   // 服务端为准；本机多出来的题（按种子认）接在后面重新编号
-  if (!srv || !Array.isArray(srv.questions)) return;
-  const has = (list, q) => list.some(x => x.seed === q.seed);
-  const localNewer = DB.updated_at && srv.updated_at && DB.updated_at > srv.updated_at && srv.questions.every(q => has(DB.questions, q));
-  const base = localNewer ? DB : srv, extra = DB.questions.filter(q => !has(base.questions, q));
-  let id = base.questions.reduce((m, q) => Math.max(m, q.id), 0); extra.forEach(q => { q.id = ++id; });
-  DB = {...base, questions: [...base.questions, ...extra], settings: DB.settings || base.settings};
-  if (!DB.questions.some(q => q.id === DB.cur)) DB.cur = DB.questions.length ? DB.questions[DB.questions.length - 1].id : null; }
+  saveT = null;
+  if (!SERVER || SYNC.blocked || SYNC.conflict || REV == null) return syncStatus();
+  if (SYNC.inflight) { SYNC.again = true; return; }
+  SYNC.inflight = true; SYNC.again = false; const sent = SYNC.chg;
+  try {
+    const r = await fetch("records", {method: "POST", headers: {"Content-Type": "application/json", "X-Drill-Token": TOKEN}, body: JSON.stringify(payload())});
+    let j = {}; try { j = await r.json(); } catch (e) {}
+    if (r.status === 409 && j.recovery_pending) SYNC.blocked = j.error;
+    else if (r.status === 409 && j.stale_page) { SYNC.blocked = j.error; SYNC.stale = true; }
+    else if (r.status === 409) SYNC.conflict = (j.error || "记录冲突") + "（本页的操作还在，合并后会再保存）";
+    else if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+    else { REV = j.revision; SYNC.err = null; SYNC.saved = sent; SYNC.lastOk = new Date().toLocaleTimeString(); }
+  } catch (e) { SYNC.err = e.message; }
+  finally { SYNC.inflight = false; if (SYNC.again && !SYNC.conflict && !SYNC.blocked) push(); syncStatus(); }
+}
+// 读本机文件并与本页合并（规则见 bar_drill_sync.js）。读不到就停写：不知道服务端版本时盲写可能覆盖。
+async function reload(){
+  try { const r = await fetch("records", {headers: {"X-Drill-Token": TOKEN}, cache: "no-store"}); let j = {}; try { j = await r.json(); } catch (e) {}
+    if (r.status === 404) { REV = 0; adopt({questions: [], conflict_copies: []}); }
+    else if (r.ok) { adopt(j); REV = Number.isInteger(j.revision) ? j.revision : 0; }
+    else if (r.status === 409 && j.recovery_pending) { SYNC.blocked = j.error; return false; }
+    else throw new Error(j.error || ("HTTP " + r.status));
+    SYNC.blocked = null; SYNC.conflict = null; SYNC.err = null; return true;
+  } catch (e) { SYNC.blocked = `读取本机记录失败：${e.message}。为免覆盖，自动保存已暂停；排除后点「重新读取」`; return false; } }
+function adopt(srv){
+  const curSeed = (Q() || {}).seed, m = DrillSync.merge(DB, srv, new Date().toISOString());
+  DB = {...DB, questions: m.questions, conflict_copies: m.conflict_copies};
+  const c = DB.questions.find(q => q.seed === curSeed); DB.cur = c ? c.id : DB.questions.length ? DB.questions[DB.questions.length - 1].id : null;
+  if (m.diverged) msg(`有 ${m.diverged} 题在别的标签页也做过、两边分叉：已采用本机文件里那份，本页那份原样存进 conflict_copies（导出记录里可见）`);
+  if (m.changed) SYNC.chg++; }
 const cache = {};
 const Q = () => DB.questions.find(q => q.id === DB.cur);
 const barsOf = q => cache[q.id] || (cache[q.id] = Drill.window(POOL.series[q.sym], q));
@@ -95,7 +141,8 @@ function newQuestion(){
   if (!p) { msg("品种池里没有足够长的数据"); return; }
   const id = (DB.questions.reduce((m, q) => Math.max(m, q.id), 0)) + 1;
   const q = {id, ...p, cursor: p.left - 1, max_cursor: p.left - 1, pos: null, pending: null, trades: [], marks: [], actions: [], note: "", done: false,
-             created_at: new Date().toISOString(), version: "bar-drill-v1"};
+             created_at: new Date().toISOString(), version: "bar-drill-v1",
+             engine: {version: Drill.VERSION, sha256: POOL.meta.engine_sha256}, data_sha256: POOL.meta.sha256[p.sym]};   // 绑定撮合引擎与输入数据；旧题没有这两项，原样保留、不重判
   DB.questions.push(q); DB.cur = id; viewEnd = null; mode = null; save(); render();
 }
 function geom(q, bars){
@@ -257,13 +304,15 @@ document.addEventListener("keydown", e => { if (["TEXTAREA", "SELECT", "INPUT"].
   else if (e.key === "End") { viewEnd = null; draw(); }
   else if (e.key === "Escape") { mode = null; render(); }
   else if (e.key === "b" || e.key === "B") order("long"); else if (e.key === "s" || e.key === "S") order("short"); else if (e.key === "x" || e.key === "X") order("exit"); });
-$("exp").onclick = () => { const out = {version: "bar-drill-v1", data_sha256: POOL.meta.sha256, exported_at: new Date().toISOString(), ...DB};
+$("exp").onclick = () => { const out = {...DB, version: "bar-drill-v1", data_sha256: POOL.meta.sha256, page_engine_sha256: POOL.meta.engine_sha256, revision: REV, exported_at: new Date().toISOString()};
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], {type: "application/json"})); a.download = "bar_drill_v1.json"; a.click(); };
+$("remerge").onclick = async () => { if (SYNC.stale) { location.reload(); return; }
+  if (await reload()) { render(); if (SYNC.saved !== SYNC.chg) push(); } syncStatus(); };
+window.addEventListener("beforeunload", e => { if (unsaved() || SYNC.conflict || SYNC.err || (SYNC.localErr && !SERVER)) { e.preventDefault(); e.returnValue = ""; } });
 (async () => {
-  if (SERVER) { try { const r = await fetch("records"); const j = await r.json();
-      if (r.ok) merge(j); else if (r.status !== 404) throw new Error(j.error || r.status);
-      saveStatus("已连上本机文件，操作会自动保存", false);
-    } catch (e) { saveStatus(`读取本机记录失败：${e.message}`, true); } }
-  else saveStatus("只存在这个浏览器里（用 bar_drill_serve.py 打开可自动存文件）", true);
-  render(); })();
+  if (SERVER) {
+    if (!TOKEN) SYNC.blocked = "页面里没有写入凭据（不是从 bar_drill_serve.py 打开的？），不会写本机文件";
+    else if (await reload() && SYNC.saved !== SYNC.chg) push();
+  }
+  render(); syncStatus(); })();
 </script></body></html>

@@ -3,6 +3,7 @@
 // 成交约定：决定在当前这根收盘后做出，下一根开盘执行；止损/止盈按下一根起的盘中价判定，跳空越过按开盘价成交；
 // 同一根既碰止损又碰止盈，无法知道先后，按止损算（保守）。不计手续费与滑点。
 const Drill = (() => {
+  const VERSION = "bar-drill-engine-1";   // 撮合口径变了就改这里；页面另记本文件 sha256，旧题按当时的引擎保留、不重判
   function mulberry32(a) {
     return () => {
       a |= 0; a = (a + 0x6D2B79F5) | 0;
@@ -114,6 +115,6 @@ const Drill = (() => {
             n_r: rs.length, avg_r: rs.length ? sum(rs) / rs.length : null, sum_r: sum(rs)};
   }
 
-  return {mulberry32, pick, window: window_, step, setLevel, finish, stats, closeTrade};
+  return {VERSION, mulberry32, pick, window: window_, step, setLevel, finish, stats, closeTrade};
 })();
 if (typeof module !== "undefined") module.exports = Drill;

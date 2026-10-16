@@ -24,10 +24,20 @@ def test_series_match_inputs_and_stop_at_2015():
     assert s["d"][-1] <= 20151231 and s["d"] == sorted(s["d"])
 
 
-def test_render_fills_placeholders():
-    pool = {"meta": {"etf": ["GLD"], "stock": [], "sha256": {}}, "series": {"GLD": {"d": [20000103], "o": [1], "h": [1], "l": [1], "c": [1], "v": [1]}}}
+def _tiny_pool():
+    return {"meta": {"etf": ["GLD"], "stock": [], "sha256": {"GLD": "d" * 64}},
+            "series": {"GLD": {"d": [20000103], "o": [1], "h": [1], "l": [1], "c": [1], "v": [1]}}}
+
+
+def test_render_fills_placeholders_and_binds_engine_sha():
+    import hashlib
+    pool = _tiny_pool()
     html = bd.render(pool)
-    assert "__ENGINE__" not in html and "__DATA__" not in html and "const Drill" in html
+    assert "__ENGINE__" not in html and "__SYNC__" not in html and "__DATA__" not in html
+    assert "const Drill" in html and "const DrillSync" in html
+    assert pool["meta"]["engine_sha256"] == hashlib.sha256(ENGINE.read_bytes()).hexdigest()
+    assert pool["meta"]["engine_sha256"] in html                     # 页面据此给新题记引擎版本
+    assert html.count("<head>") == 1                                 # 服务在其后注入写入凭据
 
 
 def _node(js: str):
@@ -112,43 +122,250 @@ def test_mirror_matches_ps_mirror_and_pick_is_reproducible():
         assert all(abs(x - y) < 1e-6 * y for x, y in zip(a[1:5], b[1:5]))
 
 
-def test_serve_roundtrip_guard_and_quarantine(tmp_path):
-    import threading
-    import urllib.error
-    import urllib.request
-    from http.server import ThreadingHTTPServer
-    from scripts import bar_drill_serve as sv
-    store = tmp_path / "drill" / "bar_drill_v1.json"
-    srv = ThreadingHTTPServer(("127.0.0.1", 0), sv.make_handler(b"<html>page</html>", store))
-    threading.Thread(target=srv.serve_forever, daemon=True).start()
-    base = f"http://127.0.0.1:{srv.server_address[1]}"
 
-    def call(method, path, obj=None):
-        req = urllib.request.Request(base + path, method=method, data=None if obj is None else json.dumps(obj).encode(),
-                                     headers={"Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req) as r:
-                return r.status, r.read()
-        except urllib.error.HTTPError as e:
-            return e.code, e.read()
-    try:
-        assert call("GET", "/")[1] == b"<html>page</html>"
-        assert call("GET", "/records")[0] == 404
-        rec = {"version": "bar-drill-v1", "questions": [{"id": 1, "seed": 11}, {"id": 2, "seed": 22}]}
-        code, body = call("POST", "/records", rec)
-        assert code == 200 and json.loads(body)["questions"] == 2
-        assert json.loads(call("GET", "/records")[1])["questions"] == rec["questions"]
-        # 空浏览器提交会丢题 → 拒绝，文件不变
-        code, body = call("POST", "/records", {"version": "bar-drill-v1", "questions": []})
-        assert code == 409 and json.loads(store.read_text("utf-8"))["questions"] == rec["questions"]
-        # 加题可以；当天第一次覆盖前留了备份
-        rec["questions"].append({"id": 3, "seed": 33})
-        assert call("POST", "/records", rec)[0] == 200
-        assert list((store.parent / "history").glob("bar_drill_v1_*.json"))
-        assert call("POST", "/records", {"version": "x", "questions": []})[0] == 400
-        # 损坏 → 隔离保留，报冲突，不当成空记录
-        store.write_text("{坏", "utf-8")
-        assert call("GET", "/records")[0] == 409
-        assert not store.exists() and list(store.parent.glob("bar_drill_v1.json.corrupt-*"))
-    finally:
-        srv.shutdown()
+# ---------------------------------------------------------------- 本机服务（Codex 053 B）：全部用临时目录，不碰 data/soul/drill/
+import http.client  # noqa: E402
+import threading  # noqa: E402
+from http.server import ThreadingHTTPServer  # noqa: E402
+
+from scripts import bar_drill_serve as sv  # noqa: E402
+
+SYNC = ROOT / "scripts/bar_drill_sync.js"
+TOKEN = "tok_test-123"
+META = {"engine_sha256": "e" * 64, "data_sha256": {"GLD": "d" * 64}}
+PAGE = b"<!doctype html><html><head><title>t</title></head><body>page</body></html>"
+
+
+@pytest.fixture()
+def drill(tmp_path):
+    store = tmp_path / "drill" / "bar_drill_v1.json"
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), sv.make_handler(PAGE, store, token=TOKEN, page_meta=META))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    yield srv.server_address[1], store
+    srv.shutdown()
+    srv.server_close()
+
+
+def _req(port, method, path, obj=None, *, host=None, origin="same", ctype="application/json", token=TOKEN, raw=None, extra=None):
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+    c.putrequest(method, path, skip_host=True, skip_accept_encoding=True)
+    h = host or f"127.0.0.1:{port}"
+    c.putheader("Host", h)
+    if origin == "same":
+        origin = "http://" + h if method == "POST" else None
+    if origin:
+        c.putheader("Origin", origin)
+    if token:
+        c.putheader("X-Drill-Token", token)
+    for k, v in (extra or {}).items():
+        c.putheader(k, v)
+    body = raw if raw is not None else (None if obj is None else json.dumps(obj).encode())
+    if body is not None:
+        if ctype:
+            c.putheader("Content-Type", ctype)
+        c.putheader("Content-Length", str(len(body)))
+    c.endheaders(body)
+    r = c.getresponse()
+    b = r.read()
+    c.close()
+    return r.status, (json.loads(b) if (r.getheader("Content-Type") or "").startswith("application/json") else b)
+
+
+def _rec(base, questions, **kw):
+    return {"version": "bar-drill-v1", "base_revision": base, "page_engine_sha256": META["engine_sha256"],
+            "data_sha256": META["data_sha256"], "questions": questions, **kw}
+
+
+def _q(seed, cursor, *, qid=1, trades=(), actions=None, done=False):
+    acts = actions if actions is not None else [{"type": "next", "as_of": k} for k in range(cursor)]
+    return {"id": qid, "seed": seed, "sym": "GLD", "i0": 400, "mirror": False, "left": 300, "right": 150,
+            "cursor": cursor, "max_cursor": cursor, "trades": list(trades), "actions": acts, "marks": [], "done": done, "note": ""}
+
+
+TRADE = {"side": 1, "entry": 100, "entry_i": 3, "exit": 104, "exit_i": 20, "reason": "止盈", "stop0": 98, "ret_pct": 4.0, "r": 2.0}
+
+
+def test_serve_roundtrip_guard_and_quarantine(drill):
+    port, store = drill
+    code, body = _req(port, "GET", "/")
+    assert code == 200 and f'<meta name="drill-token" content="{TOKEN}">'.encode() in body and b"page" in body
+    code, body = _req(port, "GET", "/records")
+    assert code == 404 and body["revision"] == 0
+    qs = [_q(11, 3), _q(22, 5, qid=2)]
+    code, body = _req(port, "POST", "/records", _rec(0, qs))
+    assert code == 200 and body["questions"] == 2 and body["revision"] == 1
+    code, got = _req(port, "GET", "/records")
+    assert got["questions"] == qs and got["revision"] == 1 and "base_revision" not in got
+    # 空浏览器提交会丢题 → 拒绝，文件不变
+    before = store.read_bytes()
+    code, body = _req(port, "POST", "/records", _rec(1, []))
+    assert code == 409 and store.read_bytes() == before
+    # 加题可以；当天第一次覆盖前留了备份
+    assert _req(port, "POST", "/records", _rec(1, qs + [_q(33, 0, qid=3)]))[0] == 200
+    assert list((store.parent / "history").glob("bar_drill_v1_*.json"))
+    assert _req(port, "POST", "/records", {**_rec(2, []), "version": "x"})[0] == 400
+    # 损坏 → 隔离保留 + 恢复未决，报冲突，不当成空记录
+    store.write_text("{坏", "utf-8")
+    code, body = _req(port, "GET", "/records")
+    assert code == 409 and body["recovery_pending"] is True and "--recovery-ack" in body["error"]
+    assert not store.exists() and list(store.parent.glob("bar_drill_v1.json.corrupt-*"))
+    # 原版漏洞：隔离后原路径空了，下一次空提交被当成首次记录。现在明确阻断，且不建文件
+    for _ in range(2):
+        code, body = _req(port, "POST", "/records", _rec(0, []))
+        assert code == 409 and body["recovery_pending"] is True and not store.exists()
+        assert _req(port, "GET", "/records")[0] == 409
+    # 用户明确确认后才放行；隔离件原样保留，确认留痕
+    assert "已确认" in sv.recovery_ack(store)
+    assert _req(port, "POST", "/records", _rec(0, []))[0] == 200
+    assert list(store.parent.glob("bar_drill_v1.json.corrupt-*")) and (store.parent / "recovery_log.jsonl").exists()
+
+
+def test_same_seed_stale_snapshot_cannot_roll_back_progress(drill):
+    """Codex 053 复现：同 seed 已存 cursor30 + 1 笔成交，旧 cursor3 + 空成交的快照不得覆盖。"""
+    port, store = drill
+    old_snap = _q(11, 3)
+    assert _req(port, "POST", "/records", _rec(0, [old_snap]))[0] == 200            # 第 1 版：cursor 3
+    new = _q(11, 30, trades=[TRADE])
+    assert _req(port, "POST", "/records", _rec(1, [new]))[0] == 200                 # 第 2 版：cursor 30，1 笔成交
+    saved = store.read_bytes()
+    # ① 迟到的旧标签页（基于第 1 版）→ 版本冲突
+    code, body = _req(port, "POST", "/records", _rec(1, [old_snap]))
+    assert code == 409 and body["conflict"] is True and body["revision"] == 2 and store.read_bytes() == saved
+    # ② 即便版本号对上，进度/成交/动作倒退也拒绝
+    code, body = _req(port, "POST", "/records", _rec(2, [old_snap]))
+    assert code == 409 and any("cursor" in x for x in body["regress"]) and any("trades" in x for x in body["regress"])
+    assert store.read_bytes() == saved
+    # ③ 已结束不能改回未结束；成交被改写（不是追加）也拒绝
+    assert _req(port, "POST", "/records", _rec(2, [{**new, "done": True}]))[0] == 200
+    assert _req(port, "POST", "/records", _rec(3, [new]))[0] == 409
+    assert _req(port, "POST", "/records", _rec(3, [{**new, "done": True, "trades": [{**TRADE, "exit": 999}]}]))[0] == 409
+    assert _req(port, "POST", "/records", _rec(3, [{**new, "done": True, "sym": "SLV"}]))[0] == 409   # 题目身份不能改
+    assert json.loads(store.read_text("utf-8"))["questions"][0]["trades"] == [TRADE]
+
+
+def test_concurrent_writes_one_wins_no_tmp_left(drill):
+    port, store = drill
+    assert _req(port, "POST", "/records", _rec(0, [_q(1, 0)]))[0] == 200
+    codes = []
+    def go(k):
+        codes.append(_req(port, "POST", "/records", _rec(1, [_q(1, 0), _q(100 + k, 0, qid=2)]))[0])
+    ts = [threading.Thread(target=go, args=(k,)) for k in range(12)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert sorted(codes) == [200] + [409] * 11                       # 同一个 base 只有一个能写成
+    d = json.loads(store.read_text("utf-8"))
+    assert d["revision"] == 2 and len(d["questions"]) == 2
+    assert not list(store.parent.glob("*.tmp"))                        # 唯一临时文件，没有残留
+
+
+def _merge(local, server):
+    return _node_sync(f"return DrillSync.merge({json.dumps(local)}, {json.dumps(server)}, 'T');")
+
+
+def _node_sync(js):
+    if not shutil.which("node"):
+        pytest.skip("没有 node")
+    code = f"const DrillSync = require({json.dumps(str(SYNC))});\nconst out = (() => {{ {js} }})();\nconsole.log(JSON.stringify(out));"
+    r = subprocess.run(["node", "-e", code], capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+def test_two_tabs_conflict_then_merge_keeps_every_action(drill):
+    """双标签页：后到的被 409；合并后两边的动作都在；同题分叉时文件那份保留、本页那份原样存档。"""
+    port, store = drill
+    a1, a2, b2 = {"type": "long", "as_of": 300}, {"type": "next", "as_of": 300}, {"type": "short", "as_of": 300}
+    qa = _q(1, 300, actions=[a1])
+    assert _req(port, "POST", "/records", _rec(0, [qa]))[0] == 200                         # 两个标签页都基于第 1 版
+    tab_b = [qa, _q(2, 299, qid=2, actions=[])]
+    assert _req(port, "POST", "/records", _rec(1, tab_b))[0] == 200                       # B 先写成第 2 版
+    tab_a = [{**qa, "cursor": 301, "max_cursor": 301, "actions": [a1, a2]}]
+    assert _req(port, "POST", "/records", _rec(1, tab_a))[0] == 409                       # A 迟到 → 拒绝
+    srv = _req(port, "GET", "/records")[1]
+    m = _merge({"questions": tab_a}, srv)
+    assert m["diverged"] == 0 and m["changed"] and [q["seed"] for q in m["questions"]] == [1, 2]
+    assert m["questions"][0]["actions"] == [a1, a2]                                        # A 的新动作保住
+    assert _req(port, "POST", "/records", _rec(srv["revision"], m["questions"], conflict_copies=m["conflict_copies"]))[0] == 200
+    # B 仍停在 [a1]，又往下做了 b2：与文件里的 [a1, a2] 分叉
+    srv = _req(port, "GET", "/records")[1]
+    tab_b2 = [{**qa, "cursor": 301, "max_cursor": 301, "actions": [a1, b2]}, tab_b[1]]
+    m = _merge({"questions": tab_b2}, srv)
+    assert m["diverged"] == 1 and m["questions"][0]["actions"] == [a1, a2]
+    assert m["conflict_copies"][0]["question"]["actions"] == [a1, b2]
+    assert _req(port, "POST", "/records", _rec(srv["revision"], m["questions"], conflict_copies=m["conflict_copies"]))[0] == 200
+    d = json.loads(store.read_text("utf-8"))
+    assert d["questions"][0]["actions"] == [a1, a2] and d["conflict_copies"][0]["question"]["actions"] == [a1, b2]
+    # 冲突副本只许追加
+    assert _req(port, "POST", "/records", _rec(d["revision"], d["questions"], conflict_copies=[]))[0] == 409
+
+
+def test_merge_relations():
+    out = _node_sync("""
+      const base = {seed: 1, id: 1, cursor: 5, max_cursor: 5, actions: [{a: 1}], trades: [], marks: []};
+      const ahead = {...base, cursor: 6, max_cursor: 6, actions: [{a: 1}, {a: 2}]};
+      const fork = {...base, cursor: 6, max_cursor: 6, actions: [{a: 1}, {a: 3}]};
+      return [DrillSync.relation(ahead, base), DrillSync.relation(base, ahead), DrillSync.relation(fork, ahead),
+              DrillSync.relation(base, base), DrillSync.relation({...base, done: false}, {...base, done: true}),
+              DrillSync.merge({questions: [{...base, id: 7, seed: 9}]}, {questions: [base]}, 'T').questions.map(q => [q.seed, q.id])];""")
+    assert out[:5] == ["local", "server", "diverged", "local", "server"]
+    assert out[5] == [[1, 1], [9, 2]]                                    # 本机独有的题接在后面、重新编号
+
+
+def test_foreign_or_malformed_requests_rejected(drill, monkeypatch):
+    """127.0.0.1 不是鉴权：非本机 Host、非同源、缺凭据、错误内容类型、坏 JSON/结构、旧页面都拒绝，且什么都不写。"""
+    port, store = drill
+    ok = _rec(0, [_q(1, 0)])
+    assert _req(port, "GET", "/", host="evil.example")[0] == 403
+    assert _req(port, "GET", "/records", host="evil.example:8788")[0] == 403
+    assert _req(port, "POST", "/records", ok, host="evil.example:8788")[0] == 403          # DNS 重绑定
+    assert _req(port, "POST", "/records", ok, origin="http://evil.example")[0] == 403
+    assert _req(port, "POST", "/records", ok, origin=None)[0] == 403                        # 写入必须带同源 Origin
+    assert _req(port, "POST", "/records", ok, origin=f"http://localhost:{port}")[0] == 403  # 与 Host 不同源
+    assert _req(port, "GET", "/records", origin="http://evil.example")[0] == 403
+    assert _req(port, "POST", "/records", ok, extra={"Sec-Fetch-Site": "cross-site"})[0] == 403
+    assert _req(port, "POST", "/records", ok, token=None)[0] == 403
+    assert _req(port, "POST", "/records", ok, token="wrong")[0] == 403
+    assert _req(port, "GET", "/records", token=None)[0] == 403
+    assert _req(port, "POST", "/records", ok, ctype="text/plain")[0] == 415                 # 免预检的简单请求
+    assert _req(port, "POST", "/records", ok, ctype=None)[0] == 415
+    assert _req(port, "POST", "/records", raw=b"{not json")[0] == 400
+    assert _req(port, "POST", "/records", raw="[1]".encode())[0] == 400
+    assert _req(port, "POST", "/records", {**ok, "evil": 1})[0] == 400
+    assert _req(port, "POST", "/records", {k: v for k, v in ok.items() if k != "base_revision"})[0] == 400
+    assert _req(port, "POST", "/records", _rec(0, [{**_q(1, 0), "seed": "1"}]))[0] == 400
+    assert _req(port, "POST", "/records", _rec(0, [_q(1, 0), _q(1, 0, qid=2)]))[0] == 400   # 种子重复
+    assert _req(port, "POST", "/records", _rec(0, [{**_q(1, 0), "actions": {}}]))[0] == 400
+    code, body = _req(port, "POST", "/records", {**ok, "page_engine_sha256": "0" * 64})
+    assert code == 409 and body["stale_page"] is True                                      # 旧引擎页面不得写
+    assert _req(port, "POST", "/records", {**ok, "data_sha256": {"GLD": "0" * 64}})[0] == 409
+    monkeypatch.setattr(sv, "MAX_BODY", 100)
+    assert _req(port, "POST", "/records", _rec(0, [_q(1, 50)]))[0] == 413
+    assert not store.exists()
+    monkeypatch.undo()
+    code, body = _req(port, "POST", "/records", ok, host=f"localhost:{port}")            # 合法本机流程（localhost 名）
+    assert code == 200 and body["revision"] == 1
+
+
+def test_recover_from_backup_never_overwrites(tmp_path):
+    store = tmp_path / "bar_drill_v1.json"
+    sv.save(store, _rec(0, [_q(1, 4)]), META)
+    backup = tmp_path / "backup.json"
+    backup.write_bytes(store.read_bytes())
+    store.write_text("坏", "utf-8")
+    with pytest.raises(sv.RecoveryPending):
+        sv.load(store)
+    with pytest.raises(sv.RecoveryPending):
+        sv.save(store, _rec(0, []), META)
+    st = sv.recovery_status(store)
+    assert st["pending"] and st["quarantined"] and not st["store_exists"]
+    assert "恢复 1 题" in sv.recover_from(store, backup)
+    d = sv.load(store)
+    assert d["questions"][0]["cursor"] == 4 and d["revision"] == 2
+    with pytest.raises(ValueError):
+        sv.recover_from(store, backup)                                  # 原路径已有文件 → 不覆盖
+    assert sv.save(store, _rec(2, [_q(1, 5)]), META)["revision"] == 3
+    assert "什么也没做" in sv.recovery_ack(store)
+
+
+def test_real_page_template_accepts_token_injection():
+    sv.make_handler(bd.render(_tiny_pool()).encode("utf-8"), Path("/nonexistent/x.json"), token=TOKEN, page_meta=META)

@@ -130,13 +130,9 @@ def summarize(rows: list) -> dict:
         b = sum(r["outcome"] == "broken" for r in ev)
         pl_all = [r["placebo_success"] for r in ev if r["placebo_success"] is not None]
         diffs = [(r["outcome"] == "reversed") - r["placebo_success"] for r in ev if r["placebo_success"] is not None]
-        pos = sum(d > 0 for d in diffs)
-        neg = sum(d < 0 for d in diffs)
         t = None
         if len(diffs) > 2 and st.pstdev(diffs) > 0:
             t = st.mean(diffs) / (st.stdev(diffs) / math.sqrt(len(diffs)))
-        pairs = [((r["outcome"] == "reversed") * 1, r["placebo_success"]) for r in ev if r["placebo_success"] is not None]
-        z, zp = pb_z([a for a, _ in pairs], [b for _, b in pairs])
         rets = [r["ret10_atr"] for r in ev if r["ret10_atr"] is not None]
         prets = [x for r in ev for x in r["placebo_ret10"] if x is not None]
         reg = {}
@@ -148,9 +144,9 @@ def summarize(rows: list) -> dict:
             "rate": None if n == 0 else round(k / n, 4), "wilson_lo": None if n == 0 else round(wilson_lo(k, n), 4),
             "placebo_rate_mean": None if not pl_all else round(st.mean(pl_all), 4),
             "paired_n": len(diffs), "paired_mean": None if not diffs else round(st.mean(diffs), 4),
-            "paired_t": None if t is None else round(t, 3), "sign_pos": pos, "sign_neg": neg,
-            "sign_p": None if sign_p(pos, neg) is None else round(sign_p(pos, neg), 5),
-            "pb_z": None if z is None else round(z, 3), "pb_p": None if zp is None else round(zp, 5),
+            "paired_t": None if t is None else round(t, 3),
+            # sign_p 与 plug-in z 在本研究均无效（Codex 053，见 run1/run2 的 STATUS.md）：不再输出，免得被当成有效 p 消费
+            "inference": "none（配对差/t 只作描述；对照与推断待重新设计）",
             "ret10_mean": None if not rets else round(st.mean(rets), 4),
             "placebo_ret10_mean": None if not prets else round(st.mean(prets), 4),
             "regime": reg,
@@ -164,7 +160,7 @@ def report_md(res: dict) -> str:
         key = "main" if x is None else f"rev_x={x}"
         L.append(f"## {'主口径 掉头门槛 1.5·ATR' if x is None else '敏感性 掉头门槛 ' + str(x) + '·ATR'}")
         L.append("")
-        L.append("| 品种 | 类 | 事件 | 掉头 | 突破 | 都没有 | 掉头率 | Wilson 下界 | 安慰剂掉头率 | 配对差 | t | z（对安慰剂） | p | 10日位移(ATR) 真/假 | 上行/下行 均线 掉头 |")
+        L.append("| 品种 | 类 | 事件 | 掉头 | 突破 | 都没有 | 掉头率 | Wilson 下界 | 安慰剂掉头率 | 配对差 | t（描述） | 配对 n | 10日位移(ATR) 真/假 | 上行/下行 均线 掉头 |")
         L.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
         for sym in (*PRIMARY, *REPLICA):
             s = res["results"][key][sym]["summary"]
@@ -172,10 +168,10 @@ def report_md(res: dict) -> str:
                 v = s[kind]
                 rg = v["regime"]
                 L.append(f"| {sym}{'（重复核对）' if sym in REPLICA else ''} | {kind} | {v['n']} | {v['reversed']} | {v['broken']} | {v['none']} | "
-                         f"{v['rate']} | {v['wilson_lo']} | {v['placebo_rate_mean']} | {v['paired_mean']} | {v['paired_t']} | {v['pb_z']} | {v['pb_p']} | "
+                         f"{v['rate']} | {v['wilson_lo']} | {v['placebo_rate_mean']} | {v['paired_mean']} | {v['paired_t']} | {v['paired_n']} | "
                          f"{v['ret10_mean']} / {v['placebo_ret10_mean']} | {rg['up']['reversed']}/{rg['up']['n']} · {rg['down']['reversed']}/{rg['down']['n']} |")
         L.append("")
-    L.append(f"主检验 6 个（GC=F、SI=F、USO × R、S），Bonferroni α = {ALPHA:.4f}。R = 向上时压力（下跌途中第一段横盘），S = 向下时支撑（起涨大阳线实体中段）。")
+    L.append(f"6 格（GC=F、SI=F、USO × R、S）只作描述，不做显著性判断（见 STATUS.md）。R = 向上时压力（下跌途中第一段横盘），S = 向下时支撑（起涨大阳线实体中段）。")
     L.append("安慰剂 = 同宽、同时刻启用、同来向、平移 ±2·ATR 的假区间。配对差 = 真实成功(0/1) − 其安慰剂平均成功率。")
     return "\n".join(L) + "\n"
 

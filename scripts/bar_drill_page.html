@@ -1,0 +1,245 @@
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>逐根回测练习</title>
+<style>
+:root{--bg:#fff;--fg:#1d1d1f;--mut:#6e6e73;--up:#2a9d4b;--dn:#d1495b;--hi:#1f6feb;--lo:#e36209;--act:#0e8a7e;--stop:#d1495b;--tg:#2a9d4b;
+  --line:#d0d0d5;--sel:#fde68a;--fut:rgba(128,128,128,.07);--chip:#4b6bfb;--sup:#2a9d4b;--res:#d1495b;--warn:#b45309;--card:#f6f6f8}
+@media (prefers-color-scheme:dark){:root{--bg:#161618;--fg:#f2f2f2;--mut:#a0a0a6;--line:#3a3a3e;--sel:#5b4b12;--fut:rgba(255,255,255,.04);--card:#202024;--warn:#f59e0b}}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,"PingFang SC",sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:0 16px 40px}
+.bar{position:sticky;top:0;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--line);z-index:5}
+.row{display:flex;flex-wrap:wrap;gap:6px 10px;margin:6px 0;align-items:center}
+.grp{display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding-right:8px;border-right:1px solid var(--line)}
+button{padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:var(--fg);cursor:pointer}
+button.on{background:var(--sel)} button.big{font-weight:600} button:disabled{opacity:.4;cursor:default}
+select{padding:4px;border-radius:8px;background:transparent;color:var(--fg);border:1px solid var(--line)}
+#chart{touch-action:pan-y;user-select:none;-webkit-user-select:none}
+svg{width:100%;height:auto;display:block;cursor:grab} svg.drag{cursor:grabbing} svg.pick{cursor:crosshair}
+.mut{color:var(--mut)} .tip{font-variant-numeric:tabular-nums;min-height:20px} .warn{color:var(--warn)}
+.card{background:var(--card);border-radius:10px;padding:10px 12px;margin:10px 0}
+table{border-collapse:collapse;font-variant-numeric:tabular-nums;font-size:13px} td,th{padding:3px 10px;border-bottom:1px solid var(--line);text-align:right} th:first-child,td:first-child{text-align:left}
+textarea{width:100%;min-height:44px;background:transparent;color:var(--fg);border:1px solid var(--line);border-radius:6px;box-sizing:border-box}
+.pos{font-variant-numeric:tabular-nums;font-weight:600}
+</style></head><body><div class="wrap">
+<div class="bar">
+  <div class="row"><b>逐根回测练习</b>
+    <select id="qsel"></select><button id="newq" class="big">新题目</button>
+    <span class="mut">品种池</span><select id="pool"><option value="all">全部</option><option value="etf">ETF + 期货</option><option value="stock">个股</option></select>
+    <span class="mut">镜像概率</span><select id="mprob"><option value="0.5">50%</option><option value="0">不镜像</option><option value="1">全部镜像</option></select>
+    <span class="mut">背景</span><select id="left"><option value="150">150 根</option><option value="300" selected>300 根</option><option value="500">500 根</option></select>
+    <span class="mut">往后</span><select id="right"><option value="100">100 根</option><option value="150" selected>150 根</option><option value="250">250 根</option></select>
+    <button id="exp">导出记录</button></div>
+  <div class="row">
+    <span class="grp"><button id="next" class="big">下一根 →</button><button id="next5">+5 根</button><button id="endq">结束本题</button></span>
+    <span class="grp"><span class="mut">交易</span><button id="long">做多</button><button id="short">做空</button><button id="flat">平仓</button>
+      <button data-m="止损">止损</button><button data-m="止盈">止盈</button><button id="cancel">撤开盘单</button></span>
+    <span class="grp" id="marks"><span class="mut">标注</span></span>
+    <span class="grp"><span class="mut">筹码</span><select id="chip"><option value="off">不显示</option><option value="stack">K 线堆叠</option></select></span>
+    <button id="latest">回到最新 ⇥</button></div>
+  <div class="row"><span class="pos" id="posline"></span><span id="msg" class="warn"></span></div>
+  <details class="mut"><summary>怎么用</summary>
+  <b>出题：</b>「新题目」随机挑一个品种和一段历史（2015 年及以前的日线），先给背景 K 线，再一根根往后放。按「镜像概率」把整段 K 线上下颠倒（涨变跌、跌变涨，波幅与形态不变），做完这题才揭晓品种、日期和有没有颠倒。价格按起点收盘 = 100 换算，日期隐去。<br>
+  <b>交易：</b>「做多 / 做空 / 平仓」在当前这根收盘后下单，<b>下一根开盘成交</b>；反方向开仓会先平掉原来的仓。「止损 / 止盈」按钮选中后在图上点价位（持仓或挂着开仓单时才能设）。止损止盈按之后每根的最高最低价判定；跳空越过按开盘价成交；同一根两个都碰到按止损算。1R = 开仓价到第一次设的止损的距离。不计手续费与滑点。<br>
+  <b>看图：</b>在图上<b>按住左右拖动</b>看更早的 K 线，触控板左右滑也能平移；滚轮（或触控板上下滑）缩放显示的根数，「回到最新」或按 End 回到当前这根。拖动只能看已经出现的 K 线。<br>
+  <b>标注：</b>HH/HL/LH/LL 自动贴最高价或最低价，支撑线/压力线按点的高度画水平线；「删除」点在标记附近。<br>
+  <b>快捷键：</b>→ 或空格 下一根，Shift+→ 前进 5 根，B 做多，S 做空，X 平仓，← 往前拖 20 根，End 回到最新，Esc 取消点图模式。<br>
+  记录存在本机浏览器里；「导出记录」下载 JSON。请不要翻看页面源码（后面的走势在里面）。</details>
+</div>
+<div class="tip mut" id="tip">按住图表左右拖动可看历史；鼠标移到 K 线上看价格</div>
+<div id="chart"></div>
+<div class="card" id="reveal" hidden></div>
+<div class="card"><b>本题成交</b><div id="trades" class="mut">（无）</div></div>
+<div class="row"><b>本题备注（为什么这样做）</b></div><textarea id="note"></textarea>
+<div class="card"><b>累计成绩（只算已结束的题）</b><div id="overall"></div></div>
+</div>
+<script>
+__ENGINE__
+const POOL = __DATA__;
+const KEY = "bar_drill_v1";
+const ETF = POOL.meta.etf, STOCK = POOL.meta.stock;
+const MARKS = [["HH","hi","var(--hi)"],["HL","lo","var(--lo)"],["LH","hi","var(--hi)"],["LL","lo","var(--lo)"],["支撑线","line","var(--sup)"],["压力线","line","var(--res)"],["删除","del",""]];
+let DB = {questions: [], cur: null, settings: {pool: "all", mprob: "0.5", left: "300", right: "150"}};
+try { const s = JSON.parse(localStorage.getItem(KEY) || "null"); if (s && s.questions) DB = s; } catch (e) {}
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch (e) {} };
+const cache = {};
+const Q = () => DB.questions.find(q => q.id === DB.cur);
+const barsOf = q => cache[q.id] || (cache[q.id] = Drill.window(POOL.series[q.sym], q));
+let mode = null, viewEnd = null, viewN = 200, drag = null, msgT = null;
+const $ = id => document.getElementById(id);
+const fx = (v, k = 2) => v == null ? "—" : (+v).toFixed(k);
+function msg(t){ $("msg").textContent = t || ""; clearTimeout(msgT); if (t) msgT = setTimeout(() => $("msg").textContent = "", 4000); }
+function act(q, type, extra){ q.actions.push({type, as_of: q.cursor, as_of_bar: barsOf(q)[q.cursor][0], at: new Date().toISOString(), ...(extra || {})}); }
+
+function newQuestion(){
+  const st = DB.settings, syms = st.pool === "etf" ? ETF : st.pool === "stock" ? STOCK : [...ETF, ...STOCK];
+  const pool = {}; syms.forEach(s => { if (POOL.series[s]) pool[s] = {n: POOL.series[s].c.length}; });
+  const seed = (crypto.getRandomValues(new Uint32Array(1))[0]) >>> 0;
+  const p = Drill.pick(pool, seed, {left: +st.left, right: +st.right, mirrorProb: +st.mprob, syms: Object.keys(pool)});
+  if (!p) { msg("品种池里没有足够长的数据"); return; }
+  const id = (DB.questions.reduce((m, q) => Math.max(m, q.id), 0)) + 1;
+  const q = {id, ...p, cursor: p.left - 1, max_cursor: p.left - 1, pos: null, pending: null, trades: [], marks: [], actions: [], note: "", done: false,
+             created_at: new Date().toISOString(), version: "bar-drill-v1"};
+  DB.questions.push(q); DB.cur = id; viewEnd = null; mode = null; save(); render();
+}
+function geom(q, bars){
+  const end = viewEnd == null ? q.cursor : Math.min(viewEnd, q.cursor), n = Math.max(30, Math.min(viewN, end + 1));
+  const v0 = Math.max(0, end - n + 1), atLatest = end === q.cursor, GAP = atLatest ? 8 : 0, D = end - v0 + 1 + GAP;
+  const vis = bars.slice(v0, end + 1);
+  let lo = Math.min(...vis.map(x => x[3])), hi = Math.max(...vis.map(x => x[2]));
+  if (atLatest) { const p = q.pos || q.pending; [p && p.stop, p && p.target, q.pos && q.pos.entry].forEach(v => { if (v != null) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }); }
+  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const W = 1200, PL = 8, PR = 64, PT = 14, PH = 420, VT = 452, VH = 60, H = 534, CHIPW = DB.settings.chip === "stack" ? 130 : 0, XR = W - PR - CHIPW - (CHIPW ? 8 : 0);
+  const bw = (XR - PL) / D, vmax = Math.max(1e-9, ...vis.map(x => x[5] || 0));
+  return {W, PL, PR, PT, PH, VT, VH, H, XR, CHIPW, v0, end, atLatest, lo, hi, bw, vmax,
+          x: i => PL + (i - v0 + 0.5) * bw, y: v => PT + (hi - v) * PH / (hi - lo), py: Y => hi - (Y - PT) * (hi - lo) / PH, vy: v => VT + VH - (v || 0) / vmax * VH};
+}
+function draw(){
+  const q = Q(); if (!q) { $("chart").innerHTML = `<p class="mut">点「新题目」开始。</p>`; return; }
+  const bars = barsOf(q), g = geom(q, bars), cw = Math.max(1, g.bw * 0.62), xc = g.W - g.PR;
+  let h = `<svg viewBox="0 0 ${g.W} ${g.H}" xmlns="http://www.w3.org/2000/svg" class="${mode ? "pick" : ""}">`;
+  if (g.atLatest) { const xf = g.x(q.cursor) + g.bw / 2; h += `<rect x="${xf}" y="${g.PT}" width="${g.XR - xf}" height="${g.VT + g.VH - g.PT}" fill="var(--fut)"/>`; }
+  for (let k = 0; k <= 5; k++) { const v = g.lo + (g.hi - g.lo) * k / 5, yy = g.y(v);
+    h += `<line x1="${g.PL}" x2="${xc}" y1="${yy}" y2="${yy}" stroke="var(--line)" stroke-dasharray="2,4"/><text x="${xc + 6}" y="${yy + 4}" font-size="11" fill="var(--mut)">${v.toFixed(2)}</text>`; }
+  if (g.CHIPW) { const NB = 60, w = (g.hi - g.lo) / NB, b = new Array(NB).fill(0);
+    for (let i = g.v0; i <= g.end; i++) { const k0 = Math.max(0, Math.floor((bars[i][3] - g.lo) / w)), k1 = Math.min(NB - 1, Math.floor((bars[i][2] - g.lo) / w)); for (let k = k0; k <= k1; k++) b[k]++; }
+    const mx = Math.max(1, ...b); b.forEach((val, k) => { if (!val) return; const y1 = g.y(g.lo + (k + 1) * w), y0 = g.y(g.lo + k * w);
+      h += `<rect x="${g.XR + 8}" y="${y1}" width="${val / mx * g.CHIPW}" height="${Math.max(.5, y0 - y1 - .5)}" fill="var(--chip)" opacity=".28"/>`; });
+    h += `<line x1="${g.XR + 4}" x2="${g.XR + 4}" y1="${g.PT}" y2="${g.PT + g.PH}" stroke="var(--line)"/>`; }
+  for (let i = g.v0; i <= g.end; i++) { const [rel, o, hi, lo, c, v] = bars[i], col = c >= o ? "var(--up)" : "var(--dn)", X = g.x(i);
+    h += `<line x1="${X}" x2="${X}" y1="${g.y(hi)}" y2="${g.y(lo)}" stroke="${col}"/><rect x="${X - cw / 2}" y="${g.y(Math.max(o, c))}" width="${cw}" height="${Math.max(1, Math.abs(g.y(o) - g.y(c)))}" fill="${col}"/>`;
+    if (v != null) h += `<rect x="${X - cw / 2}" y="${g.vy(v)}" width="${cw}" height="${g.VT + g.VH - g.vy(v)}" fill="${col}" opacity=".45"/>`;
+    if (rel % 25 === 0) h += `<text x="${X}" y="${g.H - 6}" font-size="10" text-anchor="middle" fill="var(--mut)">${rel}</text>`; }
+  h += `<line x1="${g.PL}" x2="${xc}" y1="${g.VT - 8}" y2="${g.VT - 8}" stroke="var(--line)"/>`;
+  const x0 = q.left - 1; if (x0 >= g.v0 && x0 <= g.end) h += `<line x1="${g.x(x0) + g.bw / 2}" x2="${g.x(x0) + g.bw / 2}" y1="${g.PT}" y2="${g.VT + g.VH}" stroke="var(--mut)" stroke-dasharray="4,4"/>`;
+  liveMarks(q).forEach(m => { const t = MARKS.find(x => x[0] === m.type), X = Math.max(g.PL, g.x(m.i)), Y = g.y(m.price);
+    if (t[1] === "line") { if (m.i > g.end) return; h += `<line x1="${X}" x2="${xc}" y1="${Y}" y2="${Y}" stroke="${t[2]}" stroke-dasharray="6,4"/><text x="${X + 3}" y="${Y - 4}" font-size="11" fill="${t[2]}">${m.type}</text>`; }
+    else if (m.i >= g.v0 && m.i <= g.end) h += `<text x="${X}" y="${t[1] === "hi" ? Y - 7 : Y + 15}" font-size="11" font-weight="600" text-anchor="middle" fill="${t[2]}">${m.type}</text>`; });
+  q.trades.forEach(t => { [[t.entry_i, t.entry, t.side > 0 ? "▲" : "▼", "var(--act)"], [t.exit_i, t.exit, "✕", t.ret_pct >= 0 ? "var(--up)" : "var(--dn)"]].forEach(([i, p, s, c]) => {
+      if (i >= g.v0 && i <= g.end) h += `<text x="${g.x(i)}" y="${g.y(p) + 4}" font-size="12" text-anchor="middle" fill="${c}">${s}</text>`; }); });
+  if (g.atLatest) {
+    const hl = (v, c, lab, left) => { if (v != null) h += `<line x1="${g.PL}" x2="${xc}" y1="${g.y(v)}" y2="${g.y(v)}" stroke="${c}" stroke-width="1.2"/><text x="${left ? g.PL + 4 : xc - 4}" y="${g.y(v) - 4}" font-size="11" text-anchor="${left ? "start" : "end"}" fill="${c}">${lab} ${v.toFixed(2)}</text>`; };
+    if (q.pos) { hl(q.pos.entry, "var(--act)", (q.pos.side > 0 ? "多" : "空") + " 开仓", true); hl(q.pos.stop, "var(--stop)", "止损"); hl(q.pos.target, "var(--tg)", "止盈");
+      if (q.pos.entry_i >= g.v0) h += `<text x="${g.x(q.pos.entry_i)}" y="${g.y(q.pos.entry) + 4}" font-size="12" text-anchor="middle" fill="var(--act)">${q.pos.side > 0 ? "▲" : "▼"}</text>`; }
+    else if (q.pending && q.pending.type !== "exit") { hl(q.pending.stop, "var(--stop)", "止损(待)"); hl(q.pending.target, "var(--tg)", "止盈(待)"); }
+  } else h += `<text x="${xc - 4}" y="${g.PT + 12}" font-size="12" text-anchor="end" fill="var(--warn)">正在看历史（第 ${bars[g.v0][0]}～${bars[g.end][0]} 根）· End 回到最新</text>`;
+  h += `<line id="cx" x1="0" x2="0" y1="${g.PT}" y2="${g.VT + g.VH}" stroke="var(--mut)" stroke-dasharray="3,3" visibility="hidden"/></svg>`;
+  $("chart").innerHTML = h; bind(q, bars);
+}
+function liveMarks(q){ const del = new Set(q.marks.filter(m => m.action === "delete").map(m => m.target)); return q.marks.filter(m => m.action === "add" && !del.has(m.id)); }
+function locate(ev, q, bars){ const svg = document.querySelector("#chart svg"), r = svg.getBoundingClientRect(), g = geom(q, bars);
+  const X = (ev.clientX - r.left) * g.W / r.width, Y = (ev.clientY - r.top) * g.H / r.height;
+  return {i: Math.min(g.end, Math.max(g.v0, g.v0 + Math.floor((X - g.PL) / g.bw))), price: g.py(Math.min(Y, g.PT + g.PH)), X, Y, g, scale: g.W / r.width}; }
+function bind(q, bars){
+  const svg = document.querySelector("#chart svg");
+  svg.addEventListener("pointerdown", ev => { drag = {x: ev.clientX, end: geom(q, bars).end, moved: false, id: ev.pointerId}; svg.setPointerCapture(ev.pointerId); });
+  svg.addEventListener("pointermove", ev => {
+    const p = locate(ev, q, bars), b = bars[p.i], cx = svg.querySelector("#cx");
+    if (drag) { const dx = (ev.clientX - drag.x) * p.scale;
+      if (Math.abs(dx) > 4) drag.moved = true;
+      if (drag.moved) { svg.classList.add("drag"); const k = Math.round(dx / p.g.bw), e = Math.max(Math.min(q.cursor, viewN - 1), Math.min(q.cursor, drag.end - k));
+        if (e !== p.g.end) { viewEnd = e >= q.cursor ? null : e; const keep = drag; draw(); drag = keep; const s2 = document.querySelector("#chart svg"); s2.setPointerCapture(ev.pointerId); s2.classList.add("drag"); }
+        return; } }
+    cx.setAttribute("x1", p.g.x(p.i)); cx.setAttribute("x2", p.g.x(p.i)); cx.setAttribute("visibility", "visible");
+    $("tip").textContent = `第 ${b[0]} 根  开 ${fx(b[1])}  高 ${fx(b[2])}  低 ${fx(b[3])}  收 ${fx(b[4])}  量 ${b[5] == null ? "缺" : fx(b[5])}  ·  鼠标处价格 ${p.price.toFixed(2)}`; });
+  svg.addEventListener("pointerup", ev => { const d = drag; drag = null; svg.classList.remove("drag"); if (!d || d.moved || q.done) return; click(ev, q, bars); });
+  svg.addEventListener("wheel", ev => { ev.preventDefault();
+    if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY)) {                       // 触控板左右滑 = 平移
+      const g = geom(q, bars), k = Math.round(ev.deltaX / 8), e = Math.max(Math.min(q.cursor, viewN - 1), Math.min(q.cursor, g.end + k));
+      viewEnd = e >= q.cursor ? null : e; draw(); return; }
+    viewN = Math.max(40, Math.min(q.cursor + 1, Math.round(viewN * (ev.deltaY > 0 ? 1.12 : 1 / 1.12)))); draw(); }, {passive: false});
+}
+function click(ev, q, bars){
+  if (!mode) return;
+  const p = locate(ev, q, bars);
+  if (mode === "止损" || mode === "止盈") {
+    const px = +p.price.toFixed(3), err = Drill.setLevel(q, bars, mode === "止损" ? "stop" : "target", px);
+    if (err) msg(err); else { act(q, mode === "止损" ? "set_stop" : "set_target", {price: px}); mode = null; }
+  } else if (mode === "删除") {
+    const g = p.g, c = liveMarks(q).map(m => { const X = g.x(m.i), t = MARKS.find(x => x[0] === m.type)[1];
+      const d = t === "line" ? (p.X >= X - 5 ? Math.abs(p.Y - g.y(m.price)) : 1e9) : Math.hypot(p.X - X, p.Y - g.y(m.price) + (t === "hi" ? 10 : -10)); return [d, m]; })
+      .filter(x => x[0] <= 14).sort((a, b) => a[0] - b[0])[0];
+    if (c) q.marks.push({action: "delete", target: c[1].id, as_of: q.cursor, at: new Date().toISOString()});
+  } else {
+    const t = MARKS.find(x => x[0] === mode)[1], b = bars[p.i];
+    q.marks.push({action: "add", id: "m" + Date.now().toString(36) + q.marks.length, type: mode, i: p.i, bar: b[0],
+                  price: t === "hi" ? b[2] : t === "lo" ? b[3] : +p.price.toFixed(3), as_of: q.cursor, at: new Date().toISOString()});
+  }
+  save(); render();
+}
+function order(type){
+  const q = Q(); if (!q || q.done) return;
+  if (type === "exit" && !q.pos) { msg("没有持仓"); return; }
+  if ((type === "long" && q.pos && q.pos.side > 0) || (type === "short" && q.pos && q.pos.side < 0)) { msg("已经持有同方向仓位"); return; }
+  const keep = q.pending && q.pending.type === type ? q.pending : null;
+  q.pending = keep || {type}; act(q, type); save(); render();
+}
+function advance(k){
+  const q = Q(); if (!q || q.done) return; const bars = barsOf(q); let fills = [];
+  for (let n = 0; n < k && q.cursor < bars.length - 1; n++) fills = fills.concat(Drill.step(q, bars));
+  if (fills.length) act(q, "fills", {fills: fills.map(f => f.reason ? {close: f.reason, px: f.exit} : f)});
+  if (q.cursor >= bars.length - 1) { Drill.finish(q, bars, "本题结束，按最后收盘平仓"); act(q, "finish"); }
+  viewEnd = null; save(); render();
+  const closed = fills.filter(f => f.reason); if (closed.length) msg(closed.map(f => `${f.reason} @ ${f.exit.toFixed(2)}（${f.ret_pct >= 0 ? "+" : ""}${f.ret_pct.toFixed(2)}%${f.r != null ? "，" + f.r.toFixed(2) + "R" : ""}）`).join("；"));
+}
+function endQ(){ const q = Q(); if (!q || q.done) return; Drill.finish(q, barsOf(q), "提前结束本题，按当前收盘平仓"); act(q, "finish_early"); save(); render(); }
+function posLine(q, bars){
+  if (!q) return "";
+  const c = bars[q.cursor][4], parts = [`已推进 ${q.cursor - q.left + 1}/${q.right} 根`];
+  if (q.pos) { const p = q.pos, pct = p.side * (c / p.entry - 1) * 100, r = p.stop0 != null && p.stop0 !== p.entry ? p.side * (c - p.entry) / Math.abs(p.entry - p.stop0) : null;
+    parts.push(`持${p.side > 0 ? "多" : "空"} @ ${fx(p.entry)} · 止损 ${fx(p.stop)} · 止盈 ${fx(p.target)} · 浮动 ${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%${r != null ? "（" + r.toFixed(2) + "R）" : ""}`); }
+  else parts.push("空仓");
+  if (q.pending) parts.push(`下一根开盘：${{long: "做多", short: "做空", exit: "平仓"}[q.pending.type]}`);
+  if (q.done) parts.push("本题已结束");
+  return parts.join("　|　");
+}
+function tradesTable(trades){
+  if (!trades.length) return "（无）";
+  return `<table><tr><th>#</th><th>方向</th><th>开仓</th><th>平仓</th><th>持有</th><th>收益</th><th>R</th><th>离场原因</th></tr>` + trades.map((t, k) =>
+    `<tr><td>${k + 1}</td><td>${t.side > 0 ? "多" : "空"}</td><td>${fx(t.entry)}</td><td>${fx(t.exit)}</td><td>${t.exit_i - t.entry_i + 1} 根</td><td>${t.ret_pct >= 0 ? "+" : ""}${t.ret_pct.toFixed(2)}%</td><td>${t.r == null ? "无止损" : t.r.toFixed(2)}</td><td>${t.reason}</td></tr>`).join("") + "</table>";
+}
+function overall(){
+  const done = DB.questions.filter(q => q.done), rows = [["全部", () => true], ["原始 K 线", q => !q.mirror], ["镜像（颠倒）", q => q.mirror]];
+  const sides = [["做多", t => t.side > 0], ["做空", t => t.side < 0]];
+  const line = (lab, nq, s) => `<tr><td>${lab}</td><td>${nq}</td><td>${s.n}</td><td>${s.win_rate == null ? "—" : (s.win_rate * 100).toFixed(0) + "%"}</td><td>${s.sum_pct >= 0 ? "+" : ""}${s.sum_pct.toFixed(2)}%</td><td>${s.avg_r == null ? "—" : s.avg_r.toFixed(2)}</td><td>${s.n_r ? s.sum_r.toFixed(2) : "—"}</td></tr>`;
+  let h = `<table><tr><th></th><th>题数</th><th>交易</th><th>胜率</th><th>合计收益</th><th>平均 R</th><th>合计 R</th></tr>`;
+  rows.forEach(([lab, f]) => { const qs = done.filter(f); h += line(lab, qs.length, Drill.stats(qs.flatMap(q => q.trades))); });
+  sides.forEach(([lab, f]) => h += line(lab, "", Drill.stats(done.flatMap(q => q.trades).filter(f))));
+  return h + `</table><div class="mut">平均 R 只算设了止损的交易。原始与镜像成绩差得多，说明可能带着方向偏好（比如习惯做多）。</div>`;
+}
+function render(){
+  const q = Q();
+  $("qsel").innerHTML = DB.questions.length ? DB.questions.map(x => `<option value="${x.id}" ${x.id === DB.cur ? "selected" : ""}>第 ${x.id} 题${x.done ? " ✓" : ""}</option>`).join("") : `<option>（还没有题目）</option>`;
+  const bars = q ? barsOf(q) : null;
+  $("posline").textContent = posLine(q, bars);
+  document.querySelectorAll("[data-m]").forEach(b => b.classList.toggle("on", b.dataset.m === mode));
+  ["next", "next5", "endq", "long", "short", "flat", "cancel"].forEach(id => $(id).disabled = !q || q.done);
+  $("trades").innerHTML = q ? tradesTable(q.trades) : "（无）";
+  $("note").value = q ? q.note || "" : "";
+  if (q && q.done) { const raw = POOL.series[q.sym], a = q.i0 - q.left + 1, b = q.i0 + q.right, s = Drill.stats(q.trades), d = i => String(raw.d[i]).replace(/(\d{4})(\d\d)(\d\d)/, "$1-$2-$3");
+    $("reveal").hidden = false;
+    $("reveal").innerHTML = `<b>揭晓：</b>${q.sym} 日线 · 背景 ${d(a)} 起 · 第 0 根 = ${d(q.i0)} · 结束 ${d(b)} · <b>${q.mirror ? "镜像（上下颠倒，真实走势与你看到的相反）" : "原始 K 线"}</b><br>
+      本题 ${s.n} 笔，胜 ${s.win}，合计 ${s.sum_pct >= 0 ? "+" : ""}${s.sum_pct.toFixed(2)}%${s.n_r ? "，合计 " + s.sum_r.toFixed(2) + "R" : ""}`; }
+  else $("reveal").hidden = true;
+  $("overall").innerHTML = overall();
+  draw();
+}
+MARKS.forEach(([n]) => { const b = document.createElement("button"); b.dataset.m = n; b.textContent = n; $("marks").appendChild(b); });
+document.querySelectorAll("[data-m]").forEach(b => b.onclick = () => { mode = mode === b.dataset.m ? null : b.dataset.m; render(); });
+["pool", "mprob", "left", "right", "chip"].forEach(k => { const el = $(k); if (DB.settings[k]) el.value = DB.settings[k]; el.onchange = () => { DB.settings[k] = el.value; save(); render(); }; });
+$("qsel").onchange = () => { DB.cur = +$("qsel").value; viewEnd = null; mode = null; save(); render(); };
+$("newq").onclick = newQuestion;
+$("next").onclick = () => advance(1); $("next5").onclick = () => advance(5); $("endq").onclick = endQ;
+$("long").onclick = () => order("long"); $("short").onclick = () => order("short"); $("flat").onclick = () => order("exit");
+$("cancel").onclick = () => { const q = Q(); if (q && q.pending) { q.pending = null; act(q, "cancel"); save(); render(); } };
+$("latest").onclick = () => { viewEnd = null; draw(); };
+$("note").addEventListener("input", e => { const q = Q(); if (q) { q.note = e.target.value; save(); } });
+document.addEventListener("keydown", e => { if (["TEXTAREA", "SELECT", "INPUT"].includes(e.target.tagName)) return;
+  const q = Q(); if (!q) return;
+  if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); advance(e.shiftKey ? 5 : 1); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); const g = geom(q, barsOf(q)); viewEnd = Math.max(Math.min(q.cursor, viewN - 1), g.end - 20); if (viewEnd >= q.cursor) viewEnd = null; draw(); }
+  else if (e.key === "End") { viewEnd = null; draw(); }
+  else if (e.key === "Escape") { mode = null; render(); }
+  else if (e.key === "b" || e.key === "B") order("long"); else if (e.key === "s" || e.key === "S") order("short"); else if (e.key === "x" || e.key === "X") order("exit"); });
+$("exp").onclick = () => { const out = {version: "bar-drill-v1", data_sha256: POOL.meta.sha256, exported_at: new Date().toISOString(), ...DB};
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(out, null, 1)], {type: "application/json"})); a.download = "bar_drill_v1.json"; a.click(); };
+render();
+</script></body></html>

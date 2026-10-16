@@ -85,3 +85,6 @@ data/logs/.publish_*
 # ⚠️ 损坏隔离副本 *.corrupt-* 【不忽略】—— 那是历史被损坏的唯一证据。
 data/history/**/*.lock
 data/history/**/.*.tmp
+
+# 逐根回测练习页（scripts/bar_drill_page.py 生成，约 3 MB，可由已入库输入复现；练习记录在浏览器本地，导出件放 data/soul/）
+data/drill/

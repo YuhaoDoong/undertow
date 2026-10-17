@@ -412,10 +412,20 @@ set +e
 SH_ST="data/logs/.status_shadow_${ET_DATE}.json"
 if stage_done shadow_capture; then SH_OUT=""; SH_RC=0
 else SH_OUT=$(python3 -m undertow shadow capture --status-file "$SH_ST" 2>&1); SH_RC=$?; stage_mark shadow_capture "$(rec_status shadow_capture)" $SH_RC; fi
+# v5 输入新鲜度侧车（Codex 056 裁定 c：v5 冻结不改，只追加 expected/actual 基准日审计）
+if ! stage_done shadow_freshness; then FA_OUT=$(python3 -m undertow shadow freshness-audit 2>&1); FA_RC=$?; stage_mark shadow_freshness "$(rc_status $FA_RC failed)" $FA_RC; fi
 if stage_done shadow_settle; then SH_OUT2=""; SH_RC2=0
 else SH_OUT2=$(python3 -m undertow shadow settle 2>&1); SH_RC2=$?; stage_mark shadow_settle "$(rc_status $SH_RC2 failed)" $SH_RC2; fi
 set -e
 printf '%s\n%s\n' "$SH_OUT" "$SH_OUT2" | grep -E "候选腿|更新|⚠️" | head -20 || true
+# 主墙近侧研究账（Codex 056 合同 v0.1）：盘前冻结 + 结算。新鲜 T−1 输入未到 → partial，下一次唤醒重试（开盘后不再冻结）
+MW_ST="data/logs/.status_mainwall_${ET_DATE}.json"
+if stage_done mainwall_capture; then MW_OUT=""; MW_RC=0
+else MW_OUT=$(python3 -m undertow mainwall capture --status-file "$MW_ST" 2>&1); MW_RC=$?; stage_mark mainwall_capture "$(rc_status $MW_RC pending)" $MW_RC; fi
+if stage_done mainwall_settle; then MW_OUT2=""; MW_RC2=0
+else MW_OUT2=$(python3 -m undertow mainwall settle 2>&1); MW_RC2=$?; stage_mark mainwall_settle "$(rc_status $MW_RC2 failed)" $MW_RC2; fi
+printf '%s\n%s\n' "$MW_OUT" "$MW_OUT2" | grep -E "冻结|更新|⚠️" | head -6 || true
+if (( MW_RC2 != 0 )); then alert "⚠️ 主墙研究账结算失败（ET $ET_NOW）" "$(printf '%s' "$MW_OUT2" | grep '⚠️' | head -2 | tr '\n' ' ')"; fi
 if (( SH_RC != 0 || SH_RC2 != 0 )); then
     alert "⚠️ 影子账采集/结算失败（ET $ET_NOW）" \
           "capture rc=$SH_RC settle rc=$SH_RC2：$(printf '%s\n%s' "$SH_OUT" "$SH_OUT2" | grep '⚠️' | head -2 | tr '\n' ' ')"

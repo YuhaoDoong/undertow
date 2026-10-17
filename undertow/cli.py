@@ -4245,6 +4245,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     from undertow.shadow_cli import register as _shadow_register
     _shadow_register(sub)
+    from undertow.mainwall_cli import register as _mainwall_register
+    _mainwall_register(sub)
     from undertow.trial_cli import register as _trial_register
     _trial_register(sub)
     from undertow.dirledger_cli import register as _dir_register
@@ -4296,7 +4298,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 #: 这些命令结束时写「实际消费输入」清单（Codex 017 A02）。session 钩子每 5 分钟跑的 live 等不在内，避免清单泛滥。
 PROVENANCE_COMMANDS = frozenset({"report", "analyze", "gamma", "vol", "flow", "expiry", "fib", "tech",
-                                 "backtest", "signals", "dirledger", "shadow"})
+                                 "backtest", "signals", "dirledger", "shadow", "mainwall"})
 
 
 def main(argv: list[str] | None = None) -> int:

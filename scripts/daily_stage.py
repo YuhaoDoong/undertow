@@ -82,7 +82,10 @@ def is_non_trading(day: str) -> bool:
 REQUIRED_STAGES = ("report", "shadow_capture", "dirledger_record", "conviction_record", "expiry_profile",
                    "inputs_archive", "publish")
 OPTIONAL_STAGES = ("report_v2", "paper_book", "signals_backfill", "shadow_settle", "dirledger_score",
-                   "author_levels", "flow_side", "sample_check", "option_bars")
+                   "author_levels", "flow_side", "sample_check", "option_bars",
+                   # Codex 056：v5 新鲜度侧车、主墙研究账。可选：研究账开盘后不能再冻结，列为必需会让 daily 整天卡在未完成；
+                   # 开盘前另由 session_hooks ⑰ 每 5 分钟重试
+                   "shadow_freshness", "mainwall_capture", "mainwall_settle")
 STAGE_STATUSES = ("ok", "ok_ineligible", "partial", "failed", "pending", "skipped")
 # ok_ineligible：记录类阶段所有注册品种都已落【终态】行，但有行不合格（晚于开盘、身份有问题或未知）。
 # 冻结行不能重写来「补合格」，所以算阶段完成（政策：不可再生数据先封账），同时由缺口检查报质量缺口。

@@ -433,6 +433,8 @@ def cmd_report(args) -> int:
     prim, pb = sh.CONFIG["primary_endpoint"], sh.CONFIG["primary_b"]
     print(f"  身份：{'正式判定' if ident == 'formal' else '探索（正式检验日 ' + sh.CONFIG['formal_test']['date'] + ' 之前，一切判定都不是放行依据）'}；"
           f"主终点 {prim}，主池 {sh.CONFIG['primary_pool']}；日历 {mc.VERSION}")
+    if not args.replay and freshness_summary():
+        print(freshness_summary())
 
     def ci(x):
         mb = x.get("mean_bounds") or [x.get("mean"), x.get("mean")]
@@ -1669,6 +1671,42 @@ def _status(args, cmd, done, issues, *, overall=None, counts=None):
             "counts": counts or {}})
 
 
+def _freshness_path() -> Path:
+    # 子目录：v5 目录下的 *.jsonl 会被 bars/intraday/脚本当成品种账本遍历（同 key 会混进机会行）
+    return _vdir(False) / "sidecar" / "freshness_audit.jsonl"
+
+
+def cmd_freshness_audit(args) -> int:
+    """v5 输入新鲜度侧车（Codex 056 裁定 c）：每条机会行追加一次 expected/actual 基准日与受影响字段；已审计的行不改写。
+    只读 v5 账本，不碰其冻结行、配置或收益。"""
+    from undertow.core.config import load_config
+    cfg = load_config(); p = _freshness_path(); n = 0
+    for inst in _instruments(cfg, args.instruments):
+        src = _path(inst.key, False)
+        if not src.exists():
+            continue
+        for r in jl.load(src, KEY):
+            a = sh.freshness_audit_row(r)
+            a["audited_at"] = _now_iso()
+            if jl.insert_frozen(p, a, key_field=KEY, frozen=lambda x: {k: v for k, v in x.items() if k != "audited_at"}) == "inserted":
+                n += 1
+    rows = jl.load(p, KEY) if p.exists() else []
+    st = sum(1 for r in rows if r.get("stale")); ok = sum(1 for r in rows if r.get("stale") is False)
+    print(f"  v5 输入新鲜度：新增 {n} 行；累计 {len(rows)} 行中基准滞后 {st}、正确 {ok}、未知 {len(rows) - st - ok}")
+    _status(args, "freshness-audit", ["v5"], [])
+    return 0
+
+
+def freshness_summary() -> str | None:
+    p = _freshness_path()
+    if not p.exists():
+        return None
+    rows = jl.load(p, KEY)
+    st = sum(1 for r in rows if r.get("stale"))
+    return (f"  ⚠️ 输入新鲜度：{len(rows)} 行中 {st} 行基准收盘晚于 T−1（多为 T−2）。本账检验的是含该输入行为的实现，"
+            "不能当作「新鲜 T−1 基准的墙策略」的证据（Codex 056；明细 sidecar/freshness_audit.jsonl）")
+
+
 def register(sub):
     p = sub.add_parser("shadow", help="前瞻配对影子账（墙选腿 A vs 无 OI 距离 B；只读，从不下单）")
     ss = p.add_subparsers(dest="shadow_cmd", required=True)
@@ -1706,6 +1744,8 @@ def register(sub):
                    help="open=ET 10:00–10:20 入场与持仓标记；close=核心收市前 30~15 分钟（正常 15:30–15:45，"
                         "13:00 收市日 12:30–12:45）持仓标记与到期前平仓")
     q.set_defaults(func=cmd_quote)
+    fa = ss.add_parser("freshness-audit", help="v5 输入新鲜度侧车：逐行记 expected/actual 基准日（只追加，不改 v5 账）")
+    fa.add_argument("instruments", nargs="*"); fa.add_argument("--status-file"); fa.set_defaults(func=cmd_freshness_audit)
     w = ss.add_parser("windows", help="打印今天 ET 的影子账窗口（供调度脚本）"); w.set_defaults(func=cmd_windows)
     ch = ss.add_parser("chain", help="开盘后近价全链快照（ET 10:15–10:35，入 git；只读）")
     ch.add_argument("instruments", nargs="*"); ch.add_argument("--allow-off-hours", action="store_true")

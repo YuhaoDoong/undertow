@@ -1,0 +1,517 @@
+"""`undertow mainwall ...` 编排：主墙近侧卖方价差前瞻研究账（Codex 056 合同 v0.1；只读，从不下单）。
+
+  capture  盘前：新鲜 T−1 输入（collect.fresh_daily）+ 当日快照 → 交易到期 E 与两侧主墙图，冻结一行。
+           输入不新鲜/快照未到 → 只追加失败尝试（capture_attempts.jsonl），不占当天冻结键，下次唤醒重试；
+           开盘后不再冻结（逾时输入不追补成盘前决定）。
+  quote    --window open：当日行先观察并冻结 Sdec（长桥常规时段价）→ 选近侧、构造 A/B 候选（写入即冻结）→ 再取盘口；
+           盘前没冻结成的品种在这里补一行机会母表（premarket 状态如实写缺失原因）。已在场的旧行同时记持仓标记。
+           --window close：在场候选的收盘窗标记（主终点 pre_expiry_exit_policy 用到期前一交易日这一窗）。
+  sample   盘中采样（与 shadow sample 同一时段）：标的价、到两侧冻结墙的距离、两侧 A 腿盘口。只记录，不触发交易。
+  settle   收盘后派生每条候选的政策结果（v5 settle_leg 原样 + 收益门槛）与机会类别。
+  report   机会母表与 A、B、A−B 描述（探索；12/31 只是独立阶段检查）。
+
+墙位卖方价差实盘停用状态不变；本账只回答「主墙 vs 1·ATR 定距」这一个研究问题。
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import pathlib
+import sys
+from datetime import date, datetime, timezone
+from pathlib import Path
+
+from undertow.analyze import mainwall as mw
+from undertow.analyze import shadow as sh
+from undertow.collect import jsonl_ledger as jl
+from undertow.core import market_calendar as mc
+from undertow.core.clock import ET, MARKET_OPEN, market_today
+
+DIR = Path("data/history/mainwall")
+KEY = "key"
+POST_FIELDS = ("windows", "samples", "outcome", "settled_at")
+
+
+def _vdir() -> Path:
+    return DIR / mw.CONFIG["version"]
+
+
+def _path(inst: str) -> Path:
+    return _vdir() / f"{inst}.jsonl"
+
+
+def _attempts_path() -> Path:
+    return _vdir() / "capture_attempts.jsonl"
+
+
+def frozen_part(row: dict) -> dict:
+    """事前部分 = 除事后观测/派生字段以外的一切。entry_decision/legs 由 _set_entry 一次写入，之后同样冻结。"""
+    return {k: v for k, v in row.items() if k not in POST_FIELDS}
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _code_sha() -> dict:
+    return {p: hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()[:16]
+            for p in ("undertow/analyze/mainwall.py", "undertow/collect/fresh_daily.py", "undertow/mainwall_cli.py")}
+
+
+def _instruments(cfg, names):
+    return [cfg.get(k) for k in (names or mw.CONFIG["instruments"])]
+
+
+def _before_open(t: datetime, T: date) -> bool:
+    t = t.astimezone(ET)
+    return (t.date(), (t.hour, t.minute)) < (T, MARKET_OPEN)
+
+
+def _append_attempt(rec: dict) -> None:
+    """失败尝试只追加（文件锁下），不占当天冻结键；损坏的旧文件由 jsonl_ledger 的严格读取报错，不被覆盖。"""
+    p = _attempts_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with jl.locked(p):
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec, ensure_ascii=False, sort_keys=True) + "\n")
+            f.flush()
+
+
+def _status(args, cmd, done, issues, *, overall=None, counts=None):
+    for i in issues:
+        print(f"  ⚠️ mainwall {cmd} {i['instrument']}: {i['error']}", file=sys.stderr)
+    if getattr(args, "status_file", None):
+        from undertow.collect.asof_history import atomic_write_json
+        atomic_write_json(Path(args.status_file), {
+            "schema": 2, "command": f"mainwall {cmd}", "ok": done, "issues": issues, "at": _now_iso(),
+            "run_id": getattr(args, "run_id", None), "session": market_today().isoformat(),
+            "overall": overall or ("failed" if issues and not done else "partial" if issues else "complete"),
+            "counts": counts or {}})
+
+
+# ── 盘前 ────────────────────────────────────────────────────────────────
+
+def _snapshot_for(store, sym: str, T: date):
+    """当日（文件日 = T）且在 T 开盘前抓取的快照；否则 (None, 原因)。快照只在 OI 结算落地后才落盘（cli 去重规则）。"""
+    from undertow.collect.cboe_options import oi_change_total, snapshot_from_payload
+    if T not in store.dates("options", sym):
+        return None, "snapshot_missing", None
+    payload, ident = store.load_with_identity("options", sym, T)
+    if payload is None or not ident or not ident.get("captured_at"):
+        return None, "snapshot_unreadable", None
+    ca = datetime.fromtimestamp(ident["captured_at"], timezone.utc)
+    if not _before_open(ca, T):
+        return None, "snapshot_after_open", None
+    snap = snapshot_from_payload(payload, None, sym)
+    prev = [d for d in store.dates("options", sym) if d < T]
+    oic = None
+    if prev:
+        pp = store.load("options", sym, prev[-1])
+        oic = oi_change_total(snapshot_from_payload(pp, None, sym), snap) if pp else None
+    d = payload.get("data") or {}
+    ltt = str(d.get("last_trade_time") or "")[:10]
+    spc = {"close": d.get("close") or d.get("prev_day_close"), "date": ltt or None}
+    meta = {"file_date": T.isoformat(), "captured_at": ca.isoformat(), "sha256": ident.get("sha256"),
+            "prev_file_date": prev[-1].isoformat() if prev else None, "oi_change_total": oic, "prev_close_field": spc}
+    return snap, None, meta
+
+
+def capture_one(inst, T: date, now: datetime, *, store, cache=None) -> tuple[str, dict]:
+    """返回 (结果, 记录)。结果 ∈ inserted / exists / attempt_failed / late。"""
+    from undertow.collect import fresh_daily as fd
+    sym = inst.options.symbol
+    att = {"key": f"{T.isoformat()}|{inst.key}", "instrument": inst.key, "session": T.isoformat(),
+           "tried_at": now.isoformat(), "config_version": mw.CONFIG["version"]}
+    if not _before_open(now, T):
+        att["status"] = "late"
+        return "late", att
+    snap, why, smeta = _snapshot_for(store, sym, T)
+    if snap is None:
+        att["status"] = why
+        return "attempt_failed", att
+    rec, ser = fd.resolve(inst, T, cache=cache, snapshot_prev_close=smeta["prev_close_field"])
+    inputs = mw.derive_inputs(rec, ser, T)
+    att["inputs"] = {k: inputs.get(k) for k in ("status", "source", "expected_base_date", "base_date", "attempts",
+                                                "cross_check")}
+    if inputs.get("status") != "fresh":
+        att["status"] = f"input_{inputs.get('status')}"
+        return "attempt_failed", att
+    E = sh.target_expiry(snap, T, tuple(mw.CONFIG["dte"]))
+    cprev = inputs["close"]
+    pre = {"status": "ok", "inputs": inputs, "snapshot": smeta, "E": E.isoformat() if E else None,
+           "recorded_at": now.isoformat(), "code_sha": _code_sha()}
+    if E is None:
+        pre.update(status="no_expiry")
+    else:
+        pre["walls"] = {k: mw.wall_map(snap.contracts, T, E, cprev, k) for k in ("P", "C")}
+        pre["strikes"] = {k: sh.listed_strikes(snap, k, E) for k in ("P", "C")}
+        pre["widths"] = {k: sh.spread_width(pre["strikes"][k], cprev, mw.CONFIG["width"]["band"]) for k in ("P", "C")}
+    row = {"key": att["key"], "schema": 1, "instrument": inst.key, "symbol": sym, "session": T.isoformat(),
+           "config_version": mw.CONFIG["version"], "config_hash": mw.config_hash(), "premarket": pre,
+           "entry_decision": None, "legs": [], "windows": {}, "samples": [], "outcome": None}
+    r = jl.insert_frozen(_path(inst.key), row, key_field=KEY, frozen=frozen_part)
+    return r, row
+
+
+def cmd_capture(args) -> int:
+    from undertow.collect.store import SnapshotStore
+    from undertow.core.config import load_config
+    cfg = load_config(); store = SnapshotStore()
+    now = datetime.now(ET); T = now.date()
+    if mc.is_trading_day(T) is not True:
+        print(f"  {T} 非交易日（或日历未覆盖），不冻结")
+        _status(args, "capture", [], [], overall="unchanged")
+        return 0 if mc.is_trading_day(T) is False else 3
+    if not _before_open(now, T):
+        # 逾时输入不追补成盘前决定；开盘窗会按最后一次失败尝试补机会母表行。这里不再追加尝试（免得每次唤醒刷一条）
+        print(f"  {T} 已开盘，不再冻结盘前行")
+        _status(args, "capture", [], [], overall="unchanged")
+        return 0
+    done, issues, pend = [], [], []
+    for inst in _instruments(cfg, args.instruments):
+        if any(r[KEY] == f"{T.isoformat()}|{inst.key}" for r in jl.load(_path(inst.key), KEY)):
+            done.append(inst.key); print(f"  {inst.key:7s} {T} 已冻结"); continue
+        try:
+            r, rec = capture_one(inst, T, now, store=store)
+        except Exception as e:
+            r, rec = "attempt_failed", {"key": f"{T.isoformat()}|{inst.key}", "instrument": inst.key,
+                                        "session": T.isoformat(), "tried_at": now.isoformat(),
+                                        "status": f"error:{type(e).__name__}", "error": str(e)[:200]}
+        if r in ("inserted", "exists"):
+            w = rec["premarket"].get("walls") or {}
+            desc = " ".join(f"{k}墙 {w[k].get('strike')}({w[k].get('oi')})" for k in ("P", "C") if w.get(k, {}).get("status") == "ok")
+            print(f"  {inst.key:7s} {T} 冻结 E={rec['premarket']['E']} 基准 {rec['premarket']['inputs']['base_date']}"
+                  f" 收 {rec['premarket']['inputs']['close']}（{rec['premarket']['inputs']['source']}） {desc}")
+            done.append(inst.key)
+        else:
+            _append_attempt(rec)
+            pend.append(inst.key)
+            issues.append({"instrument": inst.key, "error": rec.get("status")})
+    overall = "complete" if not pend else ("partial" if done else "failed")
+    _status(args, "capture", done, issues, overall=overall)
+    return 0 if overall == "complete" else 1
+
+
+# ── 入场窗 / 标记窗 ───────────────────────────────────────────────────────
+
+def _set_entry(path: Path, key: str, decision: dict, legs: list) -> str:
+    """entry_decision 与 legs 只写一次（锁内读→判→写）；已存在 → exists，不改。"""
+    with jl.locked(path):
+        rows = jl.load_path(path, KEY)
+        for r in rows:
+            if r[KEY] == key:
+                if r.get("entry_decision") is not None:
+                    return "exists"
+                r["entry_decision"], r["legs"] = decision, legs
+                jl.atomic_write(path, rows, KEY)
+                return "set"
+    raise KeyError(key)
+
+
+def _ensure_denominator_row(inst, T: date) -> None:
+    """盘前没冻结成的品种：开盘后补一行，机会母表不能缺这一天（原因取最后一次失败尝试）。"""
+    p = _path(inst.key)
+    key = f"{T.isoformat()}|{inst.key}"
+    if any(r[KEY] == key for r in jl.load(p, KEY)):
+        return
+    last = None
+    ap = _attempts_path()
+    if ap.exists():
+        for ln in ap.read_text("utf-8").splitlines():
+            try:
+                a = json.loads(ln)
+            except ValueError:
+                continue
+            if a.get("key") == key:
+                last = a
+    st = f"premarket_{last['status']}" if last and last.get("status") else "premarket_not_run"
+    row = {"key": key, "schema": 1, "instrument": inst.key, "symbol": inst.options.symbol, "session": T.isoformat(),
+           "config_version": mw.CONFIG["version"], "config_hash": mw.config_hash(),
+           "premarket": {"status": st, "last_attempt_at": (last or {}).get("tried_at"), "recorded_at": _now_iso()},
+           "entry_decision": None, "legs": [], "windows": {}, "samples": [], "outcome": None}
+    jl.insert_frozen(p, row, key_field=KEY, frozen=frozen_part)
+
+
+def _decide(row: dict, sdec: float, sdec_meta: dict) -> tuple[dict, list]:
+    pre = row["premarket"]
+    atr = pre["inputs"]["atr14"]
+    E = date.fromisoformat(pre["E"])
+    choice = mw.choose_side(pre["walls"], sdec, atr)
+    legs = mw.candidates(pre["strikes"], E, sdec, atr, pre["walls"], pre["widths"], choice)
+    return {"sdec": sdec, **sdec_meta, "atr14": atr, "choice": choice, "frozen_at": _now_iso()}, legs
+
+
+def _quote_legs(root: str, legs_by_row: list) -> tuple[dict, dict | None, str, str]:
+    from undertow.collect.longbridge_options import _lb_symbol
+    from undertow.collect.longbridge_quote import fetch_depth, fetch_stock_quotes
+    need = {}
+    for _, l in legs_by_row:
+        for K in (l["sell"], l["buy"]):
+            need[(sh.qkey(l["side"], K), l["expiry"])] = _lb_symbol(root, date.fromisoformat(l["expiry"]), l["side"], K)
+    t0 = _now_iso()
+    try:
+        dep = fetch_depth(sorted(set(need.values())))
+    except Exception as e:
+        dep = {"__error__": f"{type(e).__name__}: {e}"[:200]}
+    try:
+        uq = fetch_stock_quotes([f"{root}.US"]).get(f"{root}.US")
+        under = {"freshest": uq.freshest, "kind": uq.freshest_kind, "last": uq.last, "timestamp": uq.timestamp} if uq else None
+    except Exception as e:
+        under = {"error": type(e).__name__}
+    return need, dep, under, (t0, _now_iso())
+
+
+def _live_legs(r: dict, T: date) -> list:
+    return [l for l in r.get("legs") or [] if l.get("status") == "candidate" and r["session"] <= T.isoformat() <= l["expiry"]]
+
+
+def _leg_valid(r: dict, l: dict, wkey: str, window: str, T: date) -> bool:
+    purpose = "entry" if (window == "open" and r["session"] == T.isoformat()) else "exit"
+    view = mw.row_view_after(r, (r.get("entry_decision") or {}).get("frozen_at"))
+    return sh.window_leg(view, l, wkey, purpose)["status"] == "valid"
+
+
+def cmd_quote(args) -> int:
+    from undertow.collect.longbridge_quote import fetch_stock_quotes
+    from undertow.core.config import load_config
+    from undertow.shadow_cli import _phase_now, _window_now
+    window = args.window
+    if _phase_now() != "rth" or not _window_now(window):
+        print(f"不在 {window} 窗口或非盘中（ET）；主墙账不记窗外报价", file=sys.stderr)
+        return 2
+    cfg = load_config(); T = market_today(); wkey = f"{T.isoformat()}|{window}"
+    counts = {"expected_legs": 0, "valid_legs": 0, "decided": 0}
+    done, issues = [], []
+    for inst in _instruments(cfg, args.instruments):
+        p = _path(inst.key); root = inst.options.symbol
+        try:
+            if window == "open":
+                _ensure_denominator_row(inst, T)
+                row = next(r for r in jl.load(p, KEY) if r["session"] == T.isoformat())
+                if row["premarket"].get("status") not in ("ok", "no_expiry"):
+                    # 盘前没冻结成 = 本该发生却没发生：作为 issue 让窗口保持未完成并在窗末提醒（不只写进账本）
+                    issues.append({"instrument": inst.key, "error": row["premarket"].get("status")})
+                if row["premarket"].get("status") == "ok" and row.get("entry_decision") is None \
+                        and row["premarket"].get("walls"):
+                    uq = fetch_stock_quotes([f"{root}.US"]).get(f"{root}.US")
+                    if uq is None or uq.freshest_kind != "常规" or not (uq.last and uq.last > 0):
+                        raise ValueError(f"标的常规时段价不可用（{getattr(uq, 'freshest_kind', None)}）")
+                    dec, legs = _decide(row, float(uq.last), {"sdec_at": _now_iso(), "sdec_kind": uq.freshest_kind,
+                                                              "sdec_quote_time": uq.timestamp, "sdec_source": "longbridge quote last"})
+                    if _set_entry(p, row[KEY], dec, legs) == "set":
+                        counts["decided"] += 1
+                        print(f"  {inst.key:7s} Sdec {dec['sdec']} 近侧 {dec['choice']['near']}（{dec['choice']['reason']}）")
+            todo = []
+            for r in jl.load(p, KEY):
+                for l in _live_legs(r, T):
+                    counts["expected_legs"] += 1
+                    if _leg_valid(r, l, wkey, window, T):
+                        counts["valid_legs"] += 1
+                    else:
+                        todo.append((r[KEY], l))
+            if not todo:
+                done.append(inst.key); continue
+            need, dep, under, (t0, t1) = _quote_legs(root, todo)
+            err = dep.pop("__error__", None)
+            if err:
+                issues.append({"instrument": inst.key, "error": err})
+            keys = {k for k, _ in todo}
+
+            def fn(r):
+                if r[KEY] not in keys:
+                    return False
+                quotes = {}
+                for l in r.get("legs") or []:
+                    for K in (l.get("sell"), l.get("buy")):
+                        sym = need.get((sh.qkey(l["side"], K), l["expiry"])) if K is not None else None
+                        if sym is None:
+                            continue
+                        d = dep.get(sym)
+                        quotes[sh.qkey(l["side"], K)] = (
+                            {"bid": d.bid, "ask": d.ask, "bid_size": d.bid_size, "ask_size": d.ask_size,
+                             "error": d.error or None, "quote_time": None} if d is not None else
+                            {"bid": None, "ask": None, "bid_size": 0, "ask_size": 0, "error": "not_returned", "quote_time": None})
+                if not quotes:
+                    return False
+                r.setdefault("windows", {}).setdefault(wkey, {"attempts": []})["attempts"].append(
+                    {"started_at": t0, "ended_at": t1, "phase": _phase_now(), "underlying": under, "quotes": quotes})
+                return True
+            jl.update(p, fn, key_field=KEY, frozen=frozen_part)
+            ids = {(k, l["leg_id"]) for k, l in todo}
+            counts["valid_legs"] += sum(1 for r in jl.load(p, KEY) for l in _live_legs(r, T)
+                                        if (r[KEY], l["leg_id"]) in ids and _leg_valid(r, l, wkey, window, T))
+            done.append(inst.key)
+        except Exception as e:
+            issues.append({"instrument": inst.key, "error": f"{type(e).__name__}: {e}"[:200]})
+    if window == "open":
+        missing = [i.key for i in _instruments(cfg, args.instruments)
+                   if not any(r["session"] == T.isoformat() and r.get("entry_decision") is not None
+                              for r in jl.load(_path(i.key), KEY))
+                   and any(r["session"] == T.isoformat() and (r.get("premarket") or {}).get("status") == "ok"
+                           for r in jl.load(_path(i.key), KEY))]
+        for m in missing:
+            if not any(i["instrument"] == m for i in issues):
+                issues.append({"instrument": m, "error": "sdec_not_frozen"})
+    if counts["expected_legs"] == 0 and not issues:
+        overall = "unchanged"
+    elif counts["valid_legs"] >= counts["expected_legs"] and not issues:
+        overall = "complete"
+    else:
+        overall = "partial" if counts["valid_legs"] > 0 else "failed"
+    print(f"  主墙账 {wkey}：应有 {counts['expected_legs']} 个候选价差，有效 {counts['valid_legs']}，新冻结 Sdec {counts['decided']} → {overall}")
+    _status(args, f"quote-{window}", done, issues, overall=overall, counts=counts)
+    return 0 if overall in ("complete", "unchanged") else 1
+
+
+# ── 盘中采样 ────────────────────────────────────────────────────────────
+
+def cmd_sample(args) -> int:
+    """盘中：标的价、到两侧冻结墙的 ATR 距离、两侧 A 腿盘口。每 15 分钟桶至多一条有效记录；越墙/近墙都记，不触发交易。"""
+    from undertow.core.config import load_config
+    from undertow.shadow_cli import _phase_now, sample_bounds, sample_slot
+    t = datetime.now(ET); T = t.date()
+    bd = sample_bounds(T)
+    slot = sample_slot(t.hour * 60 + t.minute, bd) if bd else None
+    if slot is None or _phase_now() != "rth":
+        print("不在盘中采样时段", file=sys.stderr)
+        return 2
+    cfg = load_config(); done, issues = [], []
+    for inst in _instruments(cfg, args.instruments):
+        p = _path(inst.key)
+        row = next((r for r in jl.load(p, KEY) if r["session"] == T.isoformat()), None)
+        pre = (row or {}).get("premarket") or {}
+        if not row or pre.get("status") != "ok" or not pre.get("walls"):
+            continue
+        if any(s.get("slot") == slot and s.get("underlying", {}).get("last") for s in row.get("samples") or []):
+            done.append(inst.key); continue
+        legs = []
+        E = pre["E"]
+        for k in ("P", "C"):
+            w = pre["walls"][k]
+            if w.get("status") == "ok" and pre["widths"].get(k):
+                buy = sh._buy_leg(pre["strikes"][k], w["strike"], k, pre["widths"][k])
+                if buy is not None and w["strike"] in pre["strikes"][k]:
+                    legs.append(("", {"side": k, "sell": w["strike"], "buy": buy, "expiry": E}))
+        need, dep, under, (t0, t1) = _quote_legs(inst.options.symbol, legs) if legs else ({}, {}, None, (_now_iso(), _now_iso()))
+        err = dep.pop("__error__", None) if isinstance(dep, dict) else None
+        px = (under or {}).get("last")
+        atr = pre["inputs"]["atr14"]
+        dist = {k: (round((px - pre["walls"][k]["strike"]) / atr * (1 if k == "P" else -1), 6)
+                    if px and pre["walls"][k].get("status") == "ok" else None) for k in ("P", "C")}
+        quotes = {}
+        for (qk, _exp), sym in need.items():
+            d = dep.get(sym)
+            quotes[qk] = ({"bid": d.bid, "ask": d.ask, "bid_size": d.bid_size, "ask_size": d.ask_size,
+                           "error": d.error or None} if d is not None else {"error": err or "not_returned"})
+        # signed_dist_atr：>0 = 墙仍在虚值侧（未越过），≤0 = 已到墙上或越过
+        rec = {"slot": slot, "started_at": t0, "ended_at": t1, "underlying": under, "signed_dist_atr": dist,
+               "quotes": quotes}
+
+        def fn(r, rec=rec):
+            if r["session"] != T.isoformat():
+                return False
+            r.setdefault("samples", []).append(rec)
+            return True
+        jl.update(p, fn, key_field=KEY, frozen=frozen_part)
+        if px:
+            done.append(inst.key)
+        else:
+            issues.append({"instrument": inst.key, "error": err or "underlying_missing"})
+    overall = "complete" if not issues else ("partial" if done else "failed")
+    print(f"  主墙账盘中采样 {slot}：{len(done)} 个品种 → {overall}")
+    _status(args, "sample", done, issues, overall=overall)
+    return 0 if overall == "complete" else 1
+
+
+# ── 结算 / 报告 ─────────────────────────────────────────────────────────
+
+def derive_row(row: dict, bars: list, now=None) -> dict:
+    outs = {l["leg_id"]: mw.leg_outcome(l, row, bars=bars, now=now) for l in row.get("legs") or []}
+    legs = {l["leg_id"]: l for l in row.get("legs") or []}
+    cat = mw.row_category(row, outs)
+    ed = row.get("entry_decision") or {}
+    near = (ed.get("choice") or {}).get("near")
+    a = outs.get(f"near-{near}-A", {}).get("policy_pnl") if near else None
+    b = outs.get(f"near-{near}-B", {}).get("policy_pnl") if near else None
+    slim = {lid: {k: v for k, v in o.items() if k != "settle"} | {"pnl_bounds": (o.get("settle") or {}).get("pnl_bounds", {})
+                                                                  .get(mw.CONFIG["primary_basis"])}
+            for lid, o in outs.items()}
+    return {"category": cat, "legs": slim, "A": a, "B": b, "A_minus_B": (round(a - b, 4) if a is not None and b is not None else None),
+            "condor": mw.condor(outs, legs), "derived_at": _now_iso()}
+
+
+def cmd_settle(args) -> int:
+    from undertow.collect.cboe_history import CboeHistorySource
+    from undertow.core.config import load_config
+    cfg = load_config(); px = CboeHistorySource(); done, issues = [], []
+    now = datetime.now(ET)
+    for inst in _instruments(cfg, args.instruments):
+        p = _path(inst.key)
+        if not p.exists():
+            continue
+        try:
+            ser = px.fetch_series(inst)
+            bars = list(zip(ser.dates, ser.highs, ser.lows, ser.closes))
+
+            def fn(r):
+                if r["session"] > now.date().isoformat():
+                    return False
+                o = derive_row(r, bars, now)
+                if r.get("outcome") and {k: v for k, v in r["outcome"].items() if k != "derived_at"} == \
+                        {k: v for k, v in o.items() if k != "derived_at"}:
+                    return False
+                r["outcome"] = o; r["settled_at"] = _now_iso()
+                return True
+            n = jl.update(p, fn, key_field=KEY, frozen=frozen_part)
+            done.append(inst.key); print(f"  {inst.key:7s} 更新 {n} 行")
+        except Exception as e:
+            issues.append({"instrument": inst.key, "error": f"{type(e).__name__}: {e}"[:200]})
+    _status(args, "settle", done, issues)
+    return 0 if not issues else 1
+
+
+def cmd_report(args) -> int:
+    from collections import Counter
+    from undertow.core.config import load_config
+    cfg = load_config()
+    rows = [r for i in _instruments(cfg, args.instruments) for r in jl.load(_path(i.key), KEY)]
+    print(f"主墙近侧研究账 {mw.CONFIG['version']}（hash {mw.config_hash()}）：{len(rows)} 行机会（品种×交易日）")
+    print(f"  身份：探索；{mw.CONFIG['stage_check']} 只是独立阶段检查，不继承 v5 确认资格；不是实盘放行。")
+    cats = Counter((r.get("outcome") or {}).get("category") or "unsettled" for r in rows)
+    print("  机会类别：" + "，".join(f"{k} {v}" for k, v in sorted(cats.items())))
+    for lab, key in (("A 主墙（政策）", "A"), ("B 1·ATR（政策）", "B"), ("A−B 配对", "A_minus_B")):
+        v = [(r.get("outcome") or {}).get(key) for r in rows]
+        v = [x for x in v if x is not None]
+        print(f"  {lab}：n={len(v)}" + (f" 均值 {sum(v) / len(v):+.2f}$/组（跨品种同日不独立，未做区间）" if v else ""))
+    return 0
+
+
+def cmd_audit(args) -> int:
+    """只读核对：每行身份与输入新鲜度（不看收益）。"""
+    from undertow.core.config import load_config
+    cfg = load_config()
+    for i in _instruments(cfg, args.instruments):
+        for r in jl.load(_path(i.key), KEY):
+            pre = r.get("premarket") or {}
+            inp = pre.get("inputs") or {}
+            ed = r.get("entry_decision") or {}
+            print(f"  {r[KEY]}  pre={pre.get('status')} 基准 {inp.get('base_date')}/{inp.get('expected_base_date')} "
+                  f"源 {inp.get('source')}  Sdec {ed.get('sdec')} 近侧 {(ed.get('choice') or {}).get('near')}")
+    return 0
+
+
+def register(sub):
+    p = sub.add_parser("mainwall", help="主墙近侧卖方价差前瞻研究账（Codex 056 v0.1；只读，从不下单，不是实盘放行）")
+    ss = p.add_subparsers(dest="mainwall_cmd", required=True)
+    for name, fn, hl in (("capture", cmd_capture, "盘前冻结：新鲜 T−1 输入 + 两侧主墙图"),
+                         ("sample", cmd_sample, "盘中采样：标的到两侧冻结墙的距离与 A 腿盘口"),
+                         ("settle", cmd_settle, "收盘后派生政策结果与机会类别"),
+                         ("report", cmd_report, "机会母表与 A、B、A−B 描述（探索）"),
+                         ("audit", cmd_audit, "逐行身份与输入新鲜度（不看收益）")):
+        c = ss.add_parser(name, help=hl); c.add_argument("instruments", nargs="*")
+        c.add_argument("--status-file"); c.add_argument("--run-id")
+        c.set_defaults(func=fn)
+    q = ss.add_parser("quote", help="--window open：冻结 Sdec→选近侧→取盘口；close：收盘窗标记")
+    q.add_argument("instruments", nargs="*"); q.add_argument("--window", choices=("open", "close"), required=True)
+    q.add_argument("--status-file"); q.add_argument("--run-id")
+    q.set_defaults(func=cmd_quote)

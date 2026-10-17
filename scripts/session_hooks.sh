@@ -97,6 +97,32 @@ run_bound() {
 }
 ov_text() { [[ "$1" == "status_missing" ]] && echo "状态文件缺失" || echo "$1"; }
 
+# ⑰ 主墙近侧研究账（Codex 056 合同 v0.1；只读，不是实盘放行）：与 ④⑤⑦ 同一套窗口（只取自 shadow windows），独立哨兵。
+#   盘前 09:00–09:29：capture 重试（daily 也会跑；新鲜 T−1 输入未到就只记失败尝试，不占当天冻结键）
+#   开盘窗：先冻结 Sdec → 选近侧 → 取盘口；收盘窗：在场候选标记；sample：标的到两侧冻结墙的距离 + A 腿盘口
+mainwall_window() {  # $1=open|close|capture $2=起(分) $3=止(分) $4=标签
+  local W="$1" LO="$2" HI="$3" TAG="$4"
+  if (( ET_MIN < LO || ET_MIN > HI )); then return; fi
+  local OKF="$LOG_DIR/.mainwall_${W}_${ET_DATE}.ok"
+  if [[ -f "$OKF" ]]; then hb "${TAG}：今日已完成，跳过"; return; fi
+  if [[ "$W" == "capture" ]]; then run_bound "mainwall_capture" "mainwall capture" mainwall capture
+  else run_bound "mainwall_${W}" "mainwall quote-${W}" mainwall quote --window "$W"; fi
+  if (( RB_RC == 75 )); then hb "${TAG}：撞锁，跳过"; return; fi
+  local SUM; SUM=$(printf '%s' "$RB_RES" | grep -E '主墙账|冻结|已冻结' | tail -1)
+  if (( RB_RC == 0 )) && [[ "$RB_OV" == "complete" || "$RB_OV" == "unchanged" ]]; then
+    : > "$OKF"; hb "${TAG}：✅ ${SUM}"
+  else
+    hb "${TAG}：⏳ 未完成（rc=$RB_RC overall=$(ov_text "$RB_OV")）${SUM}，下次唤醒重试"
+    if (( ET_MIN >= HI - 6 )); then notify "⚠️ 主墙研究账${TAG}未完成" "${SUM:-$(printf '%s' "$RB_RES" | tail -1)}"; fi
+  fi
+}
+mainwall_sample() {  # $1=起(分) $2=止(分)；无哨兵，命令自己跳过本桶已有的记录
+  local LB_PRIORITY=low; export LB_PRIORITY
+  if (( ET_MIN < $1 || ET_MIN > $2 )); then return; fi
+  run_bound "mainwall_sample" "mainwall sample" mainwall sample
+  if (( RB_RC == 75 )); then hb "⑰主墙采样：撞锁，跳过"; return; fi
+  hb "⑰主墙采样：rc=$RB_RC overall=$(ov_text "$RB_OV") $(printf '%s' "$RB_RES" | grep -E '主墙账盘中采样' | tail -1)"
+}
 # ── ④⑤ 影子账盘口窗口（v3，Codex 005 R02）──────────────────────────
 # ⚠️ 放在①②③之前：那几个窗口里有 exit 0（撞锁等），排在后面会被跳过。
 # ④ ET 10:00–10:20：当日入场 + 持仓标记；⑤ 核心收市前 30~15 分钟：持仓标记与到期前平仓（主终点）。
@@ -360,9 +386,13 @@ if (( SHW_RC == 0 )); then
     if [[ "$_W" == "close" ]]; then shadow_window close "$_LO" "$_HI" "⑤影子收盘窗"; fi
     if [[ "$_W" == "chain" ]]; then shadow_window chain "$_LO" "$_HI" "⑥开盘后全链快照"; fi
     if [[ "$_W" == "sample" ]]; then shadow_sample "$_LO" "$_HI"; fi
+    if [[ "$_W" == "open" ]]; then mainwall_window open "$_LO" "$_HI" "⑰主墙开盘窗"; fi
+    if [[ "$_W" == "close" ]]; then mainwall_window close "$_LO" "$_HI" "⑰主墙收盘窗"; fi
+    if [[ "$_W" == "sample" ]]; then mainwall_sample "$_LO" "$_HI"; fi
   done <<< "$SHW"
   if [[ -n "$SHW" ]]; then                      # 交易日
     if (( ET_MIN >= 540 && ET_MIN < 570 )); then
+      mainwall_window capture 540 569 "⑰主墙盘前冻结"
       premarket_fill
       # 现场核验 pre 每天只跑一次：等补齐完成（或到 09:25 截止）再核，免得报一个随后就补上的缺口
       if [[ -f "$LOG_DIR/.premarket_fill_${ET_DATE}.ok" ]] || (( ET_MIN >= 565 )); then fieldcheck pre; fi

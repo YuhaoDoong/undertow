@@ -11,6 +11,7 @@
 | `cftc_cot.py` | COT 持仓：CFTC Socrata（Disaggregated 物理品 / Legacy 金融品如美元指数） | 免费·周五发布·截止当周二 |
 | `cboe_options.py` | 期权链：CBOE 延迟报价（**ETF 代理** GLD/SLV/USO/QQQ），OCC 代码解析、OI/gamma/iv + 原始落盘 + 内容指纹去重 | 免费·日内延迟 |
 | `cboe_history.py` | 历史日线（回测用）：CBOE，免 key | 免费·日终 |
+| `fresh_daily.py` | **盘前决策用的新鲜 T−1 日线**（Codex 056 F0）：expected 只来自预存交易日历；源顺序 CBOE 历史 → Yahoo chart 同代码 ETF，整条序列取自第一个到达 expected 的源、不拼接；缺 H/L 的 bar 不顶替；另一源与快照自带前收盘（带日期才核）相对差 > 0.5% → conflict。返回 typed 记录（fresh/stale/conflict/calendar_unknown，含逐源尝试、抓取时刻、原文 sha256、价格口径）。ATR/语境由 `analyze.mainwall.derive_inputs` 从同一序列算（采集层不 import 分析层）。主墙研究账使用；影子账 v5 不改 | 免费·Yahoo 有界重抓（15 分钟缓存） |
 | `cboe_vol.py` | 波动率指数：GVZ(金)/OVX(油)/VXSLV(银) | 免费·日频 |
 | `yahoo_futures.py` | **真实期货价**：Yahoo chart（GC=F/SI=F/CL=F/DX=F），urllib 直连零依赖 | 免费·准实时 |
 | `fred_macro.py` | 宏观：FRED（DFII10 实际利率 / DTWEXBGS 美元 / T10YIE 通胀预期），免 key | 免费·日频 T+1 |

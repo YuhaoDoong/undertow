@@ -699,6 +699,31 @@ def settle_leg(leg: dict, row: dict, *, bars: list, now: datetime | None = None,
     return res
 
 
+# ── 输入新鲜度侧车（Codex 056：v5 冻结不改，只追加审计）──────────────────
+
+def freshness_audit_row(row: dict) -> dict:
+    """一条 v5 机会行的基准日新鲜度：expected = 预存日历的 T−1 交易日，age = 实际基准落后的交易日数。
+
+    v5 capture 取「CBOE 日线里 T 之前最后一根」作基准；源端常没更新 T−1 → 拿到 T−2。这不是前视（只会更旧），
+    但选墙 5% 带、离墙距离、B 规则的 ATR 距离与 ATR 本身都跟着晚一天。受影响字段一并列出，供 report 披露。
+    """
+    T = date.fromisoformat(row["session"])
+    exp = mc.prev_trading_day(T)
+    bd = (row.get("decision") or {}).get("base_date")
+    age = None
+    if exp and bd:
+        b = date.fromisoformat(bd)
+        days = mc.trading_days(b, exp)
+        age = None if days is None else len([d for d in days if d > b])
+    return {"key": row["key"], "session": row["session"], "expected_base_date": exp.isoformat() if exp else None,
+            "actual_base_date": bd, "age_trading_days": age, "stale": None if age is None else age > 0,
+            "source": "cboe_history（v5 capture：ser.dates 中 < T 的最后一根）",
+            "captured_at": (row.get("identity") or {}).get("captured_at"),
+            "affected": ["decision.base_close", "decision.atr14", "decision.atr_expand_5", "decision.atr_pct_250",
+                         "legs[*].distance_pct/distance_atr", "A 选墙 5% 带", "B1/B2 ATR 距离", "width 的近价带"]
+            if age else []}
+
+
 # ── 统计（W06）──────────────────────────────────────────────────────────
 
 def _norm(o: dict, basis: str, which: str = "point"):

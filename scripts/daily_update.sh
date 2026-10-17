@@ -427,10 +427,15 @@ if stage_done mainwall_capture; then MW_OUT=""; MW_RC=0
 else MW_OUT=$(python3 -m undertow mainwall capture --status-file "$MW_ST" 2>&1); MW_RC=$?; stage_mark mainwall_capture "$(rc_status $MW_RC pending)" $MW_RC; fi
 if stage_done mainwall_settle; then MW_OUT2=""; MW_RC2=0
 else MW_OUT2=$(python3 -m undertow mainwall settle 2>&1); MW_RC2=$?; stage_mark mainwall_settle "$(rc_status $MW_RC2 failed)" $MW_RC2; fi
+# 覆盖补查（058 A）：机器睡了一整天、盘中 hook 一次没跑，次日盘前这里也会把已过截止的缺口登记并写兜底；rc=1 = 有缺口（不是崩溃）
+MW_COV=$(python3 -m undertow mainwall coverage 2>&1); MW_COV_RC=$?
 set -e
 printf '%s\n%s\n' "$MW_OUT" "$MW_OUT2" | grep -E "冻结|更新|⚠️" | head -6 || true
 # capture 盘前未就绪是常态（源未更新 → 只记失败尝试、下次重试），由 session_hooks ⑰ 在 09:23 起未完成时提醒；结算失败当场告警
 if (( MW_RC2 != 0 )); then alert "⚠️ 主墙研究账结算失败（ET $ET_NOW）" "rc=$MW_RC2：$(printf '%s' "$MW_OUT2" | grep '⚠️' | head -2 | tr '\n' ' ')"; fi
+MW_NEW=$(printf '%s\n' "$MW_COV" | awk '$1=="NEW_GAPS"{print $2}' | tail -1)
+if [[ -z "$MW_NEW" ]]; then alert "⚠️ 主墙研究账覆盖核查失败（ET $ET_NOW）" "rc=$MW_COV_RC：$(printf '%s' "$MW_COV" | tail -1)"
+elif (( MW_NEW > 0 )); then alert "⚠️ 主墙研究账发现 ${MW_NEW} 个覆盖缺口（ET $ET_NOW）" "$(printf '%s\n' "$MW_COV" | grep '⚠️' | head -1)"; fi
 # <<< mainwall-daily
 if (( SH_RC != 0 || SH_RC2 != 0 )); then
     alert "⚠️ 影子账采集/结算失败（ET $ET_NOW）" \

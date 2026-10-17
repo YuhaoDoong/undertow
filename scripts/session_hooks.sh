@@ -125,6 +125,22 @@ mainwall_window() {  # $1=open|close|capture $2=起(分) $3=止(分) $4=标签
     fi
   fi
 }
+mainwall_coverage() {  # Codex 058 A：每次唤醒重算已过截止的应有项（窗口外、睡过整窗也能补查）；新缺口由命令先写兜底凭证再标已提醒
+  run_bound "mainwall_coverage" "mainwall coverage" mainwall coverage
+  if (( RB_RC == 75 )); then hb "⑰主墙覆盖核查：撞锁，跳过"; return; fi
+  local NEW; NEW=$(printf '%s\n' "$RB_RES" | awk '$1=="NEW_GAPS"{print $2}' | tail -1)
+  if [[ -z "$NEW" ]]; then
+    hb "⑰主墙覆盖核查：⚠️ 命令未给出结果（rc=$RB_RC overall=$(ov_text "$RB_OV")）"
+    if (( RB_RC != 1 )); then notify "⚠️ 主墙研究账覆盖核查失败" "$(printf '%s' "$RB_RES" | tail -1)"; fi
+    return
+  fi
+  if (( NEW > 0 )); then
+    hb "⑰主墙覆盖核查：新缺口 ${NEW}（已写 FAILURE 兜底）"
+    notify "⚠️ 主墙研究账发现 ${NEW} 个覆盖缺口" "$(printf '%s\n' "$RB_RES" | grep '⚠️' | head -1)"
+  else
+    hb "⑰主墙覆盖核查：无新缺口（rc=$RB_RC）"
+  fi
+}
 mainwall_sample() {  # $1=起(分) $2=止(分)；无哨兵，命令自己跳过本桶已有的记录
   local LB_PRIORITY=low; export LB_PRIORITY
   if (( ET_MIN < $1 || ET_MIN > $2 )); then return; fi
@@ -411,6 +427,7 @@ if (( SHW_RC == 0 )); then
     if [[ "$_W" == "sample" ]]; then mainwall_sample "$_LO" "$_HI"; fi
   done <<< "$SHW"
   if [[ -n "$SHW" ]]; then                      # 交易日
+    mainwall_coverage
     if (( ET_MIN >= 540 && ET_MIN < 570 )); then
       mainwall_window capture 540 569 "⑰主墙盘前冻结"
       premarket_fill

@@ -71,30 +71,73 @@ class AttemptsCorrupt(RuntimeError):
     pass
 
 
+ATTEMPT_REQUIRED = ("key", "instrument", "session", "status", "tried_at")
+
+
+def _no_dup(pairs):
+    keys = [k for k, _ in pairs]
+    if len(keys) != len(set(keys)):
+        raise ValueError(f"重复字段 {sorted({k for k in keys if keys.count(k) > 1})}")
+    return dict(pairs)
+
+
+def _bad_const(x):
+    raise ValueError(f"非有限数 {x}")
+
+
+def validate_attempt(a) -> None:
+    """一条失败尝试必须是对象、必需字段为非空字符串。同 key 多行（同日多次重试）是合法的，不套主账的唯一 key 规则。"""
+    if not isinstance(a, dict):
+        raise ValueError("不是 JSON 对象")
+    for k in ATTEMPT_REQUIRED:
+        if not isinstance(a.get(k), str) or not a[k]:
+            raise ValueError(f"必需字段 {k} 缺失或非法")
+
+
+def _parse_attempt_line(ln: str) -> dict:
+    a = json.loads(ln, object_pairs_hook=_no_dup, parse_constant=_bad_const)
+    validate_attempt(a)
+    return a
+
+
+def _quarantine(p: Path, raw: bytes) -> Path:
+    import uuid
+    q = p.with_name(p.name + f".corrupt-{datetime.now(timezone.utc):%Y%m%dT%H%M%S%f}-{uuid.uuid4().hex[:6]}")
+    q.write_bytes(raw)
+    return q
+
+
 def _load_attempts() -> list:
-    """严格读取失败尝试账：任一行坏 → 原件保留、另存隔离副本、抛 AttemptsCorrupt（不静默跳过坏行）。"""
+    """严格读取失败尝试账（Codex 057 R3 / 058 C）：编码、JSON、重复字段、非有限数、对象结构、必需字段任一不合法
+    → 原件不动、另存隔离副本、抛 AttemptsCorrupt。不静默跳过坏行。"""
     p = _attempts_path()
     if not p.exists():
         return []
     raw = p.read_bytes()
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError as e:
+        q = _quarantine(p, raw)
+        raise AttemptsCorrupt(f"capture_attempts 编码非法（隔离副本 {q.name}，原件未动）：{e}") from e
     out = []
-    for i, ln in enumerate(raw.decode("utf-8", errors="strict").splitlines()):
+    for i, ln in enumerate(text.splitlines()):
         try:
-            out.append(json.loads(ln))
+            out.append(_parse_attempt_line(ln))
         except ValueError as e:
-            q = p.with_name(p.name + f".corrupt-{datetime.now(timezone.utc):%Y%m%dT%H%M%S}")
-            if not q.exists():
-                q.write_bytes(raw)
-            raise AttemptsCorrupt(f"capture_attempts 第 {i + 1} 行损坏（隔离副本 {q.name}，原件未动）：{e}") from e
+            q = _quarantine(p, raw)
+            raise AttemptsCorrupt(f"capture_attempts 第 {i + 1} 行不合法（隔离副本 {q.name}，原件未动）：{e}") from e
     return out
 
 
 def _append_attempt(rec: dict) -> None:
-    """失败尝试只追加（文件锁下，fsync 后回读末行核对），不占当天冻结键。追加前先严格读一遍：坏文件不在其后继续追加。"""
+    """失败尝试只追加（文件锁下，fsync 后回读末行核对），不占当天冻结键。写入前同一套校验（拒非有限数/缺字段）；
+    追加前先严格读一遍：坏文件不在其后继续追加。"""
     import os
+    validate_attempt(rec)
+    line = json.dumps(rec, ensure_ascii=False, sort_keys=True, allow_nan=False)
+    _parse_attempt_line(line)
     p = _attempts_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    line = json.dumps(rec, ensure_ascii=False, sort_keys=True)
     with jl.locked(p):
         _load_attempts()
         with open(p, "a", encoding="utf-8") as f:
@@ -461,26 +504,46 @@ def _sample_members(pre: dict) -> tuple[list, dict]:
     return legs, na
 
 
-def _slot_state(row: dict, slot: str, members: list) -> dict:
-    """本桶各成员是否已有成功观测（首个成功观测保留其时刻；不同成员的时刻可能不同，不拼成同批）。"""
+def _slot_bounds(T: date, slot: str, bd: tuple) -> tuple[datetime, datetime]:
+    from undertow.shadow_cli import SAMPLE
+    m0 = int(slot[:2]) * 60 + int(slot[3:])
+    m1 = min(m0 + SAMPLE["step_min"], bd[1])
+    mk = lambda m: datetime(T.year, T.month, T.day, m // 60, m % 60, tzinfo=ET)  # noqa: E731
+    return mk(m0), mk(m1)
+
+
+def _in_slot(iso: str | None, lo: datetime, hi: datetime) -> bool:
+    try:
+        t = datetime.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return False
+    return lo <= t < hi
+
+
+def _slot_state(row: dict, slot: str, members: list, lo: datetime, hi: datetime) -> dict:
+    """本桶各成员首个【桶内收到】的成功观测时刻（Codex 058 B）。资格按成员自己的 received_at；
+    旧格式没有逐成员时刻的，保守要求整批 started_at 与 ended_at 都在桶内。跨桶返回的观测保留在原始尝试里，但不算本桶，
+    也不倒填到下一桶。不同成员的时刻可能不同，不拼成同批。"""
     got = {"underlying": None, **{m: None for m in members}}
     for a in row.get("samples") or []:
         if a.get("slot") != slot:
             continue
+        env = _in_slot(a.get("started_at"), lo, hi) and _in_slot(a.get("ended_at"), lo, hi)
         u = a.get("underlying") or {}
-        if got["underlying"] is None and u.get("last"):
-            got["underlying"] = a["started_at"]
+        if got["underlying"] is None and u.get("last") and (_in_slot(u["received_at"], lo, hi) if "received_at" in u else env):
+            got["underlying"] = u.get("received_at") or a["started_at"]
         for m_, q in (a.get("quotes") or {}).items():
-            if m_ in got and got[m_] is None and q.get("observed"):
-                got[m_] = a["started_at"]
+            ok_t = _in_slot(q["received_at"], lo, hi) if "received_at" in q else env
+            if m_ in got and got[m_] is None and q.get("observed") and ok_t:
+                got[m_] = q.get("received_at") or a["started_at"]
     return got
 
 
 def cmd_sample(args) -> int:
-    """盘中采样（Codex 057 R4）：标的与期权分开取、分开记。每个 15 分钟桶内：标的价 + 到两侧冻结墙的有符号 ATR 距离，
-    两侧 A 腿合约盘口。每次唤醒只补本桶尚无成功观测的成员；每次尝试原样追加。没有适用期权腿时照样记标的与距离。
-    成员齐全 → complete；部分 → partial（rc=1，下一次唤醒补）；不触发任何交易。
-    一侧无挂单（bid/ask 为空但无错误）算已观测；取数失败 / 未返回才算缺失。"""
+    """盘中采样（Codex 057 R4 / 058 B）：标的与期权分开取、分开记、逐成员记请求与收到时刻。每个 15 分钟桶内：标的价 +
+    到两侧冻结墙的有符号 ATR 距离，两侧 A 腿合约盘口。每次唤醒只补本桶尚无【桶内收到】成功观测的成员；每次尝试原样追加。
+    没有适用期权腿时照样记标的与距离。成员齐全 → complete；部分 → partial（rc=1，下一次唤醒补）；不触发任何交易。
+    一侧无挂单（bid/ask 为空但无错误）算已观测；取数失败 / 未返回 / 收到时已出桶（out_of_slot）不算。"""
     from undertow.collect.longbridge_options import _lb_symbol
     from undertow.collect.longbridge_quote import fetch_depth, fetch_stock_quotes
     from undertow.core.config import load_config
@@ -491,6 +554,7 @@ def cmd_sample(args) -> int:
     if slot is None or _phase_now() != "rth":
         print("不在盘中采样时段", file=sys.stderr)
         return 2
+    lo, hi = _slot_bounds(T, slot, bd)
     cfg = load_config(); done, issues = [], []
     counts = {"members": 0, "observed": 0}
     for inst in _instruments(cfg, args.instruments):
@@ -498,13 +562,13 @@ def cmd_sample(args) -> int:
         row = next((r for r in jl.load(p, KEY) if r["session"] == T.isoformat()), None)
         pre = (row or {}).get("premarket") or {}
         if not row or pre.get("status") != "ok" or not pre.get("walls"):
-            continue                                          # 当天无冻结墙图：无采样对象（盘前缺口由开盘窗/审计报告）
+            continue                                          # 当天无冻结墙图：无采样对象（盘前缺口由覆盖核查报告）
         legs, na = _sample_members(pre)
         sym_of = {}
         for l in legs:
             for K in (l["sell"], l["buy"]):
                 sym_of[sh.qkey(l["side"], K)] = _lb_symbol(root, date.fromisoformat(l["expiry"]), l["side"], K)
-        got = _slot_state(row, slot, list(sym_of))
+        got = _slot_state(row, slot, list(sym_of), lo, hi)
         need = [m_ for m_, v in got.items() if v is None]
         counts["members"] += len(got)
         if not need:
@@ -512,29 +576,31 @@ def cmd_sample(args) -> int:
         t0 = _now_iso()
         under = None
         if "underlying" in need:
+            rq = _now_iso()
             try:
                 uq = fetch_stock_quotes([f"{root}.US"]).get(f"{root}.US")
                 under = ({"last": uq.last, "kind": uq.freshest_kind, "timestamp": uq.timestamp} if uq and uq.last
                          else {"error": "not_returned"})
             except Exception as e:
                 under = {"error": type(e).__name__}
+            under.update(requested_at=rq, received_at=_now_iso())
+            under["out_of_slot"] = not _in_slot(under["received_at"], lo, hi)
         quotes = {}
-        want = [m_ for m_ in need if m_ != "underlying"]
-        if want:
+        for m_ in [x for x in need if x != "underlying"]:
+            rq = _now_iso()                                   # 逐合约单独请求（depth 本就一次一个代码），各记收到时刻
             try:
-                dep = fetch_depth(sorted({sym_of[m_] for m_ in want}))
-                err = None
+                d = fetch_depth([sym_of[m_]]).get(sym_of[m_]); err = None
             except Exception as e:
-                dep, err = {}, f"{type(e).__name__}"
-            for m_ in want:
-                d = dep.get(sym_of[m_])
-                ok = d is not None and not d.error
-                quotes[m_] = ({"bid": d.bid, "ask": d.ask, "bid_size": d.bid_size, "ask_size": d.ask_size,
-                               "error": d.error or None, "observed": ok} if d is not None
-                              else {"error": err or "not_returned", "observed": False})
-        px = (under or {}).get("last")
+                d, err = None, type(e).__name__
+            rv = _now_iso()
+            ok = d is not None and not d.error
+            quotes[m_] = ({"bid": d.bid, "ask": d.ask, "bid_size": d.bid_size, "ask_size": d.ask_size,
+                           "error": d.error or None, "observed": ok} if d is not None
+                          else {"error": err or "not_returned", "observed": False})
+            quotes[m_].update(requested_at=rq, received_at=rv, out_of_slot=not _in_slot(rv, lo, hi))
+        px = (under or {}).get("last") if under and not under.get("out_of_slot") else None
         atr = pre["inputs"]["atr14"]
-        # signed_dist_atr：>0 = 墙仍在虚值侧（未越过），≤0 = 已到墙上或越过
+        # signed_dist_atr：>0 = 墙仍在虚值侧（未越过），≤0 = 已到墙上或越过；标的收到时已出桶 → 不算距离
         dist = {k: (round((px - pre["walls"][k]["strike"]) / atr * (1 if k == "P" else -1), 6)
                     if px and pre["walls"][k].get("status") == "ok" else None) for k in ("P", "C")}
         rec = {"slot": slot, "started_at": t0, "ended_at": _now_iso(), "underlying": under, "signed_dist_atr": dist,
@@ -546,7 +612,7 @@ def cmd_sample(args) -> int:
             r.setdefault("samples", []).append(rec)
             return True
         jl.update(p, fn, key_field=KEY, frozen=frozen_part)
-        after = _slot_state(next(r for r in jl.load(p, KEY) if r["session"] == T.isoformat()), slot, list(sym_of))
+        after = _slot_state(next(r for r in jl.load(p, KEY) if r["session"] == T.isoformat()), slot, list(sym_of), lo, hi)
         miss = [m_ for m_, v in after.items() if v is None]
         counts["observed"] += len(after) - len(miss)
         if miss:
@@ -622,6 +688,162 @@ def cmd_settle(args) -> int:
     return 0 if not issues else 1
 
 
+# ── 已到截止的应有覆盖（Codex 058 A）──────────────────────────────────────
+# 不靠「正好在窗末醒来」：每次唤醒（session_hooks）与每日任务都把起点以来所有已过截止的应有项重算一遍，
+# 新发现的缺口持久登记（coverage_gaps.jsonl）、先写兜底凭证再标已提醒。未到截止 → 不报；休市 / 无到期 / 无候选 → 不适用。
+# 三个维度分开：盘前身份（冻结、Sdec）/ 主终点观测（入场窗、到期前一交易日收盘窗盘口）/ 描述采样（盘中 15 分钟桶）。
+# 描述采样缺桶不抹掉合法的 A/B；缺行情不补 0。
+
+def _gaps_path() -> Path:
+    return _vdir() / "coverage_gaps.jsonl"
+
+
+def _deadline(T: date, hhmm: tuple) -> datetime:
+    return datetime(T.year, T.month, T.day, hhmm[0], hhmm[1], tzinfo=ET)
+
+
+def _observed_in_window(row: dict, leg: dict, wkey: str, after: str | None) -> bool:
+    """窗口内（含发出与返回）有一次 rth 尝试拿到了两腿报价（无取数错误）；质量是否合格另由结算判断，不算覆盖缺口。"""
+    for a in ((row.get("windows") or {}).get(wkey) or {}).get("attempts") or []:
+        if a.get("phase") != "rth" or not sh.in_window(wkey, a.get("started_at"), a.get("ended_at")):
+            continue
+        if after and not sh._after(a.get("started_at"), after):
+            continue
+        q = a.get("quotes") or {}
+        sq, bq = q.get(sh.qkey(leg["side"], leg["sell"])), q.get(sh.qkey(leg["side"], leg["buy"]))
+        if sq and bq and not sq.get("error") and not bq.get("error"):
+            return True
+    return False
+
+
+def coverage_items(row: dict | None, T: date, inst: str, now: datetime) -> list[dict]:
+    """(交易日, 品种) 已过截止的应有项。status ∈ complete / missing / partial / not_applicable。未到截止的不列。"""
+    from undertow.shadow_cli import sample_bounds, sample_slots
+    out = []
+
+    def add(section, item, status, deadline, reason=None):
+        out.append({"id": f"{T.isoformat()}|{inst}|{item}", "session": T.isoformat(), "instrument": inst,
+                    "section": section, "item": item, "status": status, "reason": reason,
+                    "deadline": deadline.isoformat()})
+    d_cap = _deadline(T, MARKET_OPEN)
+    if now < d_cap:
+        return out
+    pre = (row or {}).get("premarket") or {}
+    if row is None:
+        add("premarket", "capture", "missing", d_cap, "not_generated")
+    elif pre.get("status") in ("ok", "no_expiry"):
+        add("premarket", "capture", "complete", d_cap)
+    else:
+        add("premarket", "capture", "missing", d_cap, pre.get("status"))
+    w_open = sh.window_end(f"{T.isoformat()}|{mw.CONFIG['entry_window']}")
+    if w_open is None or now <= w_open:
+        return out
+    usable = row is not None and pre.get("status") == "ok" and pre.get("walls")
+    if not usable:
+        add("premarket", "sdec", "not_applicable", w_open, "no_frozen_wall_map")
+    elif (row.get("entry_decision") or {}).get("sdec") is not None:
+        add("premarket", "sdec", "complete", w_open)
+    else:
+        add("premarket", "sdec", "missing", w_open, "sdec_not_frozen")
+    ed = (row or {}).get("entry_decision") or {}
+    wkey = f"{T.isoformat()}|{mw.CONFIG['entry_window']}"
+    for l in (row or {}).get("legs") or []:
+        if l.get("status") != "candidate":
+            continue
+        ok = _observed_in_window(row, l, wkey, ed.get("frozen_at"))
+        add("endpoint", f"entry:{l['leg_id']}", "complete" if ok else "missing", w_open, None if ok else "no_quote_in_window")
+        X = mc.prev_trading_day(date.fromisoformat(l["expiry"]))
+        if X is None or X < T:
+            continue
+        xk = f"{X.isoformat()}|close"
+        xe = sh.window_end(xk)
+        if xe is None or now <= xe:
+            continue
+        if not ok:
+            add("endpoint", f"exit:{l['leg_id']}", "not_applicable", xe, "no_entry_quote")
+            continue
+        okx = _observed_in_window(row, l, xk, None)
+        add("endpoint", f"exit:{l['leg_id']}", "complete" if okx else "missing", xe, None if okx else "no_quote_in_window")
+    bd = sample_bounds(T)
+    if bd and usable:
+        legs, _na = _sample_members(pre)
+        members = [sh.qkey(l["side"], K) for l in legs for K in (l["sell"], l["buy"])]
+        for slot in sample_slots(bd):
+            lo, hi = _slot_bounds(T, slot, bd)
+            if now < hi:
+                continue
+            got = _slot_state(row, slot, members, lo, hi)
+            miss = [m_ for m_, v in got.items() if v is None]
+            st = "complete" if not miss else ("missing" if len(miss) == len(got) else "partial")
+            add("sample", f"sample:{slot}", st, hi, None if not miss else "missing:" + ",".join(miss))
+    return out
+
+
+def coverage_all(insts: list, now: datetime) -> list[dict]:
+    start = date.fromisoformat(mw.CONFIG["prospective_start"])
+    if now.date() < start:
+        return []
+    days = mc.trading_days(start, now.date())
+    if days is None:
+        raise ValueError("交易日历不覆盖覆盖核查区间")
+    out = []
+    for k in insts:
+        rows = {r["session"]: r for r in jl.load(_path(k), KEY)}
+        for d in days:
+            out += coverage_items(rows.get(d.isoformat()), d, k, now)
+    return out
+
+
+def _gap_frozen(g: dict) -> dict:
+    return {k: v for k, v in g.items() if k not in ("detected_at", "alerted_at", "fallback_file")}
+
+
+def cmd_coverage(args) -> int:
+    """重算起点以来所有已过截止的应有项；新缺口持久登记，先写兜底凭证（data/reports/FAILURE_<ET日>.txt，只写状态）
+    再标已提醒。输出最后一行 `NEW_GAPS n`（调度层据此弹通知；通知失败不影响兜底）。rc：0 无缺口 / 1 有缺口（新旧都算）。"""
+    import os
+    from undertow.core.config import load_config
+    cfg = load_config()
+    now = _clock()
+    items = coverage_all([i.key for i in _instruments(cfg, args.instruments)], now)
+    gaps = [g for g in items if g["status"] in ("missing", "partial")]
+    gp = _gaps_path(); gp.parent.mkdir(parents=True, exist_ok=True)
+    for g in gaps:
+        g2 = {**g, "key": g["id"], "detected_at": now.isoformat(), "alerted_at": None}
+        jl.insert_frozen(gp, g2, key_field="key", frozen=lambda x: _gap_frozen({k: v for k, v in x.items()}))
+    pending = [r for r in (jl.load(gp, "key") if gp.exists() else []) if not r.get("alerted_at")]
+    if pending:
+        f = Path("data/reports") / f"FAILURE_{now.date().isoformat()}.txt"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        with open(f, "a", encoding="utf-8") as fh:
+            for r in pending:
+                fh.write(f"{now:%Y-%m-%d %H:%M %z} | ⚠️ 主墙研究账覆盖缺口 {r['id']}（{r['section']}，{r['status']}，{r.get('reason')}），"
+                         f"见 undertow mainwall audit\n")
+            fh.flush(); os.fsync(fh.fileno())
+        ids = {r["key"] for r in pending}
+
+        def mark(r):
+            if r["key"] in ids and not r.get("alerted_at"):
+                r["alerted_at"] = now.isoformat(); r["fallback_file"] = str(f)
+                return True
+            return False
+        jl.update(gp, mark, key_field="key", frozen=_gap_frozen)
+    by = {}
+    for g in items:
+        by.setdefault(g["section"], {}).setdefault(g["status"], 0)
+        by[g["section"]][g["status"]] += 1
+    lab = {"premarket": "盘前身份", "endpoint": "主终点观测", "sample": "描述采样"}
+    for sec in ("premarket", "endpoint", "sample"):
+        print(f"  {lab[sec]}覆盖：" + ("，".join(f"{k} {v}" for k, v in sorted(by.get(sec, {}).items())) or "（尚无已到截止项）"))
+    order = {"premarket": 0, "endpoint": 1, "sample": 2}
+    for g in sorted(gaps, key=lambda x: (order[x["section"]], x["id"]))[:10]:     # 盘前/主终点缺口优先显示
+        print(f"  ⚠️ {g['id']} {g['status']} {g.get('reason')}")
+    print(f"NEW_GAPS {len(pending)}")
+    _status(args, "coverage", ["coverage"], [{"instrument": g["instrument"], "error": g["id"]} for g in gaps][:20],
+            overall="complete" if not gaps else "partial", counts={"gaps": len(gaps), "new": len(pending)})
+    return 1 if gaps else 0
+
+
 def _due_until(now: datetime) -> date | None:
     """已应发生的最后一个交易日：今天开盘窗结束之后算今天，否则上一个交易日。"""
     T = now.date()
@@ -680,6 +902,14 @@ def cmd_audit(args) -> int:
         print(f"  {r[KEY]}  pre={pre.get('status')} 基准 {inp.get('base_date')}/{inp.get('expected_base_date')} "
               f"源 {inp.get('source')}  Sdec {ed.get('sdec')} 近侧 {(ed.get('choice') or {}).get('near')}  类别 {t['category']}")
     print(f"  应有 {len(tab)} 格，缺口/盘前失败 {bad}")
+    cov = coverage_all(sorted({t["instrument"] for t in tab}) or [i for i in (args.instruments or mw.CONFIG["instruments"])], _clock())
+    lab = {"premarket": "盘前身份", "endpoint": "主终点观测", "sample": "描述采样"}
+    for sec in ("premarket", "endpoint", "sample"):
+        xs = [c for c in cov if c["section"] == sec]
+        g = [c for c in xs if c["status"] in ("missing", "partial")]
+        print(f"  {lab[sec]}覆盖：已到截止 {len(xs)} 项，缺口 {len(g)}" + ("" if not g else "：" + "；".join(c["id"] for c in g[:6])))
+        bad += len(g) if sec != "premarket" else sum(1 for c in g if c["item"] == "sdec")
+    print("  注：rc=0 只说明已到截止的应有项没有缺口；未到截止的（如盘前时的当日开盘窗）不在其内。")
     return 1 if bad else 0
 
 
@@ -690,7 +920,8 @@ def register(sub):
                          ("sample", cmd_sample, "盘中采样：标的到两侧冻结墙的距离与 A 腿盘口"),
                          ("settle", cmd_settle, "收盘后派生政策结果与机会类别"),
                          ("report", cmd_report, "机会母表与 A、B、A−B 描述（探索）"),
-                         ("audit", cmd_audit, "逐行身份与输入新鲜度（不看收益）")):
+                         ("audit", cmd_audit, "逐行身份与输入新鲜度 + 三维已到截止覆盖（不看收益）"),
+                         ("coverage", cmd_coverage, "已到截止的应有覆盖核查：新缺口持久登记 + 兜底凭证（调度每次唤醒跑）")):
         c = ss.add_parser(name, help=hl); c.add_argument("instruments", nargs="*")
         c.add_argument("--status-file"); c.add_argument("--run-id")
         c.set_defaults(func=fn)

@@ -12,7 +12,7 @@ def _daily_block() -> str:
     return src[a:b]
 
 
-def _run_daily(tmp_path, rc_capture: int, rc_settle: int):
+def _run_daily(tmp_path, rc_capture: int, rc_settle: int, new_gaps: int = 0):
     marks = tmp_path / "marks.txt"
     script = f"""set -e
 ET_DATE=2026-10-19; ET_NOW=06:00
@@ -20,7 +20,7 @@ stage_done() {{ return 1; }}
 stage_mark() {{ echo "$1 $2 $3" >> {marks}; }}
 rc_status() {{ case "$1" in 0) echo ok ;; 3) echo "${{2:-pending}}" ;; *) echo failed ;; esac; }}
 alert() {{ echo "ALERT $1" >> {marks}; }}
-python3() {{ if [[ "$4" == capture ]]; then echo "⚠️ cap"; return {rc_capture}; else echo "⚠️ set"; return {rc_settle}; fi; }}
+python3() {{ if [[ "$4" == capture ]]; then echo "⚠️ cap"; return {rc_capture}; elif [[ "$4" == coverage ]]; then echo "NEW_GAPS {new_gaps}"; return 0; else echo "⚠️ set"; return {rc_settle}; fi; }}
 {_daily_block()}
 echo REACHED_DOWNSTREAM
 """
@@ -88,3 +88,34 @@ def test_sample_alert_fallback_written_even_if_notify_fails(tmp_path):
 def test_sample_complete_no_alert(tmp_path):
     fail, note = _run_sample(tmp_path, 597, rc=0, ov="complete")
     assert fail == "" and note == ""
+
+
+def test_daily_coverage_new_gaps_alerted(tmp_path):
+    r, marks = _run_daily(tmp_path, 0, 0, new_gaps=3)
+    assert "REACHED_DOWNSTREAM" in r.stdout and "ALERT ⚠️ 主墙研究账发现 3 个覆盖缺口" in marks
+
+
+def _run_cov(tmp_path, res: str, rc: int):
+    (tmp_path / "logs").mkdir(exist_ok=True)
+    script = f"""
+LOG_DIR=logs; ET_DATE=2026-10-19; ET_MIN=600
+hb() {{ echo "HB $1" >> hb.txt; }}
+ov_text() {{ echo "$1"; }}
+notify() {{ echo "NOTIFY $1" >> notify.txt; }}
+run_bound() {{ RB_RES=$'{res}'; RB_RC={rc}; RB_OV=partial; }}
+{_fn("mainwall_coverage")}
+mainwall_coverage
+"""
+    subprocess.run(["zsh", "-c", script], cwd=tmp_path, check=True)
+    n = tmp_path / "notify.txt"
+    return n.read_text() if n.exists() else ""
+
+
+def test_hook_coverage_notifies_only_new_gaps(tmp_path):
+    assert "2 个覆盖缺口" in _run_cov(tmp_path, "  ⚠️ x missing\\nNEW_GAPS 2", 1)
+    (tmp_path / "b").mkdir()
+    assert _run_cov(tmp_path / "b", "NEW_GAPS 0", 1) == ""
+
+
+def test_hook_coverage_crash_is_visible(tmp_path):
+    assert "覆盖核查失败" in _run_cov(tmp_path, "Traceback", 2)

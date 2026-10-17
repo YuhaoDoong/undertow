@@ -139,6 +139,10 @@ def _base_row(m, key=f"{T}|silver"):
             "entry_decision": None, "legs": [], "windows": {}, "samples": [], "outcome": None}
 
 
+def _att(status, tried_at, key=f"{T}|silver"):
+    return {"key": key, "instrument": "silver", "session": T.isoformat(), "status": status, "tried_at": tried_at}
+
+
 def test_entry_set_once_and_frozen(mwcli):
     m = mwcli
     p = m._path("silver"); p.parent.mkdir(parents=True)
@@ -165,8 +169,8 @@ def test_premarket_conflict_not_overwritten(mwcli):
 
 def test_denominator_row_from_last_failed_attempt(mwcli):
     m = mwcli
-    m._append_attempt({"key": f"{T}|silver", "status": "input_stale", "tried_at": "a"})
-    m._append_attempt({"key": f"{T}|silver", "status": "snapshot_missing", "tried_at": "b"})
+    m._append_attempt(_att("input_stale", "a"))
+    m._append_attempt(_att("snapshot_missing", "b"))
 
     class I:
         key = "silver"
@@ -354,13 +358,7 @@ def test_open_window_flags_failed_premarket(monkeypatch, mwcli):
 def test_sample_records_signed_distance_once_per_slot(monkeypatch, mwcli):
     import undertow.shadow_cli as sc
     m, p, A = _e2e(monkeypatch, mwcli)
-
-    class FakeDT(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return datetime(2026, 10, 16, 11, 2, tzinfo=ET)
-    monkeypatch.setattr(m, "datetime", FakeDT)
-    monkeypatch.setattr(sc, "sample_bounds", lambda d: (585, 780))
+    _sample_env(monkeypatch, m, depth_ok=True)
     assert m.cmd_sample(A) == 0
     r = jl.load(p, "key")[0]
     s = r["samples"][0]
@@ -412,20 +410,20 @@ def test_audit_flags_whole_day_never_run(mwcli, monkeypatch):
 
 def test_corrupt_attempts_log_is_reported_and_preserved(mwcli):
     m = mwcli
-    m._append_attempt({"key": f"{T}|silver", "status": "input_stale", "tried_at": "a"})
+    m._append_attempt(_att("input_stale", "a"))
     ap = m._attempts_path()
     ap.write_bytes(ap.read_bytes() + b'{"key": "half\n')
     orig = ap.read_bytes()
     with pytest.raises(m.AttemptsCorrupt):
-        m._append_attempt({"key": "x"})
+        m._append_attempt(_att("input_stale", "c"))
     assert ap.read_bytes() == orig and list(ap.parent.glob("capture_attempts.jsonl.corrupt-*"))
 
     m._ensure_denominator_row(_I, T)
     r = jl.load(m._path("silver"), "key")[0]
-    assert r["premarket"]["status"] == "premarket_attempts_corrupt" and "损坏" in r["premarket"]["error"]
+    assert r["premarket"]["status"] == "premarket_attempts_corrupt" and "不合法" in r["premarket"]["error"]
 
 
-def _sample_env(monkeypatch, m, depth_ok: bool, row_mut=None):
+def _sample_env(monkeypatch, m, depth_ok: bool, row_mut=None, now=(11, 2, 0), step_s=1):
     import undertow.collect.longbridge_quote as lq
     import undertow.shadow_cli as sc
     from undertow.collect.longbridge_quote import Depth
@@ -433,9 +431,12 @@ def _sample_env(monkeypatch, m, depth_ok: bool, row_mut=None):
     class FakeDT(datetime):
         @classmethod
         def now(cls, tz=None):
-            return datetime(2026, 10, 16, 11, 2, tzinfo=ET)
+            return datetime(2026, 10, 16, *now, tzinfo=ET)
     monkeypatch.setattr(m, "datetime", FakeDT)
     monkeypatch.setattr(sc, "sample_bounds", lambda d: (585, 780))
+    import itertools
+    clk = (datetime(2026, 10, 16, *now, tzinfo=ET) + timedelta(seconds=i * step_s) for i in itertools.count())
+    monkeypatch.setattr(m, "_now_iso", lambda: next(clk).isoformat())
     calls = {"depth": [], "quote": 0}
 
     def depth(syms):
@@ -455,10 +456,10 @@ def test_sample_depth_failure_is_partial_then_retries_only_missing(monkeypatch, 
     m, p, A = _e2e(monkeypatch, mwcli)
     calls = _sample_env(monkeypatch, m, depth_ok=False)
     assert m.cmd_sample(A) == 1                                               # 标的成功不能掩盖盘口失败
-    assert calls["quote"] == 1 and len(calls["depth"]) == 1
+    assert calls["quote"] == 1 and len(calls["depth"]) == 4                  # 逐合约请求，各记收到时刻
     calls = _sample_env(monkeypatch, m, depth_ok=True)
     assert m.cmd_sample(A) == 0
-    assert calls["quote"] == 0 and len(calls["depth"][0]) == 4                # 只补缺的 4 个合约，标的已有不重取
+    assert calls["quote"] == 0 and len(calls["depth"]) == 4                   # 只补缺的 4 个合约，标的已有不重取
     smp = jl.load(p, "key")[0]["samples"]
     assert len(smp) == 2 and smp[1]["requested"] != smp[0]["requested"]     # 两次尝试都原样保留
     assert m.cmd_sample(A) == 0 and len(jl.load(p, "key")[0]["samples"]) == 2
@@ -476,3 +477,133 @@ def test_sample_without_applicable_legs_still_records_distance(monkeypatch, mwcl
     assert m.cmd_sample(A) == 0 and calls["depth"] == []
     s = jl.load(p, "key")[0]["samples"][0]
     assert s["signed_dist_atr"]["P"] > 0 and s["not_applicable"] == {"P": "no_width", "C": "no_width"}
+
+
+# ── 058：跨桶观测 / 尝试账严格校验 ──────────────────────────────────────────
+
+@pytest.mark.parametrize("now", [(12, 59, 50), (10, 14, 50)])
+def test_sample_members_received_after_slot_end_do_not_count(monkeypatch, mwcli, now):
+    m, p, A = _e2e(monkeypatch, mwcli)
+    _sample_env(monkeypatch, m, depth_ok=True, now=now, step_s=8)          # 第 2 次读钟起已越过桶末
+    assert m.cmd_sample(A) == 1
+    smp = jl.load(p, "key")[0]["samples"][0]
+    assert smp["slot"] == ("12:45" if now[0] == 12 else "10:00")
+    flags = [q["out_of_slot"] for q in smp["quotes"].values()] + [smp["underlying"]["out_of_slot"]]
+    assert any(flags)                                                       # 原始尝试保留并标 out_of_slot
+    if smp["underlying"]["out_of_slot"]:
+        assert smp["signed_dist_atr"] == {"P": None, "C": None}
+
+
+def test_sample_recovers_within_slot_after_failure(monkeypatch, mwcli):
+    m, p, A = _e2e(monkeypatch, mwcli)
+    _sample_env(monkeypatch, m, depth_ok=False, now=(11, 0, 0))
+    assert m.cmd_sample(A) == 1
+    _sample_env(monkeypatch, m, depth_ok=True, now=(11, 5, 0))
+    assert m.cmd_sample(A) == 0
+    smp = jl.load(p, "key")[0]["samples"]
+    assert smp[0]["underlying"]["last"] and "underlying" not in smp[1]["requested"]   # 已合格成员不被覆盖、不重取
+
+
+@pytest.mark.parametrize("bad", [b"null\n", b'{"key":"k","key":"k2","instrument":"silver","session":"s","status":"x","tried_at":"t"}\n',
+                                 b'{"key":"k","instrument":"silver","session":"s","status":"x","tried_at":"t","v":NaN}\n',
+                                 b"\xff\xfe\n", b'{"key":"k","instrument":"silver","session":"s"}\n'])
+def test_attempts_log_rejects_bad_structure(mwcli, bad):
+    m = mwcli
+    m._append_attempt(_att("input_stale", "a"))
+    ap = m._attempts_path()
+    ap.write_bytes(ap.read_bytes() + bad)
+    orig = ap.read_bytes()
+    with pytest.raises(m.AttemptsCorrupt):
+        m._load_attempts()
+    assert ap.read_bytes() == orig and list(ap.parent.glob("capture_attempts.jsonl.corrupt-*"))
+    m._ensure_denominator_row(_I, T)
+    assert jl.load(m._path("silver"), "key")[0]["premarket"]["status"] == "premarket_attempts_corrupt"
+
+
+def test_attempts_same_key_retries_allowed_and_write_rejects_nan(mwcli):
+    m = mwcli
+    for i in range(3):
+        m._append_attempt(_att("input_stale", f"t{i}"))
+    assert len(m._load_attempts()) == 3
+    with pytest.raises(ValueError):
+        m._append_attempt(_att("input_stale", "x") | {"v": float("nan")})
+    with pytest.raises(ValueError):
+        m._append_attempt({"key": "k"})
+    assert len(m._load_attempts()) == 3
+
+
+# ── 058 A：已到截止的应有覆盖（截止后第一次唤醒补查）──────────────────────────
+
+D19 = date(2026, 10, 19)
+
+
+def _row19(**kw):
+    r = _premarket_row(); r["key"] = f"{D19}|silver"; r["session"] = D19.isoformat()
+    r["premarket"]["E"] = "2026-10-21"
+    r.update(kw)
+    return r
+
+
+def _cov(m, monkeypatch, now, rows=(), tmp=None):
+    p = m._path("silver"); p.parent.mkdir(parents=True, exist_ok=True)
+    for r in rows:
+        jl.insert_frozen(p, r, key_field="key", frozen=m.frozen_part)
+    monkeypatch.setattr(m, "_clock", lambda: now)
+
+    class A:
+        instruments = ["silver"]; status_file = None; run_id = None
+    return A
+
+
+def test_coverage_whole_open_window_missed_found_after_deadline(monkeypatch, mwcli, tmp_path, capsys):
+    m = mwcli
+    monkeypatch.chdir(tmp_path)
+    A = _cov(m, monkeypatch, datetime(2026, 10, 19, 17, 0, tzinfo=ET), [_row19()])
+    assert m.cmd_coverage(A) == 1
+    out = capsys.readouterr().out
+    assert "NEW_GAPS" in out and "sdec missing" in out
+    fail = (tmp_path / "data/reports/FAILURE_2026-10-19.txt").read_text()
+    assert "2026-10-19|silver|sdec" in fail and "2026-10-19|silver|sample:12:45" in fail
+    assert m.cmd_coverage(A) == 1 and capsys.readouterr().out.strip().endswith("NEW_GAPS 0")    # 不重复提醒
+    assert m.cmd_audit(A) == 1                                                                  # audit 不再 rc0
+
+
+def test_coverage_before_deadline_and_next_day_catchup(monkeypatch, mwcli, tmp_path):
+    m = mwcli
+    monkeypatch.chdir(tmp_path)
+    assert m.coverage_items(_row19(), D19, "silver", datetime(2026, 10, 19, 9, 0, tzinfo=ET)) == []
+    items = m.coverage_items(_row19(), D19, "silver", datetime(2026, 10, 19, 10, 10, tzinfo=ET))
+    assert [i["item"] for i in items] == ["capture"]                         # 开盘窗未结束：Sdec 未到截止
+    A = _cov(m, monkeypatch, datetime(2026, 10, 20, 8, 0, tzinfo=ET))         # 10/19 一行都没有，10/20 早上补查
+    assert m.cmd_coverage(A) == 1
+    g = jl.load(m._gaps_path(), "key")
+    assert any(x["id"] == "2026-10-19|silver|capture" and x["reason"] == "not_generated" for x in g)
+
+
+def test_coverage_not_applicable_no_false_alarm(monkeypatch, mwcli, tmp_path):
+    m = mwcli
+    r = _row19(); r["premarket"] = {"status": "no_expiry"}
+    items = m.coverage_items(r, D19, "silver", datetime(2026, 10, 19, 17, 0, tzinfo=ET))
+    assert {i["item"]: i["status"] for i in items} == {"capture": "complete", "sdec": "not_applicable"}
+    monkeypatch.setattr(m, "_clock", lambda: datetime(2026, 10, 18, 12, tzinfo=ET))       # 周末：起点前，无应有项
+    assert m.coverage_all(["silver"], datetime(2026, 10, 18, 12, tzinfo=ET)) == []
+    days = {i["session"] for i in m.coverage_all(["silver"], datetime(2026, 11, 30, 17, tzinfo=ET))}
+    assert "2026-11-26" not in days and "2026-10-24" not in days                            # 休市日、周六不列
+
+
+def test_coverage_half_day_sample_slots(mwcli):
+    m = mwcli
+    r = _row19(); r["session"] = "2026-11-27"
+    items = m.coverage_items(r, date(2026, 11, 27), "silver", datetime(2026, 11, 27, 16, 0, tzinfo=ET))
+    slots = [i["item"] for i in items if i["section"] == "sample"]
+    assert slots and slots[-1] == "sample:12:30"                              # 13:00 收市日采样截到 12:45
+
+
+def test_coverage_complete_day_reports_no_gap(monkeypatch, mwcli, tmp_path):
+    m, p, A = _e2e(monkeypatch, mwcli)                                       # 10/16 有完整开盘窗
+    assert m.coverage_items(None, T, "silver", datetime(2026, 10, 16, 9, 0, tzinfo=ET)) == []
+    assert m.cmd_quote(A) == 0
+    r = jl.load(p, "key")[0]
+    items = m.coverage_items(r, T, "silver", datetime(2026, 10, 16, 10, 30, tzinfo=ET))
+    st = {i["item"]: i["status"] for i in items}
+    assert st["sdec"] == "complete" and all(v == "complete" for k, v in st.items() if k.startswith("entry:"))

@@ -52,6 +52,41 @@ const DrillSync = (() => {
   function copyKey(c) { return JSON.stringify([c && c.seed, c && c.question]); }
   // 一道题的 K 线只由这几项决定（数据版本另由 data_sha256 绑定）；缓存按它认，题号重排不影响
   function windowKey(q) { return JSON.stringify([q.sym, q.i0, q.left, q.right, !!q.mirror]); }
-  return {isPrefix, covers, relation, merge, copyKey, windowKey};
+
+  // 二次标注记录（relabel-v1）：按题库题号 rid 认。标注 marks、动作 actions 只许追加；locked / revealed 只许由 false 变 true；
+  // 作答 answer（锁定时写）与判定 result（揭示时写）一旦写下不许改。同样的「谁包含谁」规则；分叉时保留服务端那份，
+  // 本机那份原样进 relabel_conflicts（按内容身份去重，重复合并不多出一条）。
+  const RL_APPEND = ["marks", "actions"];
+  function rlCovers(a, b) {
+    return RL_APPEND.every(k => isPrefix(b[k], a[k])) && !(b.locked && !a.locked) && !(b.revealed && !a.revealed)
+      && (b.answer == null || same(a.answer, b.answer)) && (b.result == null || same(a.result, b.result))
+      && same(a.item_sha, b.item_sha);
+  }
+  function rlRelation(local, server) {
+    const l = rlCovers(local, server), s = rlCovers(server, local);
+    return l ? "local" : s ? "server" : "diverged";
+  }
+  const rlKey = c => JSON.stringify([c && c.rid, c && c.record]);
+  function mergeRelabel(local, server, now) {
+    const sr = (server && server.relabel) || [], lr = (local && local.relabel) || [];
+    const scopies = (server && server.relabel_conflicts) || [];
+    const copies = [...scopies];
+    const has = c => copies.some(x => rlKey(x) === rlKey(c));
+    let diverged = 0;
+    const relabel = sr.map(s => {
+      const l = lr.find(x => x.rid === s.rid);
+      if (!l) return s;
+      const r = rlRelation(l, s);
+      if (r === "local") return l;
+      if (r === "diverged") { diverged++; const c = {stashed_at: now, rid: s.rid, reason: "本机与本机文件各有对方没有的操作；保留文件里那份，本机这份原样存档", record: l};
+        if (!has(c)) copies.push(c); }
+      return s;
+    });
+    ((local && local.relabel_conflicts) || []).forEach(c => { if (!has(c)) copies.push(c); });
+    lr.filter(l => !sr.some(s => s.rid === l.rid)).forEach(l => relabel.push(l));
+    const changed = !same(relabel, sr) || copies.length !== scopies.length;
+    return {relabel, relabel_conflicts: copies, diverged, changed};
+  }
+  return {isPrefix, covers, relation, merge, copyKey, windowKey, rlCovers, rlRelation, mergeRelabel};
 })();
 if (typeof module !== "undefined") module.exports = DrillSync;

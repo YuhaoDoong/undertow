@@ -60,7 +60,13 @@ MAX_NOTE = 20_000
 REQUEST_TIMEOUT = 30
 SERVER_KEYS = {"revision", "saved_at"}                      # 服务端写，页面带回来也会被覆盖
 CLIENT_KEYS = {"version", "questions", "cur", "settings", "updated_at", "base_revision",
-               "page_engine_sha256", "data_sha256", "conflict_copies"}
+               "page_engine_sha256", "data_sha256", "conflict_copies",
+               "relabel", "relabel_conflicts", "relabel_cur"}       # 二次标注题（relabel-v1，可选；旧记录没有这三项照常可读）
+# 二次标注记录：按题库题号 rid 认；marks/actions 只许追加，locked/revealed 不许撤，answer/result/item_sha 写下后不许改
+RL_KEYS = {"rid", "item_sha", "created_at", "marks", "actions", "answer", "locked", "revealed", "result", "note"}
+RL_APPEND = ("marks", "actions")
+RL_DIRS = ("看涨", "看跌", "不确定")
+RL_MARK_TYPES = {"HH", "HL", "LH", "LL", "支撑线", "压力线"}
 APPEND_ONLY = ("actions", "trades", "marks")                 # 只许在末尾追加，不许删改
 IDENTITY = ("sym", "i0", "mirror", "left", "right", "engine", "data_sha256")   # 题目身份，存下后不许改
 TOKEN_HEADER = "X-Drill-Token"
@@ -295,6 +301,42 @@ def _validate_legacy_question(q: dict, tag: str) -> None:
         _check(_int(q["max_cursor"]), f"{tag}的 max_cursor 不是整数")
 
 
+def _validate_relabel(r: dict, tag: str) -> None:
+    """二次标注记录逐字段校验：作答与锁定、判定与揭示必须成对；揭示前必须先锁定。"""
+    _check(isinstance(r, dict), f"{tag}不是对象")
+    extra = set(r) - RL_KEYS
+    _check(not extra, f"{tag}含未知字段 {sorted(extra)[:5]}")
+    _check(isinstance(r.get("rid"), str) and 0 < len(r["rid"]) <= 64, f"{tag}的 rid 不对")
+    _check(_hex64(r.get("item_sha")), f"{tag}的 item_sha 不是 sha256")
+    _check(isinstance(r.get("created_at"), str), f"{tag}缺 created_at")
+    _check(type(r.get("locked")) is bool and type(r.get("revealed")) is bool, f"{tag}的 locked/revealed 不是布尔")
+    _check(not r["revealed"] or r["locked"], f"{tag}未锁定却已揭示")
+    _check(isinstance(r.get("note", ""), str) and len(r.get("note", "")) <= MAX_NOTE, f"{tag}的备注不是文本或过长")
+    for f in RL_APPEND:
+        _check(isinstance(r.get(f), list) and len(r[f]) <= MAX_LIST, f"{tag}的 {f} 不是列表或过多")
+    for m in r["marks"]:
+        _check(isinstance(m, dict) and m.get("action") in ("add", "delete"), f"{tag}的标注不对")
+        if m["action"] == "add":
+            _check(isinstance(m.get("id"), str) and m.get("type") in RL_MARK_TYPES and _int(m.get("i")) and 0 <= m["i"] < MAX_SPAN
+                   and _pos(m.get("price")), f"{tag}的标注不对")
+        else:
+            _check(isinstance(m.get("target"), str), f"{tag}的删除标注不对")
+    for a in r["actions"]:
+        _check(isinstance(a, dict) and isinstance(a.get("type"), str), f"{tag}的动作记录不对")
+    ans = r.get("answer")
+    _check((ans is None) == (not r["locked"]), f"{tag}的作答与锁定状态不一致")
+    if ans is not None:
+        _check(isinstance(ans, dict) and ans.get("dir") in RL_DIRS and _opt(ans.get("invalid"), _pos) and isinstance(ans.get("at"), str)
+               and not (ans["dir"] == "不确定" and ans.get("invalid") is not None), f"{tag}的作答不对")
+    res = r.get("result")
+    _check((res is None) == (not r["revealed"]), f"{tag}的判定与揭示状态不一致")
+    if res is not None:
+        side = lambda x: (isinstance(x, dict) and x.get("dir") in RL_DIRS and type(x.get("ok")) is bool  # noqa: E731
+                          and _bool_or_none(x.get("inv_hit")))
+        _check(isinstance(res, dict) and side(res.get("user")) and side(res.get("claude")) and _num(res.get("move"))
+               and _hex64(res.get("relabel_sha256")) and isinstance(res.get("at"), str), f"{tag}的判定不对")
+
+
 def validate_body(rec, meta: dict | None = None) -> None:
     """记录主体（提交、读入、恢复共用）：顶层字段、每道题（新题完整、旧题宽松）、题号/种子唯一、冲突副本、设置。"""
     _check(isinstance(rec, dict), "记录不是 JSON 对象")
@@ -322,6 +364,18 @@ def validate_body(rec, meta: dict | None = None) -> None:
     _check(isinstance(cc, list), "conflict_copies 不是列表")
     for c in cc:                                              # 存档副本只卡外形，内容原样保留（它本来就是分叉出来的那份）
         _check(isinstance(c, dict) and isinstance(c.get("question"), dict) and _int(c["question"].get("seed")), "冲突副本不对")
+    rl = rec.get("relabel", [])
+    _check(isinstance(rl, list) and len(rl) <= MAX_QUESTIONS, "relabel 不是列表或过多")
+    rids = set()
+    for k, r in enumerate(rl):
+        _validate_relabel(r, f"二次标注第 {k} 项")
+        _check(r["rid"] not in rids, f"二次标注 {r['rid']} 重复")
+        rids.add(r["rid"])
+    rc = rec.get("relabel_conflicts", [])
+    _check(isinstance(rc, list), "relabel_conflicts 不是列表")
+    for c in rc:
+        _check(isinstance(c, dict) and isinstance(c.get("record"), dict) and isinstance(c.get("rid"), str), "二次标注冲突副本不对")
+    _check(rec.get("relabel_cur") is None or isinstance(rec.get("relabel_cur"), str), "relabel_cur 不是题号")
     _check(isinstance(rec.get("settings", {}), dict), "settings 不是对象")
     _check(rec.get("cur") is None or _int(rec.get("cur")), "cur 不是题号")
     _check(rec.get("updated_at") is None or isinstance(rec.get("updated_at"), str), "updated_at 不是文本")
@@ -361,6 +415,28 @@ def check_progress(old: dict, new: dict) -> None:
     a, b = old.get("conflict_copies") or [], new.get("conflict_copies") or []
     if len(b) < len(a) or b[:len(a)] != a:
         bad.append("冲突副本被删改")
+    by_rid = {r["rid"]: r for r in new.get("relabel") or [] if isinstance(r, dict) and "rid" in r}
+    for orr in old.get("relabel") or []:
+        if not isinstance(orr, dict):
+            continue
+        tag = f"二次标注 {orr.get('rid')}"
+        nr = by_rid.get(orr.get("rid"))
+        if nr is None:
+            bad.append(f"{tag}被删掉")
+            continue
+        for k in RL_APPEND:
+            x, y = orr.get(k) or [], nr.get(k) or []
+            if len(y) < len(x) or y[:len(x)] != x:
+                bad.append(f"{tag}的 {k} 不是已存记录的延续（{len(x)} → {len(y)} 条）")
+        for k in ("locked", "revealed"):
+            if orr.get(k) is True and nr.get(k) is not True:
+                bad.append(f"{tag}已{'锁定' if k == 'locked' else '揭示'}却被撤回")
+        for k in ("answer", "result", "item_sha"):
+            if orr.get(k) is not None and orr.get(k) != nr.get(k):
+                bad.append(f"{tag}的 {k} 被改")
+    a, b = old.get("relabel_conflicts") or [], new.get("relabel_conflicts") or []
+    if len(b) < len(a) or b[:len(a)] != a:
+        bad.append("二次标注冲突副本被删改")
     if bad:
         raise Conflict("这次提交会让已保存的记录倒退，拒绝写入（原件未动）：" + "；".join(bad[:5]) +
                        (f" 等 {len(bad)} 处" if len(bad) > 5 else "") + "。请点「重新载入并合并」",

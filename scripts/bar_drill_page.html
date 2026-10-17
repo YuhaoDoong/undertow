@@ -2,9 +2,10 @@
 <title>逐根回测练习</title>
 <style>
 :root{--bg:#fff;--fg:#1d1d1f;--mut:#6e6e73;--up:#2a9d4b;--dn:#d1495b;--hi:#1f6feb;--lo:#e36209;--act:#0e8a7e;--stop:#d1495b;--tg:#2a9d4b;
-  --line:#d0d0d5;--sel:#fde68a;--fut:rgba(128,128,128,.07);--chip:#4b6bfb;--sup:#2a9d4b;--res:#d1495b;--warn:#b45309;--card:#f6f6f8}
-@media (prefers-color-scheme:dark){:root{--bg:#161618;--fg:#f2f2f2;--mut:#a0a0a6;--line:#3a3a3e;--sel:#5b4b12;--fut:rgba(255,255,255,.04);--card:#202024;--warn:#f59e0b}}
+  --line:#d0d0d5;--sel:#fde68a;--fut:rgba(128,128,128,.07);--chip:#4b6bfb;--sup:#2a9d4b;--res:#d1495b;--warn:#b45309;--card:#f6f6f8;--cl:#8e44ad}
+@media (prefers-color-scheme:dark){:root{--bg:#161618;--fg:#f2f2f2;--mut:#a0a0a6;--line:#3a3a3e;--sel:#5b4b12;--fut:rgba(255,255,255,.04);--card:#202024;--warn:#f59e0b;--cl:#c39bd3}}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,"PingFang SC",sans-serif}
+[hidden]{display:none!important}   /* .row/.grp 的 display:flex 会盖掉 hidden 属性（旧题提示行原先因此一直显示） */
 .wrap{max-width:1180px;margin:0 auto;padding:0 16px 40px}
 .bar{position:sticky;top:0;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--line);z-index:5}
 .row{display:flex;flex-wrap:wrap;gap:6px 10px;margin:6px 0;align-items:center}
@@ -22,15 +23,21 @@ textarea{width:100%;min-height:44px;background:transparent;color:var(--fg);borde
 </style></head><body><div class="wrap">
 <div class="bar">
   <div class="row"><b>逐根回测练习</b>
-    <select id="qsel"></select><button id="newq" class="big">新题目</button>
+    <span class="mut">题型</span><select id="kind"><option value="drill">逐根回测</option><option value="relabel">二次标注（和算法比）</option></select>
+    <span id="drillsel"><select id="qsel"></select><button id="newq" class="big">新题目</button></span>
     <span class="mut">品种池</span><select id="pool"><option value="all">全部</option><option value="etf">ETF + 期货</option><option value="stock">个股</option></select>
     <span class="mut">镜像概率</span><select id="mprob"><option value="0.5">50%</option><option value="0">不镜像</option><option value="1">全部镜像</option></select>
     <span class="mut">背景</span><select id="left"><option value="150">150 根</option><option value="300" selected>300 根</option><option value="500">500 根</option></select>
     <span class="mut">往后</span><select id="right"><option value="100">100 根</option><option value="150" selected>150 根</option><option value="250">250 根</option></select>
     <button id="exp">导出记录</button><span id="saved" class="mut"></span><button id="remerge" hidden>重新载入并合并</button></div>
-  <div class="row">
-    <span class="grp"><button id="next" class="big">下一根 →</button><button id="next5">+5 根</button><button id="endq">结束本题</button></span>
-    <span class="grp"><span class="mut">交易</span><button id="long">做多</button><button id="short">做空</button><button id="flat">平仓</button>
+  <div class="row" id="rlbar" hidden>
+    <span class="grp"><select id="rlsel"></select><button id="rlnext" class="big">下一道没做完的</button></span>
+    <span class="grp"><span class="mut">我的方向</span><button data-dir="看涨">看涨</button><button data-dir="看跌">看跌</button><button data-dir="不确定">不确定</button>
+      <button data-m="失效位">失效位</button><button id="rlclrinv">清除失效位</button></span>
+    <span class="grp"><button id="rllock" class="big">锁定我的标注</button><button id="rlreveal" class="big">揭示未来 20 根</button></span></div>
+  <div class="row" id="drillrow">
+    <span class="grp" id="g_next"><button id="next" class="big">下一根 →</button><button id="next5">+5 根</button><button id="endq">结束本题</button></span>
+    <span class="grp" id="g_trade"><span class="mut">交易</span><button id="long">做多</button><button id="short">做空</button><button id="flat">平仓</button>
       <button data-m="止损">止损</button><button data-m="止盈">止盈</button><button id="cancel">撤开盘单</button></span>
     <span class="grp" id="marks"><span class="mut">标注</span></span>
     <span class="grp"><span class="mut">筹码</span><select id="chip"><option value="off">不显示</option><option value="stack">K 线堆叠</option></select></span>
@@ -43,29 +50,44 @@ textarea{width:100%;min-height:44px;background:transparent;color:var(--fg);borde
   <b>结束本题：</b>和其它操作一样是看完当前收盘才决定，持仓在<b>下一根开盘</b>平掉（正常成交）；挂着的开仓单作废。已经是最后一根、或本题自然走到头时还持仓，只能按最后收盘平——这叫「行政平仓」，单列，不计入胜率和收益之和。<br>
   <b>看图：</b>在图上<b>按住左右拖动</b>看更早的 K 线，触控板左右滑也能平移；滚轮（或触控板上下滑）缩放显示的根数，「回到最新」或按 End 回到当前这根。拖动只能看已经出现的 K 线。<br>
   <b>标注：</b>HH/HL/LH/LL 自动贴最高价或最低价，支撑线/压力线按点的高度画水平线；「删除」点在标记附近。<br>
+  <b>二次标注（题型选「二次标注」）：</b>题库是出题时用固定种子抽好的一批图（2015 年及以前日线，原始与镜像各半，只给截止前 300 根）。
+  图上「算法标注」是确定性规则算出来的，<b>只用了截止根及以前的 K 线</b>：收盘之字形（2 倍 ATR 才算反转）的摆动点标 HH/HL/LH/LL，
+  来向区间（R = 下跌途中第一段横盘、作向上压力；S = 起涨大阳线实体中段、作向下支撑）中到截止时还有效的，
+  方向 = 最近两个高点与两个低点同为 HH+HL 看涨、LH+LL 看跌，否则不确定；失效位 = 看涨时最近低点、看跌时最近高点。
+  ① 先自己标（HH/HL/LH/LL、支撑线、压力线），选方向，可选在图上点一个失效位；② 「锁定」后不能再改，这时才显示算法标注与差异
+  （同类结构点相差 3 根以内算一致；支撑/压力线落在同类区间内或离区间 0.25 倍 ATR 以内算一致）；③ 「揭示未来 20 根」后判对错：
+  位移 = (第 20 根收盘 − 截止收盘) / 截止根 ATR，|位移| &lt; 0.5 时「不确定」算对、看涨看跌算错，≥ 0.5 时方向一致算对、「不确定」算错；
+  失效位只记 20 根内有没有被盘中高低碰到，不判先后。揭示后才显示品种、日期、是否镜像。<b>这是练习记录，不是你或算法方向能力的证据</b>
+  （题少、同一时期、算法规则也没验证过）。<br>
   <b>快捷键：</b>→ 或空格 下一根，Shift+→ 前进 5 根，B 做多，S 做空，X 平仓，← 往前拖 20 根，End 回到最新，Esc 取消点图模式。<br>
   <b>保存：</b>每一步都自动保存。用 <code>python3 scripts/bar_drill_serve.py</code> 打开（http://127.0.0.1:8788/）时，还会自动写进私有文件 data/soul/drill/，换浏览器也不丢；直接双击打开的话只存在这个浏览器里。保存状态显示在顶部：<b>开了两个标签页</b>同时做时，晚到的那个会被拒绝（不会覆盖先存的进度），点「重新载入并合并」即可——同一题两边都往下做过的，保留文件里那份，本页那份原样存档。记录文件损坏时服务会把它隔离并暂停写入，按顶部提示在终端处理。旧版撮合引擎或旧数据做的未完题只能查看，不能接着推进（当前引擎会按新口径撮合，等于改判旧题）；可点「以当前引擎另开新题」，同一段 K 线从已看到的位置空仓接着做，旧题原样保留。服务重启后已开的页面要刷新。请不要翻看页面源码（后面的走势在里面）。</details>
 </div>
 <div class="tip mut" id="tip">按住图表左右拖动可看历史；鼠标移到 K 线上看价格</div>
 <div id="chart"></div>
 <div class="card" id="reveal" hidden></div>
-<div class="card"><b>本题成交</b><div id="trades" class="mut">（无）</div></div>
+<div class="card" id="rldiff" hidden></div>
+<div class="card" id="tradescard"><b>本题成交</b><div id="trades" class="mut">（无）</div></div>
 <div class="row"><b>本题备注（为什么这样做）</b></div><textarea id="note"></textarea>
-<div class="card"><b>累计成绩（只算已结束的题）</b><div id="overall"></div></div>
+<div class="card" id="overallcard"><b>累计成绩（只算已结束的题）</b><div id="overall"></div></div>
+<div class="card" id="rlover" hidden></div>
 </div>
 <script>
 __ENGINE__
 __SYNC__
+__RELABEL__
 const POOL = __DATA__;
 const KEY = "bar_drill_v1";
 const ETF = POOL.meta.etf, STOCK = POOL.meta.stock;
 const MARKS = [["HH","hi","var(--hi)"],["HL","lo","var(--lo)"],["LH","hi","var(--hi)"],["LL","lo","var(--lo)"],["支撑线","line","var(--sup)"],["压力线","line","var(--res)"],["删除","del",""]];
-const DEFAULT_SETTINGS = {pool: "all", mprob: "0.5", left: "300", right: "150"};
-let DB = {questions: [], conflict_copies: [], cur: null, settings: {...DEFAULT_SETTINGS}};
+const DEFAULT_SETTINGS = {pool: "all", mprob: "0.5", left: "300", right: "150", kind: "drill"};
+const RLB = POOL.relabel || {meta: {}, items: []};
+let DB = {questions: [], conflict_copies: [], cur: null, relabel: [], relabel_conflicts: [], relabel_cur: null, settings: {...DEFAULT_SETTINGS}};
 // 保存状态全部如实显示在顶部（Codex 053 B）：浏览器本地失败、服务端冲突、恢复未决、尚未落文件，都不许被一句「已保存」盖住。
 const SYNC = {inflight: false, again: false, conflict: null, blocked: null, stale: false, err: null, localErr: null, lastOk: null, chg: 0, saved: 0};
 try { const s = JSON.parse(localStorage.getItem(KEY) || "null");
-  if (s && Array.isArray(s.questions)) DB = {questions: s.questions, conflict_copies: s.conflict_copies || [], cur: s.cur ?? null, settings: {...DEFAULT_SETTINGS, ...(s.settings || {})}, updated_at: s.updated_at};
+  if (s && Array.isArray(s.questions)) DB = {questions: s.questions, conflict_copies: s.conflict_copies || [], cur: s.cur ?? null,
+    relabel: Array.isArray(s.relabel) ? s.relabel : [], relabel_conflicts: s.relabel_conflicts || [], relabel_cur: s.relabel_cur ?? null,
+    settings: {...DEFAULT_SETTINGS, ...(s.settings || {})}, updated_at: s.updated_at};
 } catch (e) { SYNC.localErr = "读取失败：" + e.message; }
 // 自动保存：每次操作都写浏览器本地；经 scripts/bar_drill_serve.py 打开时，另外串行写进私有文件 data/soul/drill/：
 // 同一时刻只有一个在途请求，期间的新改动等它回来再合并成一次提交；提交带 base_revision，服务端版本变了就 409，不覆盖。
@@ -95,7 +117,8 @@ const save = () => { DB.updated_at = new Date().toISOString(); SYNC.chg++;
   if (SERVER && !SYNC.blocked && !SYNC.conflict) { clearTimeout(saveT); saveT = setTimeout(push, 400); }
   syncStatus(); };
 const payload = () => ({version: "bar-drill-v1", base_revision: REV, page_engine_sha256: POOL.meta.engine_sha256, data_sha256: POOL.meta.sha256,
-  questions: DB.questions, conflict_copies: DB.conflict_copies || [], cur: DB.cur, settings: DB.settings, updated_at: DB.updated_at});
+  questions: DB.questions, conflict_copies: DB.conflict_copies || [], cur: DB.cur, settings: DB.settings, updated_at: DB.updated_at,
+  relabel: DB.relabel || [], relabel_conflicts: DB.relabel_conflicts || [], relabel_cur: DB.relabel_cur ?? null});
 async function push(){
   saveT = null;
   if (!SERVER || SYNC.blocked || SYNC.conflict || REV == null) return syncStatus();
@@ -122,8 +145,10 @@ async function reload(){
     SYNC.blocked = null; SYNC.conflict = null; SYNC.err = null; return true;
   } catch (e) { SYNC.blocked = `读取本机记录失败：${e.message}。为免覆盖，自动保存已暂停；排除后点「重新读取」`; return false; } }
 function adopt(srv){
-  const curSeed = (Q() || {}).seed, m = DrillSync.merge(DB, srv, new Date().toISOString());
-  DB = {...DB, questions: m.questions, conflict_copies: m.conflict_copies};
+  const now = new Date().toISOString(), curSeed = (Q() || {}).seed, m = DrillSync.merge(DB, srv, now), rm = DrillSync.mergeRelabel(DB, srv, now);
+  DB = {...DB, questions: m.questions, conflict_copies: m.conflict_copies, relabel: rm.relabel, relabel_conflicts: rm.relabel_conflicts};
+  if (rm.diverged) msg(`有 ${rm.diverged} 道二次标注题在别的标签页也做过、两边分叉：已采用本机文件里那份，本页那份存进 relabel_conflicts`);
+  if (rm.changed && !m.changed) { SYNC.chg++; DB.updated_at = now; }
   const c = DB.questions.find(q => q.seed === curSeed); DB.cur = c ? c.id : DB.questions.length ? DB.questions[DB.questions.length - 1].id : null;
   if (m.diverged) msg(`有 ${m.diverged} 题在别的标签页也做过、两边分叉：已采用本机文件里那份，本页那份原样存进 conflict_copies（导出记录里可见）`);
   // 合并结果（含本页独有的冲突副本）先写进浏览器本地，再由调用方串行推给本机文件；本地写失败照常显示在顶部（Codex 054 B1）
@@ -138,6 +163,103 @@ const barsOf = q => { const k = DrillSync.windowKey(q); return cache[k] || (cach
 const curData = q => q.data_sha256 != null && q.data_sha256 === POOL.meta.sha256[q.sym];
 const frozen = q => !!q && !q.done && !(curEngine(q) && curData(q));
 let mode = null, viewEnd = null, viewN = 200, drag = null, msgT = null;
+
+// ── 二次标注（relabel-v1）──────────────────────────────────────────────
+// 记录 DB.relabel[] 按题库题号 rid 认；作答草稿（方向、失效位）记成追加的动作，锁定时才写 answer；揭示时写 result（含判定规则 sha256）。
+const RL = () => DB.settings.kind === "relabel";
+const rlItem = rid => RLB.items.find(x => x.rid === rid);
+const rlRec = rid => (DB.relabel || []).find(r => r.rid === rid);
+function rlEnsure(){
+  const it = rlItem(DB.relabel_cur); if (!it) return null;
+  let r = rlRec(it.rid);
+  if (!r) { r = {rid: it.rid, item_sha: it.item_sha, created_at: new Date().toISOString(), marks: [], actions: [], answer: null,
+                 locked: false, revealed: false, result: null, note: ""};
+    DB.relabel = DB.relabel || []; DB.relabel.push(r); }
+  return r;
+}
+// 题库重建过（同一 rid 的 item_sha 变了）→ 这条记录对应的是旧题，只读
+const rlStale = r => !!r && !!rlItem(r.rid) && rlItem(r.rid).item_sha !== r.item_sha;
+function rlDraft(r){
+  const d = {dir: null, invalid: null};
+  (r ? r.actions : []).forEach(a => { if (a.type === "pick_dir") d.dir = a.dir; if (a.type === "pick_invalid") d.invalid = a.price; });
+  return r && r.answer ? {dir: r.answer.dir, invalid: r.answer.invalid} : d;
+}
+// 画图用的视图对象：与逐根题同形（geom/draw/bind 复用），揭示前只到截止根，揭示后多 20 根
+function rlView(){
+  const it = rlItem(DB.relabel_cur); if (!it) return null;
+  const r = rlRec(it.rid), cut = it.left - 1;
+  return {sym: it.sym, i0: it.i0, left: it.left, right: it.right, mirror: it.mirror, cursor: r && r.revealed ? cut + it.right : cut,
+          max_cursor: cut, pos: null, pending: null, trades: [], marks: r ? r.marks : [], done: false, _rl: {it, r}};
+}
+const CUR = () => RL() ? rlView() : Q();
+const markable = q => q && (q._rl ? !(q._rl.r && (q._rl.r.locked || rlStale(q._rl.r))) : !frozen(q) && !q.done);
+function rlAct(r, type, extra){ r.actions.push({type, at: new Date().toISOString(), ...(extra || {})}); }
+function rlPickDir(d){ const v = rlView(); if (!markable(v)) return; const r = rlEnsure(); rlAct(r, "pick_dir", {dir: d}); save(); render(); }
+function rlLock(){
+  const v = rlView(); if (!v || !markable(v)) return; const r = rlEnsure(), dr = rlDraft(r), bars = barsOf(v), cut = v.left - 1;
+  const err = Relabel.checkAnswer(dr.dir, dr.invalid, bars[cut][4]); if (err) { msg(err); return; }
+  r.answer = {dir: dr.dir, invalid: dr.invalid, at: new Date().toISOString()}; r.locked = true; rlAct(r, "lock"); mode = null; save(); render();
+}
+function rlReveal(){
+  const v = rlView(); if (!v) return; const r = rlRec(v._rl.it.rid);
+  if (!r || !r.locked) { msg("先锁定自己的标注，再揭示"); return; } if (r.revealed || rlStale(r)) return;
+  const it = v._rl.it, m = RLB.meta, cut = it.left - 1, bars = Drill.window(POOL.series[it.sym], {...it, right: it.right});
+  const u = Relabel.judge(bars, cut, it.claude.atr, r.answer.dir, r.answer.invalid, it.right, m.tie_atr);
+  const c = Relabel.judge(bars, cut, it.claude.atr, it.claude.direction, it.claude.invalid, it.right, m.tie_atr);
+  if (!u || !c) { msg("这题缺未来 K 线或 ATR，无法判定"); return; }
+  r.result = {user: {dir: r.answer.dir, ok: u.ok, inv_hit: u.inv_hit}, claude: {dir: it.claude.direction, ok: c.ok, inv_hit: c.inv_hit},
+              move: +u.move.toFixed(6), relabel_sha256: POOL.meta.relabel_sha256, at: new Date().toISOString()};
+  r.revealed = true; rlAct(r, "reveal"); viewEnd = null; save(); render();
+}
+function rlNextOpen(){
+  const items = RLB.items; if (!items.length) return;
+  const k0 = Math.max(0, items.findIndex(x => x.rid === DB.relabel_cur));
+  for (let s = 1; s <= items.length; s++) { const it = items[(k0 + s) % items.length], r = rlRec(it.rid);
+    if (!r || !r.revealed) { DB.relabel_cur = it.rid; viewEnd = null; mode = null; save(); render(); return; } }
+  msg("题库里的题都做完了");
+}
+function rlOverlay(q, g, xc){
+  const it = q._rl.it, r = q._rl.r, dr = rlDraft(r); let h = "";
+  const hl = (v, c, lab) => { if (v != null) h += `<line x1="${g.PL}" x2="${xc}" y1="${g.y(v)}" y2="${g.y(v)}" stroke="${c}" stroke-width="1.2" stroke-dasharray="8,3"/><text x="${xc - 4}" y="${g.y(v) - 4}" font-size="11" text-anchor="end" fill="${c}">${lab} ${(+v).toFixed(2)}</text>`; };
+  hl(dr.invalid, "var(--stop)", "我的失效位");
+  if (!(r && r.locked)) return h;                      // 锁定前不显示算法标注
+  it.claude.zones.forEach(z => { const x0 = Math.max(g.PL, g.x(Math.max(g.v0, z.formed))), y1 = g.y(z.hi), y0 = g.y(z.lo);
+    if (z.formed > g.end) return;
+    h += `<rect x="${x0}" y="${y1}" width="${xc - x0}" height="${Math.max(1, y0 - y1)}" fill="var(--cl)" opacity=".13"/><text x="${x0 + 3}" y="${y1 - 3}" font-size="11" fill="var(--cl)">算法 ${z.kind === "R" ? "R 压力区" : "S 支撑区"}</text>`; });
+  it.claude.points.forEach(p => { if (p.i < g.v0 || p.i > g.end) return; const X = g.x(p.i), Y = g.y(p.price);
+    h += `<circle cx="${X}" cy="${Y}" r="3" fill="var(--cl)"/><text x="${X}" y="${p.kind === "H" ? Y - 18 : Y + 27}" font-size="11" text-anchor="middle" fill="var(--cl)">${p.label}</text>`; });
+  hl(it.claude.invalid, "var(--cl)", "算法失效位");
+  return h;
+}
+function rlDiffHtml(q){
+  const it = q._rl.it, r = q._rl.r; if (!r || !r.locked) return null;
+  const m = RLB.meta, d = Relabel.diff(liveMarks(q), it.claude, it.claude.atr, m.point_tol_bars, m.line_tol_atr);
+  const pt = x => `${x.type || x.label}@${x.i - it.left + 1}`, zn = z => `${z.kind === "R" ? "R" : "S"} ${fx(z.lo)}–${fx(z.hi)}`;
+  const lst = (a, f) => a.length ? a.map(f).join("、") : "无";
+  return `<b>标注差异（锁定后）</b>　我的方向 <b>${r.answer.dir}</b>${r.answer.invalid != null ? "（失效位 " + fx(r.answer.invalid) + "）" : ""}　·　算法方向 <b>${it.claude.direction}</b>${it.claude.invalid != null ? "（失效位 " + fx(it.claude.invalid) + "）" : ""}<br>
+    结构点一致 ${d.points.match.length}：${lst(d.points.match, x => `${pt(x.user)}≈${x.claude.label}@${x.claude.i - it.left + 1}`)}<br>
+    只有我标的 ${d.points.user_only.length}：${lst(d.points.user_only, pt)}<br>只有算法标的 ${d.points.claude_only.length}：${lst(d.points.claude_only, x => `${x.label}@${x.i - it.left + 1}`)}<br>
+    价位一致 ${d.levels.match.length}：${lst(d.levels.match, x => `${x.user.type} ${fx(x.user.price)} ≈ ${zn(x.claude)}`)}<br>
+    只有我画的线 ${d.levels.user_only.length}：${lst(d.levels.user_only, x => `${x.type} ${fx(x.price)}`)}　·　只有算法的区间 ${d.levels.claude_only.length}：${lst(d.levels.claude_only, zn)}<br>
+    <span class="mut">位置写「@ 相对截止的根数」（0 = 截止根，负数 = 更早）。同类结构点相差 ≤ ${m.point_tol_bars} 根算一致；线落在同类区间内或离区间 ≤ ${m.line_tol_atr} 倍 ATR 算一致。</span>`;
+}
+function rlRevealHtml(q){
+  const it = q._rl.it, r = q._rl.r; if (!r || !r.revealed) return null;
+  const raw = POOL.series[it.sym], d = i => String(raw.d[i]).replace(/(\d{4})(\d\d)(\d\d)/, "$1-$2-$3"), res = r.result;
+  const ok = x => x.ok ? "✅ 对" : "❌ 错", inv = x => x.inv_hit == null ? "未设失效位" : x.inv_hit ? "20 根内碰到失效位" : "没碰到失效位";
+  return `<b>揭晓：</b>${it.sym} 日线 · 截止 ${d(it.i0)} · 往后 20 根到 ${d(it.i0 + it.right)} · <b>${it.mirror ? "镜像（上下颠倒，真实走势与你看到的相反）" : "原始 K 线"}</b><br>
+    位移 = ${res.move >= 0 ? "+" : ""}${res.move.toFixed(2)} 倍 ATR（|位移| &lt; ${RLB.meta.tie_atr} 算「不确定」）<br>
+    我：${res.user.dir} ${ok(res.user)}（${inv(res.user)}）　·　算法：${res.claude.dir} ${ok(res.claude)}（${inv(res.claude)}）
+    ${res.relabel_sha256 !== POOL.meta.relabel_sha256 ? '<br><span class="warn">这题是旧版判定规则判的，原样保留。</span>' : ""}`;
+}
+function rlOverallHtml(){
+  const done = (DB.relabel || []).filter(r => r.revealed && r.result), s = Relabel.stats(done.map(r => r.result));
+  const pc = (a, b) => b ? ` (${(a / b * 100).toFixed(0)}%)` : "";
+  return `<b>二次标注累计（已揭示 ${s.n} / 题库 ${RLB.items.length} 题）</b><br>
+    我：对 ${s.user_ok}，错 ${s.n - s.user_ok}${pc(s.user_ok, s.n)}　·　算法：对 ${s.claude_ok}，错 ${s.n - s.claude_ok}${pc(s.claude_ok, s.n)}<br>
+    方向分歧 ${s.disagree} 题：其中我对 ${s.disagree_user_ok}、算法对 ${s.disagree_claude_ok}（两边都错的也有可能）　·　我设了失效位 ${s.user_inv_set} 题，20 根内被碰到 ${s.user_inv_hit} 题<br>
+    <span class="mut">这是练习记录，不是你或算法方向能力的证据：题少、相邻题可能来自同一段行情、算法规则本身也没验证过，20 根与 0.5 倍 ATR 的判定口径也是设定的。</span>`;
+}
 const $ = id => document.getElementById(id);
 const fx = (v, k = 2) => v == null ? "—" : (+v).toFixed(k);
 function msg(t){ $("msg").textContent = t || ""; clearTimeout(msgT); if (t) msgT = setTimeout(() => $("msg").textContent = "", 4000); }
@@ -179,7 +301,7 @@ function geom(q, bars){
           x: i => PL + (i - v0 + 0.5) * bw, y: v => PT + (hi - v) * PH / (hi - lo), py: Y => hi - (Y - PT) * (hi - lo) / PH, vy: v => VT + VH - (v || 0) / vmax * VH};
 }
 function draw(){
-  const q = Q(); if (!q) { $("chart").innerHTML = `<p class="mut">点「新题目」开始。</p>`; return; }
+  const q = CUR(); if (!q) { $("chart").innerHTML = `<p class="mut">${RL() ? (RLB.items.length ? "点「下一道没做完的」开始。" : "这个页面没有二次标注题库（请用 bar_drill_page.py 重新生成）。") : "点「新题目」开始。"}</p>`; return; }
   const bars = barsOf(q), g = geom(q, bars), cw = Math.max(1, g.bw * 0.62), xc = g.W - g.PR;
   let h = `<svg viewBox="0 0 ${g.W} ${g.H}" xmlns="http://www.w3.org/2000/svg" class="${mode ? "pick" : ""}">`;
   if (g.atLatest) { const xf = g.x(q.cursor) + g.bw / 2; h += `<rect x="${xf}" y="${g.PT}" width="${g.XR - xf}" height="${g.VT + g.VH - g.PT}" fill="var(--fut)"/>`; }
@@ -207,6 +329,7 @@ function draw(){
       if (q.pos.entry_i >= g.v0) h += `<text x="${g.x(q.pos.entry_i)}" y="${g.y(q.pos.entry) + 4}" font-size="12" text-anchor="middle" fill="var(--act)">${q.pos.side > 0 ? "▲" : "▼"}</text>`; }
     else if (q.pending && q.pending.type !== "exit") { hl(q.pending.stop, "var(--stop)", "止损(待)"); hl(q.pending.target, "var(--tg)", "止盈(待)"); }
   } else h += `<text x="${xc - 4}" y="${g.PT + 12}" font-size="12" text-anchor="end" fill="var(--warn)">正在看历史（第 ${bars[g.v0][0]}～${bars[g.end][0]} 根）· End 回到最新</text>`;
+  if (q._rl) h += rlOverlay(q, g, xc);
   h += `<line id="cx" x1="0" x2="0" y1="${g.PT}" y2="${g.VT + g.VH}" stroke="var(--mut)" stroke-dasharray="3,3" visibility="hidden"/></svg>`;
   $("chart").innerHTML = h; bind(q, bars);
 }
@@ -234,8 +357,13 @@ function bind(q, bars){
     viewN = Math.max(40, Math.min(q.cursor + 1, Math.round(viewN * (ev.deltaY > 0 ? 1.12 : 1 / 1.12)))); draw(); }, {passive: false});
 }
 function click(ev, q, bars){
-  if (!mode || frozen(q)) return;
+  if (!mode || !markable(q)) return;
   const p = locate(ev, q, bars);
+  if (q._rl) {                                        // 二次标注：标注写进该题的记录（第一次动手时才建记录）
+    const r = rlEnsure(); q = {...q, marks: r.marks};
+    if (mode === "失效位") { rlAct(r, "pick_invalid", {price: +p.price.toFixed(3)}); mode = null; save(); render(); return; }
+    if (mode === "止损" || mode === "止盈") return;
+  }
   if (mode === "止损" || mode === "止盈") {
     const px = +p.price.toFixed(3), err = Drill.setLevel(q, bars, mode === "止损" ? "stop" : "target", px);
     if (err) msg(err); else { act(q, mode === "止损" ? "set_stop" : "set_target", {price: px}); mode = null; }
@@ -308,7 +436,30 @@ function overall(){
     `题目不同、练习顺序与熟练度、样本太少等，不能直接当作方向偏好。练习不计手续费与滑点，页面源码里有后面的走势，成绩只作自我练习参考。` +
     (other ? `<br>另有 ${other} 道已结束的题是旧版撮合引擎做的（例如旧版提前结束按已知的当前收盘平仓），原样保留、不重判、不计入上表。` : "") + `</div>`;
 }
+function renderRL(){
+  const v = rlView(), r = v && v._rl.r, dr = rlDraft(r), stale = rlStale(r), it = v && v._rl.it;
+  $("rlsel").innerHTML = RLB.items.length ? RLB.items.map((x, k) => { const rr = rlRec(x.rid);
+    return `<option value="${x.rid}" ${x.rid === DB.relabel_cur ? "selected" : ""}>第 ${k + 1} 题${rr && rr.revealed ? " ✓" : rr && rr.locked ? " 🔒" : ""}</option>`; }).join("") : `<option>（没有题库）</option>`;
+  document.querySelectorAll("[data-m]").forEach(b => { b.classList.toggle("on", b.dataset.m === mode); b.disabled = !markable(v); });
+  document.querySelectorAll("[data-dir]").forEach(b => { b.classList.toggle("on", b.dataset.dir === dr.dir); b.disabled = !markable(v); });
+  $("rlclrinv").disabled = !markable(v) || dr.invalid == null;
+  $("rllock").disabled = !markable(v); $("rlreveal").disabled = !v || !r || !r.locked || r.revealed || stale;
+  $("legacy").hidden = true;
+  $("posline").textContent = !v ? "" : [`二次标注 ${RLB.items.findIndex(x => x.rid === it.rid) + 1}/${RLB.items.length}`,
+    `我的方向：${dr.dir || "未选"}${dr.invalid != null ? "，失效位 " + fx(dr.invalid) : ""}`,
+    stale ? "题库已重建，这条记录对应旧题，只读" : r && r.revealed ? "已揭示" : r && r.locked ? "已锁定，可揭示未来" : "标注中（锁定前看不到算法标注）"].join("　|　");
+  $("note").value = r ? r.note || "" : "";
+  const rv = v && rlRevealHtml(v); $("reveal").hidden = !rv; if (rv) $("reveal").innerHTML = rv;
+  const dh = v && rlDiffHtml(v); $("rldiff").hidden = !dh; if (dh) $("rldiff").innerHTML = dh;
+  $("rlover").innerHTML = rlOverallHtml();
+  draw();
+}
 function render(){
+  const rl = RL();
+  $("kind").value = rl ? "relabel" : "drill";
+  [["drillsel", rl], ["g_next", rl], ["g_trade", rl], ["tradescard", rl], ["overallcard", rl], ["rlbar", !rl], ["rlover", !rl]].forEach(([id, h]) => $(id).hidden = h);
+  if (!rl) $("rldiff").hidden = true;
+  if (rl) { renderRL(); return; }
   const q = Q();
   $("qsel").innerHTML = DB.questions.length ? DB.questions.map(x => `<option value="${x.id}" ${x.id === DB.cur ? "selected" : ""}>第 ${x.id} 题${x.done ? " ✓" : ""}</option>`).join("") : `<option>（还没有题目）</option>`;
   const bars = q ? barsOf(q) : null;
@@ -337,9 +488,18 @@ $("next").onclick = () => advance(1); $("next5").onclick = () => advance(5); $("
 $("long").onclick = () => order("long"); $("short").onclick = () => order("short"); $("flat").onclick = () => order("exit");
 $("cancel").onclick = () => { const q = Q(); if (q && q.pending && !frozen(q)) { q.pending = null; act(q, "cancel"); save(); render(); } };
 $("latest").onclick = () => { viewEnd = null; draw(); };
-$("note").addEventListener("input", e => { const q = Q(); if (q) { q.note = e.target.value; save(); } });
+$("note").addEventListener("input", e => {
+  if (RL()) { const v = rlView(); if (v && !rlStale(v._rl.r)) { const r = rlEnsure(); r.note = e.target.value; save(); } return; }
+  const q = Q(); if (q) { q.note = e.target.value; save(); } });
+$("kind").onchange = () => { DB.settings.kind = $("kind").value; if (RL() && !rlItem(DB.relabel_cur) && RLB.items.length) DB.relabel_cur = RLB.items[0].rid;
+  viewEnd = null; mode = null; save(); render(); };
+$("rlsel").onchange = () => { DB.relabel_cur = $("rlsel").value; viewEnd = null; mode = null; save(); render(); };
+$("rlnext").onclick = rlNextOpen; $("rllock").onclick = rlLock; $("rlreveal").onclick = rlReveal;
+$("rlclrinv").onclick = () => { const v = rlView(); if (!markable(v)) return; const r = rlEnsure(); if (rlDraft(r).invalid == null) return; rlAct(r, "pick_invalid", {price: null}); save(); render(); };
+document.querySelectorAll("[data-dir]").forEach(b => b.onclick = () => rlPickDir(b.dataset.dir));
 document.addEventListener("keydown", e => { if (["TEXTAREA", "SELECT", "INPUT"].includes(e.target.tagName)) return;
-  const q = Q(); if (!q) return;
+  const q = CUR(); if (!q) return;
+  if (RL() && !["ArrowLeft", "End", "Escape"].includes(e.key)) return;   // 二次标注不推进、不交易
   if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); advance(e.shiftKey ? 5 : 1); }
   else if (e.key === "ArrowLeft") { e.preventDefault(); const g = geom(q, barsOf(q)); viewEnd = Math.max(Math.min(q.cursor, viewN - 1), g.end - 20); if (viewEnd >= q.cursor) viewEnd = null; draw(); }
   else if (e.key === "End") { viewEnd = null; draw(); }

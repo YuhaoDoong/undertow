@@ -418,14 +418,20 @@ if stage_done shadow_settle; then SH_OUT2=""; SH_RC2=0
 else SH_OUT2=$(python3 -m undertow shadow settle 2>&1); SH_RC2=$?; stage_mark shadow_settle "$(rc_status $SH_RC2 failed)" $SH_RC2; fi
 set -e
 printf '%s\n%s\n' "$SH_OUT" "$SH_OUT2" | grep -E "候选腿|更新|⚠️" | head -20 || true
-# 主墙近侧研究账（Codex 056 合同 v0.1）：盘前冻结 + 结算。新鲜 T−1 输入未到 → partial，下一次唤醒重试（开盘后不再冻结）
+# >>> mainwall-daily（主墙近侧研究账，Codex 056/057 R1）：可选研究阶段，失败不得中断后续必需阶段 ——
+# 原错（057 复现）：本段曾放在 set -e 之后，capture 未就绪（rc=1，盘前常态）会让 `X=$(cmd)` 触发 errexit 直接退出 daily，
+# 连 stage_mark 与之后的方向台账等必需阶段都不跑。现在 set +e 分开捕获 rc（不用 `|| true`），失败照记 stage 并可见。
+set +e
 MW_ST="data/logs/.status_mainwall_${ET_DATE}.json"
 if stage_done mainwall_capture; then MW_OUT=""; MW_RC=0
 else MW_OUT=$(python3 -m undertow mainwall capture --status-file "$MW_ST" 2>&1); MW_RC=$?; stage_mark mainwall_capture "$(rc_status $MW_RC pending)" $MW_RC; fi
 if stage_done mainwall_settle; then MW_OUT2=""; MW_RC2=0
 else MW_OUT2=$(python3 -m undertow mainwall settle 2>&1); MW_RC2=$?; stage_mark mainwall_settle "$(rc_status $MW_RC2 failed)" $MW_RC2; fi
+set -e
 printf '%s\n%s\n' "$MW_OUT" "$MW_OUT2" | grep -E "冻结|更新|⚠️" | head -6 || true
-if (( MW_RC2 != 0 )); then alert "⚠️ 主墙研究账结算失败（ET $ET_NOW）" "$(printf '%s' "$MW_OUT2" | grep '⚠️' | head -2 | tr '\n' ' ')"; fi
+# capture 盘前未就绪是常态（源未更新 → 只记失败尝试、下次重试），由 session_hooks ⑰ 在 09:23 起未完成时提醒；结算失败当场告警
+if (( MW_RC2 != 0 )); then alert "⚠️ 主墙研究账结算失败（ET $ET_NOW）" "rc=$MW_RC2：$(printf '%s' "$MW_OUT2" | grep '⚠️' | head -2 | tr '\n' ' ')"; fi
+# <<< mainwall-daily
 if (( SH_RC != 0 || SH_RC2 != 0 )); then
     alert "⚠️ 影子账采集/结算失败（ET $ET_NOW）" \
           "capture rc=$SH_RC settle rc=$SH_RC2：$(printf '%s\n%s' "$SH_OUT" "$SH_OUT2" | grep '⚠️' | head -2 | tr '\n' ' ')"

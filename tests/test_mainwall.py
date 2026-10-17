@@ -121,7 +121,7 @@ def test_row_category_priority():
 
 
 def test_condor_needs_same_attempt_both_sides():
-    assert mw.condor({"near-P-A": {"entry_status": "valid"}}, {}) is None
+    assert mw.condor({"near-P-A": {"entry_status": "valid"}}, {}) == {"status": "one_side_missing", "pnl": None}
 
 
 # ── 编排层：冻结 / 只写一次 / 机会母表 ──────────────────────────────────────
@@ -180,33 +180,97 @@ def test_denominator_row_from_last_failed_attempt(mwcli):
     assert len(jl.load(m._path("silver"), "key")) == 1
 
 
+class _I:
+    key = "silver"
+
+    class options:
+        symbol = "SLV"
+
+
+class _Store:
+    def dates(self, kind, sym):
+        return [T]
+
+    def load_with_identity(self, kind, sym, d):
+        return {"data": {}}, {"captured_at": datetime(2026, 10, 16, 6, 0, tzinfo=ET).timestamp(), "sha256": "x"}
+
+    def load(self, *a):
+        return None
+
+
+def _clocks(monkeypatch, m, *times):
+    it = iter(times)
+    last = {}
+
+    def clk():
+        last["t"] = next(it, last.get("t"))
+        return last["t"]
+    monkeypatch.setattr(m, "_clock", clk)
+    monkeypatch.setattr(m, "_wall_now", lambda: last.get("t") or times[0])
+
+
+def _fresh_inputs(avail):
+    return {"status": "fresh", "close": 51.92, "atr14": 1.5, "base_date": "2026-10-15", "expected_base_date": "2026-10-15",
+            "available_at": avail, "cross_check": []}
+
+
+def _setup_capture(monkeypatch, m, avail):
+    import undertow.collect.cboe_options as co
+    import undertow.collect.fresh_daily as fd
+    snap = type("S", (), {"contracts": [C("P", 50.0, E, 100), C("C", 60.0, E, 100)]})()
+    monkeypatch.setattr(co, "snapshot_from_payload", lambda *a: snap)
+    monkeypatch.setattr(fd, "resolve", lambda *a, **k: (_fresh_inputs(avail), object()))
+    monkeypatch.setattr(mw, "derive_inputs", lambda rec, ser, T: rec)
+    monkeypatch.setattr(sh, "target_expiry", lambda *a: E)
+    monkeypatch.setattr(sh, "listed_strikes", lambda snap, k, e: [49.0, 50.0] if k == "P" else [60.0, 61.0])
+
+
+def _et_dt(h, m_, s=0):
+    return datetime(2026, 10, 16, h, m_, s, tzinfo=ET)
+
+
 def test_capture_late_or_stale_never_freezes(mwcli, monkeypatch):
     m = mwcli
-
-    class I:
-        key = "silver"
-
-        class options:
-            symbol = "SLV"
-
-    class Store:
-        def dates(self, kind, sym):
-            return [T]
-
-        def load_with_identity(self, kind, sym, d):
-            return {"data": {}}, {"captured_at": datetime(2026, 10, 16, 6, 0, tzinfo=ET).timestamp(), "sha256": "x"}
-
-        def load(self, *a):
-            return None
+    _clocks(monkeypatch, m, _et_dt(9, 31))
+    assert m.capture_one(_I, T, store=_Store())[0] == "late"
+    import undertow.collect.fresh_daily as fd
     import undertow.collect.cboe_options as co
     monkeypatch.setattr(co, "snapshot_from_payload", lambda *a: type("S", (), {"contracts": []})())
-    r, att = m.capture_one(I, T, datetime(2026, 10, 16, 9, 31, tzinfo=ET), store=Store())
-    assert r == "late"
-    import undertow.collect.fresh_daily as fd
     monkeypatch.setattr(fd, "resolve", lambda *a, **k: ({"status": "stale"}, None))
-    r, att = m.capture_one(I, T, datetime(2026, 10, 16, 6, 30, tzinfo=ET), store=Store())
+    _clocks(monkeypatch, m, _et_dt(6, 30))
+    r, att = m.capture_one(_I, T, store=_Store())
     assert r == "attempt_failed" and att["status"] == "input_stale"
     assert not m._path("silver").exists()                                   # 失败不占当天冻结键
+
+
+def test_capture_started_premarket_but_completed_after_open_not_frozen(mwcli, monkeypatch):
+    m = mwcli
+    _setup_capture(monkeypatch, m, _et_dt(9, 28).isoformat())
+    _clocks(monkeypatch, m, _et_dt(9, 29), _et_dt(9, 29, 50), _et_dt(9, 30, 5))
+    r, att = m.capture_one(_I, T, store=_Store())
+    assert r == "attempt_failed" and att["status"] == "late_completion" and not m._path("silver").exists()
+
+
+def test_capture_input_available_after_freeze_or_unknown_not_frozen(mwcli, monkeypatch):
+    m = mwcli
+    for avail in (None, _et_dt(9, 31).isoformat()):
+        _setup_capture(monkeypatch, m, avail)
+        _clocks(monkeypatch, m, _et_dt(9, 0), _et_dt(9, 0, 10), _et_dt(9, 0, 20))
+        r, att = m.capture_one(_I, T, store=_Store())
+        assert r == "attempt_failed" and att["status"] == "input_availability_unproven"
+    _setup_capture(monkeypatch, m, _et_dt(8, 59).isoformat())
+    _clocks(monkeypatch, m, _et_dt(9, 0), _et_dt(9, 0, 10), _et_dt(9, 0, 20))
+    r, row = m.capture_one(_I, T, store=_Store())
+    assert r == "inserted" and row["premarket"]["frozen_at"] == _et_dt(9, 0, 20).isoformat()
+    assert row["premarket"]["attempt_started_at"] < row["premarket"]["inputs_consumed_at"] < row["premarket"]["frozen_at"]
+
+
+def test_offline_replay_refused(mwcli, monkeypatch):
+    m = mwcli
+    monkeypatch.setattr(m, "_clock", lambda: _et_dt(6, 30))
+    monkeypatch.setattr(m, "_wall_now", lambda: datetime(2026, 10, 17, 10, 0, tzinfo=ET))
+    with pytest.raises(RuntimeError):
+        m.capture_one(_I, T, store=_Store())
 
 
 # ── 端到端：开盘窗冻结 Sdec → 选近侧 → 取盘口 → 派生（全部替身，不联网）──────────
@@ -222,7 +286,7 @@ def _premarket_row(inst="silver"):
             "entry_decision": None, "legs": [], "windows": {}, "samples": [], "outcome": None}
 
 
-def _e2e(monkeypatch, mwcli, kind="常规"):
+def _e2e(monkeypatch, mwcli, kind="常规", start=(10, 5, 0)):
     import itertools
     import undertow.collect.longbridge_quote as lq
     import undertow.shadow_cli as sc
@@ -230,7 +294,7 @@ def _e2e(monkeypatch, mwcli, kind="常规"):
     m = mwcli
     p = m._path("silver"); p.parent.mkdir(parents=True)
     jl.insert_frozen(p, _premarket_row(), key_field="key", frozen=m.frozen_part)
-    clock = (datetime(2026, 10, 16, 10, 5, tzinfo=ET) + timedelta(seconds=i) for i in itertools.count())
+    clock = (datetime(2026, 10, 16, *start, tzinfo=ET) + timedelta(seconds=i) for i in itertools.count())
     monkeypatch.setattr(m, "_now_iso", lambda: next(clock).isoformat())
     monkeypatch.setattr(m, "market_today", lambda: T)
     monkeypatch.setattr(sc, "_phase_now", lambda: "rth")
@@ -303,3 +367,112 @@ def test_sample_records_signed_distance_once_per_slot(monkeypatch, mwcli):
     assert s["signed_dist_atr"]["P"] == round((51.85 - 50) / 1.5, 6) and s["signed_dist_atr"]["C"] > 0
     assert "P|50" in s["quotes"] and "C|60" in s["quotes"]
     assert m.cmd_sample(A) == 0 and len(jl.load(p, "key")[0]["samples"]) == 1     # 同一桶不重复记
+
+
+def test_sdec_fetch_crossing_window_end_not_frozen(monkeypatch, mwcli):
+    m, p, A = _e2e(monkeypatch, mwcli, start=(10, 20, 59))     # 10:20:59 发出、10:21:00 返回 → 跨窗末
+    assert m.cmd_quote(A) == 1
+    assert jl.load(p, "key")[0]["entry_decision"] is None
+
+
+# ── R3：确定弃权 0 / 未知 None / 机会母表 / 损坏尝试账 ──────────────────────────
+
+def test_determined_abstention_is_zero_unknown_stays_none(mwcli):
+    m = mwcli
+    tie = {"premarket": {"status": "ok"}, "entry_decision": {"choice": {"near": None, "reason": "tie"}}, "legs": []}
+    o = m.derive_row(tie, bars=[])
+    assert (o["A"], o["B"], o["A_minus_B"]) == (0.0, 0.0, 0.0) and o["category"] == "tie"
+    o = m.derive_row({"premarket": {"status": "no_expiry"}, "legs": []}, bars=[])
+    assert (o["A"], o["B"], o["A_minus_B"]) == (0.0, 0.0, 0.0)
+    o = m.derive_row({"premarket": {"status": "premarket_input_stale"}, "legs": []}, bars=[])
+    assert (o["A"], o["B"], o["A_minus_B"], o["A_bounds"]) == (None, None, None, None)     # 缺输入不折 0
+    o = m.derive_row({"premarket": {"status": "ok"}, "entry_decision": None, "legs": []}, bars=[])
+    assert o["A"] is None and o["category"] == "sdec_missing"
+
+
+def test_opportunity_table_enumerates_missing_days():
+    tab = mw.opportunity_table([{"session": "2026-10-19", "instrument": "gold", "outcome": {"category": "tie"}}],
+                               ["gold", "silver"], date(2026, 10, 21))
+    assert len(tab) == 6                                                     # 10/19–10/21 × 2
+    assert [t["category"] for t in tab].count("not_generated") == 5
+    assert mw.opportunity_table([], ["gold"], date(2026, 10, 16)) == []      # 起点之前不告警
+    tab = mw.opportunity_table([], ["gold"], date(2026, 11, 30))
+    assert "2026-11-26" not in {t["session"] for t in tab}                   # 感恩节休市不算应有格
+
+
+def test_audit_flags_whole_day_never_run(mwcli, monkeypatch):
+    m = mwcli
+    monkeypatch.setattr(m, "_clock", lambda: datetime(2026, 10, 20, 17, 0, tzinfo=ET))
+
+    class A:
+        instruments = ["gold", "silver"]
+    assert m.cmd_audit(A) == 1                                                # 空目录不能报「0 行、成功」
+    assert m.cmd_report(A) == 0
+
+
+def test_corrupt_attempts_log_is_reported_and_preserved(mwcli):
+    m = mwcli
+    m._append_attempt({"key": f"{T}|silver", "status": "input_stale", "tried_at": "a"})
+    ap = m._attempts_path()
+    ap.write_bytes(ap.read_bytes() + b'{"key": "half\n')
+    orig = ap.read_bytes()
+    with pytest.raises(m.AttemptsCorrupt):
+        m._append_attempt({"key": "x"})
+    assert ap.read_bytes() == orig and list(ap.parent.glob("capture_attempts.jsonl.corrupt-*"))
+
+    m._ensure_denominator_row(_I, T)
+    r = jl.load(m._path("silver"), "key")[0]
+    assert r["premarket"]["status"] == "premarket_attempts_corrupt" and "损坏" in r["premarket"]["error"]
+
+
+def _sample_env(monkeypatch, m, depth_ok: bool, row_mut=None):
+    import undertow.collect.longbridge_quote as lq
+    import undertow.shadow_cli as sc
+    from undertow.collect.longbridge_quote import Depth
+
+    class FakeDT(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 10, 16, 11, 2, tzinfo=ET)
+    monkeypatch.setattr(m, "datetime", FakeDT)
+    monkeypatch.setattr(sc, "sample_bounds", lambda d: (585, 780))
+    calls = {"depth": [], "quote": 0}
+
+    def depth(syms):
+        calls["depth"].append(list(syms))
+        return {s: Depth(s, 0.3 if depth_ok else None, 5, 0.32 if depth_ok else None, 5, "" if depth_ok else "timeout")
+                for s in syms}
+
+    def quotes(syms):
+        calls["quote"] += 1
+        return {s: type("Q", (), {"last": 51.85, "freshest_kind": "常规", "timestamp": "t"})() for s in syms}
+    monkeypatch.setattr(lq, "fetch_depth", depth)
+    monkeypatch.setattr(lq, "fetch_stock_quotes", quotes)
+    return calls
+
+
+def test_sample_depth_failure_is_partial_then_retries_only_missing(monkeypatch, mwcli):
+    m, p, A = _e2e(monkeypatch, mwcli)
+    calls = _sample_env(monkeypatch, m, depth_ok=False)
+    assert m.cmd_sample(A) == 1                                               # 标的成功不能掩盖盘口失败
+    assert calls["quote"] == 1 and len(calls["depth"]) == 1
+    calls = _sample_env(monkeypatch, m, depth_ok=True)
+    assert m.cmd_sample(A) == 0
+    assert calls["quote"] == 0 and len(calls["depth"][0]) == 4                # 只补缺的 4 个合约，标的已有不重取
+    smp = jl.load(p, "key")[0]["samples"]
+    assert len(smp) == 2 and smp[1]["requested"] != smp[0]["requested"]     # 两次尝试都原样保留
+    assert m.cmd_sample(A) == 0 and len(jl.load(p, "key")[0]["samples"]) == 2
+
+
+def test_sample_without_applicable_legs_still_records_distance(monkeypatch, mwcli):
+    m, p, A = _e2e(monkeypatch, mwcli)
+
+    def drop(r):
+        r["premarket"]["widths"] = {"P": None, "C": None}
+        return True
+    with jl.locked(p):
+        rows = jl.load_path(p, "key"); drop(rows[0]); jl.atomic_write(p, rows, "key")
+    calls = _sample_env(monkeypatch, m, depth_ok=False)
+    assert m.cmd_sample(A) == 0 and calls["depth"] == []
+    s = jl.load(p, "key")[0]["samples"][0]
+    assert s["signed_dist_atr"]["P"] > 0 and s["not_applicable"] == {"P": "no_width", "C": "no_width"}

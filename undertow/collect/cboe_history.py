@@ -55,6 +55,50 @@ def _expected_last_bar() -> date | None:
         return None
 
 
+def parse_payload(payload, sym: str) -> PriceSeries:
+    """CBOE 历史日线原文 → PriceSeries（fetch_series 与 fresh_daily 共用同一解析，后者要从自己读到的同一份原文解析）。"""
+    rows = payload.get("data")
+    if not isinstance(rows, list) or not rows:
+        raise DataSourceError(f"CBOE 历史无 data 列表（{sym}）")
+
+    # 同时取 high/low：台账的 MFE/MAE（盘中最有利/最不利偏移）需要它们。
+    # 2026-09-23 用户问「盘中跌下去又被拉回来的，统计里算失败吗」——是的，
+    # 旧口径只吃 closes。实测 67 个开火信号：收盘口径 70.1%、盘中极值口径 79.1%，
+    # 其中 6 个（9%）是「盘中到过、收盘回吐」被判失败。
+    # ⚠️ high/low 缺失时整行跳过而不是折成 close —— 折值会让 MAE 系统性偏小，
+    #    而 MAE 正是卖方结构判断「有没有被盘中击穿」的唯一依据（低估风险比高估危险）。
+    rowsc = []
+    by_date = {}
+    for r in rows:
+        try:
+            d = datetime.strptime(r["date"], "%Y-%m-%d").date()
+        except (KeyError, ValueError, TypeError):
+            continue
+        # 同日重复不能算第二根收益/第二个交易日。仅合并完全相同的 OHLCV；
+        # 冲突没有可靠先后顺序，不能用任意一条悄悄改变历史结果。
+        ohlcv = tuple(r.get(field) for field in ("open", "high", "low", "close", "volume"))
+        if d in by_date:
+            if ohlcv != by_date[d]:
+                raise DataSourceError(f"CBOE 历史同日 OHLCV 冲突（{sym}, {d}）")
+            continue
+        by_date[d] = ohlcv
+        try:
+            c = float(r["close"])
+            h = float(r["high"])
+            lo = float(r["low"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if not (lo <= c <= h):      # 脏行：极值与收盘矛盾，宁可丢弃不可污染
+            continue
+        rowsc.append((d, c, h, lo))
+    rowsc.sort(key=lambda x: x[0])
+    return PriceSeries(symbol=sym,
+                       dates=[x[0] for x in rowsc],
+                       closes=[x[1] for x in rowsc],
+                       highs=[x[2] for x in rowsc],
+                       lows=[x[3] for x in rowsc])
+
+
 class CboeHistorySource:
     name = "cboe_history"
     CACHE_TTL = 12 * 3600  # 日线一天更新一次，缓存半天
@@ -104,43 +148,4 @@ class CboeHistorySource:
             print(f"⚠️ {sym} CBOE 日线最新只到 {lb}，落后于上一交易日 {expect}（源端未更新）："
                   "依赖日线的日期命名与价格分析会少这几天", file=_sys.stderr)
 
-        rows = payload.get("data")
-        if not isinstance(rows, list) or not rows:
-            raise DataSourceError(f"CBOE 历史无 data 列表（{sym}）")
-
-        # 同时取 high/low：台账的 MFE/MAE（盘中最有利/最不利偏移）需要它们。
-        # 2026-09-23 用户问「盘中跌下去又被拉回来的，统计里算失败吗」——是的，
-        # 旧口径只吃 closes。实测 67 个开火信号：收盘口径 70.1%、盘中极值口径 79.1%，
-        # 其中 6 个（9%）是「盘中到过、收盘回吐」被判失败。
-        # ⚠️ high/low 缺失时整行跳过而不是折成 close —— 折值会让 MAE 系统性偏小，
-        #    而 MAE 正是卖方结构判断「有没有被盘中击穿」的唯一依据（低估风险比高估危险）。
-        rowsc = []
-        by_date = {}
-        for r in rows:
-            try:
-                d = datetime.strptime(r["date"], "%Y-%m-%d").date()
-            except (KeyError, ValueError, TypeError):
-                continue
-            # 同日重复不能算第二根收益/第二个交易日。仅合并完全相同的 OHLCV；
-            # 冲突没有可靠先后顺序，不能用任意一条悄悄改变历史结果。
-            ohlcv = tuple(r.get(field) for field in ("open", "high", "low", "close", "volume"))
-            if d in by_date:
-                if ohlcv != by_date[d]:
-                    raise DataSourceError(f"CBOE 历史同日 OHLCV 冲突（{sym}, {d}）")
-                continue
-            by_date[d] = ohlcv
-            try:
-                c = float(r["close"])
-                h = float(r["high"])
-                lo = float(r["low"])
-            except (KeyError, ValueError, TypeError):
-                continue
-            if not (lo <= c <= h):      # 脏行：极值与收盘矛盾，宁可丢弃不可污染
-                continue
-            rowsc.append((d, c, h, lo))
-        rowsc.sort(key=lambda x: x[0])
-        return PriceSeries(symbol=sym,
-                           dates=[x[0] for x in rowsc],
-                           closes=[x[1] for x in rowsc],
-                           highs=[x[2] for x in rowsc],
-                           lows=[x[3] for x in rowsc])
+        return parse_payload(payload, sym)

@@ -39,7 +39,11 @@ CONFIG = {
     "primary_basis": "pre_expiry_exit_policy",
     "payoff_floor": "payoff-floor-v1-20261014",
     "stage_check": "2026-12-31",                     # 独立阶段检查，不继承 v5 的确认资格
+    # 前瞻起点：开始前冻结（Codex 057 R3），机会母表从这一天起按日历 × 品种枚举；不因首笔成交/盈利而设，也不事后后移
+    "prospective_start": "2026-10-19",
 }
+
+DETERMINED_ABSTAIN = ("no_wall", "already_beyond", "tie", "no_expiry")   # 确定弃权：政策现金 0
 
 
 def config_hash(cfg: dict = CONFIG) -> str:
@@ -48,24 +52,75 @@ def config_hash(cfg: dict = CONFIG) -> str:
 
 # ── 输入 ────────────────────────────────────────────────────────────────
 
-def derive_inputs(rec: dict, ser, T: date) -> dict:
-    """fresh_daily 记录 + 同一条序列 → ATR14 与语境，并核对三者截止同一日（expected=T−1）。
+ATR_BARS = 15          # ATR14 = 最近 14 个真实波幅的简单均值 → 需要连续 15 根（stretch._atr_series）
+CONTEXT_BARS = 266     # 语境 atr_pct_250：ATR 序列再回看 250 个 → 约 250 + 15 + 1 根
 
-    返回 rec 的副本，加 atr14 / context / asof；任何一项没截到 expected → status=incomplete（不拿旧 ATR 配新收盘）。
+
+def coverage(dates, end: date, n: int) -> dict:
+    """end 往回 n 个交易日（预存日历）是否都在 dates 里。日历不覆盖的更早部分如实标 unverifiable，不拿周末规则猜节假日。"""
+    from undertow.core import market_calendar as mc
+    have, want, d, unver = set(dates), [], end, 0
+    for _ in range(n):
+        if d is None or not mc.covered(d):
+            unver = n - len(want)
+            break
+        want.append(d)
+        d = mc.prev_trading_day(d)
+    missing = [x.isoformat() for x in want if x not in have]
+    return {"checked": len(want), "missing": missing, "unverifiable": unver}
+
+
+def _hlc_ok(ser, dates_iso: set) -> bool:
+    for d, h, l, c in zip(ser.dates, ser.highs, ser.lows, ser.closes):
+        if d.isoformat() in dates_iso and not all(isinstance(x, (int, float)) and math.isfinite(x) and x > 0 for x in (h, l, c)):
+            return False
+    return True
+
+
+def derive_inputs(rec: dict, ser, T: date) -> dict:
+    """fresh_daily 记录 + 同一条序列 → ATR14 与语境，并核对截止日与回看覆盖（Codex 057 R2）。
+
+    - ATR14 用到的最近 15 个交易日必须全在、HLC 有限且为正；缺任一根 → status=incomplete（不压缩回看、不拼补）。
+      决策只用收盘与 ATR14（距离、B 腿），所以只有它决定能否冻结。
+    - 语境（atr_pct_250 等，只记录不参与决策）回看约 266 根：日历可核部分有缺根 → 语境字段置 None、context_status=incomplete，
+      行照常冻结；日历不覆盖的更早部分标 unverifiable（不拿周末规则猜节假日）。
+    - 三个 asof 必须都 = expected。
     """
     from undertow.analyze.spread_ledger import decision_context
     from undertow.analyze.stretch import _atr_series
     out = dict(rec)
     if rec.get("status") != "fresh" or ser is None:
         return out
+    exp = date.fromisoformat(rec["expected_base_date"])
+    cov_atr = coverage(ser.dates, exp, ATR_BARS)
+    cov_ctx = coverage(ser.dates, exp, CONTEXT_BARS)
+    out["coverage"] = {"atr14": cov_atr, "context": cov_ctx}
     atr = _atr_series(ser.highs, ser.lows, ser.closes, 14)
-    ctx = decision_context(ser.highs, ser.lows, ser.closes, ser.dates, T)
     a = atr[-1] if atr else None
-    out.update(atr14=round(a, 6) if (a is not None and math.isfinite(a) and a > 0) else None, context=ctx,
-               asof={"hlc": rec.get("base_date"), "atr14": ser.dates[-1].isoformat() if ser.dates else None,
-                     "context": ctx.get("asof")})
-    if out["atr14"] is None or len({rec.get("expected_base_date"), *out["asof"].values()}) != 1:
+    out["atr14"] = round(a, 6) if (a is not None and math.isfinite(a) and a > 0) else None
+    ctx = decision_context(ser.highs, ser.lows, ser.closes, ser.dates, T)
+    ctx_ok = not cov_ctx["missing"] and _hlc_ok(ser, {d.isoformat() for d in ser.dates[-CONTEXT_BARS:]})
+    out["context_status"] = ("ok" if not cov_ctx["unverifiable"] else "ok_partially_verified") if ctx_ok else "incomplete"
+    out["context"] = ctx if ctx_ok else {"asof": ctx.get("asof"), "note": "回看窗口缺根或 HLC 非法，语境不计"}
+    out["asof"] = {"hlc": rec.get("base_date"), "atr14": ser.dates[-1].isoformat() if ser.dates else None,
+                   "context": ctx.get("asof")}
+    atr_ok = (not cov_atr["missing"] and not cov_atr["unverifiable"]
+              and _hlc_ok(ser, set(_window_iso(exp, ATR_BARS))))
+    if out["atr14"] is None or not atr_ok or len({rec.get("expected_base_date"), *out["asof"].values()}) != 1:
         out["status"] = "incomplete"
+        out["incomplete_reason"] = ("atr_window_missing:" + ",".join(cov_atr["missing"])) if cov_atr["missing"] else \
+            ("atr_window_unverifiable" if cov_atr["unverifiable"] else "atr_or_asof_invalid")
+    return out
+
+
+def _window_iso(end: date, n: int) -> list[str]:
+    from undertow.core import market_calendar as mc
+    out, d = [], end
+    for _ in range(n):
+        if d is None:
+            break
+        out.append(d.isoformat())
+        d = mc.prev_trading_day(d)
     return out
 
 
@@ -261,20 +316,52 @@ def row_category(row: dict, outs: dict) -> str:
 
 
 def condor(outs: dict, legs: dict) -> dict | None:
-    """次要：两侧 A 同一次尝试入场、同到期时的四腿合成（费用 $6.40）。缺一侧 → None，不补 0。"""
+    """次要：两侧 A 同一次尝试入场、同到期时的四腿合成（费用 $6.40）。缺一侧/不同批/到期不同 → pnl=None 并给原因，不补 0。"""
     pa = [o for lid, o in outs.items() if lid.endswith("-A") and o.get("entry_status") == "valid"]
     if len(pa) != 2:
-        return None
+        return {"status": "one_side_missing", "pnl": None}
     e0, e1 = (o["settle"]["entry"] for o in pa)
     if e0["at"] != e1["at"]:
-        return None
+        # 两侧各自的首个合格报价不在同一次尝试：不拼成假同批（覆盖较窄，如实记原因）
+        return {"status": "not_same_batch", "pnl": None}
     sides = [lid for lid, o in outs.items() if lid.endswith("-A") and o.get("entry_status") == "valid"]
     if len({legs[l]["expiry"] for l in sides}) != 1:
-        return None
+        return {"status": "expiry_mismatch", "pnl": None}
     credit = e0["credit"]["conservative"] + e1["credit"]["conservative"]
     W = max(legs[l]["width_usd"] for l in sides)
     # 每侧 pnl 已各扣 $3.20 → 两侧相加正好是四腿 $6.40；任一侧点值未知（缺价/残腿实值未知）→ 整组未知
     pnls = [o["settle"]["pnl"].get(CONFIG["primary_basis"]) for o in pa]
-    return {"credit": round(credit, 4), "fee": CONFIG["fee_condor"],
+    return {"status": "ok", "basis": "raw_quote_scenario（两侧首个合格报价同批；未套组合收益门槛，不是政策入场）",
+            "credit": round(credit, 4), "fee": CONFIG["fee_condor"],
             "max_risk_at_expiry": round(W - credit + CONFIG["fee_condor"], 4),
             "pnl": round(sum(pnls), 4) if all(x is not None for x in pnls) else None}
+
+
+def opportunity_table(rows: list, instruments: list, upto: date | None, start: str = CONFIG["prospective_start"]) -> list:
+    """机会母表：start..upto 的每个交易日 × 品种一行；账里没有的记 not_generated（没有记录 ≠ 没有机会）。
+    upto=None 或早于 start → 空表。日历不覆盖 → 抛错（不能把未知区间当空）。"""
+    from undertow.core import market_calendar as mc
+    s0 = date.fromisoformat(start)
+    if upto is None or upto < s0:
+        return []
+    days = mc.trading_days(s0, upto)
+    if days is None:
+        raise ValueError(f"交易日历不覆盖 {s0}–{upto}")
+    have = {(r["session"], r["instrument"]): r for r in rows}
+    out = []
+    for d in days:
+        for inst in instruments:
+            r = have.get((d.isoformat(), inst))
+            out.append({"session": d.isoformat(), "instrument": inst,
+                        "category": "not_generated" if r is None else ((r.get("outcome") or {}).get("category") or "unsettled"),
+                        "outcome": None if r is None else r.get("outcome")})
+    return out
+
+
+def interval_diff(a: list | None, b: list | None) -> list | None:
+    """[A下界−B上界, A上界−B下界]；任一端未知 → 对应端 None；整体未知 → None。"""
+    if not a or not b:
+        return None
+    lo = None if (a[0] is None or b[1] is None) else round(a[0] - b[1], 4)
+    hi = None if (a[1] is None or b[0] is None) else round(a[1] - b[0], 4)
+    return [lo, hi]

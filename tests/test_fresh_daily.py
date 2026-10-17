@@ -115,3 +115,55 @@ def test_derive_inputs_same_asof_or_incomplete():
     short = _series(date(2026, 10, 15), n=10)
     rec2, ser2 = fd.resolve(_Inst, T, fetchers=_fetchers(short, None))
     assert mw.derive_inputs(rec2, ser2, T)["status"] == "incomplete"     # 语境不足 30 根 → 不冻结
+
+
+def test_identity_bound_to_same_bytes_even_if_cache_rewritten(tmp_path, monkeypatch):
+    """057 R2：读到 A 之后另一个写者把缓存改成 B —— 返回的序列与 hash 必须都属于 A。"""
+    import hashlib
+    import json
+    import time as _t
+    from undertow.collect.cache import FileCache
+    cache = FileCache(tmp_path)
+    t1 = int(datetime(2026, 10, 15, 13, 30, tzinfo=timezone.utc).timestamp())
+
+    def payload(c):
+        return {"chart": {"result": [{"timestamp": [t1], "indicators": {"quote": [{"close": [c], "high": [c + 1], "low": [c - 1]}]}}]}}
+    key = "yahoo_etf_SLV_2y"
+    raw_a = json.dumps({"fetched_at": _t.time(), "data": payload(50.0)}, ensure_ascii=False).encode("utf-8")
+    cache._path(key).write_bytes(raw_a)
+    orig = fd.parse_yahoo
+
+    def racing_parse(p, sym):
+        cache.set(key, payload(70.0))                     # 解析期间被改写
+        return orig(p, sym)
+    monkeypatch.setattr(fd, "parse_yahoo", racing_parse)
+    ser, meta = fd.fetch_yahoo(_Inst, cache)
+    assert ser.closes == [50.0] and meta["raw_sha"] == hashlib.sha256(raw_a).hexdigest()
+
+
+def test_identity_missing_is_not_fresh():
+    def f(inst, cache):
+        return _series(date(2026, 10, 15)), {"fetched_at": None, "raw_sha": None}
+    rec, ser = fd.resolve(_Inst, T, fetchers={"cboe_history": f, "yahoo_chart": f})
+    assert rec["status"] == "stale" and ser is None
+    assert {a["status"] for a in rec["attempts"]} == {"identity_missing"}
+
+
+def test_internal_missing_bar_in_atr_window_is_incomplete():
+    s = _series(date(2026, 10, 15))
+    i = s.dates.index(date(2026, 10, 13))
+    gap = PriceSeries("SLV", s.dates[:i] + s.dates[i + 1:], s.closes[:i] + s.closes[i + 1:],
+                      s.highs[:i] + s.highs[i + 1:], s.lows[:i] + s.lows[i + 1:])
+    rec, ser = fd.resolve(_Inst, T, fetchers=_fetchers(gap, None))
+    assert rec["status"] == "fresh"                       # 最后一根到了
+    out = mw.derive_inputs(rec, ser, T)
+    assert out["status"] == "incomplete" and "2026-10-13" in out["incomplete_reason"]
+
+
+def test_context_gap_outside_atr_window_only_blanks_context():
+    s = _series(date(2026, 10, 15))
+    i = s.dates.index(date(2026, 8, 3))                    # ATR 窗口（最近 15 根）之外、语境窗口之内
+    gap = PriceSeries("SLV", s.dates[:i] + s.dates[i + 1:], s.closes[:i] + s.closes[i + 1:],
+                      s.highs[:i] + s.highs[i + 1:], s.lows[:i] + s.lows[i + 1:])
+    out = mw.derive_inputs(*fd.resolve(_Inst, T, fetchers=_fetchers(gap, None)), T)
+    assert out["status"] == "fresh" and out["context_status"] == "incomplete" and "atr14" not in out["context"]

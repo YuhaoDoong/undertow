@@ -113,7 +113,16 @@ mainwall_window() {  # $1=open|close|capture $2=起(分) $3=止(分) $4=标签
     : > "$OKF"; hb "${TAG}：✅ ${SUM}"
   else
     hb "${TAG}：⏳ 未完成（rc=$RB_RC overall=$(ov_text "$RB_OV")）${SUM}，下次唤醒重试"
-    if (( ET_MIN >= HI - 6 )); then notify "⚠️ 主墙研究账${TAG}未完成" "${SUM:-$(printf '%s' "$RB_RES" | tail -1)}"; fi
+    if (( ET_MIN >= HI - 6 )); then
+      local MK="$LOG_DIR/.mainwall_alerted_${W}_${ET_DATE}"
+      if [[ ! -e "$MK" ]]; then
+        : > "$MK"
+        notify "⚠️ 主墙研究账${TAG}未完成" "${SUM:-$(printf '%s' "$RB_RES" | tail -1)}"
+        # 兜底凭证（launchd 下通知未必弹得出）：只写状态，不写账户/持仓内容
+        printf '%s | ET %s | ⚠️ 主墙研究账%s未完成（rc=%s overall=%s），见 undertow mainwall audit\n' \
+          "$(date '+%F %H:%M %z')" "$(TZ=America/New_York date +%H:%M)" "$TAG" "$RB_RC" "$(ov_text "$RB_OV")" >> "data/reports/FAILURE_${ET_DATE}.txt"
+      fi
+    fi
   fi
 }
 mainwall_sample() {  # $1=起(分) $2=止(分)；无哨兵，命令自己跳过本桶已有的记录
@@ -121,7 +130,18 @@ mainwall_sample() {  # $1=起(分) $2=止(分)；无哨兵，命令自己跳过�
   if (( ET_MIN < $1 || ET_MIN > $2 )); then return; fi
   run_bound "mainwall_sample" "mainwall sample" mainwall sample
   if (( RB_RC == 75 )); then hb "⑰主墙采样：撞锁，跳过"; return; fi
-  hb "⑰主墙采样：rc=$RB_RC overall=$(ov_text "$RB_OV") $(printf '%s' "$RB_RES" | grep -E '主墙账盘中采样' | tail -1)"
+  local SUM; SUM=$(printf '%s' "$RB_RES" | grep -E '主墙账盘中采样' | tail -1)
+  if (( RB_RC == 0 )) && [[ "$RB_OV" == "complete" || "$RB_OV" == "unchanged" ]]; then hb "⑰主墙采样：✅ ${SUM}"; return; fi
+  hb "⑰主墙采样：⏳ rc=$RB_RC overall=$(ov_text "$RB_OV") ${SUM}，下次唤醒补缺"
+  # 与 ⑦ 同规则：失败按【当前桶】判 —— 本桶最后 6 分钟仍未补齐就提醒并写兜底凭证，每桶最多一次（Codex 057 R4）
+  local BEND=$(( $1 + ( (ET_MIN - $1) / 15 + 1 ) * 15 ))
+  local MK="$LOG_DIR/.mainwall_sample_alerted_${ET_DATE}_${BEND}"
+  if (( ET_MIN >= BEND - 6 )) && [[ ! -e "$MK" ]]; then
+    : > "$MK"
+    notify "⚠️ 主墙研究账盘中采样本桶未补齐" "${SUM:-$(printf '%s' "$RB_RES" | tail -1)}"
+    printf '%s | ET %s | ⚠️ 主墙研究账盘中采样本桶未补齐（rc=%s overall=%s）\n' \
+      "$(date '+%F %H:%M %z')" "$(TZ=America/New_York date +%H:%M)" "$RB_RC" "$(ov_text "$RB_OV")" >> "data/reports/FAILURE_${ET_DATE}.txt"
+  fi
 }
 # ── ④⑤ 影子账盘口窗口（v3，Codex 005 R02）──────────────────────────
 # ⚠️ 放在①②③之前：那几个窗口里有 exit 0（撞锁等），排在后面会被跳过。

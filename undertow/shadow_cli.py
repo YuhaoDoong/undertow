@@ -1703,7 +1703,7 @@ def freshness_summary() -> str | None:
         return None
     rows = jl.load(p, KEY)
     st = sum(1 for r in rows if r.get("stale"))
-    return (f"  ⚠️ 输入新鲜度：{len(rows)} 行中 {st} 行基准收盘晚于 T−1（多为 T−2）。本账检验的是含该输入行为的实现，"
+    return (f"  ⚠️ 输入新鲜度：{len(rows)} 行中 {st} 行基准收盘滞后于 T−1（多为 T−2，即早于应有的 T−1）。本账检验的是含该输入行为的实现，"
             "不能当作「新鲜 T−1 基准的墙策略」的证据（Codex 056；明细 sidecar/freshness_audit.jsonl）")
 
 

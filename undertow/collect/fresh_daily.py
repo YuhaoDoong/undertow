@@ -11,7 +11,9 @@ v5 冻结不改（只追加新鲜度侧车审计，见 shadow_cli freshness-audi
 3. 交叉核对：另一个源（若也有 expected 那根）与期权快照里带日期的前收盘（若有）都和所选收盘比；
    相对差 > CROSS_CHECK_MAX_REL 判 conflict → 状态 incomplete，不用。
 4. 缺 H/L 的 bar 不用收盘顶替（会让 ATR 系统性偏小），那一根视为不可用。
-5. available_at = 本次所用原文的抓取时刻（缓存文件里的 fetched_at）；调用方负责判断它早于决策冻结时刻。
+5. 原文身份与序列绑定在同一次读取上（Codex 057 R2）：从缓存文件读一次字节 → 同一份字节算 sha256、取 fetched_at、解析序列；
+   不在解析后另读一次文件「证明」（另一个写者可能已改写，hash 就属于另一版）。available_at = 这份原文的抓取时刻；
+   调用方据此核对它早于冻结时刻。可选 cas_put 把这份原文存进内容寻址存储（cas 引用 = 同一 sha256）。
 6. ATR / 语境由分析层（analyze.mainwall.derive_inputs）从返回的同一条序列计算 —— 采集层不 import 分析层。
 
 返回值只描述输入，不做任何交易判断。失败一律 typed（stale / conflict / error / calendar_unknown），不抛给调用方吞掉。
@@ -29,10 +31,10 @@ from undertow.core import market_calendar as mc
 from undertow.core.clock import ET
 from undertow.core.models import PriceSeries
 
-VERSION = "fresh-daily-v1-20261017"
+VERSION = "fresh-daily-v2-20261017"
 SOURCE_ORDER = ("cboe_history", "yahoo_chart")
-# 两源 / 快照前收盘的相对差上限。未校准的健全性检查（不是统计阈值）：GLD/SLV 两源同日收盘历史上应一致到分，
-# 0.5% 只用来拦「抓到的是另一天 / 另一种复权」这类整根错位。重设需改 VERSION。
+# 两源 / 快照前收盘的相对差上限。未校准的工程约定（不是统计阈值、未验证为最佳）：「GLD/SLV 两源同日收盘应基本一致」
+# 只是待核假设；0.5% 用来拦「抓到的是另一天 / 另一种复权」这类整根错位。重设需改 VERSION。
 CROSS_CHECK_MAX_REL = 0.005
 YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 YAHOO_TTL_S = 900                  # 有界重抓：盘前每 15 分钟最多一次（daily 每 15 分钟唤醒）
@@ -44,14 +46,15 @@ def _sha(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
 
 
-def _cache_meta(cache: FileCache, key: str) -> tuple[float | None, str | None]:
-    """缓存文件里的抓取时刻与原文哈希（与 fetch 消费的是同一份字节；文件不存在或坏 → None）。"""
+def consume_cache(cache: FileCache, key: str) -> dict | None:
+    """读一次缓存文件字节，返回 {payload, fetched_at, raw_sha, raw}；三者出自同一份字节。不存在/坏 → None。"""
     p = cache._path(key)
     try:
         raw = p.read_bytes()
-        return float(json.loads(raw.decode("utf-8"))["fetched_at"]), _sha(raw)
+        obj = json.loads(raw.decode("utf-8"))
+        return {"payload": obj["data"], "fetched_at": float(obj["fetched_at"]), "raw_sha": _sha(raw), "raw": raw}
     except (OSError, ValueError, KeyError, TypeError, UnicodeError):
-        return None, None
+        return None
 
 
 def _truncate(ser: PriceSeries, T: date) -> PriceSeries:
@@ -62,10 +65,13 @@ def _truncate(ser: PriceSeries, T: date) -> PriceSeries:
 
 
 def fetch_cboe(inst, cache: FileCache) -> tuple[PriceSeries, dict]:
-    from undertow.collect.cboe_history import CboeHistorySource
-    ser = CboeHistorySource(cache=cache).fetch_series(inst)
-    at, sha = _cache_meta(cache, f"cboehist_{inst.price.symbol}")
-    return ser, {"fetched_at": at, "raw_sha": sha}
+    """先让原适配器按其既有规则刷新缓存（落后重抓、429 退避），再从缓存读【一次】字节并就地解析 —— 返回的序列与身份同源。"""
+    from undertow.collect.cboe_history import CboeHistorySource, parse_payload
+    CboeHistorySource(cache=cache).fetch_series(inst)
+    got = consume_cache(cache, f"cboehist_{inst.price.symbol}")
+    if got is None:
+        raise DataSourceError(f"CBOE 日线缓存不可读（{inst.price.symbol}）")
+    return parse_payload(got["payload"], inst.price.symbol), got
 
 
 def parse_yahoo(payload: dict, symbol: str) -> PriceSeries:
@@ -96,13 +102,15 @@ def parse_yahoo(payload: dict, symbol: str) -> PriceSeries:
 def fetch_yahoo(inst, cache: FileCache) -> tuple[PriceSeries, dict]:
     sym = inst.price.symbol
     key = f"yahoo_etf_{sym}_2y"
-    payload = cache.get(key, YAHOO_TTL_S)
-    if payload is None:
+    got = consume_cache(cache, key)
+    if got is None or time.time() - got["fetched_at"] > YAHOO_TTL_S:
         payload = http_get_json(YAHOO_URL.format(symbol=sym), params={"range": "2y", "interval": "1d"},
                                 headers={"User-Agent": "Mozilla/5.0"})
         cache.set(key, payload)
-    at, sha = _cache_meta(cache, key)
-    return parse_yahoo(payload, sym), {"fetched_at": at, "raw_sha": sha}
+        got = consume_cache(cache, key)
+        if got is None:
+            raise DataSourceError(f"Yahoo 日线缓存写入后不可读（{sym}）")
+    return parse_yahoo(got["payload"], sym), got
 
 
 FETCHERS = {"cboe_history": fetch_cboe, "yahoo_chart": fetch_yahoo}
@@ -117,12 +125,13 @@ def _iso(ts: float | None) -> str | None:
 
 
 def resolve(inst, T: date, *, cache: FileCache | None = None, fetchers: dict | None = None,
-            snapshot_prev_close: dict | None = None) -> tuple[dict, PriceSeries | None]:
+            snapshot_prev_close: dict | None = None, cas_put=None) -> tuple[dict, PriceSeries | None]:
     """T 盘前决策可用的日线输入。返回 (记录, 截到 T−1 的序列或 None)。记录可直接落盘（全是 JSON 值）。
 
     snapshot_prev_close: {"close": x, "date": "YYYY-MM-DD"}（期权快照自带的前收盘，带日期才核对；None 跳过）。
     status: fresh（可用）/ stale（所有源都没到 expected）/ conflict（源间不一致）/ calendar_unknown。
-    fresh 只说明 T−1 的 H/L/C 到了且一致；ATR/语境是否截止同日由 analyze.mainwall.derive_inputs 再核。
+    fresh 只说明 T−1 的 H/L/C 到了且一致；ATR/语境的回看覆盖由 analyze.mainwall.derive_inputs 再核。
+    身份（抓取时刻 + 原文 sha256）缺失的源不算 fresh（identity_missing）。cas_put(raw) 给定时，参与决定的原文都存一份。
     """
     cache = cache or FileCache()
     fetchers = fetchers or FETCHERS
@@ -144,12 +153,17 @@ def resolve(inst, T: date, *, cache: FileCache | None = None, fetchers: dict | N
             continue
         tr = _truncate(ser, T)
         last = tr.dates[-1] if tr.dates else None
-        att.update(meta, available_at=_iso(meta.get("fetched_at")), last_date=last.isoformat() if last else None)
-        if last != expected:
+        att.update(fetched_at=meta.get("fetched_at"), raw_sha=meta.get("raw_sha"),
+                   available_at=_iso(meta.get("fetched_at")), last_date=last.isoformat() if last else None)
+        if not (meta.get("fetched_at") and meta.get("raw_sha")):
+            att["status"] = "identity_missing"
+        elif last != expected:
             att["status"] = "stale"      # 含「T−1 那根缺 H/L 被解析器整根丢掉」：两个源都不拿收盘顶替高低
         else:
             att["status"] = "fresh"
             got[src] = (tr, meta)
+            if cas_put is not None and meta.get("raw") is not None:
+                att["cas"] = cas_put(meta["raw"]).get("sha256")
         rec["attempts"].append(att)
     if not got:
         rec["status"] = "stale"
@@ -160,8 +174,10 @@ def resolve(inst, T: date, *, cache: FileCache | None = None, fetchers: dict | N
     for other in SOURCE_ORDER:
         if other != src and other in got:
             oc = got[other][0].closes[-1]
+            om = got[other][1]
             rec["cross_check"].append({"against": other, "close": round(oc, 4), "rel_diff": round(_rel(oc, close), 6),
-                                       "ok": _rel(oc, close) <= CROSS_CHECK_MAX_REL})
+                                       "ok": _rel(oc, close) <= CROSS_CHECK_MAX_REL,
+                                       "available_at": _iso(om.get("fetched_at")), "raw_sha": om.get("raw_sha")})
     if snapshot_prev_close and snapshot_prev_close.get("close") and snapshot_prev_close.get("date") == expected.isoformat():
         sc = float(snapshot_prev_close["close"])
         rec["cross_check"].append({"against": "snapshot_prev_close", "close": round(sc, 4),

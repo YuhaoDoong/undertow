@@ -84,16 +84,30 @@ except Exception:
 ok = d.get("schema") == 2 and d.get("run_id") == rid and d.get("session") == sess and d.get("command") == cmd
 print(d.get("overall", "") if ok else "status_mismatch")' "$1" "$2" "$ET_DATE" "$3" 2>/dev/null || echo status_corrupt
 }
+bound_count() {  # $1=状态文件 $2=run_id $3=命令名 $4=counts 字段 → 整数；身份不符/缺失/非整数 → 空（调用方按核查失败处理）
+  [[ -n "$1" && -f "$1" ]] || return 0
+  "$PY" -c '
+import json, sys
+p, rid, sess, cmd, k = sys.argv[1:6]
+try:
+    d = json.load(open(p))
+except Exception:
+    sys.exit(0)
+if d.get("schema") == 2 and d.get("run_id") == rid and d.get("session") == sess and d.get("command") == cmd:
+    v = (d.get("counts") or {}).get(k)
+    if type(v) is int and v >= 0:
+        print(v)' "$1" "$2" "$ET_DATE" "$3" "$4" 2>/dev/null
+}
 run_bound() {
   local NAME="$1" CMDN="$2"; shift 2
   local RID="$$-$RANDOM-$(date +%s)"
   local ST="$LOG_DIR/.status_${NAME}_${ET_DATE}.run-${RID}.json" LK="$LOG_DIR/.lockf_${NAME}"
-  RB_RES=""; RB_RC=0; RB_OV=""
+  RB_RES=""; RB_RC=0; RB_OV=""; RB_RID="$RID"; RB_STF=""
   # lockf -t 0：锁被占立即退出 75（EX_TEMPFAIL）；-k 保留锁文件（避免删文件与加锁的竞争）；命令返回码原样透传
   RB_RES=$(lockf -k -t 0 "$LK" "$PY" -m undertow.cli "$@" --status-file "$ST" --run-id "$RID" 2>&1); RB_RC=$?
   if (( RB_RC == 75 )) && [[ ! -f "$ST" ]]; then RB_OV="busy"; return; fi
   RB_OV=$(bound_overall "$ST" "$RID" "$CMDN")
-  [[ -f "$ST" ]] && mv -f "$ST" "$LOG_DIR/.status_${NAME}_${ET_DATE}.json"
+  [[ -f "$ST" ]] && mv -f "$ST" "$LOG_DIR/.status_${NAME}_${ET_DATE}.json" && RB_STF="$LOG_DIR/.status_${NAME}_${ET_DATE}.json"
 }
 ov_text() { [[ "$1" == "status_missing" ]] && echo "状态文件缺失" || echo "$1"; }
 
@@ -125,20 +139,33 @@ mainwall_window() {  # $1=open|close|capture $2=起(分) $3=止(分) $4=标签
     fi
   fi
 }
-mainwall_coverage() {  # Codex 058 A：每次唤醒重算已过截止的应有项（窗口外、睡过整窗也能补查）；新缺口由命令先写兜底凭证再标已提醒
+mainwall_coverage() {  # Codex 058 A / 059 A2：每次唤醒重算已过截止的应有项；只认经 run_id/session/command/schema 核验的状态
   run_bound "mainwall_coverage" "mainwall coverage" mainwall coverage
   if (( RB_RC == 75 )); then hb "⑰主墙覆盖核查：撞锁，跳过"; return; fi
-  local NEW; NEW=$(printf '%s\n' "$RB_RES" | awk '$1=="NEW_GAPS"{print $2}' | tail -1)
-  if [[ -z "$NEW" ]]; then
-    hb "⑰主墙覆盖核查：⚠️ 命令未给出结果（rc=$RB_RC overall=$(ov_text "$RB_OV")）"
-    if (( RB_RC != 1 )); then notify "⚠️ 主墙研究账覆盖核查失败" "$(printf '%s' "$RB_RES" | tail -1)"; fi
+  # 业务 rc 1（有缺口）与 Python 崩溃的 rc 1 无法靠返回码区分：先核验状态，再读 counts.new；
+  # 状态缺失/损坏/不符、overall=failed、rc 与 overall 不一致、NEW_GAPS 行与 counts 不一致 → 一律当核查失败（通知 + 兜底）
+  local NEW="" LINE OK=0
+  if [[ "$RB_OV" == "complete" || "$RB_OV" == "partial" ]]; then NEW=$(bound_count "$RB_STF" "$RB_RID" "mainwall coverage" new); fi
+  LINE=$(printf '%s\n' "$RB_RES" | awk '$1=="NEW_GAPS"{print $2}' | tail -1)
+  if [[ -n "$NEW" ]] && [[ -z "$LINE" || "$LINE" == "$NEW" ]] && \
+     { { [[ "$RB_OV" == "complete" ]] && (( RB_RC == 0 )); } || { [[ "$RB_OV" == "partial" ]] && (( RB_RC == 1 )); }; }; then OK=1; fi
+  if (( ! OK )); then
+    hb "⑰主墙覆盖核查：⚠️ 核查失败（rc=$RB_RC overall=$(ov_text "$RB_OV") new=${NEW:-?} 行=${LINE:-无}）"
+    # 每个 ET 小时最多一次；哨兵只在兜底写成功后才建（写失败下次唤醒重试，不写成「已提醒」）
+    local MK="$LOG_DIR/.mainwall_cov_failed_${ET_DATE}_$(( ET_MIN / 60 ))"
+    if [[ ! -e "$MK" ]]; then
+      notify "⚠️ 主墙研究账覆盖核查失败" "rc=$RB_RC overall=$(ov_text "$RB_OV")：$(printf '%s' "$RB_RES" | grep -v '^NEW_GAPS' | tail -1)"
+      printf '%s | ET %s | ⚠️ 主墙研究账覆盖核查失败（rc=%s overall=%s），见 undertow mainwall coverage\n' \
+        "$(date '+%F %H:%M %z')" "$(TZ=America/New_York date +%H:%M)" "$RB_RC" "$(ov_text "$RB_OV")" >> "data/reports/FAILURE_${ET_DATE}.txt" \
+        && : > "$MK"
+    fi
     return
   fi
   if (( NEW > 0 )); then
-    hb "⑰主墙覆盖核查：新缺口 ${NEW}（已写 FAILURE 兜底）"
+    hb "⑰主墙覆盖核查：新缺口 ${NEW}（命令已写 FAILURE 兜底）"
     notify "⚠️ 主墙研究账发现 ${NEW} 个覆盖缺口" "$(printf '%s\n' "$RB_RES" | grep '⚠️' | head -1)"
   else
-    hb "⑰主墙覆盖核查：无新缺口（rc=$RB_RC）"
+    hb "⑰主墙覆盖核查：无新缺口（overall=$RB_OV）"
   fi
 }
 mainwall_sample() {  # $1=起(分) $2=止(分)；无哨兵，命令自己跳过本桶已有的记录

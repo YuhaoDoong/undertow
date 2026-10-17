@@ -428,13 +428,20 @@ else MW_OUT=$(python3 -m undertow mainwall capture --status-file "$MW_ST" 2>&1);
 if stage_done mainwall_settle; then MW_OUT2=""; MW_RC2=0
 else MW_OUT2=$(python3 -m undertow mainwall settle 2>&1); MW_RC2=$?; stage_mark mainwall_settle "$(rc_status $MW_RC2 failed)" $MW_RC2; fi
 # 覆盖补查（058 A）：机器睡了一整天、盘中 hook 一次没跑，次日盘前这里也会把已过截止的缺口登记并写兜底；rc=1 = 有缺口（不是崩溃）
-MW_COV=$(python3 -m undertow mainwall coverage 2>&1); MW_COV_RC=$?
+# 059 A2：状态按本次 run_id 核验后才读 counts.new；rc 1 既可能是有缺口也可能是崩溃，不单凭返回码或 NEW_GAPS 行
+MW_COV_RID="daily-$$-$RANDOM-$(date +%s)"; MW_COV_ST="data/logs/.status_mainwall_coverage_${ET_DATE}.run-${MW_COV_RID}.json"
+MW_COV=$(python3 -m undertow mainwall coverage --status-file "$MW_COV_ST" --run-id "$MW_COV_RID" 2>&1); MW_COV_RC=$?
+MW_COV_V=$(python3 scripts/bound_status.py "$MW_COV_ST" "$MW_COV_RID" "$ET_DATE" "mainwall coverage" 2>/dev/null)
+[[ -f "$MW_COV_ST" ]] && mv -f "$MW_COV_ST" "data/logs/.status_mainwall_coverage_${ET_DATE}.json"
 set -e
 printf '%s\n%s\n' "$MW_OUT" "$MW_OUT2" | grep -E "冻结|更新|⚠️" | head -6 || true
 # capture 盘前未就绪是常态（源未更新 → 只记失败尝试、下次重试），由 session_hooks ⑰ 在 09:23 起未完成时提醒；结算失败当场告警
 if (( MW_RC2 != 0 )); then alert "⚠️ 主墙研究账结算失败（ET $ET_NOW）" "rc=$MW_RC2：$(printf '%s' "$MW_OUT2" | grep '⚠️' | head -2 | tr '\n' ' ')"; fi
-MW_NEW=$(printf '%s\n' "$MW_COV" | awk '$1=="NEW_GAPS"{print $2}' | tail -1)
-if [[ -z "$MW_NEW" ]]; then alert "⚠️ 主墙研究账覆盖核查失败（ET $ET_NOW）" "rc=$MW_COV_RC：$(printf '%s' "$MW_COV" | tail -1)"
+MW_OV=${MW_COV_V%% *}; MW_NEW=${MW_COV_V#* }; [[ "$MW_COV_V" == *" "* ]] || MW_NEW=""
+MW_LINE=$(printf '%s\n' "$MW_COV" | awk '$1=="NEW_GAPS"{print $2}' | tail -1)
+if [[ -z "$MW_NEW" ]] || [[ -n "$MW_LINE" && "$MW_LINE" != "$MW_NEW" ]] || \
+   ! { { [[ "$MW_OV" == complete ]] && (( MW_COV_RC == 0 )); } || { [[ "$MW_OV" == partial ]] && (( MW_COV_RC == 1 )); }; }; then
+  alert "⚠️ 主墙研究账覆盖核查失败（ET $ET_NOW）" "rc=$MW_COV_RC overall=${MW_OV:-状态缺失}：$(printf '%s' "$MW_COV" | grep -v '^NEW_GAPS' | tail -1)"
 elif (( MW_NEW > 0 )); then alert "⚠️ 主墙研究账发现 ${MW_NEW} 个覆盖缺口（ET $ET_NOW）" "$(printf '%s\n' "$MW_COV" | grep '⚠️' | head -1)"; fi
 # <<< mainwall-daily
 if (( SH_RC != 0 || SH_RC2 != 0 )); then

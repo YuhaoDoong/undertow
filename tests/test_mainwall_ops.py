@@ -12,7 +12,20 @@ def _daily_block() -> str:
     return src[a:b]
 
 
-def _run_daily(tmp_path, rc_capture: int, rc_settle: int, new_gaps: int = 0):
+def _cov_cmd(new_gaps=0, gaps=0, *, crash=False, mismatch=False, line=None):
+    """替身 coverage：按参数写（或不写）本次 run 的状态文件；$6=--status-file 路径，$8=--run-id。"""
+    if crash:
+        return 'echo Traceback; return 1'
+    rid = "bogus" if mismatch else "$8"                          # 双引号内 $8 展开为本次 --run-id
+    ov, rc = ("partial", 1) if gaps else ("complete", 0)
+    q = '\\"'
+    js = (f'{{{q}schema{q}:2,{q}command{q}:{q}mainwall coverage{q},{q}run_id{q}:{q}{rid}{q},'
+          f'{q}session{q}:{q}2026-10-19{q},{q}overall{q}:{q}{ov}{q},{q}counts{q}:{{{q}new{q}:{new_gaps}}}}}')
+    return f'mkdir -p "${{6:h}}"; echo "{js}" > "$6"; echo "NEW_GAPS {new_gaps if line is None else line}"; return {rc}'
+
+
+def _run_daily(tmp_path, rc_capture: int, rc_settle: int, new_gaps: int = 0, cov=None):
+    cov = cov or _cov_cmd(new_gaps, new_gaps)
     marks = tmp_path / "marks.txt"
     script = f"""set -e
 ET_DATE=2026-10-19; ET_NOW=06:00
@@ -20,7 +33,11 @@ stage_done() {{ return 1; }}
 stage_mark() {{ echo "$1 $2 $3" >> {marks}; }}
 rc_status() {{ case "$1" in 0) echo ok ;; 3) echo "${{2:-pending}}" ;; *) echo failed ;; esac; }}
 alert() {{ echo "ALERT $1" >> {marks}; }}
-python3() {{ if [[ "$4" == capture ]]; then echo "⚠️ cap"; return {rc_capture}; elif [[ "$4" == coverage ]]; then echo "NEW_GAPS {new_gaps}"; return 0; else echo "⚠️ set"; return {rc_settle}; fi; }}
+python3() {{
+  if [[ "$1" == scripts/bound_status.py ]]; then command python3 {ROOT}/scripts/bound_status.py "${{@:2}}"; return; fi
+  if [[ "$4" == capture ]]; then echo "⚠️ cap"; return {rc_capture}
+  elif [[ "$4" == coverage ]]; then {cov}
+  else echo "⚠️ set"; return {rc_settle}; fi; }}
 {_daily_block()}
 echo REACHED_DOWNSTREAM
 """
@@ -95,27 +112,77 @@ def test_daily_coverage_new_gaps_alerted(tmp_path):
     assert "REACHED_DOWNSTREAM" in r.stdout and "ALERT ⚠️ 主墙研究账发现 3 个覆盖缺口" in marks
 
 
-def _run_cov(tmp_path, res: str, rc: int):
+def test_daily_coverage_crash_or_bad_status_alerts_failure(tmp_path):
+    """059 A2：rc1 + 无状态（崩溃）、身份不符、NEW_GAPS 与 counts 不一致 → 核查失败告警，不当成「正常有缺口」。"""
+    for i, cov in enumerate((_cov_cmd(crash=True), _cov_cmd(1, 1, mismatch=True), _cov_cmd(0, 1, line=3))):
+        d = tmp_path / str(i); d.mkdir()
+        r, marks = _run_daily(d, 0, 0, cov=cov)
+        assert "REACHED_DOWNSTREAM" in r.stdout and "ALERT ⚠️ 主墙研究账覆盖核查失败" in marks, (i, marks)
+    d = tmp_path / "ok"; d.mkdir()
+    r, marks = _run_daily(d, 0, 0, cov=_cov_cmd(0, 2))                  # 合法 partial、无新缺口 → 不重复提醒
+    assert "ALERT" not in marks
+
+
+def _hook_prelude() -> str:
+    src = (ROOT / "scripts" / "session_hooks.sh").read_text("utf-8")
+    a = src.index("bound_overall() {")
+    b = src.index("ov_text() {")
+    return src[a:src.index("\n", b) + 1]
+
+
+def _run_cov(tmp_path, cov: str, *, et_min=600, reports_ok=True):
+    """真实 run_bound / bound_overall / bound_count；$PY 是替身：-c 透传给真 python，-m 跑 cov 场景。"""
     (tmp_path / "logs").mkdir(exist_ok=True)
+    if reports_ok:
+        (tmp_path / "data/reports").mkdir(parents=True, exist_ok=True)
+    fake = tmp_path / "fakepy"
+    fake.write_text(f"""#!/bin/zsh
+if [[ "$1" == -c ]]; then exec python3 "$@"; fi
+shift 2   # -m undertow.cli → $1=mainwall $2=coverage $4=状态文件 $6=run_id
+_c() {{ {cov.replace('$6', '$4').replace('$8', '$6').replace('${6:h}', '${4:h}')} }}
+_c "$@"
+""")
+    fake.chmod(0o755)
     script = f"""
-LOG_DIR=logs; ET_DATE=2026-10-19; ET_MIN=600
+LOG_DIR=logs; ET_DATE=2026-10-19; ET_MIN={et_min}; PY={fake}
 hb() {{ echo "HB $1" >> hb.txt; }}
-ov_text() {{ echo "$1"; }}
 notify() {{ echo "NOTIFY $1" >> notify.txt; }}
-run_bound() {{ RB_RES=$'{res}'; RB_RC={rc}; RB_OV=partial; }}
+{_hook_prelude()}
 {_fn("mainwall_coverage")}
-mainwall_coverage
+mainwall_coverage; true
 """
     subprocess.run(["zsh", "-c", script], cwd=tmp_path, check=True)
-    n = tmp_path / "notify.txt"
-    return n.read_text() if n.exists() else ""
+    rd = lambda n: (tmp_path / n).read_text() if (tmp_path / n).exists() else ""
+    return rd("notify.txt"), rd("data/reports/FAILURE_2026-10-19.txt"), rd("hb.txt")
 
 
 def test_hook_coverage_notifies_only_new_gaps(tmp_path):
-    assert "2 个覆盖缺口" in _run_cov(tmp_path, "  ⚠️ x missing\\nNEW_GAPS 2", 1)
+    note, _, _ = _run_cov(tmp_path, _cov_cmd(2, 2))
+    assert "2 个覆盖缺口" in note
     (tmp_path / "b").mkdir()
-    assert _run_cov(tmp_path / "b", "NEW_GAPS 0", 1) == ""
+    note, fail, hb = _run_cov(tmp_path / "b", _cov_cmd(0, 3))           # 合法 partial + new 0：不重复提醒
+    assert note == "" and fail == "" and "无新缺口" in hb
 
 
-def test_hook_coverage_crash_is_visible(tmp_path):
-    assert "覆盖核查失败" in _run_cov(tmp_path, "Traceback", 2)
+def test_hook_coverage_rc1_without_status_is_failure(tmp_path):
+    """059 A2 复现：LedgerConflictError 时 rc1、无状态、无 NEW_GAPS —— 旧 hook 只写 HB；现在通知 + 持久兜底。"""
+    note, fail, _ = _run_cov(tmp_path, _cov_cmd(crash=True))
+    assert "覆盖核查失败" in note and "覆盖核查失败" in fail
+
+
+def test_hook_coverage_mismatch_or_inconsistent_line_is_failure(tmp_path):
+    for i, cov in enumerate((_cov_cmd(1, 1, mismatch=True), _cov_cmd(0, 1, line=2))):
+        d = tmp_path / str(i); d.mkdir()
+        note, fail, _ = _run_cov(d, cov)
+        assert "覆盖核查失败" in note and "覆盖核查失败" in fail, i
+
+
+def test_hook_coverage_failure_fallback_retried_until_written(tmp_path):
+    note, fail, _ = _run_cov(tmp_path, _cov_cmd(crash=True), reports_ok=False)   # 兜底写不进去 → 不建哨兵
+    assert fail == "" and not list((tmp_path / "logs").glob(".mainwall_cov_failed_*"))
+    (tmp_path / "notify.txt").unlink()
+    note, fail, _ = _run_cov(tmp_path, _cov_cmd(crash=True))                    # 下一次唤醒重试并写成
+    assert "覆盖核查失败" in fail and list((tmp_path / "logs").glob(".mainwall_cov_failed_*"))
+    (tmp_path / "notify.txt").unlink()
+    note, fail2, _ = _run_cov(tmp_path, _cov_cmd(crash=True))                   # 同一小时不重复
+    assert note == "" and fail2 == fail

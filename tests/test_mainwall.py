@@ -607,3 +607,128 @@ def test_coverage_complete_day_reports_no_gap(monkeypatch, mwcli, tmp_path):
     items = m.coverage_items(r, T, "silver", datetime(2026, 10, 16, 10, 30, tzinfo=ET))
     st = {i["item"]: i["status"] for i in items}
     assert st["sdec"] == "complete" and all(v == "complete" for k, v in st.items() if k.startswith("entry:"))
+
+
+# ── 059：缺口事实演进 / 核查异常 typed / audit 当日边界 / 数值溢出 ─────────────────────
+
+def _inst(key):
+    return type("I", (), {"key": key, "options": type("O", (), {"symbol": key.upper()})})
+
+
+def test_coverage_gap_fact_evolves_without_conflict(monkeypatch, mwcli, tmp_path, capsys):
+    """Codex 059 A1 复现序列：09:29 失败尝试 → 09:31 登记 capture(not_generated) → 开盘补 premarket_input_stale 分母行
+    → 10:05 / 10:30 再核查。旧版在 10:05 抛 LedgerConflictError、之后的新缺口永远落不了账。"""
+    import json as _json
+    m = mwcli
+    monkeypatch.chdir(tmp_path)
+    m._append_attempt(_att("input_stale", "2026-10-19T13:29:00+00:00", key=f"{D19}|silver") | {"session": D19.isoformat()})
+    gold = _row19(); gold["key"] = f"{D19}|gold"; gold["instrument"] = "gold"            # gold 盘前合格、但 Sdec 没冻结
+    jl.insert_frozen(m._path("gold"), gold, key_field="key", frozen=m.frozen_part)
+
+    class A:
+        instruments = ["gold", "silver"]; status_file = str(tmp_path / "st.json"); run_id = "r"
+
+    def run(hh, mm):
+        monkeypatch.setattr(m, "_clock", lambda: datetime(2026, 10, 19, hh, mm, tzinfo=ET))
+        rc = m.cmd_coverage(A)
+        st = _json.loads(Path(A.status_file).read_text())
+        return rc, st, {g["key"]: g for g in jl.load(m._gaps_path(), "key")}
+
+    rc, st, g = run(9, 31)
+    cap = f"{D19}|silver|capture"
+    assert rc == 1 and st["overall"] == "partial" and st["counts"]["new"] == 1
+    assert g[cap]["reason"] == "not_generated" and g[cap]["alerted_at"]
+    m._ensure_denominator_row(_inst("silver"), D19)                                       # 合同要求的正确行为
+    assert jl.load(m._path("silver"), "key")[0]["premarket"]["status"] == "premarket_input_stale"
+    rc, st, g = run(10, 5)
+    assert rc == 1 and st["overall"] == "partial" and st["counts"]["new"] == 0              # 不崩、不重复提醒
+    assert g[cap]["reason"] == "not_generated" and g[cap]["status"] == "missing"            # 首次事实保留
+    assert g[cap]["current_reason"] == "premarket_input_stale" and len(g[cap]["events"]) == 1
+    rc, st, g = run(10, 30)                       # 开盘窗已过：gold 的 Sdec 缺口 + 09:45/10:00/10:15 三个采样桶都是新的
+    assert rc == 1 and st["counts"]["new"] == 4 and f"{D19}|gold|sdec" in g and f"{D19}|gold|sample:10:15" in g
+    assert g[cap]["reason"] == "not_generated" and len(g[cap]["events"]) == 1               # 状态没再变 → 不追加事件
+    fail = (tmp_path / "data/reports/FAILURE_2026-10-19.txt").read_text()
+    assert fail.count(cap) == 1 and fail.count(f"{D19}|gold|sdec") == 1
+    raw = m._gaps_path().read_bytes()
+    assert run(10, 30)[1]["counts"]["new"] == 0 and m._gaps_path().read_bytes() == raw     # 同一时刻重复运行：文件不动、不再提醒
+
+
+def test_gap_registry_missing_partial_complete_events(mwcli, tmp_path):
+    m = mwcli
+    gp = tmp_path / "g.jsonl"
+    it = {"id": "2026-10-19|silver|sample:10:00", "session": "2026-10-19", "instrument": "silver", "section": "sample",
+          "item": "sample:10:00", "status": "missing", "reason": "missing:S,P50", "deadline": "x"}
+    now = datetime(2026, 10, 19, 10, 20, tzinfo=ET)
+    m._register_gaps(gp, [it], now)
+    m._register_gaps(gp, [it | {"status": "partial", "reason": "missing:P50"}], now)
+    m._register_gaps(gp, [it | {"status": "partial", "reason": "missing:P50"}], now)
+    m._register_gaps(gp, [it | {"status": "complete", "reason": None}], now)
+    r = jl.load(gp, "key")[0]
+    assert (r["status"], r["reason"]) == ("missing", "missing:S,P50")
+    assert [e["status"] for e in r["events"]] == ["partial", "complete"] and r["current_status"] == "complete"
+    bad = dict(r); bad["reason"] = "改写"
+    jl.atomic_write(gp, [bad], "key")
+    m._register_gaps(gp, [it | {"status": "partial"}], now)                                # 可变字段照常更新
+    with pytest.raises(jl.LedgerConflictError):
+        jl.update(gp, lambda x: x.update(status="x") or True, key_field="key", frozen=m._gap_frozen)
+
+
+def test_coverage_crash_writes_typed_failed_status(monkeypatch, mwcli, tmp_path):
+    import json as _json
+    m = mwcli
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(m, "_clock", lambda: datetime(2026, 10, 19, 10, 30, tzinfo=ET))
+
+    class A:
+        instruments = ["gold", "silver"]; status_file = str(tmp_path / "st.json"); run_id = "r"
+
+    def boom(*a, **k):
+        raise jl.LedgerConflictError("模拟")
+    monkeypatch.setattr(m, "_register_gaps", boom)
+    assert m.cmd_coverage(A) == 2
+    assert _json.loads(Path(A.status_file).read_text())["overall"] == "failed"
+    monkeypatch.undo(); monkeypatch.chdir(tmp_path); monkeypatch.setattr(m, "DIR", tmp_path / "mw")
+    monkeypatch.setattr(m, "_clock", lambda: datetime(2026, 10, 19, 10, 30, tzinfo=ET))
+    m._path("gold").parent.mkdir(parents=True, exist_ok=True)
+    m._path("gold").write_bytes(b"{bad\n")                                                  # 一个品种账损坏
+    assert m.cmd_coverage(A) == 2
+    st = _json.loads(Path(A.status_file).read_text())
+    assert st["overall"] == "failed" and st["counts"]["errors"] == 1
+    assert f"{D19}|silver|capture" in {g["key"] for g in jl.load(m._gaps_path(), "key")}   # 其余可核项照常留痕
+
+
+@pytest.mark.parametrize("hh,mm,row,want", [
+    (9, 29, None, 0),            # 未到截止
+    (9, 31, None, 1),            # 当日 capture 已到截止、无行 —— 旧版打印缺口却 rc0
+    (9, 31, "ok", 0),
+    (10, 21, "no_expiry", 0),    # 开盘窗结束后：盘前合格（无到期 → Sdec/采样不适用）
+    (10, 21, "ok", 1),           # 开盘窗结束后：Sdec 缺口
+])
+def test_audit_current_day_capture_boundary(monkeypatch, mwcli, tmp_path, hh, mm, row, want):
+    m = mwcli
+    monkeypatch.chdir(tmp_path)
+    rows = []
+    if row:
+        r = _row19()
+        if row == "no_expiry":
+            r["premarket"] = {"status": "no_expiry"}
+        rows = [r]
+    A = _cov(m, monkeypatch, datetime(2026, 10, 19, hh, mm, tzinfo=ET), rows)
+    assert m.cmd_audit(A) == want
+
+
+def test_audit_before_start_and_weekend_no_false_alarm(monkeypatch, mwcli, tmp_path):
+    m = mwcli
+    A = _cov(m, monkeypatch, datetime(2026, 10, 18, 12, tzinfo=ET))
+    assert m.cmd_audit(A) == 0
+
+
+@pytest.mark.parametrize("lit", ["1e999", "-1e999"])
+def test_attempts_overflow_literal_quarantined(mwcli, lit):
+    m = mwcli
+    p = m._attempts_path(); p.parent.mkdir(parents=True, exist_ok=True)
+    raw = ('{"key":"k","instrument":"silver","session":"s","status":"input_stale","tried_at":"t","nested":{"x":%s}}\n' % lit).encode()
+    p.write_bytes(raw)
+    with pytest.raises(m.AttemptsCorrupt):
+        m._load_attempts()
+    assert p.read_bytes() == raw and list(p.parent.glob("capture_attempts.jsonl.corrupt-*"))

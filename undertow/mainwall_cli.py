@@ -85,13 +85,27 @@ def _bad_const(x):
     raise ValueError(f"非有限数 {x}")
 
 
+def _all_finite(x, path="") -> None:
+    """递归检查所有浮点均有限（Codex 059 C）：JSON 的 1e999 被标准库读成 inf，不经过 parse_constant。"""
+    if isinstance(x, float):
+        if x != x or x in (float("inf"), float("-inf")):
+            raise ValueError(f"非有限数 {path or '.'}={x}")
+    elif isinstance(x, dict):
+        for k, v in x.items():
+            _all_finite(v, f"{path}.{k}")
+    elif isinstance(x, list):
+        for i, v in enumerate(x):
+            _all_finite(v, f"{path}[{i}]")
+
+
 def validate_attempt(a) -> None:
-    """一条失败尝试必须是对象、必需字段为非空字符串。同 key 多行（同日多次重试）是合法的，不套主账的唯一 key 规则。"""
+    """一条失败尝试必须是对象、必需字段为非空字符串、所有数值有限。同 key 多行（同日多次重试）是合法的，不套主账的唯一 key 规则。"""
     if not isinstance(a, dict):
         raise ValueError("不是 JSON 对象")
     for k in ATTEMPT_REQUIRED:
         if not isinstance(a.get(k), str) or not a[k]:
             raise ValueError(f"必需字段 {k} 缺失或非法")
+    _all_finite(a)
 
 
 def _parse_attempt_line(ln: str) -> dict:
@@ -779,7 +793,8 @@ def coverage_items(row: dict | None, T: date, inst: str, now: datetime) -> list[
     return out
 
 
-def coverage_all(insts: list, now: datetime) -> list[dict]:
+def coverage_all(insts: list, now: datetime, errors: list | None = None) -> list[dict]:
+    """errors 给了就逐 (品种, 日) 隔离核查异常（记进 errors，其余可核项照常返回）；不给则异常上抛。"""
     start = date.fromisoformat(mw.CONFIG["prospective_start"])
     if now.date() < start:
         return []
@@ -788,30 +803,87 @@ def coverage_all(insts: list, now: datetime) -> list[dict]:
         raise ValueError("交易日历不覆盖覆盖核查区间")
     out = []
     for k in insts:
-        rows = {r["session"]: r for r in jl.load(_path(k), KEY)}
+        try:
+            rows = {r["session"]: r for r in jl.load(_path(k), KEY)}
+        except Exception as e:
+            if errors is None:
+                raise
+            errors.append({"instrument": k, "error": f"{type(e).__name__}: {e}"})
+            continue
         for d in days:
-            out += coverage_items(rows.get(d.isoformat()), d, k, now)
+            try:
+                out += coverage_items(rows.get(d.isoformat()), d, k, now)
+            except Exception as e:
+                if errors is None:
+                    raise
+                errors.append({"instrument": k, "error": f"{d.isoformat()} {type(e).__name__}: {e}"})
     return out
 
 
+GAP_MUTABLE = ("current_status", "current_reason", "events", "alerted_at", "fallback_file")
+
+
 def _gap_frozen(g: dict) -> dict:
-    return {k: v for k, v in g.items() if k not in ("detected_at", "alerted_at", "fallback_file")}
+    """首次发现的事实（id、截止、首次 status/reason、detected_at）永久冻结；当前状态与提醒标记可变。"""
+    return {k: v for k, v in g.items() if k not in GAP_MUTABLE}
+
+
+def _register_gaps(gp: Path, items: list, now: datetime) -> None:
+    """按稳定 id 幂等登记（Codex 059 A1）：新缺口插入首次事实；已登记的只在当前状态变化时更新 current_* 并追加事件，
+    首次事实不动（旧版把会演进的 status/reason 也拿去和首份冻结比，开盘补分母行后 reason 变了就永久冲突、后续缺口落不了账）。
+    整个读改写在文件锁内；不覆盖、不删旧行。"""
+    gaps = {g["id"]: g for g in items if g["status"] in ("missing", "partial")}
+    seen = {g["id"]: g for g in items}
+    with jl.locked(gp):
+        rows = jl.load_path(gp, "key")
+        before = {r["key"]: _gap_frozen(dict(r)) for r in rows}
+        changed = False
+        for r in rows:
+            g = seen.get(r["key"])
+            if g is None:
+                continue
+            cur = (r.get("current_status", r["status"]), r.get("current_reason", r.get("reason")))
+            if cur != (g["status"], g.get("reason")):
+                r["current_status"], r["current_reason"] = g["status"], g.get("reason")
+                r.setdefault("events", []).append({"at": now.isoformat(), "status": g["status"], "reason": g.get("reason")})
+                changed = True
+        have = {r["key"] for r in rows}
+        for gid, g in gaps.items():
+            if gid not in have:
+                rows.append({**g, "key": gid, "detected_at": now.isoformat(), "current_status": g["status"],
+                             "current_reason": g.get("reason"), "events": [], "alerted_at": None})
+                changed = True
+        for r in rows:
+            if r["key"] in before and _gap_frozen(r) != before[r["key"]]:
+                raise jl.LedgerConflictError(f"{r['key']} 首次发现事实在更新中被改动；整次写入拒绝")
+        if changed:
+            jl.atomic_write(gp, sorted(rows, key=lambda r: r["key"]), "key")
 
 
 def cmd_coverage(args) -> int:
     """重算起点以来所有已过截止的应有项；新缺口持久登记，先写兜底凭证（data/reports/FAILURE_<ET日>.txt，只写状态）
-    再标已提醒。输出最后一行 `NEW_GAPS n`（调度层据此弹通知；通知失败不影响兜底）。rc：0 无缺口 / 1 有缺口（新旧都算）。"""
+    再标已提醒。状态文件 counts.new / counts.gaps / counts.errors 是机器真值（调度层核验 run_id 后才读）；
+    末行 `NEW_GAPS n` 只是与之一致的人读副本。rc：0 无当前缺口 / 1 有当前缺口 / 2 核查本身出错（含部分品种核不了）。"""
+    try:
+        return _coverage_run(args)
+    except Exception as e:                                         # 核查崩溃 ≠ 有缺口：typed 状态 failed、rc 2
+        print(f"  ⚠️ mainwall coverage 核查失败：{type(e).__name__}: {e}", file=sys.stderr)
+        _status(args, "coverage", [], [{"instrument": "*", "error": f"{type(e).__name__}: {e}"}], overall="failed",
+                counts={"errors": 1})
+        return 2
+
+
+def _coverage_run(args) -> int:
     import os
     from undertow.core.config import load_config
     cfg = load_config()
     now = _clock()
-    items = coverage_all([i.key for i in _instruments(cfg, args.instruments)], now)
+    errors: list = []
+    items = coverage_all([i.key for i in _instruments(cfg, args.instruments)], now, errors)
     gaps = [g for g in items if g["status"] in ("missing", "partial")]
     gp = _gaps_path(); gp.parent.mkdir(parents=True, exist_ok=True)
-    for g in gaps:
-        g2 = {**g, "key": g["id"], "detected_at": now.isoformat(), "alerted_at": None}
-        jl.insert_frozen(gp, g2, key_field="key", frozen=lambda x: _gap_frozen({k: v for k, v in x.items()}))
-    pending = [r for r in (jl.load(gp, "key") if gp.exists() else []) if not r.get("alerted_at")]
+    _register_gaps(gp, items, now)
+    pending = [r for r in jl.load(gp, "key") if not r.get("alerted_at")]
     if pending:
         f = Path("data/reports") / f"FAILURE_{now.date().isoformat()}.txt"
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -838,9 +910,16 @@ def cmd_coverage(args) -> int:
     order = {"premarket": 0, "endpoint": 1, "sample": 2}
     for g in sorted(gaps, key=lambda x: (order[x["section"]], x["id"]))[:10]:     # 盘前/主终点缺口优先显示
         print(f"  ⚠️ {g['id']} {g['status']} {g.get('reason')}")
+    for e in errors:
+        print(f"  ⚠️ 核查失败 {e['instrument']}：{e['error']}")
     print(f"NEW_GAPS {len(pending)}")
-    _status(args, "coverage", ["coverage"], [{"instrument": g["instrument"], "error": g["id"]} for g in gaps][:20],
-            overall="complete" if not gaps else "partial", counts={"gaps": len(gaps), "new": len(pending)})
+    issues = [{"instrument": e["instrument"], "error": "核查失败 " + e["error"]} for e in errors] + \
+             [{"instrument": g["instrument"], "error": g["id"]} for g in gaps][:20]
+    counts = {"gaps": len(gaps), "new": len(pending), "errors": len(errors)}
+    if errors:
+        _status(args, "coverage", [], issues, overall="failed", counts=counts)
+        return 2
+    _status(args, "coverage", ["coverage"], issues, overall="complete" if not gaps else "partial", counts=counts)
     return 1 if gaps else 0
 
 
@@ -887,28 +966,29 @@ def cmd_audit(args) -> int:
     """只读核对：应有格逐一列出身份与输入新鲜度（不看收益）。有 not_generated 或盘前失败 → rc=1（缺口要可见）。"""
     rows, tab = _table(args)
     by = {(r["session"], r["instrument"]): r for r in rows}
-    bad = 0
+    bad: set = set()                       # 按稳定 id 去重（机会表与覆盖核查可能指向同一 capture 缺口）
     for t in tab:
         r = by.get((t["session"], t["instrument"]))
         if r is None:
-            bad += 1
+            bad.add(f"{t['session']}|{t['instrument']}|capture")
             print(f"  ⚠️ {t['session']}|{t['instrument']}  not_generated（整日没有任何记录）")
             continue
         pre = r.get("premarket") or {}
         inp = pre.get("inputs") or {}
         ed = r.get("entry_decision") or {}
         if pre.get("status") not in ("ok", "no_expiry"):
-            bad += 1
+            bad.add(f"{t['session']}|{t['instrument']}|capture")
         print(f"  {r[KEY]}  pre={pre.get('status')} 基准 {inp.get('base_date')}/{inp.get('expected_base_date')} "
               f"源 {inp.get('source')}  Sdec {ed.get('sdec')} 近侧 {(ed.get('choice') or {}).get('near')}  类别 {t['category']}")
-    print(f"  应有 {len(tab)} 格，缺口/盘前失败 {bad}")
+    print(f"  应有 {len(tab)} 格，缺口/盘前失败 {len(bad)}")
     cov = coverage_all(sorted({t["instrument"] for t in tab}) or [i for i in (args.instruments or mw.CONFIG["instruments"])], _clock())
     lab = {"premarket": "盘前身份", "endpoint": "主终点观测", "sample": "描述采样"}
     for sec in ("premarket", "endpoint", "sample"):
         xs = [c for c in cov if c["section"] == sec]
         g = [c for c in xs if c["status"] in ("missing", "partial")]
         print(f"  {lab[sec]}覆盖：已到截止 {len(xs)} 项，缺口 {len(g)}" + ("" if not g else "：" + "；".join(c["id"] for c in g[:6])))
-        bad += len(g) if sec != "premarket" else sum(1 for c in g if c["item"] == "sdec")
+        bad |= {c["id"] for c in g}       # 全部已到截止缺口都计入 rc（09:30 后、开盘窗结束前当日 capture 缺口不在机会表里）
+    print(f"  已到截止缺口合计（按 id 去重）{len(bad)}")
     print("  注：rc=0 只说明已到截止的应有项没有缺口；未到截止的（如盘前时的当日开盘窗）不在其内。")
     return 1 if bad else 0
 

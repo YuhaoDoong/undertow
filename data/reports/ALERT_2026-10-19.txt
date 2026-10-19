@@ -1,0 +1,5 @@
+2026-10-19 | qqq ⚡极强看跌�tlt ⚡强看涨�spy ⚡极强看跌�iwm ⚡极强看跌
+  qqq     观察[近中性 中偏空 ⚡极强看跌]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/qqq_2026-10-16.html
+  tlt     观察[近偏多(弱) 中偏空 ⚡强看涨]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/tlt_2026-10-16.html
+  spy     观察[近中性 中偏空(弱) ⚡极强看跌]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/spy_2026-10-16.html
+  iwm     观察[近偏空(弱) 中偏空(弱) ⚡极强看跌]  · 本系统暂无通过验证的方向依据  → /Users/yhdong/Trading/data/reports/iwm_2026-10-16.html

@@ -200,3 +200,46 @@ def test_sides_no_fee_profit_reports_no_probability(fakes, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "−$2.20" in out and "含费无盈利可能" in out and "+$-" not in out
     assert "全赢 +" not in out and "不给概率代理" in out and "≈ 75%" not in out
+
+
+# —— 同标的整体风险（Codex 061/062）——
+
+def _uso_book():
+    legs = [{"kind": "C", "strike": 160.0, "expiry": "2026-10-29", "qty": 1, "symbol": "USO261029C160000.US"},
+            {"kind": "C", "strike": 165.0, "expiry": "2026-10-29", "qty": -1, "symbol": "USO261029C165000.US"}]
+    return [{"id": "uso", "underlying": "USO", "stop_loss": 70.0, "payoff_max_loss": 131.25, "legs": legs,
+             "net_cash": -129.65, "future_fees": 1.6, "cash_basis": "现金流水（合成）"}]
+
+
+def test_spread_quote_prints_netting_unit(fakes, monkeypatch, capsys):
+    monkeypatch.setattr(dc, "_budget_context", lambda: ({"equity": 664.0, "asof": "x"}, _uso_book(),
+                                                       {"latched": False}, []))
+    assert dc.cmd_spread_quote(_sq(strikes="160/165", credit=True)) == 0      # 反向贷记 = 平掉现仓的情景
+    out = capsys.readouterr().out
+    assert "USO 同标的整体" in out and "各笔相加上界" in out and "到期处置" in out and "13:30" in out
+
+
+def test_risk_unit_partial_close_protection_raises_risk(fakes, monkeypatch, capsys):
+    """062：只卖掉多头保护腿 → 剩裸空 165C，右尾无上限；最大亏损变化不可算（unbounded），不说成减险。"""
+    monkeypatch.setattr(dc, "_budget_context", lambda: ({"equity": 664.0, "asof": "x"}, _uso_book(),
+                                                       {"latched": False}, []))
+    a = argparse.Namespace(underlying="USO", leg=[dc._parse_delta_leg("-1:C:160:2026-10-29")], cash=None)
+    assert dc.cmd_risk_unit(a) == 0
+    out = capsys.readouterr().out
+    assert "[现仓]" in out and "joint_bound" in out and "卖 1 张 USO261029C160000.US @ 3.25" in out
+    assert "unbounded" in out and "政策 B 整本账（拟操作后）：fail" in out
+
+
+def test_risk_unit_refuses_netting_when_legs_missing(fakes, monkeypatch, capsys):
+    book = _uso_book() + [{"id": "x", "underlying": "USO", "stop_loss": 10.0, "payoff_max_loss": 20.0}]
+    monkeypatch.setattr(dc, "_budget_context", lambda: ({"equity": 664.0, "asof": "x"}, book, {"latched": False}, []))
+    assert dc.cmd_risk_unit(argparse.Namespace(underlying="USO", leg=None, cash=None)) == 1
+    assert "不能净额" in capsys.readouterr().out
+
+
+def test_parse_delta_leg_rejects_bad():
+    with pytest.raises(argparse.ArgumentTypeError):
+        dc._parse_delta_leg("0:P:50:2026-10-30")
+    with pytest.raises(argparse.ArgumentTypeError):
+        dc._parse_delta_leg("2:X:50:2026-10-30")
+    assert dc._parse_delta_leg("+2:p:48:2026-10-30") == {"kind": "P", "strike": 48.0, "expiry": "2026-10-30", "qty": 2}

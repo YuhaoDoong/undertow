@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from undertow.analyze import risk_policy as rp
@@ -144,6 +144,13 @@ def _budget_context():
         book = bundle["risk"]["book"] if bundle.get("review") is not None else []
     except Exception as e:                               # noqa: BLE001
         return None, None, None, [f"账户只读失败：{type(e).__name__}: {str(e)[:120]}"]
+    if book:                                             # 同标的净额：已有腿用真实现金流水（Codex 061），失败则留成本价口径并说明
+        try:
+            from undertow.analyze.risk_aggregate import apply_cash_ledger
+            since = (date.today() - timedelta(days=90)).isoformat()
+            notes += apply_cash_ledger(book, lb.fetch_cash_flow(start=since) or [], since=since)
+        except Exception as e:                           # noqa: BLE001
+            notes.append(f"现金流水读取失败（{type(e).__name__}）→ 净额用券商成本价口径")
     capital = {"equity": assets.net_assets, "asof": _et_now().isoformat(), "buying_power": assets.buy_power}
     neg = {k: v for k, v in assets.cash_by_ccy.items() if v < 0}
     if neg:
@@ -157,6 +164,32 @@ def _budget_context():
         pause = None
         notes.append(f"暂停状态读取失败：{type(e).__name__}")
     return capital, book, pause, notes
+
+
+def _netting_lines(b: dict, root: str) -> list[str]:
+    """同标的整体计险（Codex 061/062）：本标的风险单元 操作前 → 拟建后，及旧口径「各笔相加」上界。"""
+    net = b.get("netting")
+    if not net:
+        return []
+    u = rp.unit_key(root)
+    pick = lambda xs: next((x for x in xs if x["unit"] == u), None)   # noqa: E731
+    bef, aft = pick(net["before"]), pick(net["after"])
+    if aft is None:
+        return []
+    if not aft.get("netted"):
+        return [f"  {u} 同标的：{aft.get('note')}"]
+    r = aft["risk"]
+    ml = "—" if r["max_loss"] is None else f"${r['max_loss']:,.2f}"
+    head = (f"  {u} 同标的整体（{r['bound_type']}，{r['method']}）：拟建后最大亏损 {ml}"
+            + (f" · 最大收益 ${r['max_gain']:,.2f}" if r.get("max_gain") is not None else "")
+            + (f"；操作前 ${bef['risk']['max_loss']:,.2f}" if bef and bef.get("netted") and bef["risk"]["max_loss"] is not None else "")
+            + (f"；各笔相加上界 ${aft['gross_upper']:,.2f}（旧口径，只作对照）" if aft.get("gross_upper") is not None else ""))
+    out = [head, f"    止损：{aft.get('stop_basis')}" + (f" ${aft['stop_loss']:,.2f}" if aft.get("stop_loss") is not None else ""),
+           f"    现金口径：{r['cash_basis']}"]
+    if r.get("bound_type") == "joint_bound" and r.get("max_loss") and r.get("max_gain") is not None:
+        pf = rp.payoff_floor(r["max_gain"], r["max_loss"])
+        out.append(f"    整体收益风险比 {pf['ratio']:.0%}（下限 {rp.PAYOFF_FLOOR['min_net_gain_to_max_loss']:.0%}：{pf['status']}）")
+    return out
 
 
 def _fmt(x, nd=2):
@@ -279,13 +312,18 @@ def cmd_spread_quote(args) -> int:
               f"到期盈亏平衡 {root} {e['breakeven']:.2f}{conv}")
         print(_floor_line(e))
         if not args.no_account:
-            b = rp.evaluate_budget(candidate=sp.budget_candidate(spec, e, root, f"{root}|{expiry}|{kind}{buy_k:g}/{sell_k:g}"),
+            b = rp.evaluate_budget(candidate=sp.budget_candidate(spec, e, root, f"{root}|{expiry}|{kind}{buy_k:g}/{sell_k:g}",
+                                                                 expiry=expiry),
                                    open_positions=book, capital=capital, pause=pause)
-            print(f"  政策 B 预算（请求 {args.qty} 组）：{b['budget_status']}（可开 {b['allowed_units']} 组）" +
-                  ("" if b["budget_status"] == "pass" else " —— " + "；".join(b["reasons"][:3])))
+            feas = b.get("feasible_units") or []
+            print(f"  政策 B 预算（请求 {args.qty} 组）：{b['budget_status']}（可开 {b['allowed_units']} 组"
+                  + (f"；可行组数 {'、'.join(map(str, feas))}" if feas and feas != list(range(1, b['allowed_units'] + 1)) else "")
+                  + "）" + ("" if b["budget_status"] == "pass" else " —— " + "；".join(b["reasons"][:3])))
+            for line in _netting_lines(b, root):
+                print(line)
     if not args.no_account and capital is not None:
         def ok(e):
-            b = rp.evaluate_budget(candidate=sp.budget_candidate(spec, e, root, "bound"), open_positions=book,
+            b = rp.evaluate_budget(candidate=sp.budget_candidate(spec, e, root, "bound", expiry=expiry), open_positions=book,
                                    capital=capital, pause=pause)
             return b["allowed_units"] >= args.qty
         pb = sp.price_bound_under(spec, ok, qty=args.qty)
@@ -298,6 +336,8 @@ def cmd_spread_quote(args) -> int:
     for n in notes:
         print(n)
     print(f"\n处置：{sp.ASSIGNMENT_NOTE}")
+    from undertow.analyze.net_risk import EXPIRY_NOTE
+    print(f"到期处置：{EXPIRY_NOTE}")
     print(f"出场：{sp.BROKER_NOTES['combo_leg_exit']}")
     print("⚠️ 只读参考，不是下单指令；价格是取数这一刻的盘口，挂单前在券商端核对；价差权限与组合占用未核实。")
     return 0
@@ -376,6 +416,104 @@ def cmd_sides(args) -> int:
     return 0
 
 
+def _parse_delta_leg(x: str) -> dict:
+    """「带符号张数:C|P:行权价:到期」，如 -2:P:50:2026-10-30（负 = 卖出/回补空头的反向是正）。"""
+    import argparse
+    try:
+        q, k, st, e = x.split(":")
+        q, k, st = int(q), k.upper(), float(st)
+        date.fromisoformat(e)
+    except ValueError as err:
+        raise argparse.ArgumentTypeError(f"腿格式应为 带符号张数:C|P:行权价:YYYY-MM-DD，收到 {x!r}") from err
+    if q == 0 or k not in ("C", "P") or st <= 0:
+        raise argparse.ArgumentTypeError(f"腿不合法：{x!r}")
+    return {"kind": k, "strike": st, "expiry": e, "qty": q}
+
+
+def _delta_cash_from_depth(root: str, legs: list[dict]) -> tuple[float | None, list[str]]:
+    """拟操作的现金情景：买入按 ask、卖出按 bid（逐腿对手价，不保证成交）减开仓费模型。缺一侧 → None（不折零）。"""
+    from undertow.collect.longbridge_bars import option_symbol
+    from undertow.collect.longbridge_quote import fetch_depth, LiveQuotesUnavailable
+    codes = [option_symbol(root, lg["expiry"], lg["kind"], lg["strike"]) for lg in legs]
+    try:
+        dep = fetch_depth(codes)
+    except LiveQuotesUnavailable as e:
+        return None, [f"实时盘口不可用：{str(e)[:120]}"]
+    cash, lines = 0.0, []
+    for lg, c in zip(legs, codes):
+        d = dep.get(c)
+        px = None if d is None or d.error else (d.ask if lg["qty"] > 0 else d.bid)
+        size = None if d is None else (d.ask_size if lg["qty"] > 0 else d.bid_size)
+        if not (isinstance(px, (int, float)) and px > 0) or size == 0:
+            return None, [f"{c} 缺{'卖一' if lg['qty'] > 0 else '买一'} → 现金情景不可计算"]
+        cash += -lg["qty"] * sp.MULT * px - abs(lg["qty"]) * sp.FEE_PER_CONTRACT
+        lines.append(f"{'买' if lg['qty'] > 0 else '卖'} {abs(lg['qty'])} 张 {c} @ {px:.2f}")
+    return round(cash, 2), lines
+
+
+def cmd_risk_unit(args) -> int:
+    """同标的整体风险：现仓 →（可选）拟加仓/减仓/部分平仓后的剩余组合（Codex 061/062；只读，从不下单）。"""
+    from undertow.analyze import net_risk as nr
+    key, root, inst = resolve(args.underlying)
+    u = rp.unit_key(root)
+    now = _et_now()
+    print(f"══ {u} 同标的整体风险 · 美东 {now:%Y-%m-%d %H:%M} · {nr.VERSION} ══")
+    capital, book, pause, notes = _budget_context()
+    if book is None:
+        print("账户只读失败 → 无法计算：" + "；".join(notes)); return 1
+    rows = [b for b in book if rp.unit_key(b.get("underlying")) == u]
+    if any(b.get("legs") is None for b in rows):
+        print("同标的有缺腿明细的持仓 → 不能净额，只能按各笔相加（保守上界）：" + "、".join(b["id"] for b in rows))
+        return 1
+    cur_legs = [lg for b in rows for lg in b["legs"]]
+    cur_cash = round(sum(b["net_cash"] for b in rows), 2) if rows else 0.0
+    delta = args.leg or []
+    dcash, dlines = (args.cash, [f"现金情景由 --cash 给出：{args.cash:+.2f}"]) if args.cash is not None else (
+        _delta_cash_from_depth(root, delta) if delta else (0.0, []))
+    w = nr.what_if(cur_legs, cur_cash, delta, dcash if dcash is not None else float("nan"),
+                   future_fee_per_contract=sp.FEE_PER_CONTRACT,
+                   cash_basis="；".join(sorted({b.get("cash_basis") or "未注明" for b in rows})) or "空仓")
+
+    def show(r, title):
+        legs = "、".join(f"{lg['qty']:+g} {lg['strike']:g}{lg['kind']} {lg['expiry']}" if lg["kind"] != "STOCK"
+                        else f"{lg['qty']:+g} 股" for lg in r["net_legs"]) or "（无）"
+        ml = "—" if r["max_loss"] is None else f"${r['max_loss']:,.2f}"
+        mg = "未建模" if r["max_gain"] is None and not r["max_gain_unbounded"] else (
+            "无上限" if r["max_gain_unbounded"] else f"${r['max_gain']:,.2f}")
+        print(f"\n[{title}] {legs}")
+        print(f"  风险界 {r['bound_type']}（{r['method']}）：最大亏损 {ml}" + (f"（S={r['worst_at']:g}）" if r.get("worst_at") is not None else "")
+              + f" · 最大收益 {mg} · 净现金流 {r['net_cash'] if r['net_cash'] is not None else '—'} · 未来费用 {r['future_fees']}")
+        sb = nr.stop_bound(r)
+        print(f"  止损：" + (f"整组价值非负 → 止损损失 ≤ ${sb:,.2f}（上界，非止损规则）" if sb is not None else "整组止损规则待补"))
+        for a in r["assumptions"]:
+            print(f"  · {a}")
+        for pr in r["problems"]:
+            print(f"  ⚠️ {pr}")
+    show(w["before"], "现仓")
+    if delta:
+        print("\n拟操作：" + "；".join(dlines))
+        show(w["after"], "拟操作后（情景，未成交保护不计入当前）")
+        if w["delta_max_loss"] is not None:
+            print(f"\n最大亏损变化：{w['delta_max_loss']:+,.2f}" + ("（风险增加：减仓/平保护腿不一定减险）" if w["delta_max_loss"] > 0 else ""))
+    if capital is not None and dcash is not None:
+        after_book = [b for b in book if rp.unit_key(b.get("underlying")) != u]
+        if w["after"]["net_legs"]:
+            after_book.append({"id": f"{u}·拟操作后", "underlying": root, "stop_loss": None, "payoff_max_loss": None,
+                               "legs": w["after"]["net_legs"], "net_cash": cur_cash + dcash,
+                               "future_fees": w["after"]["future_fees"], "cash_basis": "拟操作后情景"})
+        b = rp.evaluate_book(after_book, capital)
+        print(f"\n政策 B 整本账（{'拟操作后' if delta else '现仓'}）：{b['overall']}")
+        for c in b["checks"]:
+            if c["status"] != "pass" or u in c["check"] or "合计" in c["check"] or "大仓" in c["check"]:
+                v = c["value"]
+                print(f"  [{c['status']}] {c['check']}：{'—' if v is None else v} / 上限 {c['limit']}" + (f"（{c['note']}）" if c.get("note") else ""))
+    for n in notes:
+        print(n)
+    print(f"\n到期处置：{nr.EXPIRY_NOTE}")
+    print("⚠️ 只读计算，不是下单指令；拟操作是报价情景，部分成交后按真实持仓重跑本命令。")
+    return 0
+
+
 def register(sub):
     p = sub.add_parser("spread-quote", help="垂直价差组合单定价：净价三档、挂单区间、含费盈亏、政策 B 预算（只读）")
     p.add_argument("underlying", help="品种 key 或代码，如 wti / USO")
@@ -387,6 +525,12 @@ def register(sub):
     p.add_argument("--snapshot", action="store_true", help="用 CBOE 昨收快照代替实时盘口")
     p.add_argument("--no-account", action="store_true", help="不读账户（跳过政策 B 预算）")
     p.set_defaults(func=cmd_spread_quote)
+    r = sub.add_parser("risk-unit", help="同标的整体风险：现仓与拟加仓/减仓/部分平仓后的剩余组合（只读）")
+    r.add_argument("underlying", help="品种 key 或代码，如 silver / SLV")
+    r.add_argument("--leg", action="append", type=_parse_delta_leg,
+                   help="拟变更腿，可多次：带符号张数:C|P:行权价:到期，如 -2:P:50:2026-10-30（平仓 = 反向数量）")
+    r.add_argument("--cash", type=float, help="拟操作的现金情景（收为正、已扣费）；缺省按长桥买一/卖一逐腿对手价")
+    r.set_defaults(func=cmd_risk_unit)
     s = sub.add_parser("sides", help="买方 vs 卖方同期对比（卖方按短到期滚动多轮）（只读）")
     s.add_argument("underlying")
     s.add_argument("--horizon", required=True, help="比较到哪天，YYYY-MM-DD（买方用这个到期）")

@@ -41,6 +41,58 @@ def _leg_key(lg) -> str | None:
     return f"{sign}{k}{s:g}@{e}"
 
 
+def _legs_and_cash(c) -> tuple[list | None, float | None, float | None]:
+    """同标的净额用的腿明细与现金（Codex 061/062）：(腿, 净现金流, 未来费用)。
+    现金按券商成本价 × 带符号数量 − 开仓费（模型）；券商成本价在部分减仓后会被改写，调用方能拿到现金流水时应
+    用 apply_cash_ledger 覆盖。任一腿缺种类/行权价/到期/数量/成本 → (None, None, None)，该组合退回各笔口径。"""
+    from undertow.analyze.healthcheck import FEE_PER_CONTRACT, CONTRACT_MULT
+    legs, cash, n = [], 0.0, 0
+    for lg in getattr(c, "legs", None) or []:
+        k, q, cp = getattr(lg, "kind", None), getattr(lg, "qty", None), getattr(lg, "cost_price", None)
+        if not (isinstance(q, (int, float)) and isinstance(cp, (int, float))) or q == 0:
+            return None, None, None
+        if k == "STOCK":
+            legs.append({"kind": "STOCK", "strike": None, "expiry": None, "qty": q, "symbol": getattr(lg, "symbol", None)})
+            cash -= q * cp
+            continue
+        s, e = getattr(lg, "strike", None), getattr(lg, "expiry", None)
+        if k not in ("C", "P") or s is None or e is None:
+            return None, None, None
+        legs.append({"kind": k, "strike": float(s), "expiry": e.isoformat() if hasattr(e, "isoformat") else e,
+                     "qty": q, "symbol": getattr(lg, "symbol", None)})
+        cash -= q * CONTRACT_MULT * cp
+        n += abs(q)
+    if not legs:
+        return None, None, None
+    fee = n * FEE_PER_CONTRACT
+    return legs, round(cash - fee, 2), round(fee, 2)
+
+
+def apply_cash_ledger(book: list[dict], cash_rows: list[dict], *, since: str) -> list[str]:
+    """用现金流水（含已付手续费）覆盖账本行的净现金流（Codex 061：已有腿用真实已核现金流水）。
+    按行内各腿合约代码匹配流水；某行有腿却在流水里一条都找不到 → 保留成本价口径并返回提示。原地修改，返回提示。"""
+    notes = []
+    for p in book:
+        syms = {lg.get("symbol") for lg in p.get("legs") or [] if lg.get("symbol")}
+        if not syms or len(syms) != len(p.get("legs") or []):
+            continue
+        sub = [r for r in cash_rows if (r.get("symbol") or "") in syms]
+        if not sub:
+            notes.append(f"{p['id']}：{since} 以来流水里没有这些合约 → 仍用券商成本价口径")
+            continue
+        tot = 0.0
+        for r in sub:
+            try:
+                tot += float(r.get("balance", 0) or 0)
+            except (TypeError, ValueError):
+                notes.append(f"{p['id']}：流水金额无法解析 → 仍用券商成本价口径")
+                break
+        else:
+            p["net_cash"] = round(tot, 2)
+            p["cash_basis"] = f"现金流水（{since} 起，含已付费用；含同合约更早轮次）"
+    return notes
+
+
 def combo_id(underlying, c) -> str | None:
     """逻辑持仓的稳定身份（Codex 044 P1-1）：标的 | 到期 | 结构 | 各腿合约与方向 | 组数。
     显示名（「熊市看涨价差(收权金)」）只是策略名，不含到期/腿，旧版拿它当 id，同标签不同到期的多笔被去重成一笔。
@@ -68,7 +120,10 @@ def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B) -> dict:
             status, ml = _classify(c)
             from undertow.analyze.healthcheck import stop_risk_detail
             d = stop_risk_detail(c) if status == "known" else None
+            legs, cash, ffee = _legs_and_cash(c)
             items.append({"id": combo_id(g.underlying, c), "group": g.underlying, "label": c.label,
+                          "legs": legs, "net_cash": cash, "future_fees": ffee,
+                          "cash_basis": "券商成本价 + 模型费用（未用现金流水核实）" if legs is not None else None,
                           "expiry": c.expiry_label, "status": status, "max_loss": ml,
                           "stop_loss": None if d is None else d["planned_stop_loss_usd"],
                           "payoff_max_loss_with_fees": None if d is None else d["payoff_max_loss_usd"],
@@ -96,6 +151,8 @@ def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B) -> dict:
         for c in b["checks"]:                                # 人读：单笔检查显示「标的·策略·到期」，身份仍按 id 判
             if c.get("position") in disp:
                 c["check"] = c["check"].replace(c["position"], disp[c["position"]], 1)
+            elif str(c.get("position", "")).startswith("unit|"):   # 同标的整体风险单元（Codex 061/062）
+                c["check"] = c["check"].replace(c["position"], f"{c['position'].split('|')[1]}·同标的整体", 1)
         checks = [{"item": c["check"], "limit": f"≤ ${c['limit']:,.0f}" if isinstance(c["limit"], (int, float)) and not
                    c["check"].startswith("大仓") else (f"≤ {c['limit']} 笔" if c["limit"] is not None else "—"),
                    "status": c["status"], "value": c["value"],
@@ -138,7 +195,9 @@ def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B) -> dict:
 def book_of(items: list[dict], unmapped: list[str]) -> list[dict]:
     """预算/核查用的账本（唯一构造处；shadow exec 也读这里，不再自己拼 id）。无法映射的腿各成一条、金额未知。"""
     return [{"id": i["id"], "underlying": i["group"], "stop_loss": i["stop_loss"],
-             "payoff_max_loss": i["payoff_max_loss_with_fees"]} for i in items] + \
+             "payoff_max_loss": i["payoff_max_loss_with_fees"],
+             **({"legs": i["legs"], "net_cash": i["net_cash"], "future_fees": i["future_fees"],
+                 "cash_basis": i["cash_basis"]} if i.get("legs") is not None else {})} for i in items] + \
            [{"id": f"unmapped|{u}", "underlying": u, "stop_loss": None, "payoff_max_loss": None} for u in unmapped]
 
 

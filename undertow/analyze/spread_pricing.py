@@ -227,12 +227,22 @@ def price_bound_under(spec: dict, ok, *, qty: int, step: float = 0.01) -> float 
     return best
 
 
-def budget_candidate(spec: dict, econ: dict, underlying: str, cid: str) -> dict:
+def budget_candidate(spec: dict, econ: dict, underlying: str, cid: str, expiry=None,
+                     fee: float = FEE_PER_CONTRACT) -> dict:
     """政策预算候选（risk_policy.evaluate_budget 接口：金额是【每组】，组数另给）。
     借记/贷记价差都不设硬止损时，计划止损损失 = 每组理论最大亏损（含费）；qty_requested = econ 的组数，
-    组数只由 risk_policy 乘一次（Codex 052 I3：旧版把整笔金额当每组、又请求 qty 组，两组被算成四组）。"""
-    return {"id": cid, "underlying": underlying, "unit_stop_loss": econ["unit_max_loss"],
-            "unit_payoff_max_loss": econ["unit_max_loss"], "qty_requested": econ["qty"]}
+    组数只由 risk_policy 乘一次（Codex 052 I3：旧版把整笔金额当每组、又请求 qty 组，两组被算成四组）。
+    给了 expiry → 附每组带符号腿与现金情景（收为正、已扣开仓费，平仓费另列），预算并入同标的整体净额计险
+    （Codex 061/062）；这是有时点的报价情景，成交后要按真实流水重读。"""
+    out = {"id": cid, "underlying": underlying, "unit_stop_loss": econ["unit_max_loss"],
+           "unit_payoff_max_loss": econ["unit_max_loss"], "qty_requested": econ["qty"]}
+    if expiry is not None:
+        e = expiry.isoformat() if hasattr(expiry, "isoformat") else expiry
+        out.update(unit_legs=[{"kind": spec["kind"], "strike": spec["long"], "expiry": e, "qty": 1},
+                              {"kind": spec["kind"], "strike": spec["short"], "expiry": e, "qty": -1}],
+                   unit_cash=round(-econ["net"] * MULT - 2 * fee, 4), unit_future_fees=round(2 * fee, 4),
+                   cash_basis=f"候选报价情景（净价 {econ['net']:+.2f}/股，开仓费模型）")
+    return out
 
 
 def itm_proxy(spec: dict, long_delta: float | None, short_delta: float | None, econ: dict | None) -> dict | None:

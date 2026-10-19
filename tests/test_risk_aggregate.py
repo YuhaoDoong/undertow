@@ -133,13 +133,18 @@ def test_same_label_different_expiries_are_three_positions():
     assert r["allowed_units"] == 0                                         # 整本账已超金银上限 → 新增冻结
 
 
-def test_same_label_two_big_positions_count_two():
+def test_same_underlying_same_expiry_is_one_risk_unit():
+    """Codex 061 §3：同标的同到期两笔（同标签不同腿）是一个风险单元——各自身份都保留在成员里，不被去重，
+    但大仓按合并后的整体算一笔，不因分两批成交变两个（旧版按 2 个大仓 fail）。
+    腿：卖 400C 1.0/买 402C 0.2、卖 405C 1.0/买 407C 0.2 → 每笔收 80；同向不抵消：(200−80)×2 + 8 张×0.80 = 246.40。"""
     from undertow.analyze import risk_policy as rp
     big = [_bear_call("2026-10-16", 400, 402), _bear_call("2026-10-16", 405, 407)]
-    big = [c.__class__(**{**c.__dict__, "max_loss": 160.0, "net_credit": 0.4}) for c in big]
     a = aggregate(_rev([_gld(big)]), NS(net_assets=5000.0), asof="d", policy=rp.POLICY_B)
+    assert len({b["id"] for b in a["book"]}) == 2
     bc = next(c for c in a["checks"] if c["item"] == "大仓数量")
-    assert bc["value"] == 2 and bc["status"] == "fail"
+    assert bc["value"] == 1 and bc["status"] == "pass"
+    unit = next(c for c in a["checks"] if c["item"] == "GLD·同标的整体·单笔理论最大亏损")
+    assert unit["value"] == 246.4
 
 
 def test_leg_without_identity_is_incomplete_not_merged():

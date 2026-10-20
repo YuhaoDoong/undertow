@@ -1,0 +1,26 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 55285,
+ "started_at": "2026-10-20T07:14:42.451815+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/NVDA/2026-10-20",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/NVDA/2026-10-20.json.gz",
+   "sha256": "d9f03199e518857e5bbf6fb08a8c7178a63689f8edb90f6145208dd5df82dbc7",
+   "captured_at": 1792480239.106835,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-20T07:14:54.403246+00:00",
+ "rc": 0,
+ "git_head": "6bd3fde80e2b10542fdca7f6e2aad675630929cf"
+}

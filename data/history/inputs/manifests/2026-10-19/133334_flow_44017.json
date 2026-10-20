@@ -1,0 +1,60 @@
+{
+ "schema": 1,
+ "command": "flow",
+ "argv": [
+  "flow",
+  "wti"
+ ],
+ "pid": 44017,
+ "started_at": "2026-10-19T13:33:34.482013+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/USO/2026-10-19",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/USO/2026-10-19.json.gz",
+   "sha256": "08e1a17a758c2b1df9f96e327bf9d81a50465db098bf4437f74bf6e1493199dc",
+   "captured_at": 1792403450.629429,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/USO/2026-10-16",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/USO/2026-10-16.json.gz",
+   "sha256": "f1e00c12f50e807ca4c7f1f2dfbcf314ff668615eb8c3541af104c0f8208a77d",
+   "captured_at": 1792146094.770755,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  },
+  {
+   "kind": "cache",
+   "key": "yahoo_CL_F_2y",
+   "status": "fresh_fetch",
+   "size": 57265,
+   "sha256": "198ff545f126d4fddbb54fd24317d359d95712ff983e6d6562ff7f04218b1461",
+   "fetched_at": "2026-10-19T13:33:34.645444+00:00",
+   "age_s": 0.0,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 2
+  },
+  {
+   "kind": "cache",
+   "key": "yahoo_CL_F_5d",
+   "status": "fresh_fetch",
+   "size": 1768,
+   "sha256": "16ae26b71f59385899844efddcd825179dd220d69f610ec279e2393bd3daac14",
+   "fetched_at": "2026-10-19T13:33:34.693267+00:00",
+   "age_s": 0.0,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 3
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-19T13:33:34.801511+00:00",
+ "rc": 0,
+ "git_head": "746f06a4eb5642db2edd485aa6155e259535bf41"
+}

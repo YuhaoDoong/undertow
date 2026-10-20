@@ -4,3 +4,7 @@
   未补完的下次自动续补；到期约一周后合约会查不到
 2026-10-16 18:32 +08 | ET 2026-10-16 06:21 | ⚠️ 每日数据未提交（ET 2026-10-16 06:21）
   发布冲突：运行前已有未提交改动的路径本次又被写入（data/history/outlook_scores.json.revisions.jsonl data/history/ratio_watch.json.revisions.jsonl data/history/resonance/gold.json.revisions.jsonl data/history/res），已停止自动提交；数据已落盘，需人工核对后提交
+2026-10-16 18:51 +08 | ET 2026-10-16 06:48 | ℹ️ daily 已封账，可选阶段未完成（ET 2026-10-16 06:48）
+  sample_check option_bars：当日不再自动重试，次日 daily 会重新执行
+2026-10-17 04:01 +0800 | ET 2026-10-16T16:00:59-0400 | ⚠️ 模拟仓需关注事件 1 条（position_valuation_missing×1；批次 337982e7859d），详见私有 data/paper/alerts.jsonl
+2026-10-17 04:02 +0800 | ET 2026-10-16T16:02:01-0400 | ⚠️ 模拟仓需关注事件 1 条（position_valuation_missing×1；批次 0778b752c39f），详见私有 data/paper/alerts.jsonl

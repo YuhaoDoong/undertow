@@ -624,5 +624,41 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-10-15T07:23:22.448120+00:00"
+ },
+ {
+  "instrument": "tqqq",
+  "date": "2026-10-16",
+  "spot": 30169.25,
+  "state": "仅结构",
+  "struct_bias": "偏多(弱)",
+  "band": "中性",
+  "regime": "牛",
+  "stretch": -1.7132463740817545,
+  "stretch_pctile": 0.132,
+  "drawdown": -3.790732718025994,
+  "dd_pctile": 0.468,
+  "combo_pctile": 0.30000000000000004,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-10-16T07:15:50.750774+00:00"
+ },
+ {
+  "instrument": "tqqq",
+  "date": "2026-10-19",
+  "spot": 29749.5,
+  "state": "仅结构",
+  "struct_bias": "偏多(弱)",
+  "band": "偏超卖",
+  "regime": "牛",
+  "stretch": -3.313672442705431,
+  "stretch_pctile": 0.056,
+  "drawdown": -5.355841252096144,
+  "dd_pctile": 0.368,
+  "combo_pctile": 0.212,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-10-19T07:23:20.459544+00:00"
  }
 ]

@@ -1,0 +1,65 @@
+{
+ "schema": 1,
+ "command": "gamma",
+ "argv": [
+  "gamma",
+  "silver",
+  "wti"
+ ],
+ "pid": 34105,
+ "started_at": "2026-10-15T11:14:09.049062+00:00",
+ "items": [
+  {
+   "kind": "cache",
+   "key": "yahoo_SI_F_2y",
+   "status": "cache_hit",
+   "size": 56941,
+   "sha256": "c24e6be220ca8ec57aeac864ca49d8ad6f8972e4a96d9584759f933221945f0d",
+   "fetched_at": "2026-10-15T07:21:58.975435+00:00",
+   "age_s": 13931.2,
+   "ttl_s": 21600,
+   "stored": true,
+   "seq": 0
+  },
+  {
+   "kind": "cache",
+   "key": "yahoo_SI_F_5d",
+   "status": "cache_hit",
+   "size": 1736,
+   "sha256": "017e7462cb7640f93028a0efa4b097bd0866d29ab3216ec2b009c540ed740c2a",
+   "fetched_at": "2026-10-15T07:21:59.058639+00:00",
+   "age_s": 13931.2,
+   "ttl_s": 21600,
+   "stored": true,
+   "seq": 1
+  },
+  {
+   "kind": "cache",
+   "key": "yahoo_CL_F_2y",
+   "status": "cache_hit",
+   "size": 57477,
+   "sha256": "2c94b8a47a555d6f589c0d2eebc5ae6dd5e4df144cc456fd55bd7650096b2f20",
+   "fetched_at": "2026-10-15T07:22:20.502062+00:00",
+   "age_s": 13910.8,
+   "ttl_s": 21600,
+   "stored": true,
+   "seq": 2
+  },
+  {
+   "kind": "cache",
+   "key": "yahoo_CL_F_5d",
+   "status": "cache_hit",
+   "size": 1764,
+   "sha256": "4a865b927882c5883885a8c95c1c7ae856908c65a346cb6b8c5ad1541ad217b3",
+   "fetched_at": "2026-10-15T07:22:20.568321+00:00",
+   "age_s": 13910.8,
+   "ttl_s": 21600,
+   "stored": true,
+   "seq": 3
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-15T11:14:11.420218+00:00",
+ "rc": 0,
+ "git_head": "c6d23e130a5e0605d981faf2f5558eb43cbfedf3"
+}

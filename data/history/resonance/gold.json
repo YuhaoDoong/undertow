@@ -624,5 +624,41 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-10-15T07:21:38.683161+00:00"
+ },
+ {
+  "instrument": "gold",
+  "date": "2026-10-16",
+  "spot": 4200.5,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "中性",
+  "regime": "熊",
+  "stretch": -0.42556818181824585,
+  "stretch_pctile": 0.42,
+  "drawdown": -7.740767045454565,
+  "dd_pctile": 0.292,
+  "combo_pctile": 0.356,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-10-16T07:14:17.326154+00:00"
+ },
+ {
+  "instrument": "gold",
+  "date": "2026-10-19",
+  "spot": 4204.7,
+  "state": "仅结构",
+  "struct_bias": "偏空(弱)",
+  "band": "中性",
+  "regime": "熊",
+  "stretch": -0.4495412844037376,
+  "stretch_pctile": 0.42,
+  "drawdown": -9.22629969418963,
+  "dd_pctile": 0.18,
+  "combo_pctile": 0.3,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-10-19T07:21:47.358090+00:00"
  }
 ]

@@ -247,3 +247,36 @@ def test_record_status_separates_terminal_from_eligible(tmp_path):
     assert {k: v["state"] for k, v in st.items()} == {
         "a": "completed_eligible", "b": "completed_ineligible", "c": "completed_ineligible",
         "g": "missing", "e": "corrupt", "f": "identity_conflict"}
+
+
+def test_stage_helpers_survive_errexit_and_keep_exit_trap(tmp_path):
+    """2026-10-19 实测：zsh 在 set -e 下【函数内】命令失败 → 整个脚本退出且不跑 EXIT trap。stage_mark 曾写 `cmd; r=$?`，
+    盘前快照未齐时 stage-set 正常返回 3 → 中途各轮 daily 静默死掉、publish_record 不登记 → 快照滞留未备份、次日 PUBLISH_CONFLICT。
+    这里取出脚本里真实的函数定义，用返回 3/4/1 的假 python3 在 set -euo pipefail 下跑：必须走到末尾、EXIT trap 必须执行。"""
+    import re
+    import shutil
+    import subprocess
+    import pytest
+    if not shutil.which("zsh"):
+        pytest.skip("无 zsh")
+    src = (ROOT / "scripts/daily_update.sh").read_text("utf-8")
+    defs = src[src.index("stage_mark() {"):src.index("\n}\n", src.index("rec_status() {")) + 3]
+    code = [ln.split(" #")[0] for ln in src.splitlines() if not ln.lstrip().startswith("#")]
+    assert not [ln for ln in code if re.search(r";\s*r=\$\?", ln)]                 # 函数内不得 `cmd; r=$?`
+    mark = tmp_path / "trap_ran"
+    script = f"""
+trap 'echo ran > {mark}' EXIT
+ET_DATE=2026-10-19
+python3() {{ return ${{FAKE_RC}}; }}
+{defs}
+set -euo pipefail
+for FAKE_RC in 3 1 0; do stage_mark report partial 1; done
+FAKE_RC=4; s=$(rec_status x); echo "rec=$s"
+FAKE_RC=2; s=$(rec_status x); echo "rec=$s"
+echo REACHED_END
+"""
+    r = subprocess.run(["zsh", "-c", script], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "REACHED_END" in r.stdout and "rec=ok_ineligible" in r.stdout and "rec=partial" in r.stdout
+    assert "阶段状态写入失败：report=partial（rc=1）" in r.stdout
+    assert mark.read_text().strip() == "ran"

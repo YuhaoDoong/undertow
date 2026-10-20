@@ -145,6 +145,10 @@ cli.py     命令编排（唯一允许把 collect 与 analyze 接起来的地方
    **替换**了顶部的 `publish_record` trap（shell 的 trap 不叠加）；③ 待发布记录「读→覆盖」删行时
    与别的进程追加无锁。→ 每个脚本只许一个 EXIT trap（测试守住）；待发布记录的增删在文件锁下做。
    卡住的历史产物从未登记，修复后仍需人工补交一次。
+11. **zsh 的 `set -e` 在函数内失败 → 整个脚本退出且不跑 EXIT trap（2026-10-19 实测，zsh 5.9）。** daily 的 `stage_mark` 写成
+   `cmd; r=$?`，盘前快照未齐时 stage-set 正常返回 3 → 中途各轮静默死掉、trap 里的 `publish_record` 不执行 → 本轮新写的快照
+   从未登记 → 下一轮判为他人改动不提交、重写台账即 PUBLISH_CONFLICT；10/16、10/19 共 12 个品种的期权链快照因此只在本地。
+   → `set -e` 区段里会被调用的函数一律 `cmd || r=$?` 捕获（测试守住）。
 
 ### launchd：别用密集的 StartCalendarInterval（2026-08-28 实测）
 

@@ -30,7 +30,11 @@ notify() { alert "$@"; }   # 兼容旧调用名
 # 也不再触发「首份已冻结」冲突），未 ok 的才重试；只有必需阶段全部 ok 且发布成功才 mark-done。
 stage_done() { python3 scripts/daily_stage.py stage-ok "$ET_DATE" "$1" >/dev/null 2>&1; }
 stage_mark() {   # $1=阶段 $2=ok|partial|failed|pending $3=rc；写不进去要出声（否则下次会误以为没跑）
-  local r; python3 scripts/daily_stage.py stage-set "$ET_DATE" "$1" "$2" "${3:-0}" >/dev/null 2>&1; r=$?
+  # rc 必须用 `cmd || r=$?` 捕获，不能 `cmd; r=$?`（2026-10-19 实测）：zsh 在 set -e 区段里，【函数内】命令失败
+  # 会直接退出整个脚本、且【不执行 EXIT trap】。盘前快照未齐时 stage-set 正常返回 3 → 中途各轮 daily 静默死在
+  # 研报后的 stage_mark，trap 里的 publish_record 没跑 → 本轮新写的快照/台账从未登记，下一轮判为「他人改动」
+  # 不提交、再写同路径即 PUBLISH_CONFLICT：10/16、10/19 共 12 个品种的期权链快照因此滞留工作区未备份。
+  local r=0; python3 scripts/daily_stage.py stage-set "$ET_DATE" "$1" "$2" "${3:-0}" >/dev/null 2>&1 || r=$?
   (( r == 3 )) && return 0                     # 快照未齐、没有身份：本轮本就不算完成，不记也不报
   (( r != 0 )) && echo "[警告] 阶段状态写入失败：$1=$2（rc=$r）"
   return 0
@@ -38,7 +42,7 @@ stage_mark() {   # $1=阶段 $2=ok|partial|failed|pending $3=rc；写不进去�
 rc_status() { case "$1" in 0) echo ok ;; 3) echo "${2:-pending}" ;; *) echo failed ;; esac; }   # $2 = rc 3 的含义
 rec_status() {   # 记录类阶段：看台账产物不看 CLI 退出码（$1=阶段）。0 全部合格终态行 → ok；4 全有终态行但有不合格 →
   # ok_ineligible（冻结行不重写，阶段算完成，质量缺口由缺口检查另报）；其它（缺失/损坏/冲突）→ partial，续跑重试
-  local r; python3 scripts/daily_stage.py record-complete "$ET_DATE" "$1" >/dev/null 2>&1; r=$?
+  local r=0; python3 scripts/daily_stage.py record-complete "$ET_DATE" "$1" >/dev/null 2>&1 || r=$?   # 同 stage_mark
   case $r in 0) echo ok ;; 4) echo ok_ineligible ;; *) echo partial ;; esac
 }
 

@@ -1,0 +1,46 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 65089,
+ "started_at": "2026-10-21T09:20:39.106840+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/SPY/2026-10-21",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SPY/2026-10-21.json.gz",
+   "sha256": "750fa69f2dbb55d696fa9938356b0aa70f7a220bfc4be5059f967846b78e0bb5",
+   "captured_at": 1792573052.795394,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/MSFT/2026-10-21",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/MSFT/2026-10-21.json.gz",
+   "sha256": "beb6c204237ff50cb2e967b8fb8c9f6f074e9d20ed003e10187724aee73dd36e",
+   "captured_at": 1792573062.763812,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/AAPL/2026-10-21",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/AAPL/2026-10-21.json.gz",
+   "sha256": "4a3d92c6b854fc052622d2871e2e4ced3d671f64b2e0b35d853a8710d0c8e05c",
+   "captured_at": 1792566168.5082371,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 2
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-21T09:20:54.000719+00:00",
+ "rc": 0,
+ "git_head": "0f3c4389b5ae5ec5ad0397b098d64f6f091cf6d2"
+}

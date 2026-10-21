@@ -1,0 +1,26 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 42129,
+ "started_at": "2026-10-21T07:25:43.287418+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/AAPL/2026-10-21",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/AAPL/2026-10-21.json.gz",
+   "sha256": "4a3d92c6b854fc052622d2871e2e4ced3d671f64b2e0b35d853a8710d0c8e05c",
+   "captured_at": 1792566168.5082371,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-21T07:25:55.861326+00:00",
+ "rc": 0,
+ "git_head": "dbaee1ca1ecc7c411402db734f1c299425fa4819"
+}

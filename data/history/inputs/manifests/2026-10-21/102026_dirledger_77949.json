@@ -1,0 +1,56 @@
+{
+ "schema": 1,
+ "command": "dirledger",
+ "argv": [
+  "dirledger",
+  "record"
+ ],
+ "pid": 77949,
+ "started_at": "2026-10-21T10:20:21.397055+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-10-21",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-10-21.json.gz",
+   "sha256": "d4cfd402e52fead7dd0e4a30a3c97258cda8c9db9e7f355fe5f99c423215b789",
+   "captured_at": 1792577757.796562,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-10-20",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-10-20.json.gz",
+   "sha256": "53a49f53f8ec8a9bb7b1f3a0206e6f0b39691fde8db483da0680ba5844792e1e",
+   "captured_at": 1792491905.080947,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SLV/2026-10-21",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SLV/2026-10-21.json.gz",
+   "sha256": "7dfa7673cd14900467b78a220cfb0bdc18f35f0fe479cd14e56a512c9729f3ee",
+   "captured_at": 1792577759.292871,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 2
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SLV/2026-10-20",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SLV/2026-10-20.json.gz",
+   "sha256": "454fa97ba5e642944c7d60d25e67a3702871b87db4d4a2058fd8b4eb34b6299d",
+   "captured_at": 1792491906.8011,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 3
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-21T10:20:26.190474+00:00",
+ "rc": 0,
+ "git_head": "1bf12b743bdefebe07c8dbff0bfc70d55bb80826"
+}

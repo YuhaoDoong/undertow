@@ -1,0 +1,1357 @@
+{
+ "version": "flow-side-proxy-v1-20260930",
+ "instrument": "gold",
+ "root": "GLD",
+ "day": "2026-10-21",
+ "protocol": [
+  "docs/prereg/2026-09-29_flow_side_check_v0.md",
+  "docs/prereg/2026-09-30_flow_side_check_v1_addendum.md"
+ ],
+ "status": "ok",
+ "spot": 374.44,
+ "computed_at": "2026-10-22T10:10:52.642317+00:00",
+ "inputs": {
+  "snapshot_prev": {
+   "path": "data/snapshots/options/GLD/2026-10-21.json.gz",
+   "sha256": "d4cfd402e52fead7dd0e4a30a3c97258cda8c9db9e7f355fe5f99c423215b789"
+  },
+  "snapshot_curr": {
+   "path": "data/snapshots/options/GLD/2026-10-22.json.gz",
+   "sha256": "ce39893da9863e25616a18853467aa22182274adf22bbb2932b6b1e0928f4b87"
+  },
+  "intraday": {
+   "path": "data/history/option_intraday/GLD/2026-10-21.json.gz",
+   "sha256": "ac8f57783c752cbcae95ba4cfb65aa19361c9ff7729e680966953f2e0f7f4979"
+  },
+  "samples": {
+   "path": "data/history/shadow_samples/2026-10-21/gold.jsonl",
+   "sha256": "d09d1bd6383c3349fb2eda79bb0b9485fe48405c3df95e3906e7323fa7de734b"
+  },
+  "capture_plan_spot": 377.8,
+  "capture_plan_n": 848
+ },
+ "f_legs_total": 28,
+ "f_weight_total": 618.5967,
+ "f_legs_in_plan": 27,
+ "f_weight_in_plan_frac": 0.9021,
+ "not_in_plan": {
+  "D_expiry": {
+   "n": 1,
+   "weight": 60.535799999999995
+  }
+ },
+ "summary_by_mode": {
+  "quote_past": {
+   "n_legs": 27,
+   "n_labelled": 4,
+   "n_agree": 1,
+   "agree_rate": 0.25,
+   "agree_rate_weighted": 0.2624,
+   "weight_covered": 1.0,
+   "n_mixed": 0,
+   "n_unknown": 23,
+   "matrix": {
+    "buy→unknown": 9,
+    "sell→unknown": 14,
+    "buy→sell": 3,
+    "buy→buy": 1
+   },
+   "base_rate_traded_buy": 0.25,
+   "base_rate_inferred_buy": 0.4815
+  },
+  "tick_only": {
+   "n_legs": 27,
+   "n_labelled": 23,
+   "n_agree": 9,
+   "agree_rate": 0.3913,
+   "agree_rate_weighted": 0.3651,
+   "weight_covered": 1.0,
+   "n_mixed": 3,
+   "n_unknown": 1,
+   "matrix": {
+    "buy→buy": 6,
+    "sell→buy": 9,
+    "buy→mixed": 2,
+    "buy→sell": 5,
+    "sell→sell": 3,
+    "sell→mixed": 1,
+    "sell→unknown": 1
+   },
+   "base_rate_traded_buy": 0.6522,
+   "base_rate_inferred_buy": 0.4815
+  },
+  "mixed": {
+   "n_legs": 27,
+   "n_labelled": 23,
+   "n_agree": 9,
+   "agree_rate": 0.3913,
+   "agree_rate_weighted": 0.3651,
+   "weight_covered": 1.0,
+   "n_mixed": 3,
+   "n_unknown": 1,
+   "matrix": {
+    "buy→buy": 6,
+    "sell→buy": 9,
+    "buy→mixed": 2,
+    "buy→sell": 5,
+    "sell→sell": 3,
+    "sell→mixed": 1,
+    "sell→unknown": 1
+   },
+   "base_rate_traded_buy": 0.6522,
+   "base_rate_inferred_buy": 0.4815
+  },
+  "quote_any_window": {
+   "n_legs": 27,
+   "n_labelled": 3,
+   "n_agree": 2,
+   "agree_rate": 0.6667,
+   "agree_rate_weighted": 0.7226,
+   "weight_covered": 1.0,
+   "n_mixed": 0,
+   "n_unknown": 24,
+   "matrix": {
+    "buy→unknown": 10,
+    "sell→unknown": 14,
+    "buy→buy": 2,
+    "buy→sell": 1
+   },
+   "base_rate_traded_buy": 0.6667,
+   "base_rate_inferred_buy": 0.4815
+  }
+ },
+ "main_mode": "quote_past",
+ "legs": [
+  {
+   "symbol": "GLD261022C389000.US",
+   "expiry": "2026-10-22",
+   "kind": "C",
+   "strike": 389.0,
+   "d_oi": 1232,
+   "delta": 0.0202,
+   "delta_adj_pp": 1.69,
+   "purity": 0.8812589413447782,
+   "weight": 24.8864,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 1398.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.9146,
+     "label": "buy",
+     "classified_frac": 0.9964,
+     "volume": 1398.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.9146,
+     "label": "buy",
+     "classified_frac": 0.9964,
+     "volume": 1398.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 1398.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261030P361000.US",
+   "expiry": "2026-10-30",
+   "kind": "P",
+   "strike": 361.0,
+   "d_oi": 735,
+   "delta": -0.0731,
+   "delta_adj_pp": -0.4,
+   "purity": 0.9865771812080537,
+   "weight": 53.7285,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 745.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.996,
+     "label": "buy",
+     "classified_frac": 0.9987,
+     "volume": 745.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.996,
+     "label": "buy",
+     "classified_frac": 0.9987,
+     "volume": 745.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 745.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261023P360000.US",
+   "expiry": "2026-10-23",
+   "kind": "P",
+   "strike": 360.0,
+   "d_oi": 595,
+   "delta": -0.012,
+   "delta_adj_pp": 3.95,
+   "purity": 0.952,
+   "weight": 7.1400000000000015,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 625.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.96,
+     "label": "buy",
+     "classified_frac": 0.52,
+     "volume": 625.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.96,
+     "label": "buy",
+     "classified_frac": 0.52,
+     "volume": 625.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 625.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261026C386000.US",
+   "expiry": "2026-10-26",
+   "kind": "C",
+   "strike": 386.0,
+   "d_oi": 263,
+   "delta": 0.163,
+   "delta_adj_pp": -1.0,
+   "purity": 0.7667638483965015,
+   "weight": 42.869,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 345.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.9506,
+     "label": "buy",
+     "classified_frac": 0.9971,
+     "volume": 345.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.9506,
+     "label": "buy",
+     "classified_frac": 0.9971,
+     "volume": 345.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 345.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261022P375000.US",
+   "expiry": "2026-10-22",
+   "kind": "P",
+   "strike": 375.0,
+   "d_oi": 261,
+   "delta": -0.1541,
+   "delta_adj_pp": 0.32,
+   "purity": 0.36401673640167365,
+   "weight": 40.220099999999995,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 742.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.597,
+     "label": "mixed",
+     "classified_frac": 0.9865,
+     "volume": 742.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.597,
+     "label": "mixed",
+     "classified_frac": 0.9865,
+     "volume": 742.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 742.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261022P373000.US",
+   "expiry": "2026-10-22",
+   "kind": "P",
+   "strike": 373.0,
+   "d_oi": 186,
+   "delta": -0.0764,
+   "delta_adj_pp": 0.64,
+   "purity": 0.4170403587443946,
+   "weight": 14.2104,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 460.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.238,
+     "label": "sell",
+     "classified_frac": 0.9957,
+     "volume": 460.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.238,
+     "label": "sell",
+     "classified_frac": 0.9957,
+     "volume": 460.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 460.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261030P365000.US",
+   "expiry": "2026-10-30",
+   "kind": "P",
+   "strike": 365.0,
+   "d_oi": 174,
+   "delta": -0.1171,
+   "delta_adj_pp": -0.43,
+   "purity": 0.4627659574468085,
+   "weight": 20.375400000000003,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 386.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.1662,
+     "label": "sell",
+     "classified_frac": 0.9819,
+     "volume": 386.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.1662,
+     "label": "sell",
+     "classified_frac": 0.9819,
+     "volume": 386.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 386.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261023P370000.US",
+   "expiry": "2026-10-23",
+   "kind": "P",
+   "strike": 370.0,
+   "d_oi": 166,
+   "delta": -0.0648,
+   "delta_adj_pp": 0.45,
+   "purity": 0.30570902394106814,
+   "weight": 10.7568,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": 0.2656,
+     "label": "sell",
+     "classified_frac": 0.1179,
+     "volume": 543.0,
+     "quote_age_min_s_median": 459.2904
+    },
+    "tick_only": {
+     "share": 0.8026,
+     "label": "buy",
+     "classified_frac": 0.989,
+     "volume": 543.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.8082,
+     "label": "buy",
+     "classified_frac": 0.989,
+     "volume": 543.0,
+     "quote_age_min_s_median": 459.2904
+    },
+    "quote_any_window": {
+     "share": 0.8333,
+     "label": "buy",
+     "classified_frac": 0.0221,
+     "volume": 543.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261022P370000.US",
+   "expiry": "2026-10-22",
+   "kind": "P",
+   "strike": 370.0,
+   "d_oi": 143,
+   "delta": -0.0304,
+   "delta_adj_pp": 2.7,
+   "purity": 0.48148148148148145,
+   "weight": 4.3472,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": 0.1887,
+     "label": "sell",
+     "classified_frac": 0.1785,
+     "volume": 297.0,
+     "quote_age_min_s_median": 636.419854
+    },
+    "tick_only": {
+     "share": 0.529,
+     "label": "mixed",
+     "classified_frac": 0.9865,
+     "volume": 297.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.4505,
+     "label": "mixed",
+     "classified_frac": 0.9865,
+     "volume": 297.0,
+     "quote_age_min_s_median": 636.419854
+    },
+    "quote_any_window": {
+     "share": 0.7826,
+     "label": "buy",
+     "classified_frac": 0.0774,
+     "volume": 297.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261027P372000.US",
+   "expiry": "2026-10-27",
+   "kind": "P",
+   "strike": 372.0,
+   "d_oi": 134,
+   "delta": -0.1807,
+   "delta_adj_pp": -0.51,
+   "purity": 0.5583333333333333,
+   "weight": 24.2138,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 240.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.9833,
+     "label": "buy",
+     "classified_frac": 0.9958,
+     "volume": 240.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.9833,
+     "label": "buy",
+     "classified_frac": 0.9958,
+     "volume": 240.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 240.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261027P366000.US",
+   "expiry": "2026-10-27",
+   "kind": "P",
+   "strike": 366.0,
+   "d_oi": 118,
+   "delta": -0.0612,
+   "delta_adj_pp": 0.3,
+   "purity": 0.8872180451127819,
+   "weight": 7.221599999999999,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 133.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.9848,
+     "label": "buy",
+     "classified_frac": 0.9925,
+     "volume": 133.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.9848,
+     "label": "buy",
+     "classified_frac": 0.9925,
+     "volume": 133.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 133.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261102P380000.US",
+   "expiry": "2026-11-02",
+   "kind": "P",
+   "strike": 380.0,
+   "d_oi": 117,
+   "delta": -0.5174,
+   "delta_adj_pp": -0.68,
+   "purity": 0.936,
+   "weight": 60.535799999999995,
+   "inferred": "sell",
+   "in_capture_plan": false,
+   "not_in_plan_reason": "D_expiry（日度到期不在当日采集计划：9/30 前只抓 Q/M/W，之后抓 10 天内的 D）",
+   "has_data": false,
+   "proxy": {}
+  },
+  {
+   "symbol": "GLD261106P375000.US",
+   "expiry": "2026-11-06",
+   "kind": "P",
+   "strike": 375.0,
+   "d_oi": 108,
+   "delta": -0.3801,
+   "delta_adj_pp": -0.31,
+   "purity": 0.3956043956043956,
+   "weight": 41.0508,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 273.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.1301,
+     "label": "sell",
+     "classified_frac": 0.9853,
+     "volume": 273.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.1301,
+     "label": "sell",
+     "classified_frac": 0.9853,
+     "volume": 273.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 273.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261022P372000.US",
+   "expiry": "2026-10-22",
+   "kind": "P",
+   "strike": 372.0,
+   "d_oi": 106,
+   "delta": -0.0547,
+   "delta_adj_pp": 1.23,
+   "purity": 0.31268436578171094,
+   "weight": 5.7982,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": 0.8356,
+     "label": "buy",
+     "classified_frac": 0.2153,
+     "volume": 339.0,
+     "quote_age_min_s_median": 519.2904
+    },
+    "tick_only": {
+     "share": 0.3225,
+     "label": "sell",
+     "classified_frac": 0.9971,
+     "volume": 339.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.2899,
+     "label": "sell",
+     "classified_frac": 0.9971,
+     "volume": 339.0,
+     "quote_age_min_s_median": 519.2904
+    },
+    "quote_any_window": {
+     "share": 0.375,
+     "label": "sell",
+     "classified_frac": 0.0472,
+     "volume": 339.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261029C390000.US",
+   "expiry": "2026-10-29",
+   "kind": "C",
+   "strike": 390.0,
+   "d_oi": 93,
+   "delta": 0.1688,
+   "delta_adj_pp": -0.4,
+   "purity": 0.8378378378378378,
+   "weight": 15.698400000000003,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 111.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.5806,
+     "label": "mixed",
+     "classified_frac": 0.2793,
+     "volume": 111.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.5806,
+     "label": "mixed",
+     "classified_frac": 0.2793,
+     "volume": 111.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 111.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261026C384000.US",
+   "expiry": "2026-10-26",
+   "kind": "C",
+   "strike": 384.0,
+   "d_oi": 88,
+   "delta": 0.2403,
+   "delta_adj_pp": -1.06,
+   "purity": 0.49162011173184356,
+   "weight": 21.1464,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 179.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.8352,
+     "label": "buy",
+     "classified_frac": 0.9832,
+     "volume": 179.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.8352,
+     "label": "buy",
+     "classified_frac": 0.9832,
+     "volume": 179.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 179.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261106C380000.US",
+   "expiry": "2026-11-06",
+   "kind": "C",
+   "strike": 380.0,
+   "d_oi": 80,
+   "delta": 0.5006,
+   "delta_adj_pp": 0.32,
+   "purity": 0.6896551724137931,
+   "weight": 40.048,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 116.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.6696,
+     "label": "buy",
+     "classified_frac": 0.9914,
+     "volume": 116.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.6696,
+     "label": "buy",
+     "classified_frac": 0.9914,
+     "volume": 116.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 116.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261028P374000.US",
+   "expiry": "2026-10-28",
+   "kind": "P",
+   "strike": 374.0,
+   "d_oi": 78,
+   "delta": -0.2951,
+   "delta_adj_pp": -0.42,
+   "purity": 0.5864661654135338,
+   "weight": 23.017799999999998,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 133.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.1364,
+     "label": "sell",
+     "classified_frac": 0.9925,
+     "volume": 133.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.1364,
+     "label": "sell",
+     "classified_frac": 0.9925,
+     "volume": 133.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 133.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261106P377000.US",
+   "expiry": "2026-11-06",
+   "kind": "P",
+   "strike": 377.0,
+   "d_oi": 77,
+   "delta": -0.4292,
+   "delta_adj_pp": -0.39,
+   "purity": 0.9506172839506173,
+   "weight": 33.0484,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 81.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.9783,
+     "label": "buy",
+     "classified_frac": 0.5679,
+     "volume": 81.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.9783,
+     "label": "buy",
+     "classified_frac": 0.5679,
+     "volume": 81.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 81.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261028P360000.US",
+   "expiry": "2026-10-28",
+   "kind": "P",
+   "strike": 360.0,
+   "d_oi": 76,
+   "delta": -0.0442,
+   "delta_adj_pp": 0.38,
+   "purity": 0.7450980392156863,
+   "weight": 3.3592000000000004,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 102.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.2,
+     "label": "sell",
+     "classified_frac": 0.9804,
+     "volume": 102.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.2,
+     "label": "sell",
+     "classified_frac": 0.9804,
+     "volume": 102.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 102.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261106P381000.US",
+   "expiry": "2026-11-06",
+   "kind": "P",
+   "strike": 381.0,
+   "d_oi": 70,
+   "delta": -0.5316,
+   "delta_adj_pp": -0.49,
+   "purity": 0.8536585365853658,
+   "weight": 37.211999999999996,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 82.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 1.0,
+     "label": "buy",
+     "classified_frac": 0.5732,
+     "volume": 82.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 1.0,
+     "label": "buy",
+     "classified_frac": 0.5732,
+     "volume": 82.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 82.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261030P379000.US",
+   "expiry": "2026-10-30",
+   "kind": "P",
+   "strike": 379.0,
+   "d_oi": 62,
+   "delta": -0.4853,
+   "delta_adj_pp": -0.65,
+   "purity": 0.8493150684931506,
+   "weight": 30.0886,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 73.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.9861,
+     "label": "buy",
+     "classified_frac": 0.9863,
+     "volume": 73.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.9861,
+     "label": "buy",
+     "classified_frac": 0.9863,
+     "volume": 73.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 73.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261028P380000.US",
+   "expiry": "2026-10-28",
+   "kind": "P",
+   "strike": 380.0,
+   "d_oi": 60,
+   "delta": -0.528,
+   "delta_adj_pp": -0.43,
+   "purity": 0.33519553072625696,
+   "weight": 31.68,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 179.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.927,
+     "label": "buy",
+     "classified_frac": 0.9944,
+     "volume": 179.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.927,
+     "label": "buy",
+     "classified_frac": 0.9944,
+     "volume": 179.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 179.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261030P367000.US",
+   "expiry": "2026-10-30",
+   "kind": "P",
+   "strike": 367.0,
+   "d_oi": 58,
+   "delta": -0.1483,
+   "delta_adj_pp": -0.44,
+   "purity": 0.3741935483870968,
+   "weight": 8.6014,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 155.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.7926,
+     "label": "buy",
+     "classified_frac": 0.871,
+     "volume": 155.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.7926,
+     "label": "buy",
+     "classified_frac": 0.871,
+     "volume": 155.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 155.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261023C389000.US",
+   "expiry": "2026-10-23",
+   "kind": "C",
+   "strike": 389.0,
+   "d_oi": 54,
+   "delta": 0.0491,
+   "delta_adj_pp": 0.3,
+   "purity": 0.4954128440366973,
+   "weight": 2.6513999999999998,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 109.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.6204,
+     "label": "buy",
+     "classified_frac": 0.9908,
+     "volume": 109.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.6204,
+     "label": "buy",
+     "classified_frac": 0.9908,
+     "volume": 109.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 109.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261026P360000.US",
+   "expiry": "2026-10-26",
+   "kind": "P",
+   "strike": 360.0,
+   "d_oi": 54,
+   "delta": -0.0169,
+   "delta_adj_pp": 0.46,
+   "purity": 0.6206896551724138,
+   "weight": 0.9125999999999999,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 87.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": 0.0,
+     "label": "sell",
+     "classified_frac": 0.9885,
+     "volume": 87.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.0,
+     "label": "sell",
+     "classified_frac": 0.9885,
+     "volume": 87.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 87.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261022P369000.US",
+   "expiry": "2026-10-22",
+   "kind": "P",
+   "strike": 369.0,
+   "d_oi": 51,
+   "delta": -0.0235,
+   "delta_adj_pp": 2.91,
+   "purity": 0.5257731958762887,
+   "weight": 1.1985,
+   "inferred": "buy",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": 0.0135,
+     "label": "sell",
+     "classified_frac": 0.7551,
+     "volume": 98.0,
+     "quote_age_min_s_median": 630.261207
+    },
+    "tick_only": {
+     "share": 0.086,
+     "label": "sell",
+     "classified_frac": 0.949,
+     "volume": 98.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": 0.086,
+     "label": "sell",
+     "classified_frac": 0.949,
+     "volume": 98.0,
+     "quote_age_min_s_median": 630.261207
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 98.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  },
+  {
+   "symbol": "GLD261029P372000.US",
+   "expiry": "2026-10-29",
+   "kind": "P",
+   "strike": 372.0,
+   "d_oi": 50,
+   "delta": -0.2516,
+   "delta_adj_pp": -0.54,
+   "purity": 0.9803921568627451,
+   "weight": 12.58,
+   "inferred": "sell",
+   "in_capture_plan": true,
+   "not_in_plan_reason": null,
+   "has_data": true,
+   "proxy": {
+    "quote_past": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 51.0,
+     "quote_age_min_s_median": null
+    },
+    "tick_only": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 51.0,
+     "quote_age_min_s_median": null
+    },
+    "mixed": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 51.0,
+     "quote_age_min_s_median": null
+    },
+    "quote_any_window": {
+     "share": null,
+     "label": "unknown",
+     "classified_frac": 0.0,
+     "volume": 51.0,
+     "quote_age_min_s_median": null
+    }
+   }
+  }
+ ]
+}

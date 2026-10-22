@@ -1,0 +1,156 @@
+{
+ "schema": 1,
+ "command": "mainwall",
+ "argv": [
+  "mainwall",
+  "capture",
+  "--status-file",
+  "data/logs/.status_mainwall_capture_2026-10-22.run-98299-25009-1792674276.json",
+  "--run-id",
+  "98299-25009-1792674276"
+ ],
+ "pid": 98340,
+ "started_at": "2026-10-22T13:04:36.720813+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-10-22",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-10-22.json.gz",
+   "sha256": "ce39893da9863e25616a18853467aa22182274adf22bbb2932b6b1e0928f4b87",
+   "captured_at": 1792663550.201817,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-10-21",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-10-21.json.gz",
+   "sha256": "d4cfd402e52fead7dd0e4a30a3c97258cda8c9db9e7f355fe5f99c423215b789",
+   "captured_at": 1792577757.796562,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_GLD",
+   "status": "cache_hit",
+   "size": 584827,
+   "sha256": "8a7db284a8ebd72653f9680cd1aa11afeec044bfa0680f4fc45b7e1be6e95716",
+   "fetched_at": "2026-10-22T10:47:16.598768+00:00",
+   "age_s": 8240.3,
+   "ttl_s": 43200,
+   "stored": true,
+   "seq": 2
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_refetch_GLD",
+   "status": "fresh_fetch",
+   "size": 80,
+   "sha256": "5e0848d47a38b6a4759ec0f82d6721779c6c3c72bc28fa1a58a46b3e423c7ad8",
+   "fetched_at": "2026-10-22T13:04:36.922599+00:00",
+   "age_s": 0.0,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 3
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_GLD",
+   "status": "fresh_fetch",
+   "size": 584933,
+   "sha256": "1cd0c190b265254407d6d801946e0cf61010884353289476616060dbec9e407a",
+   "fetched_at": "2026-10-22T13:04:38.047788+00:00",
+   "age_s": 0.0,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 4
+  },
+  {
+   "kind": "cache",
+   "key": "yahoo_etf_GLD_2y",
+   "status": "fresh_fetch",
+   "size": 58698,
+   "sha256": "0658679a61aba9775fecd09b90087e39ef11d92c3fefed2615fa3d8db0f30b38",
+   "fetched_at": "2026-10-22T13:04:38.344546+00:00",
+   "age_s": 0.0,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 5
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SLV/2026-10-22",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SLV/2026-10-22.json.gz",
+   "sha256": "08e09a551a02354317da73661c693192d895a7f8eabc55b0458398bf19c7e34a",
+   "captured_at": 1792663550.886662,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 6
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SLV/2026-10-21",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SLV/2026-10-21.json.gz",
+   "sha256": "7dfa7673cd14900467b78a220cfb0bdc18f35f0fe479cd14e56a512c9729f3ee",
+   "captured_at": 1792577759.292871,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 7
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_SLV",
+   "status": "cache_hit",
+   "size": 516594,
+   "sha256": "11f283bdd8b455c6d28c2d112ba812997e3525484dfb9decc1b894094cc17153",
+   "fetched_at": "2026-10-22T10:47:39.539052+00:00",
+   "age_s": 8219.4,
+   "ttl_s": 43200,
+   "stored": true,
+   "seq": 8
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_refetch_SLV",
+   "status": "fresh_fetch",
+   "size": 79,
+   "sha256": "7496c1cec8c35555c42e3ab68f7f97fa6749edd3c1641b7de2c7d09670b15928",
+   "fetched_at": "2026-10-22T13:04:38.933828+00:00",
+   "age_s": 0.0,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 9
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_SLV",
+   "status": "fresh_fetch",
+   "size": 516698,
+   "sha256": "3331a481b2daa3550692faf871ca6bb0dd767a9fb95a3d3c07b97645549dc8df",
+   "fetched_at": "2026-10-22T13:04:39.891301+00:00",
+   "age_s": 0.0,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 10
+  },
+  {
+   "kind": "cache",
+   "key": "yahoo_etf_SLV_2y",
+   "status": "fresh_fetch",
+   "size": 59181,
+   "sha256": "40a964cb3b7c6f763a5b597763926fad2dc1f409322e16264581bf5932923870",
+   "fetched_at": "2026-10-22T13:04:40.072264+00:00",
+   "age_s": 0.0,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 11
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-22T13:04:40.474663+00:00",
+ "rc": 0,
+ "git_head": "7904444edba03ad1cd35f9db85f4a516e9abcdef"
+}

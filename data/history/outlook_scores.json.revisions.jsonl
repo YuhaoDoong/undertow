@@ -231,3 +231,10 @@
 {"key": ["tqqq", "2026-10-22"], "published": -5.3, "revision": -4.9, "revised_at": "2026-10-22T18:28:11.749616+08:00"}
 {"key": ["tlt", "2026-10-22"], "published": -4.4, "revision": -2.8, "revised_at": "2026-10-22T18:28:17.956598+08:00"}
 {"key": ["iwm", "2026-10-22"], "published": -1.6, "revision": 0.0, "revised_at": "2026-10-22T18:28:42.212319+08:00"}
+{"key": ["gold", "2026-10-22"], "published": -3.0, "revision": -0.8, "revised_at": "2026-10-22T18:47:25.400967+08:00"}
+{"key": ["silver", "2026-10-22"], "published": -3.2, "revision": -2.6, "revised_at": "2026-10-22T18:47:43.977787+08:00"}
+{"key": ["wti", "2026-10-22"], "published": -2.4, "revision": -0.8, "revised_at": "2026-10-22T18:47:59.891852+08:00"}
+{"key": ["qqq", "2026-10-22"], "published": -3.8, "revision": -4.8, "revised_at": "2026-10-22T18:48:24.235568+08:00"}
+{"key": ["tqqq", "2026-10-22"], "published": -5.3, "revision": -4.9, "revised_at": "2026-10-22T18:48:44.333485+08:00"}
+{"key": ["tlt", "2026-10-22"], "published": -4.4, "revision": -2.8, "revised_at": "2026-10-22T18:48:51.222741+08:00"}
+{"key": ["iwm", "2026-10-22"], "published": -1.6, "revision": 0.0, "revised_at": "2026-10-22T18:49:17.196341+08:00"}

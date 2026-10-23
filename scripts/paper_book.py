@@ -36,6 +36,8 @@ def _advisory_cell(r: dict, pnl, note) -> str:
     """借记价差的提示规则（debit-roi100-review-v1，只提示不平仓）：含费盈利 / 含费风险成本；估值有假设（缺腿按 0）不算。"""
     if r.get("structure") != "debit" or not r.get("advisory_rule"):
         return ""
+    if r["advisory_rule"] != "debit-roi100-review-v1":         # v2 起：与事件同一公式（spread_econ.debit_roi_review）
+        return _advisory_cell_v2(r, pnl, note)
     e = r["econ"]
     L, M = e.get("max_loss_usd"), e.get("max_gain_usd")
     if not (_num(L) and _num(M) and L > 0):
@@ -46,6 +48,24 @@ def _advisory_cell(r: dict, pnl, note) -> str:
     from scripts.paper_trades import advisory_triggered       # 与事件同一判定（Codex 046 WP2），显示精度另处理
     roi = pnl / L
     return f"；盈利/风险成本 {roi:.0%}" + ("　🔔 ≥100% 考虑止盈（只提示）" if advisory_triggered(pnl, L) else "") + cap
+
+
+def _advisory_cell_v2(r: dict, pnl, note) -> str:
+    """v2：净利润 / 实际入场付出（模拟仓入场费、平仓费 = 往返费模型各一半）。公式与事件同源 spread_econ.debit_roi_review。
+    当前可平仓净价由含费盈亏反解：pnl = ((credit − value)·100 − fe)·q → 净价 = −value；估值不完整不算。"""
+    from undertow.analyze import spread_econ as se
+    fe, q, c = r.get("fee_round_trip"), r.get("qty"), r.get("credit")
+    ok = _num(fe) and fe >= 0 and isinstance(q, int) and q > 0 and _num(c)
+    vx = (-c + (pnl / q + fe) / 100) if ok and _num(pnl) and not note else None
+    rv = se.debit_roi_review(side=r["side"], k_sell=r["k_sell"], k_buy=r["k_buy"], cost=-c if _num(c) else None,
+                             qty=q if isinstance(q, int) else 0, entry_fees=fe / 2 * q if ok else None,
+                             exit_fees=fe / 2 * q if ok else None, value_exec=vx, entry_fee_source="paper_model")
+    if rv["status"] in ("incomplete", "not_applicable"):
+        return f"；提示 {r['advisory_rule']}：实际付出未知（{rv['why']}）"
+    cap = "（最大可达 %.0f%%，100%% 不可达）" % (rv["max_roi"] * 100) if rv["unreachable"] else ""
+    if rv["roi"] is None:
+        return f"；净利润/实际付出 —（估值不完整）{cap}"
+    return f"；净利润/实际付出 {rv['roi']:.0%}" + ("　🔔 ≥100% 提醒讨论止盈（只提示）" if rv["triggered"] else "") + cap
 
 
 def _num(x) -> bool:
@@ -107,7 +127,7 @@ def classify(theses: list) -> dict:
         row = {"id": t["id"], "date": t.get("date"), "instrument": t.get("instrument"), "batch": p.get("batch", "legacy"),
                "judgment": judgment_id(j, t), "state": p.get("state"), "side": p.get("side"), "expiry": p.get("expiry"),
                "k_sell": p.get("k_sell"), "k_buy": p.get("k_buy"), "credit": p.get("entry_credit"),
-               "structure": p.get("structure", "credit"), "qty": p.get("qty", 1), "hold": p.get("hold_to_expiry"),
+               "structure": p.get("structure", "credit"), "qty": p.get("qty", 1), "fee_round_trip": p.get("fee_round_trip"), "hold": p.get("hold_to_expiry"),
                "voided": p.get("voided_exits") or [], "unresolved": [e for e in p.get("events") or [] if e.get("action") == "exit_unresolved"],
                "exit_assumption": p.get("exit_assumption") or _close_assumption(p),
                "econ": p.get("economics") or {}, "pnl": p.get("pnl_usd"), "stop": p.get("stop_value"),

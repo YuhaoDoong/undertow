@@ -64,8 +64,14 @@ EXIT_RULE_STRUCTURES = {"claude-exit-v1": ("credit",), "user-tp90-v1": ("credit"
 # 提示规则（只提示、从不平仓；与自动退出规则分开）。debit-roi100-review-v1（用户 2026-10-14：「我觉得买方收益率 100% 以上，
 # 可以考虑平掉吧」；Codex 045 建议）：含费盈利 ≥ 100% × 含费风险成本（L = 100·借记 + 往返费）→ 提示「考虑止盈」。未校准。
 # 风险成本含往返费，不等于实际开仓现金；最大可达 ROI = 含费最大收益 / L < 100% 时显式标 target_unreachable，不改阈值。
+# v2（用户 2026-10-23「以后止盈线 100% 含费的时候，要提醒止盈。然后讨论决定是否平仓」；Codex 063-B 正式采纳）：
+# 分母 = 实际入场付出（权利金 + 入场费），净利润另扣预计平仓费；公式唯一来源 spread_econ.debit_roi_review。
+# 已挂 v1 的仓位保留 v1（历史可复现，不静默改写）；新纠正挂 ADVISORY_CURRENT。
 ADVISORY_RULES = {"debit-roi100-review-v1": {"roi_frac": 1.0, "structures": ("debit",), "type": "advisory",
-                                             "status": "uncalibrated"}}
+                                             "status": "uncalibrated"},
+                  "debit-roi100-review-v2-20261023": {"roi_frac": 1.0, "structures": ("debit",), "type": "advisory",
+                                                      "status": "正式提醒政策（收益效果未校准）", "formula": "v2"}}
+ADVISORY_CURRENT = {"debit": "debit-roi100-review-v2-20261023"}
 
 
 def exit_rule_error(p: dict) -> str | None:
@@ -109,6 +115,8 @@ def advisory_view(p: dict, val, assume, at: datetime | None = None) -> dict | No
     out = {"rule": r, "roi": None, "risk_cost_usd": L, "max_roi": None, "target_unreachable": None, "triggered": False,
            "roi_frac": cfg["roi_frac"], "status": cfg["status"], "effective_at": p.get("advisory_effective_at"),
            "before_effective": bool(at is not None and eff is not None and at < eff)}
+    if cfg.get("formula") == "v2":
+        return {**out, **_advisory_v2(p, val, assume, out["before_effective"])}
     if not (_finite(L, M) and L > 0):
         return out
     out["max_roi"] = round(M / L, 4)
@@ -119,6 +127,21 @@ def advisory_view(p: dict, val, assume, at: datetime | None = None) -> dict | No
         out["pnl_usd"] = pnl
         out["triggered"] = advisory_triggered(pnl, cfg["roi_frac"] * L) and not out["before_effective"]
     return out
+
+
+def _advisory_v2(p: dict, val, assume, before_effective: bool) -> dict:
+    """v2 提醒：模拟仓的入场/平仓费就是往返费模型各一半（模拟成交本来按它记账）。估值有假设 → 当作报价缺失、不触发。"""
+    from undertow.analyze import spread_econ as se
+    fe = p.get("fee_round_trip")
+    half = fe / 2 * p["qty"] if _finite(fe) and fe >= 0 else None
+    ec = p.get("entry_credit")
+    r = se.debit_roi_review(side=p["side"], k_sell=p["k_sell"], k_buy=p["k_buy"], cost=-ec if _finite(ec) else None,
+                            qty=p["qty"], entry_fees=half, exit_fees=half,
+                            value_exec=-val if _finite(val) and assume is None else None,
+                            entry_fee_source="paper_model", exit_fee_source="paper_model")
+    return {"risk_cost_usd": r["invest_usd"], "max_roi": r["max_roi"], "target_unreachable": r["unreachable"],
+            "roi": r["roi"], "pnl_usd": r["profit_usd"], "triggered": bool(r["triggered"]) and not before_effective,
+            "review": r}
 
 
 def in_rth(t: datetime) -> bool:
@@ -1160,7 +1183,7 @@ def correct_exit_rule(tid: str, note: str, now: datetime | None = None) -> dict:
             # 已了结仓位保留原规则名，重复纠正同一规则不再追加（Codex 046 WP2）；真正不同的纠正另起版本
             return {"ok": True, "unchanged": True, "why": f"{r} 已纠正过（已了结仓位只留一次审计）"}
         live = p.get("state") in ("planned", "entered")
-        adv = next((k for k, v in ADVISORY_RULES.items() if p.get("structure", "credit") in v["structures"]), None)
+        adv = ADVISORY_CURRENT.get(p.get("structure", "credit"))
         e = {"at": now.isoformat(), "action": "exit_rule_corrected", "from": r, "to": None,
              "advisory_rule": adv if live else None, "effective_at": now.isoformat(), "state_at_correction": p["state"],
              "user_note": note,

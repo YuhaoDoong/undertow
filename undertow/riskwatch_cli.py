@@ -232,6 +232,17 @@ def group_verticals(positions: list) -> tuple[list[dict], list[str]]:
     return out, odd
 
 
+def _unit_notes(live: list[dict], odd: list[str]) -> dict:
+    """同标的还有其它在场价差或未配对腿 → 该标的是多腿整体风险单元（Codex 061/062），两腿成本不代表整轮成本（063 T3）。"""
+    from collections import Counter
+    n = Counter(v["root"] for v in live)
+    for s in odd:
+        o = parse_occ(s)
+        if o:
+            n[o[0]] += 1
+    return {r: f"{r} 同时有 {c} 组/条在场价差或腿" for r, c in n.items() if c > 1}
+
+
 def _quotes(symbols: list[str]) -> dict:
     """逐腿盘口（长桥 depth，经 lb_budget），模拟仓同一形态：{sym: {bid, ask, bid_size, ask_size, error}}。全部失败 → {}。"""
     from undertow.collect import longbridge_quote as lq
@@ -354,6 +365,7 @@ def collect_and_evaluate(now: datetime | None = None, *, deps: dict | None = Non
     except Exception:                                       # noqa: BLE001
         cash = None
     live, odd = group_verticals(positions or [])
+    unit_of = _unit_notes(live, odd)
     if odd:
         items.append(rw.RiskItem("live_unmapped|" + ",".join(sorted(odd)), "warn", "live",
                                  f"有 {len(odd)} 条实盘腿不是可识别的垂直价差：巡检未覆盖", "、".join(sorted(odd))[:200]))
@@ -396,7 +408,7 @@ def collect_and_evaluate(now: datetime | None = None, *, deps: dict | None = Non
             fee_round_trip=plan["fee_round_trip"] if plan.get("fee_round_trip") is not None else _fee_rt(),
             value=None if cv is None else cv[0], value_assumption=None if cv is None else cv[1],
             spot=spots.get(v["root"]), tdays_to_expiry=_tdays(now.date(), v["expiry"]), missing_streak=miss,
-            cost_source=src), plan))
+            cost_source=src, unit_note=unit_of.get(v["root"])), plan))
     for tid, p in paper_rows:
         root = p["underlying"].split(".")[0]
         cv = close_value(quotes, p) if close_value else None
@@ -622,7 +634,7 @@ def cmd_plan_set(args) -> int:
     p = dict(obj["plans"].get(args.key) or {})
     for f, a in (("cost_per_share", "cost"), ("take_profit_value", "take_profit_value"), ("stop_value", "stop_value"),
                  ("review_date", "review_date"), ("review_note", "review_note"), ("note", "note"),
-                 ("fee_round_trip", "fee_round_trip"), ("cost_side", "cost_side")):
+                 ("fee_round_trip", "fee_round_trip"), ("cost_side", "cost_side"), ("entry_fees_usd", "entry_fees")):
         if getattr(args, a, None) is not None:
             p[f] = getattr(args, a)
     if args.inv_ref:
@@ -653,6 +665,7 @@ def register(sub):
     s.add_argument("--cost-side", choices=("debit", "credit"), help="可选：成本方向，与行权价结构不符时巡检不采用")
     s.add_argument("--take-profit-value", type=float); s.add_argument("--stop-value", type=float)
     s.add_argument("--fee-round-trip", type=float, help="每组往返费用（美元）；0 合法，负数/非有限拒绝")
+    s.add_argument("--entry-fees", type=float, help="这批实际入场总费用（美元，按现金流水核定）；100%% 含费提醒的分母用它，缺省按模型估计")
     s.add_argument("--inv-ref"); s.add_argument("--inv-op", choices=rw.INVALIDATION_OPS, default="<")
     s.add_argument("--inv-level", type=float); s.add_argument("--inv-equiv", type=float)
     s.add_argument("--inv-basis", choices=("close", "intraday"), default="close"); s.add_argument("--inv-note")

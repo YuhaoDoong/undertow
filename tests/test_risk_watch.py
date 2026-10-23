@@ -53,11 +53,9 @@ def test_normal_is_silent():
 
 # —— 1. 止盈 ——
 def test_debit_take_profit_at_100pct_of_paid():
-    e = rw.econ(uso())
-    L = e["entry_net_payoff_max_loss"]                   # 128 + 3.2
-    need = -(1.20 + (L + 3.2) / 100)                     # 含费盈利 = 付出（往返费 3.2 一并扣）→ 价差价值
-    assert "take_profit" in keys(ev(uso(value=need - 0.01)))
-    assert "take_profit" not in keys(ev(uso(value=need + 0.02)))
+    """v2（Codex 063-B）：实际付出 I = 120 + 入场费 1.6；净利润 = 100·V − 平仓费 1.6 − I ≥ I ⇔ V ≥ 2.40 + 4.8/100 = 2.448。"""
+    assert "take_profit" in keys(ev(uso(value=-2.448)))
+    assert "take_profit" not in keys(ev(uso(value=-2.44)))
 
 
 def test_debit_take_profit_ignored_when_valuation_assumed():

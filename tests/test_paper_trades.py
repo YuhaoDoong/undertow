@@ -646,7 +646,7 @@ def test_correct_exit_rule_keeps_history_and_only_touches_named_position(tmp_pat
     assert not pt.correct_exit_rule("D", "")["ok"]                                         # 需要用户原话
     r = pt.correct_exit_rule("D", "用户：买方不是按 90%", datetime(2026, 10, 14, 11, 0, tzinfo=ET))
     st = load()
-    assert r["ok"] and st["D"]["paper"]["exit_rule"] is None and st["D"]["paper"]["advisory_rule"] == "debit-roi100-review-v1"
+    assert r["ok"] and st["D"]["paper"]["exit_rule"] is None and st["D"]["paper"]["advisory_rule"] == "debit-roi100-review-v2-20261023"   # 063：新纠正挂现行 v2
     e = st["D"]["paper"]["events"][-1]
     assert e["action"] == "exit_rule_corrected" and e["from"] == "user-tp90-v1" and e["effective_at"].startswith("2026-10-14")
     assert pt.correct_exit_rule("D", "再来")["unchanged"]                                  # 幂等

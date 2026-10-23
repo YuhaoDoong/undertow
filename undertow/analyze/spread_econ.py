@@ -122,3 +122,64 @@ def credit_range_for_stop_cap(*, width: float, stop_mult: float, cap_usd: float,
     if max_loss_cap_usd is not None:
         lo = max(lo, width - (max_loss_cap_usd / qty - fee_round_trip) / mult)
     return (round(lo, 4), round(hi, 4)) if lo <= hi and hi > 0 else None
+
+
+# —— 买方价差 100% 含费止盈提醒（用户 2026-10-23；Codex 063-B 正式采纳）——
+# 「以后止盈线 100% 含费的时候，要提醒止盈。然后讨论决定是否平仓」：只提醒、讨论后由用户决定，从不平仓，阈值前也可以讨论。
+# 是用户指定的提醒/复核政策，不是回测证明最优的退出策略（收益效果未校准）。旧 v1（分母 = 含往返费的理论最大亏损）
+# 保留给历史模拟仓复现，不静默改写；两者是不同规则，不是「v2 略保守」。
+DEBIT_ROI_REVIEW = {
+    "version": "debit-roi100-review-v2-20261023",
+    "roi_frac": 1.0,
+    "status": "正式提醒政策（用户 2026-10-23，Codex 063）；收益效果未校准；只提醒讨论，从不平仓",
+    # 组合净价按 0.01 报价是假设（长桥组合单的最小报价单位未逐标的核验）；只用于把触发净价向上取到可挂的价位
+    "tick": 0.01,
+}
+
+
+def debit_roi_review(*, side: str, k_sell: float, k_buy: float, cost: float, qty: int, entry_fees: float | None,
+                     exit_fees: float | None, value_exec: float | None, mult: int = MULT,
+                     entry_fee_source: str = "unknown", exit_fee_source: str = "model", rule: dict = DEBIT_ROI_REVIEW) -> dict:
+    """借记垂直价差的 100% 含费提醒（Codex 063-B 公式）。全部美元按整笔（q 组）：
+        I    = q·m·c + Fi                实际入场现金付出（权利金 + 实际入场费）
+        Cnet = q·m·Vexec − Fo            按可平仓对手价（多头 bid − 空头 ask）全平的净收入，Fo = 预计平仓费
+        P    = Cnet − I；ROI = P / I     触发 P ≥ I（按分比较，不先把 ROI 舍入）⇔ 每股 V* = 2c + (2Fi + Fo)/(q·m)
+    入场费在分母里代表实际付出、在净利润里代表已发生成本，没有重复收；平仓费只扣一次。
+    q·m·W − Fo < 2I → 100% 目标不可达（适用性结果，不是失败；不换成别的阈值）。
+    cost = 每股净付出（正数）；value_exec = 每股可平仓净价（正 = 卖出收回，可为负 = 点差倒挂）；None = 报价缺失。
+    费用缺失 → incomplete（不折 0）。剩余收益 / 回吐 / 持有-现平打平价是【无费、到期】的情景幅度，不是概率或期望。"""
+    out = {"rule": rule["version"], "status": None, "why": None, "roi_frac": rule["roi_frac"], "policy_status": rule["status"],
+           "entry_fee_source": entry_fee_source, "exit_fee_source": exit_fee_source, "invest_usd": None, "trigger_value": None,
+           "trigger_quote": None, "max_close_net_usd": None, "max_roi": None, "unreachable": None, "value_exec": value_exec,
+           "close_net_usd": None, "profit_usd": None, "roi": None, "triggered": False, "remaining_gross_usd": None,
+           "giveback_gross_usd": None, "hold_close_breakeven": None}
+    if side not in ("C", "P") or not _fin(k_sell, k_buy) or k_sell == k_buy or not is_debit(side, k_sell, k_buy):
+        return {**out, "status": "not_applicable", "why": "不是借记垂直价差"}
+    if not (isinstance(qty, int) and not isinstance(qty, bool) and qty > 0 and isinstance(mult, int) and mult > 0):
+        return {**out, "status": "incomplete", "why": "组数/乘数必须是正整数"}
+    width = abs(k_sell - k_buy)
+    if not (_fin(cost) and 0 < cost < width):
+        return {**out, "status": "incomplete", "why": "每股付出缺失或不在 (0, 宽度) 内"}
+    miss = [n for n, f in (("入场费", entry_fees), ("预计平仓费", exit_fees)) if not (_fin(f) and f >= 0)]
+    if miss:
+        return {**out, "status": "incomplete", "why": "、".join(miss) + "缺失或不合法（不折 0）"}
+    qm = qty * mult
+    inv = round(qm * cost + entry_fees, 2)
+    v_star = 2 * cost + (2 * entry_fees + exit_fees) / qm
+    tick = rule["tick"]
+    max_close = round(qm * width - exit_fees, 2)
+    out.update(invest_usd=inv, trigger_value=round(v_star, 4),
+               trigger_quote=round(math.ceil(round(v_star / tick, 6)) * tick, 4),
+               max_close_net_usd=max_close, max_roi=round((max_close - inv) / inv, 4),
+               unreachable=round(max_close - inv, 2) < round(rule["roi_frac"] * inv, 2))
+    if not _fin(value_exec):
+        return {**out, "status": "no_quote", "why": "可平仓报价缺失：不输出确定的 100%"}
+    cnet = round(qm * value_exec - exit_fees, 2)
+    p = round(cnet - inv, 2)
+    out.update(close_net_usd=cnet, profit_usd=p, roi=round(p / inv, 4),
+               triggered=p >= round(rule["roi_frac"] * inv, 2),
+               remaining_gross_usd=round((width - value_exec) * qm, 2), giveback_gross_usd=round(value_exec * qm, 2))
+    if 0 < value_exec < width:                       # 两行权价之间：到期 payoff 等于今天 V 的标的价（无费、到期口径）
+        out["hold_close_breakeven"] = round(k_buy - value_exec if side == "P" else k_buy + value_exec, 4)
+    out["status"] = "triggered" if out["triggered"] else ("unreachable" if out["unreachable"] else "below")
+    return out

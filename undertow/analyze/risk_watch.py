@@ -14,8 +14,12 @@
   不用于止盈（止盈靠一个卖不出去的估值会误导）。
 
 规则（全部阈值在 RISK_WATCH_META，未校准；只是「该提醒人看一眼」的工程开关，不是交易信号）：
-1. 止盈到达：借记价差 含费盈利 ≥ 含费最大亏损 × 100%（用户口径「盈利÷付出 ≥100% 可考虑平」，与模拟仓 debit-roi100-review-v1
-   同一判定 advisory_triggered：按分比较）；或私有计划给的止盈价差值到达。贷记价差 含费盈利 ≥ POLICY_B 止盈比例 × 含费最大收益。
+1. 止盈到达：借记价差按 spread_econ.debit_roi_review（debit-roi100-review-v2-20261023，用户 2026-10-23、Codex 063-B 正式提醒政策）：
+   净利润（可平仓对手价全平收入 − 预计平仓费 − 实际入场付出）≥ 实际入场付出（权利金 + 实际入场费）→ 提醒讨论，从不平仓。
+   入场费优先取计划里核定的 entry_fees_usd，否则按往返费模型的一半（标「估计」）；100% 不可达时不报、也不换别的阈值。
+   同标的还有其它在场腿时，两腿成本不代表整轮成本：子结构达标也只报「整轮 ROI 未核实」请讨论（Codex 063 T3）。
+   或私有计划给的止盈价差值到达。贷记价差 含费盈利 ≥ POLICY_B 止盈比例 × 含费最大收益。
+   旧 v1（分母 = 含往返费理论最大亏损）只留给已挂 v1 的模拟仓复现。
 2. 计划失效位：私有计划的 invalidation（参照价可以是商品价如布伦特，也可以是标的）——盘中越过只报 warn「若收盘仍在外侧即失效」，
    临收盘窗口（当日收市前 close_warn_minutes 分钟起；收市时刻取 market_calendar，半日市 13:00）仍在外侧报 urgent，
    文案是「临收盘预警、尚未收盘确认」—— 15:30 不是收盘，巡检也不在收盘后确认。收市时刻未知 → 不升级并写明。
@@ -52,7 +56,7 @@ from undertow.analyze import spread_econ as se
 RISK_WATCH_META = {
     "version": "risk-watch-v1-20261015",
     "status": "未校准：全部是提醒人看一眼的工程开关，不是交易信号；改动请同步测试",
-    "debit_take_profit_roi": 1.0,          # 用户口径：盈利 ÷ 付出 ≥ 100%（与模拟仓 debit-roi100-review-v1 一致）
+    "debit_take_profit_rule": se.DEBIT_ROI_REVIEW["version"],   # 唯一公式 spread_econ.debit_roi_review（Codex 063-B）
     "credit_take_profit_frac": rp.POLICY_B["take_profit_gain_frac"],   # 唯一来源 risk_policy（POLICY_B 90%）
     "short_near_frac": 0.01,               # 标的距卖腿 ≤ 1% 算「近价」（未校准）
     "expiry_near_tdays": 2,                # 距到期 ≤ 2 个交易日（含到期日当天 = 0）
@@ -96,6 +100,7 @@ class SpreadView:
     stop_value: float | None = None         # 模拟仓自带止损线（平仓价值口径，与 value 同号）
     missing_streak: int = 0                 # 连续估值缺失次数（含本次）
     cost_source: str = "unknown"            # plan（用户核定）/ broker_estimate（券商成本推算，未核定）/ paper_fill
+    unit_note: str | None = None            # 同标的还有其它在场腿/价差（整体风险单元）→ 两腿成本不代表整轮成本
 
 
 def econ(v: SpreadView) -> dict:
@@ -116,6 +121,43 @@ def pnl_usd(v: SpreadView, e: dict | None = None) -> float | None:
     return None if loss is None else round(-loss, 2)
 
 
+def debit_review(v: SpreadView, plan: dict | None) -> dict:
+    """借记价差的 100% 含费提醒（spread_econ.debit_roi_review 唯一公式）。入场费：计划核定的 entry_fees_usd（实际）优先，
+    否则按往返费模型的一半（估计）；平仓费恒为模型估计。估值有假设（某腿缺价按 0）→ 当作报价缺失，不触发。"""
+    plan = plan or {}
+    fe = v.fee_round_trip if _fin(v.fee_round_trip) and v.fee_round_trip >= 0 else None
+    fi_plan = plan.get("entry_fees_usd")
+    if _fin(fi_plan) and fi_plan >= 0:
+        fi, fi_src = float(fi_plan), "actual"
+    else:
+        fi, fi_src = (None if fe is None else fe / 2 * v.qty), "model"
+    cost = -v.entry_credit if _fin(v.entry_credit) and v.entry_credit < 0 else None
+    vx = -v.value if v.value is not None and v.value_assumption is None else None
+    r = se.debit_roi_review(side=v.side, k_sell=v.k_sell, k_buy=v.k_buy, cost=cost, qty=v.qty, entry_fees=fi,
+                            exit_fees=None if fe is None else fe / 2 * v.qty, value_exec=vx,
+                            entry_fee_source=fi_src, exit_fee_source="model")
+    return {**r, "unit_note": v.unit_note}
+
+
+def debit_review_title(v: SpreadView, r: dict, est: str = "") -> str:
+    fee = "（入场费为估计）" if r["entry_fee_source"] != "actual" else ""
+    if r.get("unit_note"):
+        return (f"{v.label}：两腿子结构含费净利润 ${r['profit_usd']:,.0f} ≥ 实际付出 ${r['invest_usd']:,.0f}（≥100%）"
+                f"——同标的还有其它腿，整轮 ROI 未核实，请讨论{fee}")
+    return (f"{v.label}：含费净利润 ${r['profit_usd']:,.0f} ≥ 实际入场付出 ${r['invest_usd']:,.0f}"
+            f"（ROI {r['roi']:.0%}，≥100%），提醒讨论是否止盈{fee}{'（成本估算）' if est else ''}")
+
+
+def debit_review_body(v: SpreadView, r: dict, est: str = "") -> str:
+    sc = f"拿到期满额再多 ${r['remaining_gross_usd']:,.0f}；归零回吐 ${r['giveback_gross_usd']:,.0f}"
+    if r.get("hold_close_breakeven") is not None:
+        sc += f"；到期标的 {r['hold_close_breakeven']:g} 时与现在平相同"
+    return (f"{r['rule']}：用户 2026-10-23 的提醒政策（收益效果未校准），只提醒、平不平由你决定。"
+            f"按可平仓对手价 {r['value_exec']:.2f}/股（触发净价 {r['trigger_value']:.3f}，可挂 {r['trigger_quote']:.2f}）。"
+            f"情景（无费、到期口径，是幅度不是概率）：{sc}。平仓费为模型估计。"
+            f"{('同标的整体：' + r['unit_note'] + '。') if r.get('unit_note') else ''}{est}{LEG_ORDER_NOTE}")
+
+
 # —— 私有持仓计划（data/account/position_plans.json）——
 
 def validate_plans(obj) -> str | None:
@@ -125,7 +167,7 @@ def validate_plans(obj) -> str | None:
     for k, p in obj["plans"].items():
         if not isinstance(p, dict):
             return f"{k}：计划不是对象"
-        for f in ("take_profit_value", "stop_value", "cost_per_share", "fee_round_trip"):
+        for f in ("take_profit_value", "stop_value", "cost_per_share", "fee_round_trip", "entry_fees_usd"):
             if p.get(f) is not None and not (_fin(p[f]) and p[f] >= 0):
                 return f"{k}：{f} 必须是非负有限数"
         if p.get("cost_side") is not None and p["cost_side"] not in ("debit", "credit"):
@@ -222,10 +264,12 @@ def assess_spread(v: SpreadView, plan: dict | None, *, today: str, now_hm: str, 
     else:
         rules["take_profit"] = {"status": CHECKED, "source": v.cost_source}
     if clean and pnl is not None:
-        if debit and _fin(L) and L > 0 and round(pnl, 2) >= round(meta["debit_take_profit_roi"] * L, 2):
-            out.append(RiskItem(f"take_profit|{v.key}", "warn", v.scope,
-                                f"{v.label}：含费盈利 ${pnl:,.0f} ≥ 付出 ${L:,.0f}（≥100%），可考虑平仓{'（估算）' if est else ''}",
-                                f"用户口径「盈利÷付出≥100% 可考虑平」，未校准。{est}{LEG_ORDER_NOTE}", nums))
+        if debit:
+            r = debit_review(v, plan)
+            nums["debit_roi_review"] = r
+            if r["triggered"]:
+                out.append(RiskItem(f"take_profit|{v.key}", "warn", v.scope, debit_review_title(v, r, est),
+                                    debit_review_body(v, r, est), nums))
         elif not debit and _fin(M) and M > 0 and round(pnl, 2) >= round(meta["credit_take_profit_frac"] * M, 2):
             out.append(RiskItem(f"take_profit|{v.key}", "warn", v.scope,
                                 f"{v.label}：已拿到最大收益的 {pnl / M:.0%}（≥{meta['credit_take_profit_frac']:.0%} 止盈线）"

@@ -420,12 +420,13 @@ def collect_and_evaluate(now: datetime | None = None, *, deps: dict | None = Non
             entry_credit=p.get("entry_credit"), qty=p["qty"], fee_round_trip=p.get("fee_round_trip"),
             value=None if cv is None else cv[0], value_assumption=None if cv is None else cv[1], spot=spots.get(root),
             tdays_to_expiry=_tdays(now.date(), str(p["expiry"])), stop_value=p.get("stop_value"),
-            missing_streak=miss, cost_source="paper_fill"), plans.get(key)))
+            missing_streak=miss, cost_source="paper_fill", advisory_spec=dict(p)), plans.get(key)))
     from undertow.core import market_calendar as mc
     close_hm = mc.close_time(now.date())
     coverage, incomplete = [], []
     for v, plan in views:
-        its, cov = rw.assess_spread(v, plan, today=today, now_hm=hm, ref_prices=refs, close_hm=close_hm, plan_problem=pprob)
+        its, cov = rw.assess_spread(v, plan, today=today, now_hm=hm, ref_prices=refs, close_hm=close_hm, plan_problem=pprob,
+                                    at=now)
         items += its
         gaps = rw.core_gaps(cov, quote_streak=v.missing_streak)
         alert_gaps = rw.core_gaps(cov, inputs=rw.GAP_ALERT_INPUTS)
@@ -634,7 +635,8 @@ def cmd_plan_set(args) -> int:
     p = dict(obj["plans"].get(args.key) or {})
     for f, a in (("cost_per_share", "cost"), ("take_profit_value", "take_profit_value"), ("stop_value", "stop_value"),
                  ("review_date", "review_date"), ("review_note", "review_note"), ("note", "note"),
-                 ("fee_round_trip", "fee_round_trip"), ("cost_side", "cost_side"), ("entry_fees_usd", "entry_fees")):
+                 ("fee_round_trip", "fee_round_trip"), ("cost_side", "cost_side"), ("entry_fees_usd", "entry_fees"),
+                 ("qty_entered", "qty_entered")):
         if getattr(args, a, None) is not None:
             p[f] = getattr(args, a)
     if args.inv_ref:
@@ -666,6 +668,8 @@ def register(sub):
     s.add_argument("--take-profit-value", type=float); s.add_argument("--stop-value", type=float)
     s.add_argument("--fee-round-trip", type=float, help="每组往返费用（美元）；0 合法，负数/非有限拒绝")
     s.add_argument("--entry-fees", type=float, help="这批实际入场总费用（美元，按现金流水核定）；100%% 含费提醒的分母用它，缺省按模型估计")
+    s.add_argument("--qty-entered", type=int,
+                   help="这批实际入场组数（按成交核定）；与当前组数不同 → 整轮 ROI 未核实、入场费按比例分摊为估计；不填不默认为当前组数")
     s.add_argument("--inv-ref"); s.add_argument("--inv-op", choices=rw.INVALIDATION_OPS, default="<")
     s.add_argument("--inv-level", type=float); s.add_argument("--inv-equiv", type=float)
     s.add_argument("--inv-basis", choices=("close", "intraday"), default="close"); s.add_argument("--inv-note")

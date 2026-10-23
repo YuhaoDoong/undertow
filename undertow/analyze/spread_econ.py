@@ -132,7 +132,8 @@ DEBIT_ROI_REVIEW = {
     "version": "debit-roi100-review-v2-20261023",
     "roi_frac": 1.0,
     "status": "正式提醒政策（用户 2026-10-23，Codex 063）；收益效果未校准；只提醒讨论，从不平仓",
-    # 组合净价按 0.01 报价是假设（长桥组合单的最小报价单位未逐标的核验）；只用于把触发净价向上取到可挂的价位
+    # 组合净价按 0.01 报价是假设（长桥组合单的最小报价单位未逐标的核验）；trigger_quote 只是按此假设向上取整的参考价，
+    # 不是「券商可挂」的保证（Codex 064 T4）；原始现金触发公式在 trigger_value
     "tick": 0.01,
 }
 
@@ -147,12 +148,13 @@ def debit_roi_review(*, side: str, k_sell: float, k_buy: float, cost: float, qty
     入场费在分母里代表实际付出、在净利润里代表已发生成本，没有重复收；平仓费只扣一次。
     q·m·W − Fo < 2I → 100% 目标不可达（适用性结果，不是失败；不换成别的阈值）。
     cost = 每股净付出（正数）；value_exec = 每股可平仓净价（正 = 卖出收回，可为负 = 点差倒挂）；None = 报价缺失。
-    费用缺失 → incomplete（不折 0）。剩余收益 / 回吐 / 持有-现平打平价是【无费、到期】的情景幅度，不是概率或期望。"""
+    费用缺失 → incomplete（不折 0）。可平仓净价 > 宽度 → quote_out_of_range（报价异常，不触发）；0 与负净价照常计算。
+    trigger_quote 是按假设 tick 向上取整的参考价（未核实券商报价单位），trigger_value 是原始公式值。剩余收益 / 回吐 / 持有-现平打平价是【无费、到期】的情景幅度，不是概率或期望。"""
     out = {"rule": rule["version"], "status": None, "why": None, "roi_frac": rule["roi_frac"], "policy_status": rule["status"],
            "entry_fee_source": entry_fee_source, "exit_fee_source": exit_fee_source, "invest_usd": None, "trigger_value": None,
            "trigger_quote": None, "max_close_net_usd": None, "max_roi": None, "unreachable": None, "value_exec": value_exec,
            "close_net_usd": None, "profit_usd": None, "roi": None, "triggered": False, "remaining_gross_usd": None,
-           "giveback_gross_usd": None, "hold_close_breakeven": None}
+           "giveback_gross_usd": None, "hold_close_breakeven": None, "negative_close": None}
     if side not in ("C", "P") or not _fin(k_sell, k_buy) or k_sell == k_buy or not is_debit(side, k_sell, k_buy):
         return {**out, "status": "not_applicable", "why": "不是借记垂直价差"}
     if not (isinstance(qty, int) and not isinstance(qty, bool) and qty > 0 and isinstance(mult, int) and mult > 0):
@@ -174,6 +176,11 @@ def debit_roi_review(*, side: str, k_sell: float, k_buy: float, cost: float, qty
                unreachable=round(max_close - inv, 2) < round(rule["roi_frac"] * inv, 2))
     if not _fin(value_exec):
         return {**out, "status": "no_quote", "why": "可平仓报价缺失：不输出确定的 100%"}
+    if round(value_exec, 4) > round(width, 4):
+        # 同到期垂直价差的可平仓净价不可能超过宽度：报价异常待复核（Codex 064 T3）。不截断成宽度、不认证止盈，
+        # 也不同时给「不可达」与「已达标」或负的剩余收益。0 与负净价（宽点差）是合法读数，照常计算、不折 0。
+        return {**out, "status": "quote_out_of_range", "triggered": False,
+                "why": f"可平仓净价 {value_exec:g} 超过宽度 {width:g}（超出模型范围）：报价异常待复核，不认证 100%"}
     cnet = round(qm * value_exec - exit_fees, 2)
     p = round(cnet - inv, 2)
     out.update(close_net_usd=cnet, profit_usd=p, roi=round(p / inv, 4),
@@ -181,5 +188,6 @@ def debit_roi_review(*, side: str, k_sell: float, k_buy: float, cost: float, qty
                remaining_gross_usd=round((width - value_exec) * qm, 2), giveback_gross_usd=round(value_exec * qm, 2))
     if 0 < value_exec < width:                       # 两行权价之间：到期 payoff 等于今天 V 的标的价（无费、到期口径）
         out["hold_close_breakeven"] = round(k_buy - value_exec if side == "P" else k_buy + value_exec, 4)
+    out["negative_close"] = value_exec < 0             # 宽点差下可平仓净收入为负：合法读数，单独标出
     out["status"] = "triggered" if out["triggered"] else ("unreachable" if out["unreachable"] else "below")
     return out

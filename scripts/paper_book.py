@@ -63,6 +63,8 @@ def _advisory_cell_v2(r: dict, pnl, note) -> str:
     if rv["status"] in ("incomplete", "not_applicable"):
         return f"；提示 {r['advisory_rule']}：实际付出未知（{rv['why']}）"
     cap = "（最大可达 %.0f%%，100%% 不可达）" % (rv["max_roi"] * 100) if rv["unreachable"] else ""
+    if rv["status"] == "quote_out_of_range":
+        return f"；净利润/实际付出 —（报价超出价差范围，待复核）{cap}"
     if rv["roi"] is None:
         return f"；净利润/实际付出 —（估值不完整）{cap}"
     return f"；净利润/实际付出 {rv['roi']:.0%}" + ("　🔔 ≥100% 提醒讨论止盈（只提示）" if rv["triggered"] else "") + cap

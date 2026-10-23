@@ -67,11 +67,11 @@ EXIT_RULE_STRUCTURES = {"claude-exit-v1": ("credit",), "user-tp90-v1": ("credit"
 # v2（用户 2026-10-23「以后止盈线 100% 含费的时候，要提醒止盈。然后讨论决定是否平仓」；Codex 063-B 正式采纳）：
 # 分母 = 实际入场付出（权利金 + 入场费），净利润另扣预计平仓费；公式唯一来源 spread_econ.debit_roi_review。
 # 已挂 v1 的仓位保留 v1（历史可复现，不静默改写）；新纠正挂 ADVISORY_CURRENT。
-ADVISORY_RULES = {"debit-roi100-review-v1": {"roi_frac": 1.0, "structures": ("debit",), "type": "advisory",
-                                             "status": "uncalibrated"},
-                  "debit-roi100-review-v2-20261023": {"roi_frac": 1.0, "structures": ("debit",), "type": "advisory",
-                                                      "status": "正式提醒政策（收益效果未校准）", "formula": "v2"}}
-ADVISORY_CURRENT = {"debit": "debit-roi100-review-v2-20261023"}
+# 规则表与版本分派的唯一来源：undertow.analyze.debit_advisory（Codex 064 T1：统一巡检与本入口共用，analyze 不反向依赖 scripts）。
+from undertow.analyze import debit_advisory as _da  # noqa: E402
+
+ADVISORY_RULES = _da.ADVISORY_RULES
+ADVISORY_CURRENT = _da.ADVISORY_CURRENT
 
 
 def exit_rule_error(p: dict) -> str | None:
@@ -91,57 +91,14 @@ def exit_rule_error(p: dict) -> str | None:
 
 
 def advisory_triggered(pnl_usd, risk_cost_usd) -> bool:
-    """提示条件的唯一判定（Codex 046 WP2）：含费盈利 P ≥ 含费风险成本 L，按分为单位的金额比较，不先把 ROI 舍入再比
-    （旧版 ROI 四舍五入四位后比 1：P 423.19 / L 423.20 → 1.0 触发，报告却不提示）。显示用的 ROI 另行舍入。"""
-    return _finite(pnl_usd, risk_cost_usd) and risk_cost_usd > 0 and round(pnl_usd, 2) >= round(risk_cost_usd, 2)
+    """提示条件的唯一判定（Codex 046 WP2）；实现在 undertow.analyze.debit_advisory。"""
+    return _da.advisory_triggered(pnl_usd, risk_cost_usd)
 
 
 def advisory_view(p: dict, val, assume, at: datetime | None = None) -> dict | None:
-    """提示规则的只读评估：→ {rule, roi, risk_cost_usd, max_roi, target_unreachable, triggered, ...}；没挂提示规则 → None。
-    经济量从共享 spread_econ（经 economics）读；估值缺失、或有估值假设（某腿缺可成交价按 0 计）→ roi None、不触发。
-    生效（Codex 046 WP2）：评估时刻 at 早于 advisory_effective_at → before_effective，不触发（回放/重建也不补造提示）。
-    未知规则或结构不适用 → config_error（由调用方显式上报，不静默 None）。"""
-    r = p.get("advisory_rule")
-    if not r:
-        return None
-    cfg = ADVISORY_RULES.get(r)
-    if not cfg or p.get("structure", "credit") not in cfg["structures"]:
-        return {"rule": r, "config_error": f"提示规则 {r} 未知或不适用于 {p.get('structure', 'credit')} 结构", "triggered": False}
-    e = economics(p["side"], p["k_sell"], p["k_buy"], p["entry_credit"], p["qty"], p["fee_round_trip"])
-    L, M = e.get("max_loss_usd"), e.get("max_gain_usd")
-    eff = _parse(p.get("advisory_effective_at") or next(
-        (x.get("effective_at") for x in reversed(p.get("events") or []) if x.get("action") == "exit_rule_corrected"
-         and x.get("advisory_rule") == r), None))                  # 早于本字段的纠正：从同一纠正事件取生效时刻
-    out = {"rule": r, "roi": None, "risk_cost_usd": L, "max_roi": None, "target_unreachable": None, "triggered": False,
-           "roi_frac": cfg["roi_frac"], "status": cfg["status"], "effective_at": p.get("advisory_effective_at"),
-           "before_effective": bool(at is not None and eff is not None and at < eff)}
-    if cfg.get("formula") == "v2":
-        return {**out, **_advisory_v2(p, val, assume, out["before_effective"])}
-    if not (_finite(L, M) and L > 0):
-        return out
-    out["max_roi"] = round(M / L, 4)
-    out["target_unreachable"] = M / L < cfg["roi_frac"]
-    if _finite(val) and assume is None:
-        pnl = round(((p["entry_credit"] - val) * 100 - p["fee_round_trip"]) * p["qty"], 2)
-        out["roi"] = round(pnl / L, 4)
-        out["pnl_usd"] = pnl
-        out["triggered"] = advisory_triggered(pnl, cfg["roi_frac"] * L) and not out["before_effective"]
-    return out
-
-
-def _advisory_v2(p: dict, val, assume, before_effective: bool) -> dict:
-    """v2 提醒：模拟仓的入场/平仓费就是往返费模型各一半（模拟成交本来按它记账）。估值有假设 → 当作报价缺失、不触发。"""
-    from undertow.analyze import spread_econ as se
-    fe = p.get("fee_round_trip")
-    half = fe / 2 * p["qty"] if _finite(fe) and fe >= 0 else None
-    ec = p.get("entry_credit")
-    r = se.debit_roi_review(side=p["side"], k_sell=p["k_sell"], k_buy=p["k_buy"], cost=-ec if _finite(ec) else None,
-                            qty=p["qty"], entry_fees=half, exit_fees=half,
-                            value_exec=-val if _finite(val) and assume is None else None,
-                            entry_fee_source="paper_model", exit_fee_source="paper_model")
-    return {"risk_cost_usd": r["invest_usd"], "max_roi": r["max_roi"], "target_unreachable": r["unreachable"],
-            "roi": r["roi"], "pnl_usd": r["profit_usd"], "triggered": bool(r["triggered"]) and not before_effective,
-            "review": r}
+    """提示规则的只读评估（v1 冻结、v2 走 spread_econ.debit_roi_review、生效时刻、越界报价）；实现在
+    undertow.analyze.debit_advisory.advisory_view，统一巡检用同一个函数。没挂提示规则 → None；未知/不适用 → config_error。"""
+    return _da.advisory_view(p, val, assume, at)
 
 
 def in_rth(t: datetime) -> bool:

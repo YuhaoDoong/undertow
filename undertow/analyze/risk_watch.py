@@ -50,6 +50,9 @@ import json
 import math
 from dataclasses import asdict, dataclass, field
 
+from datetime import datetime
+
+from undertow.analyze import debit_advisory as da
 from undertow.analyze import risk_policy as rp
 from undertow.analyze import spread_econ as se
 
@@ -101,6 +104,7 @@ class SpreadView:
     missing_streak: int = 0                 # 连续估值缺失次数（含本次）
     cost_source: str = "unknown"            # plan（用户核定）/ broker_estimate（券商成本推算，未核定）/ paper_fill
     unit_note: str | None = None            # 同标的还有其它在场腿/价差（整体风险单元）→ 两腿成本不代表整轮成本
+    advisory_spec: dict | None = None       # 模拟仓记录（挂的 advisory_rule / 生效时刻 / 事件）；借记提示按它分派（Codex 064 T1）
 
 
 def econ(v: SpreadView) -> dict:
@@ -126,9 +130,19 @@ def debit_review(v: SpreadView, plan: dict | None) -> dict:
     否则按往返费模型的一半（估计）；平仓费恒为模型估计。估值有假设（某腿缺价按 0）→ 当作报价缺失，不触发。"""
     plan = plan or {}
     fe = v.fee_round_trip if _fin(v.fee_round_trip) and v.fee_round_trip >= 0 else None
-    fi_plan = plan.get("entry_fees_usd")
+    fi_plan, qe = plan.get("entry_fees_usd"), plan.get("qty_entered")
+    qe = qe if isinstance(qe, int) and not isinstance(qe, bool) and qe > 0 else None
+    scope_note = None
+    if qe is None:          # 不默认为当前组数（Codex 064 T2）：不知道入场后有没有减仓，就不说整轮
+        scope_note = "入场组数未登记（plan-set --qty-entered），可能有过部分减仓：只算当前两腿子结构，整轮 ROI 未核实"
+    elif qe != v.qty:
+        scope_note = (f"入场 {qe} 组、现 {v.qty} 组：数量有变化，只算剩余 {v.qty} 组子结构"
+                      f"（已平部分的真实现金未计入），整轮 ROI 未核实")
     if _fin(fi_plan) and fi_plan >= 0:
-        fi, fi_src = float(fi_plan), "actual"
+        if qe is not None and qe != v.qty:   # 原整笔入场费不整笔套给剩余组：按组数比例分摊，是估计
+            fi, fi_src = round(float(fi_plan) * v.qty / qe, 2), "allocated"
+        else:
+            fi, fi_src = float(fi_plan), "actual"
     else:
         fi, fi_src = (None if fe is None else fe / 2 * v.qty), "model"
     cost = -v.entry_credit if _fin(v.entry_credit) and v.entry_credit < 0 else None
@@ -136,14 +150,19 @@ def debit_review(v: SpreadView, plan: dict | None) -> dict:
     r = se.debit_roi_review(side=v.side, k_sell=v.k_sell, k_buy=v.k_buy, cost=cost, qty=v.qty, entry_fees=fi,
                             exit_fees=None if fe is None else fe / 2 * v.qty, value_exec=vx,
                             entry_fee_source=fi_src, exit_fee_source="model")
-    return {**r, "unit_note": v.unit_note}
+    return {**r, "unit_note": v.unit_note, "scope_note": scope_note}
+
+
+FEE_SOURCE_TEXT = {"actual": "", "allocated": "（入场费按组数比例分摊，估计）", "model": "（入场费为估计）",
+                   "paper_model": "（模拟仓按往返费模型）"}
 
 
 def debit_review_title(v: SpreadView, r: dict, est: str = "") -> str:
-    fee = "（入场费为估计）" if r["entry_fee_source"] != "actual" else ""
-    if r.get("unit_note"):
+    fee = FEE_SOURCE_TEXT.get(r["entry_fee_source"], "（入场费来源未知）")
+    if r.get("unit_note") or r.get("scope_note"):
         return (f"{v.label}：两腿子结构含费净利润 ${r['profit_usd']:,.0f} ≥ 实际付出 ${r['invest_usd']:,.0f}（≥100%）"
-                f"——同标的还有其它腿，整轮 ROI 未核实，请讨论{fee}")
+                f"——{'同标的还有其它腿' if r.get('unit_note') else '组数未核'}，整轮 ROI 未核实，请讨论{fee}"
+                f"{'（成本估算）' if est else ''}")
     return (f"{v.label}：含费净利润 ${r['profit_usd']:,.0f} ≥ 实际入场付出 ${r['invest_usd']:,.0f}"
             f"（ROI {r['roi']:.0%}，≥100%），提醒讨论是否止盈{fee}{'（成本估算）' if est else ''}")
 
@@ -153,9 +172,43 @@ def debit_review_body(v: SpreadView, r: dict, est: str = "") -> str:
     if r.get("hold_close_breakeven") is not None:
         sc += f"；到期标的 {r['hold_close_breakeven']:g} 时与现在平相同"
     return (f"{r['rule']}：用户 2026-10-23 的提醒政策（收益效果未校准），只提醒、平不平由你决定。"
-            f"按可平仓对手价 {r['value_exec']:.2f}/股（触发净价 {r['trigger_value']:.3f}，可挂 {r['trigger_quote']:.2f}）。"
+            f"按可平仓对手价 {r['value_exec']:.2f}/股（触发净价 {r['trigger_value']:.3f}；"
+            f"按假设最小报价单位 0.01 向上取整的参考价 {r['trigger_quote']:.2f}，券商报价单位未核实）。"
             f"情景（无费、到期口径，是幅度不是概率）：{sc}。平仓费为模型估计。"
-            f"{('同标的整体：' + r['unit_note'] + '。') if r.get('unit_note') else ''}{est}{LEG_ORDER_NOTE}")
+            f"{('同标的整体：' + r['unit_note'] + '。') if r.get('unit_note') else ''}"
+            f"{(r['scope_note'] + '。') if r.get('scope_note') else ''}{est}{LEG_ORDER_NOTE}")
+
+
+def _paper_debit_advisory(v: SpreadView, at: datetime | None, rules: dict, nums: dict, out: list, est: str) -> None:
+    """模拟仓借记价差：按记录挂的提示规则与生效时刻分派（debit_advisory，与模拟仓入口同一函数；Codex 064 T1）。
+    没挂规则 → 不适用；未知/不适用的规则 → missing(advisory_rule)；未生效 → 不适用、不提醒；越界报价 → 复核提醒、不认证止盈。"""
+    a = da.advisory_view(v.advisory_spec, v.value, v.value_assumption, at) if v.advisory_spec is not None else None
+    nums["paper_advisory"] = a
+    if a is None:
+        rules["take_profit"] = {"status": NA, "why": "模拟仓未挂提示规则"}
+        return
+    if a.get("config_error"):
+        rules["take_profit"] = {"status": MISSING, "input": "advisory_rule", "why": a["config_error"]}
+        return
+    if a.get("quote_status") == "quote_out_of_range":
+        rules["take_profit"] = {"status": MISSING, "input": "quote_quality", "why": a["why"]}
+        out.append(RiskItem(f"quote_anomaly|{v.key}", "warn", v.scope, f"{v.label}：可平仓报价超出价差范围，待复核",
+                            a["why"] + "；止盈提示本轮未判定（不是没到线）", nums))
+        return
+    if a["before_effective"]:
+        rules["take_profit"] = {"status": NA, "why": f"提示规则 {a['rule']} 尚未生效（{a.get('effective_at')}）"}
+        return
+    if not a["triggered"]:
+        return
+    if a.get("review"):                                  # v2：与实盘同一文案
+        r = {**a["review"], "unit_note": None, "scope_note": None}
+        out.append(RiskItem(f"take_profit|{v.key}", "warn", v.scope, debit_review_title(v, r, est),
+                            debit_review_body(v, r, est), nums))
+    else:                                                # v1：历史规则原口径（分母 = 含费风险成本）
+        out.append(RiskItem(f"take_profit|{v.key}", "warn", v.scope,
+                            f"{v.label}：含费盈利 ${a['pnl_usd']:,.0f} ≥ 含费风险成本 ${a['risk_cost_usd']:,.0f}"
+                            f"（{a['rule']}，{a['roi']:.0%}），考虑止盈（只提示）",
+                            f"{a['rule']}（未校准，只提示、从不平仓）。{LEG_ORDER_NOTE}", nums))
 
 
 # —— 私有持仓计划（data/account/position_plans.json）——
@@ -170,6 +223,9 @@ def validate_plans(obj) -> str | None:
         for f in ("take_profit_value", "stop_value", "cost_per_share", "fee_round_trip", "entry_fees_usd"):
             if p.get(f) is not None and not (_fin(p[f]) and p[f] >= 0):
                 return f"{k}：{f} 必须是非负有限数"
+        qe = p.get("qty_entered")
+        if qe is not None and not (isinstance(qe, int) and not isinstance(qe, bool) and qe > 0):
+            return f"{k}：qty_entered 必须是正整数（按成交核定的入场组数）"
         if p.get("cost_side") is not None and p["cost_side"] not in ("debit", "credit"):
             return f"{k}：cost_side 只能是 debit / credit"
         inv = p.get("invalidation")
@@ -214,7 +270,7 @@ def evaluate_spread(v: SpreadView, plan: dict | None, *, today: str, now_hm: str
 
 def assess_spread(v: SpreadView, plan: dict | None, *, today: str, now_hm: str, ref_prices: dict | None = None,
                   close_hm: str | None = None, meta: dict = RISK_WATCH_META,
-                  plan_problem: str | None = None) -> tuple[list[RiskItem], dict]:
+                  plan_problem: str | None = None, at: datetime | None = None) -> tuple[list[RiskItem], dict]:
     """→ (提醒, 覆盖)。today = 美东日期，now_hm = 美东 HH:MM，close_hm = 当日收市 HH:MM（market_calendar；None = 未知）。
     覆盖 = {"key","scope","label","rules": {规则: {"status", "input"?, "why"?, "source"?}}}。
     plan_problem：计划文件存在但读不了/不合格（Codex 054 R1）。此时计划规则（计划止损、失效位、复核日）记 missing(input="plan")
@@ -264,9 +320,15 @@ def assess_spread(v: SpreadView, plan: dict | None, *, today: str, now_hm: str, 
     else:
         rules["take_profit"] = {"status": CHECKED, "source": v.cost_source}
     if clean and pnl is not None:
-        if debit:
+        if debit and v.scope == "paper":
+            _paper_debit_advisory(v, at, rules, nums, out, est)
+        elif debit:
             r = debit_review(v, plan)
             nums["debit_roi_review"] = r
+            if r["status"] == "quote_out_of_range":
+                rules["take_profit"] = {"status": MISSING, "input": "quote_quality", "why": r["why"]}
+                out.append(RiskItem(f"quote_anomaly|{v.key}", "warn", v.scope, f"{v.label}：可平仓报价超出价差范围，待复核",
+                                    r["why"] + "；止盈提醒本轮未判定（不是没到线）", nums))
             if r["triggered"]:
                 out.append(RiskItem(f"take_profit|{v.key}", "warn", v.scope, debit_review_title(v, r, est),
                                     debit_review_body(v, r, est), nums))

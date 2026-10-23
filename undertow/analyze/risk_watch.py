@@ -28,7 +28,7 @@
    合成净收 1、卖腿 100、标的 99.9、平仓成本 0.2 时含费仍浮盈）：提示分列当前含费估值、到期盈亏平衡与指派风险；
    到期 ≤ expiry_near_tdays 个交易日且卖腿近价或价内（借记、贷记都算）→ warn：钉价/指派风险。
    分腿平仓顺序（用户 2026-10-15 纠正：长桥组合单可以分腿平）：**先买回卖腿，再卖出买腿**，否则会留下裸卖。
-4. 计划减损线：借记价差持有价值（−value）≤ 计划 stop_value → urgent；模拟仓贷记价差价值 ≥ 其 stop_value → urgent。
+4. 计划减损线：借记价差持有价值（−value）≤ 计划 stop_value → urgent；贷记价差平仓成本（value）≥ 止损线 → urgent，止损线取私有计划 stop_value（实盘），没有则取模拟仓自带的。
    借记价差「理论到期最大亏损 = 已付权利金」不等于没有处置风险：短腿仍可能被提前指派，产生股票头寸与资金占用（券商处置未核实）。
 5. 复核日：计划 review_date 到达 → info（当天一次）。
 6. 账户：任一币种现金为负 → warn；试行暂停已锁 → urgent；试行未建立/连续亏损不可判定/账本 incomplete → info；账本超 POLICY_B → urgent。
@@ -282,7 +282,9 @@ def assess_spread(v: SpreadView, plan: dict | None, *, today: str, now_hm: str, 
 
     # 4. 减损/止损线（估值有假设也照报：假设只会让估值更差，报出来让人去看）
     sv = plan.get("stop_value")
-    stop_applies = (debit and _fin(sv)) or (not debit and _fin(v.stop_value))
+    # 贷记价差：私有计划的止损线优先（实盘），否则用模拟仓自带的。旧版只认模拟仓自带，实盘贷记写了 plan stop 也静默不报
+    csv = sv if (not debit and _fin(sv)) else v.stop_value
+    stop_applies = (debit and _fin(sv)) or (not debit and _fin(csv))
     rules["stop"] = (pmiss or {"status": NA}) if not stop_applies else (qmiss if v.value is None else {"status": CHECKED})
     if v.value is not None and _fin(sv) and debit and -v.value <= sv:
         out.append(RiskItem(f"stop|{v.key}", "urgent", v.scope,
@@ -291,10 +293,11 @@ def assess_spread(v: SpreadView, plan: dict | None, *, today: str, now_hm: str, 
                             (f"（含费 ${L:,.0f}）" if _fin(L) else "") +
                             "；但理论限损不等于没有处置风险：短腿仍可能被提前指派，产生股票头寸与资金占用（券商处置未核实）" +
                             (f"；估值假设：{v.value_assumption}" if v.value_assumption else ""), nums))
-    if v.value is not None and _fin(v.stop_value) and not debit and v.value >= v.stop_value:
+    if v.value is not None and _fin(csv) and not debit and v.value >= csv:
         out.append(RiskItem(f"stop|{v.key}", "urgent", v.scope,
-                            f"{v.label}：平仓成本 {v.value:.2f} ≥ 止损线 {v.stop_value:.2f}",
-                            "模拟仓止损规则会在下一个盯市时点按其体检执行" +
+                            f"{v.label}：平仓成本 {v.value:.2f} ≥ 止损线 {csv:.2f}",
+                            ("模拟仓止损规则会在下一个盯市时点按其体检执行" if v.scope == "paper" else
+                             "按私有计划止损：本工具只提醒、从不下单。" + LEG_ORDER_NOTE) +
                             (f"；估值假设：{v.value_assumption}" if v.value_assumption else ""), nums))
 
     # 2. 计划失效位

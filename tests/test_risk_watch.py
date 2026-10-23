@@ -86,6 +86,19 @@ def test_debit_plan_stop_and_credit_paper_stop():
     assert "stop" in keys(ev(uso(value=-0.40, value_assumption="buy_bid_missing"), plan={"stop_value": 0.5}))
 
 
+
+def test_live_credit_plan_stop_is_honoured():
+    """2026-10-23：实盘贷记价差在私有计划写了 stop_value，旧版只认模拟仓自带的 stop_value → 静默不报。"""
+    live = dict(key="live|SLV|2026-10-30|P|50/48", scope="live", label="SLV 48/50P", underlying="SLV",
+                expiry="2026-10-30", side="P", k_sell=50.0, k_buy=48.0, entry_credit=1.10, qty=2,
+                fee_round_trip=3.2, spot=47.5, tdays_to_expiry=5, stop_value=None)
+    hit = [i for i in ev(credit(**live, value=1.63), plan={"stop_value": 1.63}) if i.key.startswith("stop")]
+    assert len(hit) == 1 and hit[0].severity == "urgent" and "先买回卖腿" in hit[0].detail
+    assert "stop" not in keys(ev(credit(**live, value=1.62), plan={"stop_value": 1.63}))
+    assert "stop" not in keys(ev(credit(**live, value=1.90)))             # 没写计划止损：不报（最大亏损口径）
+    # 计划优先于视图自带
+    assert "stop" in keys(ev(credit(value=4.0), plan={"stop_value": 3.5}))
+
 # —— 2. 失效位 ——
 INV = {"invalidation": {"ref": "BZ=F", "op": "<", "level": 101.50, "basis": "close", "underlying_equiv": 149.0}}
 

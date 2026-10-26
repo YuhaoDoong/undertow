@@ -1,0 +1,26 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 25479,
+ "started_at": "2026-10-26T09:58:44.053880+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/GOOGL/2026-10-26",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-10-26.json.gz",
+   "sha256": "25840f2d55863cc351a0a3af4c4b9bcf7ed11c54243206827a1a400ced223057",
+   "captured_at": 1793007290.015223,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-26T09:58:57.212655+00:00",
+ "rc": 0,
+ "git_head": "4b779b28d72ab9340795c0e605d38dae8b90aee2"
+}

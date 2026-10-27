@@ -1,0 +1,36 @@
+{
+ "schema": 1,
+ "command": "dirledger",
+ "argv": [
+  "dirledger",
+  "record"
+ ],
+ "pid": 39053,
+ "started_at": "2026-10-27T09:33:45.173445+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-10-26",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-10-26.json.gz",
+   "sha256": "0f7418434124a3ea06e6ef1662830cf191f9e0d0488efab57b89902372773541",
+   "captured_at": 1793009662.460222,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SLV/2026-10-26",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SLV/2026-10-26.json.gz",
+   "sha256": "0944b36884fdc8f97483f42513273286662cd04f19651a6dff2917265202987b",
+   "captured_at": 1793009663.875904,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-27T09:33:49.806130+00:00",
+ "rc": 0,
+ "git_head": "3c8011c9215dfb3a59cf8d193a7671e0c12cb19d"
+}

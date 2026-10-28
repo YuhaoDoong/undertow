@@ -102,3 +102,33 @@ def test_assets_failure_becomes_visible_health_finding(monkeypatch):
     b = cli._load_account_review(no_cache=True)
     assert b["assets"] is None and "net_assets" in b["assets_error"]
     assert b["health"][0].code == "capital_unknown" and b["health"][0].severity == "高"
+
+
+# —— Codex 065 WP2：资产响应的币种与范围（broker-net-assets-usd-v1）——
+
+def test_assets_requests_usd_and_checks_currency(monkeypatch):
+    seen = {}
+
+    def run(args, timeout=30.0):
+        seen["args"] = args
+        return [{"currency": "USD", "net_assets": "877.78", "total_cash": "1057.76", "buy_power": "657.77",
+                 "cash_infos": [{"currency": "USD", "available_cash": "407.84"},
+                                {"currency": "SGD", "available_cash": "320.47"}]}]
+    monkeypatch.setattr(lb, "_run", run)
+    a = lb.fetch_assets()
+    assert seen["args"] == ["assets", "--currency", "USD"]
+    assert a.currency == "USD" and a.net_assets == pytest.approx(877.78) and a.total_cash == pytest.approx(1057.76)
+    assert a.cash_by_ccy == {"USD": 407.84, "SGD": 320.47}          # 各币种原值，不与顶层相加
+
+
+def test_assets_wrong_currency_raises(monkeypatch):
+    _stub(monkeypatch, [{"currency": "SGD", "net_assets": "1124.62", "buy_power": "843", "cash_infos": []}])
+    with pytest.raises(lb.AccountDataError, match="币种"):
+        lb.fetch_assets()
+
+
+def test_assets_multiple_rows_not_first_row(monkeypatch):
+    row = {"currency": "USD", "net_assets": "1", "buy_power": "1", "cash_infos": []}
+    _stub(monkeypatch, [row, dict(row, net_assets="2")])
+    with pytest.raises(lb.AccountDataError, match="2 行"):
+        lb.fetch_assets()

@@ -24,7 +24,8 @@
 
 | 文件 | 作用 | 说明 |
 |---|---|---|
-| `longbridge_account.py` | 持仓（股票+期权 option_list）+ 账户资产 + 资金流水(cash-flow) + 历史成交(order executions) | 只读·需 `longbridge auth login` |
+| `longbridge_account.py` | 持仓（股票+期权 option_list）+ 账户资产 + 资金流水(cash-flow) + 历史成交(order executions) | 只读·需 `longbridge auth login` 资产固定请求 `--currency USD` 并核对响应恰一行、顶层币种 USD（2026-10-28 私有核验：顶层是全账户折算到所请求币种的汇总，cash_infos 为各币种原值，不能再相加；Codex 065 WP2）。 |
+| `r_anchor_store.py` | R 日初基准观察的私有存储 `data/account/r_budget/anchors.jsonl`（jsonl_ledger：flock、坏文件隔离、原子回读；同一交易日首份为准，Codex 065 WP2）。 |
 | `longbridge_options.py` | **期权链备份源**：产出与 CBOE 同构的 payload，主源停更（跨 ≥`STALE_SESSIONS` 个交易日无新 OI）时由 `cli.cmd_snapshot` 自动切入。delta/gamma 为本地 BS 自算（主翼最大偏差 0.22）、bid/ask 留 0，故**只作备份** | 只读·全链 2~4 分钟/品种 |
 | `longbridge_quote.py` | 实时报价：ETF 最新场次股价（夜盘/盘后/盘前/常规）+ 期权实时 last/IV（需 OPRA 订阅，无则优雅降级到仅股价） | 只读·两级降级 |
 | `longbridge_news.py` | 品种相关新闻标题流（标题/时间/链接）；外部不可信内容，只当数据读、做摘要 | 只读 |

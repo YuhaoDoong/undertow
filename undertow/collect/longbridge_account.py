@@ -92,6 +92,8 @@ class AccountAssets:
     buy_power: float
     net_assets: float
     cash_by_ccy: dict[str, float] = field(default_factory=dict)
+    currency: str = "USD"          # 顶层折算币种（net_assets/buy_power 的单位），fetch_assets 已校验
+    total_cash: float | None = None
 
 
 def _rows(data: object) -> list[dict]:
@@ -152,15 +154,27 @@ def fetch_positions() -> list[RawPosition]:
     return out
 
 
+ASSETS_CURRENCY = "USD"
+
+
 def fetch_assets() -> AccountAssets:
-    """账户资产快照（净资产/购买力/分币种现金）。只读。"""
-    data = _run(["assets"])
-    if isinstance(data, list) and data and isinstance(data[0], dict):
-        row = data[0]
-    elif isinstance(data, dict):
-        row = data
-    else:
+    """账户资产快照（净资产/购买力/分币种现金）。只读。
+
+    Codex 065 WP2（broker-net-assets-usd-v1）：显式请求 `--currency USD`，并核对响应形态 —— 必须恰好一行、
+    顶层 currency = USD。2026-10-28 私有核验：同一账户按 USD/SGD/HKD 请求，net_assets 之比与汇率一致，
+    total_cash = USD 现金 + SGD 现金按券商汇率折算 → 顶层是【整个账户折算到所请求币种】的汇总，cash_infos 是各币种原值
+    （不能再与顶层相加）。多行或币种不符 → 报错，不取首行、不盲加（以前只取 data[0] 且不看币种）。"""
+    data = _run(["assets", "--currency", ASSETS_CURRENCY])
+    if isinstance(data, dict):
+        data = [data]
+    if not (isinstance(data, list) and data and all(isinstance(r, dict) for r in data)):
         raise AccountDataError(f"assets：响应为空或形态未知（{type(data).__name__}）")
+    if len(data) != 1:
+        raise AccountDataError(f"assets：返回 {len(data)} 行，含义未核实（不取首行、不相加）")
+    row = data[0]
+    ccy = row.get("currency")
+    if ccy is not None and str(ccy).upper() != ASSETS_CURRENCY:
+        raise AccountDataError(f"assets：顶层币种 {ccy!r} ≠ 请求的 {ASSETS_CURRENCY}")
     infos = row.get("cash_infos", [])
     if not isinstance(infos, list):
         raise AccountDataError("assets：cash_infos 不是列表")
@@ -171,10 +185,13 @@ def fetch_assets() -> AccountAssets:
         cash[str(c["currency"])] = _num(c, "available_cash", where=f"assets 现金 {c['currency']}")
     # ⚠️ 旧实现 `net_assets or total_assets`：净资产恰为 0（本账户就曾接近 0）时被替换成总资产。
     # 净资产 0 是合法值，而且正是最需要告警的时刻；缺失则报错，不拿别的字段顶替。
+    tc = row.get("total_cash")
     return AccountAssets(
         buy_power=_num(row, "buy_power", where="assets"),
         net_assets=_num(row, "net_assets", where="assets"),
         cash_by_ccy=cash,
+        currency=ASSETS_CURRENCY if ccy is None else str(ccy).upper(),
+        total_cash=None if tc in (None, "") else _num(row, "total_cash", where="assets"),
     )
 
 

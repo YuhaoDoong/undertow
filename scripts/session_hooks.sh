@@ -383,6 +383,22 @@ close_backup() {
     fi
   fi
 }
+# ⑱ 预算权益 R 的日初基准（Codex 065 WP2，用户 2026-10-28 确认启用）：收市后（ET 16:15 起）与次日盘前（09:00–09:29）
+#    各尝试一次 `trial r-anchor`，只读账户、写私有 data/account/r_budget/anchors.jsonl；同一交易日首份为准（再跑返回已存在）。
+#    缺这份基准 → 次日开盘后 R 不可判定、实盘预算冻结新增（不拿陈旧值顶替），所以失败要当场可见：当天 2 次失败即通知。
+#    本日志会入库：只记成败，不记金额。
+r_anchor_capture() {  # $1=阶段标签（close/pre）
+  local OKF="$LOG_DIR/.r_anchor_${ET_DATE}_$1.ok" FAILF="$LOG_DIR/.r_anchor_fail_${ET_DATE}" RES RC
+  [[ -f "$OKF" ]] && return
+  RES=$("$PY" -m undertow.cli trial r-anchor 2>&1); RC=$?
+  if (( RC == 0 )); then : > "$OKF"; hb "⑱R 日初基准（$1）：✅ $(printf '%s' "$RES" | tail -1 | clip 60)"
+  elif (( RC == 3 )); then : > "$OKF"; hb "⑱R 日初基准（$1）：不在日终窗口，跳过"
+  else
+    printf 'x' >> "$FAILF"
+    hb "⑱R 日初基准（$1）：⏳ rc=$RC，下次唤醒重试"
+    [[ $(wc -c < "$FAILF") -eq 2 ]] && notify "⚠️ R 日初基准未采到" "rc=$RC；开盘后实盘预算将冻结新增，可手动 undertow trial r-anchor"
+  fi
+}
 # ⑯ 盘中持仓风险巡检（用户 2026-10-15：「以后每天需要评估一下持仓风险（实盘和模拟仓都要）。每天盘中定时检查风险，
 #    有需要提示的再通知我，正常情况不用提示。」）：交易日 ET 09:45 起每 30 分钟一个桶，到核心收市窗口（shadow windows 的 close 行）
 #    末分钟为止（常规日 15:45、半日市 12:45）。`undertow riskwatch run` 只读实盘 + 模拟仓 + 账户。
@@ -467,6 +483,8 @@ if (( SHW_RC == 0 )); then
     if (( ET_MIN >= 1000 )); then close_backup; fi
     if (( ET_MIN >= 990 )); then paper_book; fi
     if (( ET_MIN >= 980 )); then fieldcheck close; thesisq close; fi
+    if (( ET_MIN >= 975 )); then r_anchor_capture close; fi
+    if (( ET_MIN >= 540 && ET_MIN < 570 )); then r_anchor_capture pre; fi
   fi
 else
   # 日历失效（覆盖期外）或命令崩溃：窗口来源没了，不能当作「今天没窗口」静默跳过

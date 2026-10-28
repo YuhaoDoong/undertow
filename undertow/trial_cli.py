@@ -307,6 +307,98 @@ def cmd_resume(args) -> int:
     return 0
 
 
+# —— 预算权益 R（Codex 065 WP2，broker-net-assets-usd-v1）——
+
+def r_view(*, assets=None, now: datetime | None = None, policy_version: str | None = None) -> dict:
+    """当前 R 快照（只读）：日初基准（私有 anchors）+ 已登记外部资金（trial 状态）+ 当前券商净资产。
+    任何一项读不到 → 快照 incomplete（R=None），不拿 net_assets 顶替。assets 可由调用方传入，避免同一次扫描两次取数。"""
+    from undertow.analyze import r_budget as rb
+    from undertow.analyze import trial_reconcile as tr
+    from undertow.collect import longbridge_account as lb
+    from undertow.collect import r_anchor_store as ras
+    now = now or datetime.now(timezone.utc)
+    problems = []
+    try:
+        anchors = ras.load()
+    except Exception as e:                                     # noqa: BLE001 —— 损坏已隔离；基准未知 → incomplete
+        anchors, problems = [], problems + [f"日初基准文件不可读：{str(e)[:160]}"]
+    st, prob = ts.load()
+    flows = (st or {}).get("external_flows") or []
+    if prob:
+        problems.append(f"试行状态不可读（外部资金未知）：{str(prob)[:120]}")
+    E_now = None
+    try:
+        a = assets if assets is not None else lb.fetch_assets()
+        if getattr(a, "currency", "USD") != "USD":
+            problems.append(f"资产币种 {a.currency} ≠ USD")
+        else:
+            E_now = a.net_assets
+    except Exception as e:                                     # noqa: BLE001
+        problems.append(f"账户净资产读不到：{str(e)[:120]}")
+    anchor, _, _ = rb.select_anchor(anchors, now)
+    nbroker = None
+    if anchor is not None:
+        try:
+            since = tc.ts(anchor["captured_at"])
+            rows = lb.fetch_cash_flow(start=since.date().isoformat())
+            nbroker = sum(1 for r in rows if r.get("flow_name") in tr.EXTERNAL
+                          and (tc.ts(r.get("business_time")) or since) > since)
+        except Exception:                                      # noqa: BLE001 —— 只影响说明（未登记入金不提额）
+            nbroker = None
+    snap = rb.snapshot(anchors=anchors, flows=[] if prob else flows, E_now=E_now if not prob else None, captured_at=now,
+                       policy_version=policy_version or rp.VERSION_B, broker_external_rows=nbroker)
+    if problems:
+        snap["missing_fields"] += problems
+    return snap
+
+
+def r_lines(snap: dict) -> list[str]:
+    f = lambda x: "未知" if x is None else f"${x:,.2f}"
+    st = {"ok": "", "no_new_risk": "（⛔ 禁止新增风险）", "incomplete": "（不可判定 → 新增冻结）"}.get(snap.get("status"), "")
+    out = [f"预算权益 R = {f(snap.get('R_budget'))}{st}  ·  口径 {snap['R_basis_version']}  ·  快照 {snap['snapshot_id']}",
+           f"  = max(0, min(A, E_now))；A = E0 {f(snap.get('E0'))}（{snap.get('origin') or '—'}，{snap.get('E0_market_session') or '—'}）"
+           f" + 已登记外部资金 {f(snap.get('net_external_F'))} = {f(snap.get('anchor_adjusted_A'))}；E_now {f(snap.get('E_now'))}",
+           f"  基准：{snap.get('anchor_note')}" + (f"；约束项 {snap['binding']}" if snap.get("binding") else "")]
+    out += [f"  · {x}" for x in snap.get("assumptions", [])]
+    out += [f"  ⚠️ {x}" for x in snap.get("missing_fields", []) if x not in ("E0", "E_now")]
+    return out
+
+
+def cmd_r(args) -> int:
+    snap = r_view()
+    for line in r_lines(snap):
+        print(line)
+    return 0 if snap["status"] != "incomplete" else 3
+
+
+def cmd_r_anchor(args) -> int:
+    """采集日初基准（只读账户、写私有 anchors）。收市后到下一次开盘前 → 该交易日的日终观察（首份为准，再采返回 exists）；
+    盘中只能 --bootstrap 且必须写原因（首次部署/漏采补救）。rc：0 已记录或已存在；3 当前不是日终窗口；1 失败。"""
+    from undertow.analyze import r_budget as rb
+    from undertow.collect import longbridge_account as lb
+    from undertow.collect import r_anchor_store as ras
+    now = datetime.now(timezone.utc)
+    if args.bootstrap and not (args.note or "").strip():
+        print("bootstrap 必须用 --note 写明原因"); return 1
+    if not args.bootstrap:
+        sess, why = rb.eod_session_for_capture(now)
+        if sess is None:
+            print(f"不是日终观察窗口：{why}"); return 3
+    try:
+        a = lb.fetch_assets()
+    except Exception as e:                                     # noqa: BLE001
+        print(f"账户读不到，未记录：{str(e)[:160]}"); return 1
+    if a.currency != "USD":
+        print(f"资产币种 {a.currency} ≠ USD，未记录"); return 1
+    row = rb.anchor_record(E=a.net_assets, captured_at=now, origin="bootstrap" if args.bootstrap else "eod",
+                           market_session=None if args.bootstrap else sess.isoformat(), note=args.note or "")
+    try:
+        res = ras.record(row)
+    except Exception as e:                                     # noqa: BLE001 —— 坏文件已隔离，不覆盖
+        print(f"基准文件写入失败（未覆盖）：{str(e)[:160]}"); return 1
+    print(f"{'已记录' if res == 'inserted' else '已存在（首份为准，未覆盖）'}：{row['id']}"); return 0
+
+
 def register(sub):
     p = sub.add_parser("trial", help="实盘试行（政策 B）状态、额度与暂停；只读，从不下单、不入金")
     ss = p.add_subparsers(dest="trial_cmd", required=True)
@@ -327,3 +419,8 @@ def register(sub):
     rc.add_argument("--apply", action="store_true"); rc.add_argument("--note", default="")
     rc.set_defaults(func=cmd_reconcile)
     r = ss.add_parser("resume"); r.add_argument("--note", required=True); r.set_defaults(func=cmd_resume)
+    ss.add_parser("r", help="预算权益 R 快照（Codex 065：max(0, min(日初基准+已登记外部资金, 当前净资产))；只读）"
+                  ).set_defaults(func=cmd_r)
+    ra = ss.add_parser("r-anchor", help="采集 R 的日初基准（收市后=日终观察；盘中只能 --bootstrap --note）")
+    ra.add_argument("--bootstrap", action="store_true"); ra.add_argument("--note", default="")
+    ra.set_defaults(func=cmd_r_anchor)

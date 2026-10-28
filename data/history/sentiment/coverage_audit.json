@@ -1,0 +1,137 @@
+{
+ "rule_version": "sentiment-panel-v0-20261028",
+ "generated_at": "2026-10-28T02:14:13.635089+00:00",
+ "vol": {
+  "OVX": {
+   "first": "2009-09-18",
+   "last": "2026-10-27",
+   "n": 4301,
+   "n_reconstructed": 0,
+   "n_unknown_vintage": 4301,
+   "gaps_over_10d": [],
+   "source_hash": "632285cda1b161520626f0ba588f6f7649e2fbf1fdfd3971d07be693c834fd48",
+   "note": "今天下载的历史；除 VXSLV 回算段外均为 unknown_vintage（未证明与当时公开值一致）"
+  },
+  "VXN": {
+   "first": "2009-09-14",
+   "last": "2026-10-27",
+   "n": 4309,
+   "n_reconstructed": 0,
+   "n_unknown_vintage": 4309,
+   "gaps_over_10d": [],
+   "source_hash": "91d116f856d2d5b204880dd75c747618423f74b74e570830e524d1a1323d54ca",
+   "note": "今天下载的历史；除 VXSLV 回算段外均为 unknown_vintage（未证明与当时公开值一致）"
+  },
+  "VXSLV": {
+   "first": "2011-03-16",
+   "last": "2026-10-27",
+   "n": 3109,
+   "n_reconstructed": 21,
+   "n_unknown_vintage": 3088,
+   "gaps_over_10d": [
+    [
+     "2022-02-11",
+     "2025-05-15"
+    ]
+   ],
+   "source_hash": "d163477adf8446a366a2aaba9c52c9ac95b25f48e322e2105d027905b546ab3d",
+   "note": "今天下载的历史；除 VXSLV 回算段外均为 unknown_vintage（未证明与当时公开值一致）"
+  },
+  "GVZ": {
+   "first": "2009-09-18",
+   "last": "2026-10-27",
+   "n": 4301,
+   "n_reconstructed": 0,
+   "n_unknown_vintage": 4301,
+   "gaps_over_10d": [],
+   "source_hash": "6738c3ca1a7972494ae5b37c5d85a1cb06ab97e8e2fb463b25e7df9125d38b82",
+   "note": "今天下载的历史；除 VXSLV 回算段外均为 unknown_vintage（未证明与当时公开值一致）"
+  },
+  "VIX": {
+   "first": "1990-01-02",
+   "last": "2026-10-27",
+   "n": 9303,
+   "n_reconstructed": 0,
+   "n_unknown_vintage": 9303,
+   "gaps_over_10d": [],
+   "source_hash": "6da7f149324ec456c80f6d7e96c90b5d3bcaa3d0f6a4274f7840542db9809265",
+   "note": "今天下载的历史；除 VXSLV 回算段外均为 unknown_vintage（未证明与当时公开值一致）"
+  }
+ },
+ "cot": {
+  "gold": {
+   "first": "2018-10-09",
+   "last": "2026-10-20",
+   "n_reports": 420,
+   "category_actual": "managed_money",
+   "report_type": "disaggregated_fut",
+   "vintage": "today_revision_only（全部 reconstructed）",
+   "n_missing_long_or_short": 0
+  },
+  "silver": {
+   "first": "2018-10-09",
+   "last": "2026-10-20",
+   "n_reports": 420,
+   "category_actual": "managed_money",
+   "report_type": "disaggregated_fut",
+   "vintage": "today_revision_only（全部 reconstructed）",
+   "n_missing_long_or_short": 0
+  },
+  "wti": {
+   "first": "2018-10-09",
+   "last": "2026-10-20",
+   "n_reports": 420,
+   "category_actual": "managed_money",
+   "report_type": "disaggregated_fut",
+   "vintage": "today_revision_only（全部 reconstructed）",
+   "n_missing_long_or_short": 0
+  },
+  "qqq": {
+   "first": "2018-10-09",
+   "last": "2026-10-20",
+   "n_reports": 420,
+   "category_actual": "noncommercial",
+   "report_type": "legacy_fut",
+   "vintage": "today_revision_only（全部 reconstructed）",
+   "n_missing_long_or_short": 0
+  }
+ },
+ "options": {
+  "GLD": {
+   "n_sessions": 80,
+   "first": "2026-06-26",
+   "last": "2026-10-27",
+   "n_skew30_valid": 78,
+   "n_valuation_unknown": 0,
+   "missing_reasons": [
+    "no_expiry_bracket_30d"
+   ]
+  },
+  "SLV": {
+   "n_sessions": 79,
+   "first": "2026-06-26",
+   "last": "2026-10-27",
+   "n_skew30_valid": 79,
+   "n_valuation_unknown": 0,
+   "missing_reasons": []
+  },
+  "USO": {
+   "n_sessions": 79,
+   "first": "2026-06-26",
+   "last": "2026-10-27",
+   "n_skew30_valid": 79,
+   "n_valuation_unknown": 0,
+   "missing_reasons": []
+  },
+  "QQQ": {
+   "n_sessions": 60,
+   "first": "2026-07-31",
+   "last": "2026-10-27",
+   "n_skew30_valid": 58,
+   "n_valuation_unknown": 0,
+   "missing_reasons": [
+    "no_expiry_bracket_30d"
+   ]
+  }
+ }
+}

@@ -48,7 +48,7 @@ def _evaluate_in_store(equity, equity_complete, asof, latest_fill_at, persist: b
     out = {}
 
     def fn(cur):
-        s2, v = tc.evaluate(cur, equity=equity, equity_complete=equity_complete, asof=asof, policy=rp.POLICY_B,
+        s2, v = tc.evaluate(cur, equity=equity, equity_complete=equity_complete, asof=asof, policy=rp.LIVE_POLICY,
                             latest_fill_at=latest_fill_at)
         out["view"] = v
         return s2 if persist else None
@@ -60,8 +60,10 @@ def _evaluate_in_store(equity, equity_complete, asof, latest_fill_at, persist: b
 
 
 def _check_identity(st) -> str | None:
-    if st["policy_version"] != rp.VERSION_B:
-        return f"试行状态的政策版本 {st['policy_version']} ≠ 现行 {rp.VERSION_B}：不自动沿用，需重新确认"
+    """试行状态（起始资本、latch、交易登记）只在同一政策谱系内沿用：065 r1 只改大仓线与 R，暂停规则未改，
+    所以 B 下建立的状态继续有效（state_lineage）；谱系外的版本不自动沿用。"""
+    if st["policy_version"] not in rp.LIVE_POLICY["state_lineage"]:
+        return f"试行状态的政策版本 {st['policy_version']} 不在现行 {rp.LIVE_POLICY['version']} 的谱系内：不自动沿用，需重新确认"
     return None
 
 
@@ -106,13 +108,16 @@ def cmd_status(args) -> int:
     st2, v, prob = _evaluate_in_store(equity, complete, _now(), fill, persist=True)
     if prob:
         print(f"⚠️ {prob}\n新增一律冻结。"); return 2
-    P = rp.POLICY_B
-    R = equity
+    P = rp.LIVE_POLICY
+    snap = r_view(policy_version=P["version"])
+    R = snap["R_budget"]
     f = lambda x: "未知" if x is None else f"${x:,.2f}"
     pct = lambda x: "—" if x is None else format(x, ".1%")
-    print(f"试行 {st2['trial_id']} · 政策 {P['version']} · 状态版本 rev {st2['rev']}")
+    print(f"试行 {st2['trial_id']} · 政策 {P['version']}（修订自 {P['amends']}）· 状态版本 rev {st2['rev']}")
     print(f"计划资本 {f(st2['planned_capital'])} · 起始到账 {f(st2['funded_capital'])} · 外部净现金流 {f(v['net_external_flows'])}")
-    print(f"当前权益 R {f(R)}（{tc.EQUITY_BASIS}）")
+    print(f"当前净资产 E_now {f(equity)}（{tc.EQUITY_BASIS}；暂停判据用它）")
+    for line in r_lines(snap):
+        print(line)
     print(f"起始资本亏损 {pct(v['initial_capital_loss_frac'])}（剔除外部现金流，暂停判据）"
           f" · 累计投入亏损 {pct(v['cumulative_invested_loss_frac'])}（只报告）"
           f" · 峰值回撤 {pct(v['peak_drawdown_frac'])}（只报告）")
@@ -130,8 +135,11 @@ def cmd_status(args) -> int:
         print(v["note"])
     for name, rule in (("单笔计划止损", P["stop_loss"]), ("单笔理论最大亏损", P["max_loss"]),
                        ("金银合计", P["categories"]["metals"]), ("其它合计", P["categories"]["other"]), ("全场合计", P["account"])):
-        print(f"  {name} ≤ {f(rp.limit_usd(rule, R))}（max({rule['frac']:.0%}·R, ${rule['floor_usd']:.0f})）")
-    print(f"  大仓（理论最大亏损 > ${P['big_position']['threshold_usd']:.0f}）同时最多 {P['big_position']['max_count']} 笔；止盈 {P['take_profit_gain_frac']:.0%}")
+        print(f"  {name} ≤ {f(rp.policy_limit(P, rule, R))}（max({rule['frac']:.0%}·R, ${rule['floor_usd']:.0f})）")
+    print(f"  大仓（同标的联合最大亏损 > {f(rp.big_threshold_usd(P, R))}，= max(15%·R, $150)，等于不算）"
+          f"同时最多 {P['big_position']['max_count']} 个；止盈 {P['take_profit_gain_frac']:.0%}")
+    if snap["status"] == "no_new_risk":
+        print("  ⛔ R ≤ 0：禁止新增风险（固定美元下限不覆盖）")
     print("政策额度 ≠ 能开：价差权限、组合占用、到期/指派处置需在券商 App 核实。本工具只读，从不下单、不入金。")
     return 0
 
@@ -146,7 +154,7 @@ def _write(fn, *, create=False) -> tuple[dict | None, str | None]:
 def cmd_init(args) -> int:
     tid = f"trial-{datetime.now(timezone.utc):%Y%m%d}"
     st, err = _write(lambda cur: tc.new_state(trial_id=tid, planned_capital=float(args.planned),
-                                              policy_version=rp.VERSION_B, created_at=_now()), create=True)
+                                              policy_version=rp.LIVE_POLICY["version"], created_at=_now()), create=True)
     if err:
         print(err); return 1
     print(f"已建立 {tid}：计划资本 ${float(args.planned):,.2f}（计划，不是到账）"); return 0
@@ -301,7 +309,7 @@ def cmd_resume(args) -> int:
     if err:
         print(err); return 1
     print("已按用户决定解除暂停；连续亏损从此刻重新计数")
-    w = tc.relock_warning(st2, rp.POLICY_B)
+    w = tc.relock_warning(st2, rp.LIVE_POLICY)
     if w:
         print(w)
     return 0
@@ -346,7 +354,7 @@ def r_view(*, assets=None, now: datetime | None = None, policy_version: str | No
         except Exception:                                      # noqa: BLE001 —— 只影响说明（未登记入金不提额）
             nbroker = None
     snap = rb.snapshot(anchors=anchors, flows=[] if prob else flows, E_now=E_now if not prob else None, captured_at=now,
-                       policy_version=policy_version or rp.VERSION_B, broker_external_rows=nbroker)
+                       policy_version=policy_version or rp.LIVE_POLICY["version"], broker_external_rows=nbroker)
     if problems:
         snap["missing_fields"] += problems
     return snap

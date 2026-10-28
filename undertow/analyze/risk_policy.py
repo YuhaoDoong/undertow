@@ -140,6 +140,62 @@ POLICY_B_META = {
 
 
 # ════════════════════════════════════════════════════════════════════════════════════
+# 实盘试行政策 B 的自适应修订 r1（Codex 065 WP2/WP3；用户 2026-10-28 确认启用）。POLICY_B 原样保留：历史记录、
+# 影子账研究预算按原版本复现。面向真实账户的入口一律用 LIVE_POLICY。只改两处，其余金额/比例/止盈/暂停不变：
+#   ① 大仓线 = 单元最大亏损上限的一半 = max(15%·R, $150)（原固定 $150），联合风险【严格大于】才算大仓，最多 1 个；
+#   ② R = max(0, min(日初基准 + 已登记外部资金, 当前净资产))（analyze/r_budget.py），R ≤ 0 → 禁止新增（下限不覆盖）。
+# 额度按分向下取（R=1999.99 → 大仓线 299.99，风险 300 属大仓）。峰值回撤闸门（X 未定）不启用。
+# 用户原话（2026-10-28，在解释「15%·R 是大仓门槛、不是单笔；按现在资金无影响」及 R 公式之后）：「确认。」
+# ════════════════════════════════════════════════════════════════════════════════════
+
+VERSION_B_LIVE = "risk-policy-v3-live-trial-B-adaptive-r1-20261028"
+POLICY_B_LIVE = {
+    **{k: (dict(v) if isinstance(v, dict) else v) for k, v in POLICY_B.items()},
+    "version": VERSION_B_LIVE,
+    "amends": VERSION_B,
+    "big_position": {"threshold": "half_of_max_loss_cap", "max_count": 1},   # = max(15%·R, $150)，由 max_loss 派生、不另写比例
+    "R_basis": "broker-net-assets-usd-v1",
+    "R_basis_note": "R = max(0, min(E0 + 已登记外部资金, E_now))，E = 长桥 net_assets（USD，全账户；Codex 065）",
+    "nonpositive_R_blocks_new": True,
+    "cent_floor_limits": True,
+    "state_lineage": (VERSION_B, VERSION_B_LIVE),   # 试行状态（起始资本、latch、交易登记）沿用；暂停规则未改
+}
+POLICY_B_LIVE_META = {
+    **POLICY_B_META,
+    "big_position": {"status": "已决定（2026-10-28 启用）", "source": "Codex 065 推荐；用户 2026-10-28「确认。」",
+                     "confirmed_by": "用户", "effective_from": "2026-10-28",
+                     "previous": "固定 $150（用户 2026-10-14 选项 B）"},
+    "R_definition": {"status": "已决定（2026-10-28 启用）", "source": "Codex 065 推荐；用户 2026-10-28「确认。」",
+                     "confirmed_by": "用户", "effective_from": "2026-10-28", "basis": "broker-net-assets-usd-v1"},
+    "_open": ["峰值回撤闸门：阈值 X 未决定，只报告不判定（Codex 064/065）",
+              "固定 20 个美股交易日的操作试行（Codex 建议、未校准，用户未确认）",
+              "net-liquidation-usd-v2（独立可平仓净值）未实现；现用券商 net_assets（持仓按 last）"],
+}
+LIVE_POLICY = POLICY_B_LIVE
+
+
+def floor_cents(x: float) -> float:
+    return math.floor(x * 100 + 1e-7) / 100
+
+
+def policy_limit(policy: dict, rule: dict, R) -> float | None:
+    """该政策下的金额上限：max(frac·R, floor)；cent_floor_limits 的版本按分向下取（不多放行一分钱）。"""
+    v = limit_usd(rule, R)
+    return floor_cents(v) if (v is not None and policy.get("cent_floor_limits")) else v
+
+
+def big_threshold_usd(policy: dict, R) -> float | None:
+    """大仓线：旧 B = 固定 threshold_usd；r1 = 单元最大亏损上限的一半（max(15%·R, $150)，按分向下取）。R 未知 → None。"""
+    bp = policy["big_position"]
+    if "threshold_usd" in bp:
+        return bp["threshold_usd"]
+    if bp.get("threshold") == "half_of_max_loss_cap":
+        m = limit_usd(policy["max_loss"], R)
+        return None if m is None else floor_cents(0.5 * m)
+    raise ValueError(f"未知大仓线规则 {bp!r}")
+
+
+# ════════════════════════════════════════════════════════════════════════════════════
 # 开仓收益风险比下限（入场闸门，独立于额度政策；改数值 = 升 PAYOFF_FLOOR_VERSION）。
 # 起因：2026-10-08 用户批次 GLD 370/365P 当天到期收 0.07，含费最大收益 $3.8 对最大亏损 $496（要赢 99.2% 才打平），
 # 当时唯一的检查是「权利金扣费后 > 0」，于是照开。用户 2026-10-14：「权利金 0.07，就不该开仓吧」；
@@ -303,7 +359,7 @@ def no_price_stop_bound(bound_type, max_loss) -> tuple[float | None, str]:
 def _book_checks(rows: list[dict], R: float, policy: dict) -> list[dict]:
     """整本账（含拟新增的那一笔）在 B 下的全部检查：每笔止损/最大亏损、两类合计、全场合计、大仓数量。
     evaluate_book 与 evaluate_budget 共用这一处，两个入口对同一本账不会给出相反结论（Codex 044 P1-5）。"""
-    ls, lm = limit_usd(policy["stop_loss"], R), limit_usd(policy["max_loss"], R)
+    ls, lm = policy_limit(policy, policy["stop_loss"], R), policy_limit(policy, policy["max_loss"], R)
     out = []
     rows, _ = _net_units(rows)                             # 同标的整体计一次（Codex 061/062）；无腿明细的行原样
     for p in rows:
@@ -340,13 +396,14 @@ def _book_checks(rows: list[dict], R: float, policy: dict) -> list[dict]:
                     "note": note + ("" if complete else "；仅已知部分")})
     for cat in ("metals", "other"):
         tot_check(f"类别合计（{cat}）", [p for p in rows if category_of(p.get("underlying")) == cat],
-                  limit_usd(policy["categories"][cat], R), "同标的整体计一次；不同标的不抵扣")
-    tot_check("全场合计", rows, limit_usd(policy["account"], R), "")
-    thr, mx = policy["big_position"]["threshold_usd"], policy["big_position"]["max_count"]
+                  policy_limit(policy, policy["categories"][cat], R), "同标的整体计一次；不同标的不抵扣")
+    tot_check("全场合计", rows, policy_limit(policy, policy["account"], R), "")
+    thr, mx = big_threshold_usd(policy, R), policy["big_position"]["max_count"]
     nb = sum(1 for p in rows if _num(p.get("payoff_max_loss")) and p["payoff_max_loss"] > thr)
     unk = sum(1 for p in rows if not _num(p.get("payoff_max_loss")))
     out.append({"check": "大仓数量", "status": "fail" if nb > mx else ("pass" if not unk or nb + unk <= mx else "incomplete"),
-                "value": nb, "limit": mx, "note": f"理论最大亏损 > ${thr:.0f}（同标的整体算一笔）"})
+                "value": nb, "limit": mx, "threshold": thr,
+                "note": f"理论最大亏损 > ${thr:,.2f}（同标的整体算一笔；等于不算）"})
     return out
 
 
@@ -381,7 +438,9 @@ def evaluate_budget(*, candidate: dict, open_positions: list | None, capital: di
     → 新增 0 组并点名超限项；不自动平旧仓、不换仓。资金能力另列 operation_status。"""
     reasons, checks = [], []
     out = {"policy_version": policy["version"], "profile_id": policy.get("profile_id"),
-           "asof": (capital or {}).get("asof"), "policy_basis": "R = 当前可审计权益（Codex 043 推荐口径）",
+           "asof": (capital or {}).get("asof"),
+           "policy_basis": policy.get("R_basis_note", "R = 当前可审计权益（Codex 043 推荐口径）"),
+           "r_snapshot_id": ((capital or {}).get("r_snapshot") or {}).get("snapshot_id"),
            "checks": checks, "allowed_units": 0, "policy_allowed_units": 0, "budget_status": "incomplete",
            "operation_status": "unverified", "reasons": reasons}
 
@@ -399,6 +458,8 @@ def evaluate_budget(*, candidate: dict, open_positions: list | None, capital: di
     R = (capital or {}).get("equity")
     if not _num(R):
         chk("当前权益 R", "incomplete", note="权益未知/非有限 → 无法定额度")
+    elif policy.get("nonpositive_R_blocks_new") and R <= 0:
+        chk("当前权益 R", "fail", value=R, note="R ≤ 0 → 禁止新增风险（固定美元下限不覆盖）")
     elif (capital or {}).get("stale"):
         chk("当前权益 R", "incomplete", value=R, note="资金读数过期或与持仓不一致 → 未核实")
     else:
@@ -425,7 +486,7 @@ def evaluate_budget(*, candidate: dict, open_positions: list | None, capital: di
         chk("现有持仓", "incomplete" if probs else "pass", note="；".join(probs[:5]))
     bad = [c for c in checks if c["status"] != "pass"]
     if bad:                                                # 已暂停 = 确定的 0（fail）；其余缺口 = incomplete（不是通过）
-        out["budget_status"] = "fail" if checks[0]["status"] == "fail" else "incomplete"
+        out["budget_status"] = "fail" if any(c["status"] == "fail" for c in checks) else "incomplete"
         reasons += [f"{c['check']}：{c['note'] or c['status']}" for c in bad]
         return out
 

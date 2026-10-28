@@ -192,14 +192,17 @@ def _soul_brief(profile, violations) -> dict | None:
     }
 
 
-def _risk_brief(review, capital, asof) -> dict | None:
-    """分口径风险汇总（Codex 008 G03）：未知成员不折零；overall=incomplete 永远不是通过。"""
+def _risk_brief(review, capital, asof, r_budget=None) -> dict | None:
+    """分口径风险汇总（Codex 008 G03）：未知成员不折零；overall=incomplete 永远不是通过。
+    实盘政策 LIVE_POLICY（Codex 065）：额度用预算权益 R（r_budget 快照）；没有快照 → R 未知 → incomplete。"""
     if review is None:
         return None
     from undertow.analyze.risk_aggregate import aggregate
     from undertow.analyze import risk_policy as _rp
-    a = aggregate(review, capital, asof=asof, policy=_rp.POLICY_B)
+    R = None if r_budget is None else r_budget.get("R_budget")
+    a = aggregate(review, capital, asof=asof, policy=_rp.LIVE_POLICY, R=R)
     return {"overall": a["overall"], "policy_version": a["policy_version"], "account_limit": a["account_limit"],
+            "R_budget": R, "r_snapshot_id": None if r_budget is None else r_budget.get("snapshot_id"),
             "totals": a["totals"], "not_passed": [c for c in a["checks"] if c["status"] != "pass"]}
 
 
@@ -215,7 +218,7 @@ def _thesis_brief(th) -> dict | None:
 def build_consult_packet(*, review, health, contexts, capital=None,
                          question: str = "", mode: str = "review",
                          pre_trade=None, news=None, soul=None, soul_status: str = "ok", thesis=None,
-                         asof: date) -> dict:
+                         asof: date, r_budget: dict | None = None) -> dict:
     """组装咨询包。
 
     review：当前持仓 PortfolioReview；health：list[HealthFinding]；
@@ -238,7 +241,7 @@ def build_consult_packet(*, review, health, contexts, capital=None,
         "portfolio": _portfolio_brief(review),
         "healthcheck": [_jsonable(f) for f in (health or [])],
         "news": _news_brief(news),
-        "risk": _risk_brief(review, capital, asof),
+        "risk": _risk_brief(review, capital, asof, r_budget),
         "soul": _soul_brief(*(soul if soul else (None, None))),
         # ok / absent（未建档）/ error: …（档案存在但不可用）。非 ok 时纪律层【未核查】，不是「没有违规」
         "soul_status": soul_status if soul else (soul_status if soul_status != "ok" else "absent"),

@@ -111,9 +111,15 @@ def _total(values: list[tuple[str, float | None]]) -> dict:
             "complete": not missing, "missing": missing}
 
 
-def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B) -> dict:
-    """policy 必须显式指定版本（Codex 043 WP2）：默认 = 实盘试行政策 B；传 rp.POLICY（v1）只用于复现历史记录。"""
+_NET = object()
+
+
+def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B, R=_NET) -> dict:
+    """policy 必须显式指定版本（Codex 043 WP2）：实盘入口传 rp.LIVE_POLICY；POLICY_B / rp.POLICY（v1）只用于复现历史记录。
+    R：额度计算用的预算权益（Codex 065：调用方传 r_budget 快照的 R_budget，未知传 None → incomplete）；
+    不传 = 旧口径直接用 net_assets（只供历史复现）。占比列仍按净资产显示。"""
     net = getattr(capital, "net_assets", None) if capital is not None else None
+    Rv = net if R is _NET else R
     items = []
     for g in getattr(review, "groups", []):
         for c in g.combos:
@@ -146,7 +152,7 @@ def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B) -> dict:
 
     book = book_of(items, unmapped)
     if policy.get("profile_id"):                             # 政策 B：整笔含费金额、类别/全场合计、大仓数量
-        b = rp.evaluate_book(book, {"equity": net}, policy)
+        b = rp.evaluate_book(book, {"equity": Rv}, policy)
         disp = {i["id"]: name(i) for i in items if i["id"]}
         for c in b["checks"]:                                # 人读：单笔检查显示「标的·策略·到期」，身份仍按 id 判
             if c.get("position") in disp:
@@ -159,11 +165,11 @@ def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B) -> dict:
                    "pct": (c["value"] / net * 100 if (isinstance(c["value"], (int, float)) and net and net > 0
                                                        and not c["check"].startswith("大仓")) else None)}
                   for c in b["checks"]]
-        return {"asof": str(asof), "policy_version": policy["version"], "net_assets": net,
+        return {"asof": str(asof), "policy_version": policy["version"], "net_assets": net, "R_budget": Rv,
                 "items": items, "unmapped": unmapped, "totals": totals, "greeks": greeks, "book": book,
                 "checks": checks, "overall": b["overall"],
-                "account_limit": f"全场合计 ≤ max(60%·R, $500) = ${rp.limit_usd(policy['account'], net):,.0f}"
-                                 if net is not None else "权益未知"}
+                "account_limit": f"全场合计 ≤ max(60%·R, $500) = ${rp.policy_limit(policy, policy['account'], Rv):,.0f}"
+                                 if Rv is not None else "预算权益 R 未知"}
     # 单笔限额（v1，历史复现用）：每项 pass / fail / incomplete
     checks = []
     for it in items:

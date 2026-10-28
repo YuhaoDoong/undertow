@@ -3135,9 +3135,13 @@ def _load_account_review(no_cache):
             suggestion="集中度、购买力、接货能力检查都没有做；在券商端核对资金后再看本报告。")] + health
     from undertow.analyze.risk_aggregate import aggregate
     from undertow.analyze import risk_policy as _rp
+    from undertow.trial_cli import r_view
+    # 预算权益 R（Codex 065，LIVE_POLICY）：同一次扫描只取这一份快照；资产读不到 → R 未知（incomplete，不用 0 顶替）
+    rsnap = r_view(assets=assets, policy_version=_rp.LIVE_POLICY["version"]) if assets is not None else None
     return {"positions": positions, "contexts": contexts, "review": review,
-            "health": health, "capital": capital, "assets": assets, "assets_error": assets_error,
-            "risk": aggregate(review, capital, asof=today, policy=_rp.POLICY_B), "today": today}
+            "health": health, "capital": capital, "assets": assets, "assets_error": assets_error, "r_budget": rsnap,
+            "risk": aggregate(review, capital, asof=today, policy=_rp.LIVE_POLICY,
+                              R=None if rsnap is None else rsnap["R_budget"]), "today": today}
 
 
 def cmd_account(args) -> int:
@@ -3927,7 +3931,7 @@ def cmd_consult(args) -> int:
     packet = build_consult_packet(
         review=review, health=health, contexts=contexts, capital=capital,
         question=(args.question or ""), mode=mode, pre_trade=pre_trade,
-        news=news, soul=soul, soul_status=soul_status, thesis=thesis, asof=today)
+        news=news, soul=soul, soul_status=soul_status, thesis=thesis, asof=today, r_budget=bundle.get("r_budget"))
 
     if getattr(args, "json", False):
         print(json.dumps(packet, ensure_ascii=False, indent=2))
@@ -3973,7 +3977,7 @@ def cmd_serve(args) -> int:
             health = []
         return build_consult_packet(review=review, health=health, contexts=contexts,
                                     capital=capital, question=question or "", mode=mode,
-                                    pre_trade=pt, asof=today)
+                                    pre_trade=pt, asof=today, r_budget=b.get("r_budget"))
 
     from undertow.consult.server import NonLoopbackBind
     try:

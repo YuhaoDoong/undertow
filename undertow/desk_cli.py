@@ -151,13 +151,21 @@ def _budget_context():
             notes += apply_cash_ledger(book, lb.fetch_cash_flow(start=since) or [], since=since)
         except Exception as e:                           # noqa: BLE001
             notes.append(f"现金流水读取失败（{type(e).__name__}）→ 净额用券商成本价口径")
-    capital = {"equity": assets.net_assets, "asof": _et_now().isoformat(), "buying_power": assets.buy_power}
+    # 预算权益 R（Codex 065，LIVE_POLICY）：用同一次账户读数的快照；R 未知 → 预算 incomplete（不拿 net_assets 顶替）
+    rsnap = bundle.get("r_budget")
+    if rsnap is None:
+        from undertow.trial_cli import r_view
+        rsnap = r_view(assets=assets, policy_version=rp.LIVE_POLICY["version"])
+    capital = {"equity": rsnap["R_budget"], "asof": _et_now().isoformat(), "buying_power": assets.buy_power,
+               "r_snapshot": rsnap, "E_now": assets.net_assets}
+    from undertow.trial_cli import r_lines
+    notes += r_lines(rsnap)[:2]
     neg = {k: v for k, v in assets.cash_by_ccy.items() if v < 0}
     if neg:
         notes.append("⚠️ 负现金：" + "、".join(f"{k} {v:,.2f}" for k, v in neg.items()) + "（外币负余额是否计息未核实）")
     try:
         from undertow.trial_cli import pause_view
-        pause, pnote = pause_view(assets.net_assets, equity_complete=True, asof=capital["asof"], persist=False)
+        pause, pnote = pause_view(assets.net_assets, equity_complete=True, asof=capital["asof"], persist=False)   # 暂停看真实权益
         if pnote:
             notes.append(pnote)
     except Exception as e:                               # noqa: BLE001
@@ -314,7 +322,8 @@ def cmd_spread_quote(args) -> int:
         if not args.no_account:
             b = rp.evaluate_budget(candidate=sp.budget_candidate(spec, e, root, f"{root}|{expiry}|{kind}{buy_k:g}/{sell_k:g}",
                                                                  expiry=expiry),
-                                   open_positions=book, capital=capital, pause=pause)
+                                   open_positions=book, capital=capital, pause=pause,
+                                   policy=rp.LIVE_POLICY)
             feas = b.get("feasible_units") or []
             print(f"  政策 B 预算（请求 {args.qty} 组）：{b['budget_status']}（可开 {b['allowed_units']} 组"
                   + (f"；可行组数 {'、'.join(map(str, feas))}" if feas and feas != list(range(1, b['allowed_units'] + 1)) else "")
@@ -324,7 +333,7 @@ def cmd_spread_quote(args) -> int:
     if not args.no_account and capital is not None:
         def ok(e):
             b = rp.evaluate_budget(candidate=sp.budget_candidate(spec, e, root, "bound", expiry=expiry), open_positions=book,
-                                   capital=capital, pause=pause)
+                                   capital=capital, pause=pause, policy=rp.LIVE_POLICY)
             return b["allowed_units"] >= args.qty
         pb = sp.price_bound_under(spec, ok, qty=args.qty)
         fb = sp.price_bound_under(spec, lambda e: e["payoff_floor"]["status"] == "pass", qty=args.qty)
@@ -351,9 +360,9 @@ def cmd_sides(args) -> int:
     if not snap:
         print("[错误] 无期权快照", file=sys.stderr); return 1
     d_snap, contracts = snap
-    R = args.equity if args.equity is not None else rp.POLICY_B["planned_trial_capital_usd"]
+    R = args.equity if args.equity is not None else rp.LIVE_POLICY["planned_trial_capital_usd"]
     cat = rp.category_of(root if key is None else key)
-    cat_lim = rp.limit_usd(rp.POLICY_B["categories"][cat], R)
+    cat_lim = rp.policy_limit(rp.LIVE_POLICY, rp.LIVE_POLICY["categories"][cat], R)
     print(f"══ {root} 买方 vs 卖方 · 到 {horizon}（{(horizon - today).days} 天）· 报价 {'实时 depth' if args.live else f'CBOE 快照 {d_snap}（昨收）'} ══")
     print(f"R = ${R:,.2f}{'（--equity）' if args.equity is not None else '（计划资本，未读账户）'} · {cat} 类单笔上限 ${cat_lim:,.0f}")
 
@@ -502,7 +511,7 @@ def cmd_risk_unit(args) -> int:
             after_book.append({"id": f"{u}·拟操作后", "underlying": root, "stop_loss": None, "payoff_max_loss": None,
                                "legs": w["after"]["net_legs"], "net_cash": cur_cash + dcash,
                                "future_fees": w["after"]["future_fees"], "cash_basis": "拟操作后情景"})
-        b = rp.evaluate_book(after_book, capital)
+        b = rp.evaluate_book(after_book, capital, rp.LIVE_POLICY)
         print(f"\n政策 B 整本账（{'拟操作后' if delta else '现仓'}）：{b['overall']}")
         for c in b["checks"]:
             if c["status"] != "pass" or u in c["check"] or "合计" in c["check"] or "大仓" in c["check"]:

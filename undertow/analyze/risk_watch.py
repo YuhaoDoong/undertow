@@ -60,7 +60,7 @@ RISK_WATCH_META = {
     "version": "risk-watch-v1-20261015",
     "status": "未校准：全部是提醒人看一眼的工程开关，不是交易信号；改动请同步测试",
     "debit_take_profit_rule": se.DEBIT_ROI_REVIEW["version"],   # 唯一公式 spread_econ.debit_roi_review（Codex 063-B）
-    "credit_take_profit_frac": rp.POLICY_B["take_profit_gain_frac"],   # 唯一来源 risk_policy（POLICY_B 90%）
+    "credit_take_profit_frac": rp.LIVE_POLICY["take_profit_gain_frac"],   # 唯一来源 risk_policy（实盘 LIVE_POLICY，90%，与 B 相同）
     "short_near_frac": 0.01,               # 标的距卖腿 ≤ 1% 算「近价」（未校准）
     "expiry_near_tdays": 2,                # 距到期 ≤ 2 个交易日（含到期日当天 = 0）
     "quote_missing_runs": 2,               # 连续 ≥ 2 次巡检盘口缺失才报

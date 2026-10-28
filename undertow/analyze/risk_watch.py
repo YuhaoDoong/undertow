@@ -240,6 +240,44 @@ def validate_plans(obj) -> str | None:
         rd = p.get("review_date")
         if rd is not None and not (isinstance(rd, str) and len(rd) == 10 and rd[4] == "-" and rd[7] == "-"):
             return f"{k}：review_date 必须是 YYYY-MM-DD"
+        bad = _campaign_fields_problem(p)
+        if bad:
+            return f"{k}：{bad}"
+    return None
+
+
+def _aware_iso(x) -> bool:
+    from datetime import datetime as _dt
+    if not isinstance(x, str):
+        return False
+    try:
+        return _dt.fromisoformat(x.replace("Z", "+00:00")).tzinfo is not None
+    except ValueError:
+        return False
+
+
+def _campaign_fields_problem(p: dict) -> str | None:
+    """本轮起点 / 换腿新阶段（Codex 063 N1、064 §5）的结构校验；语义（是否与持仓相符）在 campaign_cash 里核。"""
+    cs = p.get("campaign_start")
+    if cs is not None and not _aware_iso(cs):
+        return "campaign_start 必须是带时区的 ISO 时刻"
+    st = p.get("stage")
+    if st is None:
+        return None
+    if not isinstance(st, dict) or not _aware_iso(st.get("start")):
+        return "stage.start 必须是带时区的 ISO 时刻"
+    inh = st.get("inherited")
+    if not isinstance(inh, list) or not inh:
+        return "stage.inherited 必须是非空列表（沿用腿）"
+    for x in inh:
+        if not isinstance(x, dict) or not isinstance(x.get("symbol"), str) or not x["symbol"].strip():
+            return "stage.inherited 每项要有 symbol"
+        q = x.get("qty")
+        if not isinstance(q, int) or isinstance(q, bool) or q == 0:
+            return "stage.inherited.qty 必须是非零整数（带符号张数）"
+        ps = [x.get(f) for f in ("low", "ref", "high")]
+        if not all(_fin(v) and v > 0 for v in ps) or not ps[0] <= ps[1] <= ps[2]:
+            return "stage.inherited 的 low ≤ ref ≤ high 必须是正有限数"
     return None
 
 

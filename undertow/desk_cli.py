@@ -144,13 +144,8 @@ def _budget_context():
         book = bundle["risk"]["book"] if bundle.get("review") is not None else []
     except Exception as e:                               # noqa: BLE001
         return None, None, None, [f"账户只读失败：{type(e).__name__}: {str(e)[:120]}"]
-    if book:                                             # 同标的净额：已有腿用真实现金流水（Codex 061），失败则留成本价口径并说明
-        try:
-            from undertow.analyze.risk_aggregate import apply_cash_ledger
-            since = (date.today() - timedelta(days=90)).isoformat()
-            notes += apply_cash_ledger(book, lb.fetch_cash_flow(start=since) or [], since=since)
-        except Exception as e:                           # noqa: BLE001
-            notes.append(f"现金流水读取失败（{type(e).__name__}）→ 净额用券商成本价口径")
+    if book:                                             # 现金已在 _load_account_review 里按本轮唯一分配（Codex 063 N1，各入口同一份）
+        notes += (bundle.get("risk") or {}).get("cash_notes") or []
     # 预算权益 R（Codex 065，LIVE_POLICY）：用同一次账户读数的快照；R 未知 → 预算 incomplete（不拿 net_assets 顶替）
     rsnap = bundle.get("r_budget")
     if rsnap is None:
@@ -460,6 +455,63 @@ def _delta_cash_from_depth(root: str, legs: list[dict]) -> tuple[float | None, l
     return round(cash, 2), lines
 
 
+def _hold_value_now(root: str, legs: list[dict]):
+    """剩余腿此刻的带符号可平仓值（多头按买一、空头按卖一）。缺一侧 → (None, 原因)。"""
+    from undertow.collect.longbridge_bars import option_symbol
+    from undertow.collect.longbridge_quote import fetch_depth, LiveQuotesUnavailable
+    opts = [lg for lg in legs if lg["kind"] in ("C", "P")]
+    if len(opts) != len(legs):
+        return None, "含正股腿：从现在起的风险未实现"
+    codes = [option_symbol(root, lg["expiry"], lg["kind"], lg["strike"]) for lg in opts]
+    try:
+        dep = fetch_depth(codes)
+    except LiveQuotesUnavailable as e:
+        return None, f"实时盘口不可用：{str(e)[:80]}"
+    v = 0.0
+    for lg, c in zip(opts, codes):
+        d = dep.get(c)
+        px = None if d is None or d.error else (d.bid if lg["qty"] > 0 else d.ask)
+        if not (isinstance(px, (int, float)) and px >= 0) or (lg["qty"] < 0 and not px):
+            return None, f"{c} 缺{'买一' if lg['qty'] > 0 else '卖一'}"
+        v += lg["qty"] * sp.MULT * px
+    return round(v, 2), None
+
+
+def _show_rulers(rows: list[dict], root: str, legs: list[dict]) -> None:
+    """三把尺子（Codex 064 §5）分开报：本轮累计 / 新阶段入场 / 从现在起。不相加、不互相替代。"""
+    from undertow.analyze import net_risk as nr
+    det = next((b.get("cash_detail") for b in rows if b.get("cash_detail")), None)
+    if not det:
+        return
+    n = sum(abs(lg["qty"]) for lg in nr.normalize(legs)[0] if lg["kind"] != "STOCK")
+    ff = round(n * sp.FEE_PER_CONTRACT, 2)
+    q = {"verified": "起点已登记", "bound": "起点未登记 → 保守界"}.get(det["quality"], det["quality"])
+    print(f"\n现金归属（{det['version']}，{q}）：本轮起点 {det['start']} · 本轮实际现金 {det['campaign_cash']:+,.2f}"
+          + (f" · 含已离场腿 {'、'.join(det['exited'])}" if det["exited"] else "")
+          + (f" · 未关联的同标的独立交易流水 {det['independent_rows']} 条（不计入）" if det["independent_rows"] else ""))
+    camp = nr.unit_risk(legs, net_cash=sum(b["campaign_cash"] for b in rows), future_fees=ff, label="本轮累计")
+    ml = lambda r: "—" if r["max_loss"] is None else f"${r['max_loss']:,.2f}"
+    print(f"  ① 本轮累计（全部实际现金 + 剩余腿到期最坏 − 未来费用）：最大亏损 {ml(camp)}（{camp['bound_type']}）")
+    if det["stages"]:
+        for k in ("low", "ref", "high"):
+            cash = sum(det["stages"][b["id"]]["cash"][k] if b["id"] in det["stages"] else b["campaign_cash"] for b in rows)
+            r = nr.unit_risk(legs, net_cash=cash, future_fees=ff, label=f"新阶段·{k}")
+            st = next(iter(det["stages"].values()))
+            old = st["old_stage"][k] if st.get("old_stage") else None
+            print(f"  ② 新阶段入场（沿用腿内部估值 {k}）：新阶段现金 {cash:+,.2f} → 最大亏损 {ml(r)}"
+                  + (f" · 旧阶段参考 {old:+,.2f}（两者之和 = 本轮实际，内部估值不是成交）" if old is not None else ""))
+        print("     政策 B 预算取使新阶段风险最大的端点（新交易从成立时点算，不吃旧阶段利润）")
+    else:
+        print("  ② 新阶段入场：未登记换腿阶段 → 政策 B 预算用 ①")
+    v, why = _hold_value_now(root, legs)
+    if v is None:
+        print(f"  ③ 从现在起：不可算（{why}）")
+    else:
+        h = nr.hold_risk(legs, v, fee_now=ff, fee_future=ff)
+        print(f"  ③ 从现在起（此刻可平仓值 {v:+,.2f}，买一/卖一；平仓费两端同模型相抵）：最多再回吐 {ml(h)}"
+              "（含已进入权益的浮盈；不进入场预算）")
+
+
 def cmd_risk_unit(args) -> int:
     """同标的整体风险：现仓 →（可选）拟加仓/减仓/部分平仓后的剩余组合（Codex 061/062；只读，从不下单）。"""
     from undertow.analyze import net_risk as nr
@@ -475,6 +527,11 @@ def cmd_risk_unit(args) -> int:
         print("同标的有缺腿明细的持仓 → 不能净额，只能按各笔相加（保守上界）：" + "、".join(b["id"] for b in rows))
         return 1
     cur_legs = [lg for b in rows for lg in b["legs"]]
+    if any(b.get("net_cash") is None for b in rows):
+        print("同标的现金归属不完整（见下方提示）→ 风险与预算不可核，不退回券商成本价：")
+        for n in notes:
+            print(f"  · {n}")
+        return 1
     cur_cash = round(sum(b["net_cash"] for b in rows), 2) if rows else 0.0
     delta = args.leg or []
     dcash, dlines = (args.cash, [f"现金情景由 --cash 给出：{args.cash:+.2f}"]) if args.cash is not None else (
@@ -499,18 +556,22 @@ def cmd_risk_unit(args) -> int:
             print(f"  · {a}")
         for pr in r["problems"]:
             print(f"  ⚠️ {pr}")
-    show(w["before"], "现仓")
+    _show_rulers(rows, root, cur_legs)
+    show(w["before"], "现仓 · 政策 B 预算口径")
     if delta:
         print("\n拟操作：" + "；".join(dlines))
         show(w["after"], "拟操作后（情景，未成交保护不计入当前）")
         if w["delta_max_loss"] is not None:
             print(f"\n最大亏损变化：{w['delta_max_loss']:+,.2f}" + ("（风险增加：减仓/平保护腿不一定减险）" if w["delta_max_loss"] > 0 else ""))
     if capital is not None and dcash is not None:
-        after_book = [b for b in book if rp.unit_key(b.get("underlying")) != u]
-        if w["after"]["net_legs"]:
-            after_book.append({"id": f"{u}·拟操作后", "underlying": root, "stop_loss": None, "payoff_max_loss": None,
-                               "legs": w["after"]["net_legs"], "net_cash": cur_cash + dcash,
-                               "future_fees": w["after"]["future_fees"], "cash_basis": "拟操作后情景"})
+        if delta:
+            after_book = [b for b in book if rp.unit_key(b.get("underlying")) != u]
+            if w["after"]["net_legs"]:
+                after_book.append({"id": f"{u}·拟操作后", "underlying": root, "stop_loss": None, "payoff_max_loss": None,
+                                   "legs": w["after"]["net_legs"], "net_cash": cur_cash + dcash,
+                                   "future_fees": w["after"]["future_fees"], "cash_basis": "拟操作后情景"})
+        else:                                            # 现仓：用账本原行（保留各行的计划止损），不另造「拟操作后」行
+            after_book = book
         b = rp.evaluate_book(after_book, capital, rp.LIVE_POLICY)
         print(f"\n政策 B 整本账（{'拟操作后' if delta else '现仓'}）：{b['overall']}")
         for c in b["checks"]:

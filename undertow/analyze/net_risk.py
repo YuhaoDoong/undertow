@@ -198,6 +198,21 @@ def _cross_min(near, far, const):
     return v, round(S, 4)
 
 
+def hold_risk(legs, value_now, *, fee_now: float, fee_future: float) -> dict:
+    """从现在继续持有的风险（Codex 064 §5 第 3 把尺子）：max(0, Vnow − Vmin + f_future − f_now)。
+    value_now：剩余腿此刻的带符号可平仓值（多头按买一、空头按卖一，资产正、负债负）；fee_now：此刻平仓费（净清算基准已扣）；
+    fee_future：未来最坏情景的处置费。实现上把「此刻净清算值」当作入场现金交给 unit_risk，跨期沿用同一保守界。
+    它回答「从此刻可能回吐多少」（含已进入权益的浮盈），不是本轮累计亏损，也不进政策 B 的入场预算。"""
+    if not (_num(value_now) and _num(fee_now) and _num(fee_future)):
+        r = unit_risk(legs, net_cash=None, future_fees=0.0, label="从现在起")
+        r["problems"].append("当前可平仓值或费用未知")
+        return r
+    r = unit_risk(legs, net_cash=-(value_now - fee_now), future_fees=fee_future,
+                  cash_basis="从现在起：此刻净清算值（买一/卖一、扣平仓费）作起点", label="从现在起")
+    r["value_now"] = round(value_now, 2)
+    return r
+
+
 def stop_bound(r: dict) -> float | None:
     """整组止损损失的【上界】（不是止损规则本身）：同一到期、不含正股、期权部分到期损益处处 ≥ 0（借记价差、蝶式等）
     → 无套利下该组合任意时刻价值 ≥ 0，任何时点整组退出的损失 ≤ 已投入净额 + 退出费用 = max_loss（忽略买卖价差滑点）。

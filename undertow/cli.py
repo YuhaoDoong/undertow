@@ -3138,10 +3138,34 @@ def _load_account_review(no_cache):
     from undertow.trial_cli import r_view
     # 预算权益 R（Codex 065，LIVE_POLICY）：同一次扫描只取这一份快照；资产读不到 → R 未知（incomplete，不用 0 顶替）
     rsnap = r_view(assets=assets, policy_version=_rp.LIVE_POLICY["version"]) if assets is not None else None
+    cash = _campaign_cash_input(lb)
     return {"positions": positions, "contexts": contexts, "review": review,
             "health": health, "capital": capital, "assets": assets, "assets_error": assets_error, "r_budget": rsnap,
             "risk": aggregate(review, capital, asof=today, policy=_rp.LIVE_POLICY,
-                              R=None if rsnap is None else rsnap["R_budget"]), "today": today}
+                              R=None if rsnap is None else rsnap["R_budget"], cash_input=cash), "today": today}
+
+
+# 同标的净额的现金归属窗口（Codex 063 N1）：在场合约在窗口内没有成交 → incomplete（不默认覆盖）。120 天是工程选择、未校准。
+CAMPAIGN_CASH_WINDOW_DAYS = 120
+
+
+def _campaign_cash_input(lb) -> dict:
+    """实盘入口共用的现金归属输入（account / live / 巡检 / spread-quote / risk-unit 同一份）：流水 + 窗口 + 私有计划。
+    读不到流水或计划文件不合格 → {"error"}（预算 incomplete，不退回券商成本价、不把坏计划当没登记）。"""
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    start = (_dt.now(_tz.utc) - _td(days=CAMPAIGN_CASH_WINDOW_DAYS)).date()
+    try:
+        rows = lb.fetch_cash_flow(start=start.isoformat()) or []
+    except Exception as e:                                # noqa: BLE001
+        return {"error": f"{type(e).__name__}: {str(e)[:100]}"}
+    try:
+        from undertow.riskwatch_cli import load_plans
+        plans, prob = load_plans()
+    except Exception as e:                                # noqa: BLE001
+        plans, prob = {}, f"{type(e).__name__}"
+    if prob:            # 坏计划 ≠ 没有计划（Codex 054 R1 / 065）：登记的起点/新阶段未知 → 不可核
+        return {"error": f"持仓计划文件不合格：{prob}"}
+    return {"rows": rows, "window_start": f"{start.isoformat()}T00:00:00+00:00", "plans": plans or {}}
 
 
 def cmd_account(args) -> int:

@@ -44,7 +44,7 @@ def _leg_key(lg) -> str | None:
 def _legs_and_cash(c) -> tuple[list | None, float | None, float | None]:
     """同标的净额用的腿明细与现金（Codex 061/062）：(腿, 净现金流, 未来费用)。
     现金按券商成本价 × 带符号数量 − 开仓费（模型）；券商成本价在部分减仓后会被改写，调用方能拿到现金流水时应
-    用 apply_cash_ledger 覆盖。任一腿缺种类/行权价/到期/数量/成本 → (None, None, None)，该组合退回各笔口径。"""
+    用 apply_campaign_cash 覆盖。任一腿缺种类/行权价/到期/数量/成本 → (None, None, None)，该组合退回各笔口径。"""
     from undertow.analyze.healthcheck import FEE_PER_CONTRACT, CONTRACT_MULT
     legs, cash, n = [], 0.0, 0
     for lg in getattr(c, "legs", None) or []:
@@ -68,28 +68,46 @@ def _legs_and_cash(c) -> tuple[list | None, float | None, float | None]:
     return legs, round(cash - fee, 2), round(fee, 2)
 
 
-def apply_cash_ledger(book: list[dict], cash_rows: list[dict], *, since: str) -> list[str]:
-    """用现金流水（含已付手续费）覆盖账本行的净现金流（Codex 061：已有腿用真实已核现金流水）。
-    按行内各腿合约代码匹配流水；某行有腿却在流水里一条都找不到 → 保留成本价口径并返回提示。原地修改，返回提示。"""
+def apply_campaign_cash(book: list[dict], cash: dict | None) -> list[str]:
+    """用现金流水按本轮唯一分配覆盖账本行的净现金流（Codex 063 N1；口径见 campaign_cash 模块文档）。原地修改，返回提示。
+
+    cash = {"rows": 原样流水, "window_start": 带时区 ISO, "plans": {计划键: 计划}}；{"error": 原因} = 流水读取失败。
+    同一标的的带腿行合成一份归属；归属不完整（缺金额、窗口没覆盖、起点登记不合格）或流水读不到 → 这些行 net_cash=None，
+    预算报 incomplete（不再留券商成本价口径冒充已核：成本价在部分减仓后会被改写）。
+    政策 B 用的 net_cash：登记了新阶段 → 新阶段入场现金的保守端；否则 → 本轮累计。另存 campaign_cash / cash_detail 供展示。"""
+    from undertow.analyze import campaign_cash as cc
     notes = []
+    units: dict = {}
     for p in book:
-        syms = {lg.get("symbol") for lg in p.get("legs") or [] if lg.get("symbol")}
-        if not syms or len(syms) != len(p.get("legs") or []):
-            continue
-        sub = [r for r in cash_rows if (r.get("symbol") or "") in syms]
-        if not sub:
-            notes.append(f"{p['id']}：{since} 以来流水里没有这些合约 → 仍用券商成本价口径")
-            continue
-        tot = 0.0
-        for r in sub:
-            try:
-                tot += float(r.get("balance", 0) or 0)
-            except (TypeError, ValueError):
-                notes.append(f"{p['id']}：流水金额无法解析 → 仍用券商成本价口径")
-                break
-        else:
-            p["net_cash"] = round(tot, 2)
-            p["cash_basis"] = f"现金流水（{since} 起，含已付费用；含同合约更早轮次）"
+        if p.get("legs") is not None:
+            units.setdefault(rp.unit_key(p.get("underlying")), []).append(p)
+    if not units or cash is None:
+        return notes
+    if cash.get("error"):
+        for ps in units.values():
+            for p in ps:
+                p.update(net_cash=None, cash_basis=f"现金流水读取失败（{cash['error']}）→ 不可核", cash_detail=None)
+        return [f"现金流水读取失败（{cash['error']}）→ 同标的净额现金未知，预算 incomplete"]
+    plans = cash.get("plans") or {}
+    for u, ps in units.items():
+        anchors, stages = {}, {}
+        for p in ps:
+            plan = plans.get(cc.plan_key_for_legs(u, p["legs"]) or "") or {}
+            if plan.get("campaign_start"):
+                anchors[p["id"]] = plan["campaign_start"]
+            if plan.get("stage"):
+                stages[p["id"]] = plan["stage"]
+        res = cc.unit_cash(u, ps, cash.get("rows") or [], window_start=cash["window_start"],
+                           anchors=anchors, stages=stages)
+        for p in ps:
+            ok = res["quality"] != "incomplete"
+            p.update(net_cash=res["policy_cash_by_row"].get(p["id"]) if ok else None,
+                     campaign_cash=res["by_row"].get(p["id"]) if ok else None,
+                     cash_basis=cc.basis_text(res, p["id"]), cash_detail=res)
+        notes += [f"{u}：{x}" for x in res["problems"] + res["notes"]]
+        if res["quality"] == "bound" and res.get("inferred_starts"):
+            notes.append(f"{u}：本轮起点未登记，按保守界计；可用 `undertow riskwatch plan-set --key <键> --campaign-start "
+                         f"<ISO>` 登记已核起点（推断最早关联成交 {min(res['inferred_starts'].values())}）")
     return notes
 
 
@@ -114,10 +132,11 @@ def _total(values: list[tuple[str, float | None]]) -> dict:
 _NET = object()
 
 
-def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B, R=_NET) -> dict:
+def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B, R=_NET, cash_input: dict | None = None) -> dict:
     """policy 必须显式指定版本（Codex 043 WP2）：实盘入口传 rp.LIVE_POLICY；POLICY_B / rp.POLICY（v1）只用于复现历史记录。
     R：额度计算用的预算权益（Codex 065：调用方传 r_budget 快照的 R_budget，未知传 None → incomplete）；
-    不传 = 旧口径直接用 net_assets（只供历史复现）。占比列仍按净资产显示。"""
+    不传 = 旧口径直接用 net_assets（只供历史复现）。占比列仍按净资产显示。
+    cash_input：现金流水归属输入（见 apply_campaign_cash；Codex 063 N1）。实盘入口必传；None = 旧口径券商成本价（只供复现）。"""
     net = getattr(capital, "net_assets", None) if capital is not None else None
     Rv = net if R is _NET else R
     items = []
@@ -151,6 +170,7 @@ def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B, R=_NET) -> d
               for g in getattr(review, "groups", [])}
 
     book = book_of(items, unmapped)
+    cash_notes = apply_campaign_cash(book, cash_input)
     if policy.get("profile_id"):                             # 政策 B：整笔含费金额、类别/全场合计、大仓数量
         b = rp.evaluate_book(book, {"equity": Rv}, policy)
         disp = {i["id"]: name(i) for i in items if i["id"]}
@@ -167,7 +187,7 @@ def aggregate(review, capital, *, asof, policy: dict = rp.POLICY_B, R=_NET) -> d
                   for c in b["checks"]]
         return {"asof": str(asof), "policy_version": policy["version"], "net_assets": net, "R_budget": Rv,
                 "items": items, "unmapped": unmapped, "totals": totals, "greeks": greeks, "book": book,
-                "checks": checks, "overall": b["overall"],
+                "checks": checks, "overall": b["overall"], "cash_notes": cash_notes,
                 "account_limit": f"全场合计 ≤ max(60%·R, $500) = ${rp.policy_limit(policy, policy['account'], Rv):,.0f}"
                                  if Rv is not None else "预算权益 R 未知"}
     # 单笔限额（v1，历史复现用）：每项 pass / fail / incomplete

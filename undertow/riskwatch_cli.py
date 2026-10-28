@@ -40,7 +40,6 @@ import fcntl
 import importlib.util
 import json
 import os
-import re
 import sys
 import time
 from contextlib import contextmanager
@@ -58,7 +57,6 @@ RESULT_SCHEMA = "risk-watch-result-v2"          # v2：结果 = 发件箱全部�
 ALERT_SCHEMA = "risk-watch-alert-v1"
 BUSY_RC = 75                                      # 与 lockf -t 0 撞锁同码：run_bound 据此判 busy
 FEE_ROUND_TRIP_PER_GROUP = None   # 由 healthcheck.FEE_PER_CONTRACT 推出（2 腿 × 2 笔），见 _fee_rt
-_OCC = re.compile(r"^([A-Z]+)(\d{2})(\d{2})(\d{2})([CP])(\d+)(?:\.[A-Z]{1,4})?$")
 
 
 def _paper():
@@ -194,15 +192,13 @@ def pending_alerts() -> list[dict]:
 
 
 def parse_occ(sym: str):
-    m = _OCC.match(sym.upper())
-    if not m:
-        return None
-    root, yy, mm, dd, cp, k = m.groups()
-    return root, f"20{yy}-{mm}-{dd}", cp, int(k) / 1000.0
+    from undertow.analyze.campaign_cash import parse_occ as _p      # 唯一实现（现金归属与巡检共用）
+    return _p(sym)
 
 
 def live_key(root, expiry, side, k_sell, k_buy) -> str:
-    return f"live|{root}|{expiry}|{side}|{k_sell:g}/{k_buy:g}"
+    from undertow.analyze.campaign_cash import plan_key
+    return plan_key(root, expiry, side, k_sell, k_buy)
 
 
 def group_verticals(positions: list) -> tuple[list[dict], list[str]]:
@@ -625,6 +621,15 @@ def cmd_plan_show(args) -> int:
     return 0
 
 
+def _stage_leg(x: str) -> dict:
+    import argparse
+    try:
+        sym, q, lo, ref, hi = x.split(":")
+        return {"symbol": sym.strip().upper(), "qty": int(q), "low": float(lo), "ref": float(ref), "high": float(hi)}
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"沿用腿格式应为 代码:带符号张数:low:ref:high，收到 {x!r}") from e
+
+
 def cmd_plan_set(args) -> int:
     obj = {"schema": rw.PLAN_SCHEMA, "plans": {}}
     if PLANS.exists():
@@ -639,6 +644,16 @@ def cmd_plan_set(args) -> int:
                  ("qty_entered", "qty_entered")):
         if getattr(args, a, None) is not None:
             p[f] = getattr(args, a)
+    cs, ss_, si = (getattr(args, a, None) for a in ("campaign_start", "stage_start", "stage_inherit"))
+    if cs is not None:
+        p["campaign_start"] = cs
+    if getattr(args, "clear_stage", False):
+        p.pop("stage", None)
+    if ss_ is not None or si:
+        if ss_ is None or not si:
+            print("⚠️ 新阶段要同时给 --stage-start 与至少一条 --stage-inherit"); return 1
+        p["stage"] = {"start": ss_, "inherited": si,
+                      **({"basis": args.stage_basis} if getattr(args, "stage_basis", None) else {})}
     if args.inv_ref:
         p["invalidation"] = {"ref": args.inv_ref, "op": args.inv_op, "level": args.inv_level,
                              "basis": args.inv_basis, "underlying_equiv": args.inv_equiv, "note": args.inv_note}
@@ -674,4 +689,10 @@ def register(sub):
     s.add_argument("--inv-level", type=float); s.add_argument("--inv-equiv", type=float)
     s.add_argument("--inv-basis", choices=("close", "intraday"), default="close"); s.add_argument("--inv-note")
     s.add_argument("--review-date"); s.add_argument("--review-note"); s.add_argument("--note")
+    s.add_argument("--campaign-start", help="本轮起点（带时区 ISO，按现金流水核定的首笔成交时刻；Codex 063 N1）")
+    s.add_argument("--stage-start", help="换腿新阶段起点（带时区 ISO；Codex 064 §5）")
+    s.add_argument("--stage-inherit", action="append", type=_stage_leg,
+                   help="沿用腿及内部估值：代码:带符号张数:low:ref:high，如 SLV261030P50000.US:-2:1.85:1.93:1.98（可多次）")
+    s.add_argument("--stage-basis", help="内部估值来源说明（同截面中价/成交价、时刻、质量）")
+    s.add_argument("--clear-stage", action="store_true", help="删除已登记的新阶段")
     s.set_defaults(func=cmd_plan_set)

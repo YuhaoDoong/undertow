@@ -226,7 +226,7 @@ def test_risk_unit_partial_close_protection_raises_risk(fakes, monkeypatch, caps
     a = argparse.Namespace(underlying="USO", leg=[dc._parse_delta_leg("-1:C:160:2026-10-29")], cash=None)
     assert dc.cmd_risk_unit(a) == 0
     out = capsys.readouterr().out
-    assert "[现仓]" in out and "joint_bound" in out and "卖 1 张 USO261029C160000.US @ 3.25" in out
+    assert "[现仓 · 政策 B 预算口径]" in out and "joint_bound" in out and "卖 1 张 USO261029C160000.US @ 3.25" in out
     assert "unbounded" in out and "政策 B 整本账（拟操作后）：fail" in out
 
 
@@ -243,3 +243,29 @@ def test_parse_delta_leg_rejects_bad():
     with pytest.raises(argparse.ArgumentTypeError):
         dc._parse_delta_leg("2:X:50:2026-10-30")
     assert dc._parse_delta_leg("+2:p:48:2026-10-30") == {"kind": "P", "strike": 48.0, "expiry": "2026-10-30", "qty": 2}
+
+
+def test_risk_unit_prints_three_rulers_and_keeps_exited_leg_cash(fakes, monkeypatch, capsys):
+    """Codex 063 N1 / 064 §5：换腿后已离场腿的现金留在本轮；本轮累计 / 新阶段 / 从现在起分开报，不相加。"""
+    from undertow.analyze.risk_aggregate import apply_campaign_cash
+    legs = [{"kind": "C", "strike": 160.0, "expiry": "2026-10-29", "qty": 1, "symbol": "USO261029C160000.US"},
+            {"kind": "C", "strike": 165.0, "expiry": "2026-10-29", "qty": -1, "symbol": "USO261029C165000.US"}]
+    book = [{"id": "uso", "underlying": "USO", "stop_loss": None, "payoff_max_loss": None, "legs": legs,
+             "net_cash": 0.0, "future_fees": 1.6}]
+    f = lambda t, s, b, n: {"time": t, "symbol": s, "balance": b, "flow_name": n}
+    rows = [f("2026-10-01T14:00:00Z", "USO261029C155000.US", "-300.00", "Option Buy Transaction"),   # 原多头（已离场）
+            f("2026-10-01T14:00:00Z", "USO261029C165000.US", "120.00", "Option Sell Transaction"),
+            f("2026-10-02T10:00:00Z", "USO261029C155000.US", "-0.82", "Option Buy Fee"),
+            f("2026-10-02T10:00:00Z", "USO261029C165000.US", "-0.83", "Option Sell Fee"),
+            f("2026-10-10T14:00:00Z", "USO261029C160000.US", "-250.00", "Option Buy Transaction"),
+            f("2026-10-10T14:00:00Z", "USO261029C155000.US", "420.00", "Option Sell Transaction"),
+            f("2026-10-11T10:00:00Z", "USO261029C160000.US", "-0.82", "Option Buy Fee"),
+            f("2026-10-11T10:00:00Z", "USO261029C155000.US", "-0.84", "Option Sell Fee")]
+    apply_campaign_cash(book, {"rows": rows, "window_start": "2026-09-01T00:00:00+00:00", "plans": {}})
+    monkeypatch.setattr(dc, "_budget_context", lambda: ({"equity": 664.0, "asof": "x"}, book, {"latched": False}, []))
+    assert dc.cmd_risk_unit(argparse.Namespace(underlying="USO", leg=None, cash=None)) == 0
+    out = capsys.readouterr().out
+    total = sum(float(r["balance"]) for r in rows)
+    assert f"本轮实际现金 {total:+,.2f}" in out and "含已离场腿 USO261029C155000.US" in out
+    assert "① 本轮累计" in out and "② 新阶段入场：未登记换腿阶段" in out and "③ 从现在起" in out
+    assert "拟操作后" not in out                                    # 现仓不另造「拟操作后」行

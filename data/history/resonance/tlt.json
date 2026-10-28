@@ -751,5 +751,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-10-27T09:11:10.357825+00:00"
+ },
+ {
+  "instrument": "tlt",
+  "date": "2026-10-28",
+  "spot": 81.4998,
+  "state": "共振看空",
+  "struct_bias": "偏空(弱)",
+  "band": "强超买",
+  "regime": "熊",
+  "stretch": 3.223408120628567,
+  "stretch_pctile": 0.984,
+  "drawdown": -2.5039513125624495,
+  "dd_pctile": 0.892,
+  "combo_pctile": 0.938,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-10-28T10:14:32.631930+00:00"
  }
 ]

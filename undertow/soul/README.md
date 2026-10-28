@@ -31,6 +31,13 @@
 - `python -m undertow soul --json` —— 结构化输出
 - 档案自动进 `consult` / `consult --pre-trade` 的上下文包
 
+## 外部作者判断的结构化登记（`author_claims.py`，Codex 066 A1）
+
+`author-claim-v1-20261028`：把一句话拆成 state / unconditional_direction / conditional_direction / revision / ambiguous，
+保留全部限定语、可读时刻与时区、期限状态、条件与触发时刻、事件簇、是否在看结果前编码（retrospective）。
+state 只能和情绪面板对照一致性，不升级成方向；期限未定、ambiguous、retrospective、条件未触发都不可计分。
+数据在私有 `data/soul/author_claims.jsonl`；校验：`python -m undertow.soul.author_claims [路径]`（只读）。
+
 ## 档案位置与隐私
 
 **公开仓库只放模板** `config/soul.template.json`（不含任何个人内容）；**你的实际档案**存 **`data/soul/profile.json`**，含个人交易史与心理弱点 —— **已 gitignore，绝不进公开仓库**

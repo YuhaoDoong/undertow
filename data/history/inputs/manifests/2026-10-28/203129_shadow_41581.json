@@ -1,0 +1,42 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "flowside",
+  "gold",
+  "silver",
+  "--status-file",
+  "data/logs/.status_flowside_2026-10-28.run-39522-12804-1793218733.json",
+  "--run-id",
+  "39522-12804-1793218733"
+ ],
+ "pid": 41581,
+ "started_at": "2026-10-28T20:18:53.949985+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-10-28",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-10-28.json.gz",
+   "sha256": "766c2f8467bbd6b8ecda819a1c614e39520c97c6ec9fe34643c359f7d34500c7",
+   "captured_at": 1793182336.662654,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SLV/2026-10-28",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SLV/2026-10-28.json.gz",
+   "sha256": "aa8a18d0336985ca91e0649dc17fafb80c260f83f113d6bae74dcf04cfa2532f",
+   "captured_at": 1793182337.327323,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-10-28T20:31:29.913942+00:00",
+ "rc": 1,
+ "git_head": "99906ff17706c200f87b3e2faaaf4d2cb7a8acee"
+}

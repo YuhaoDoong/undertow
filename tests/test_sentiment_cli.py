@@ -152,3 +152,12 @@ def test_forward_session_mapping():
     hol = datetime(2026, 11, 25, 17, 0, tzinfo=ET)        # 感恩节前一天盘后 → 跳过 11/26
     assert C._forward_session(hol) == (date(2026, 11, 27), "certified")
 
+
+
+def test_coverage_audit_reports_gaps_and_reconstructed():
+    ser = [(date(2022, 2, 10), 30.0), (date(2022, 2, 11), 31.0), (date(2025, 5, 15), 40.0),
+           (date(2025, 5, 16), 41.0), (date(2025, 6, 17), 42.0)]
+    rep = C.coverage_audit({"VXSLV": {"series": ser, "sha256": "h"}}, {}, {})
+    v = rep["vol"]["VXSLV"]
+    assert v["gaps_over_10d"] == [["2022-02-11", "2025-05-15"], ["2025-05-16", "2025-06-17"]]
+    assert v["n_reconstructed"] == 2

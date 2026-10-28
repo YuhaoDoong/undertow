@@ -449,8 +449,10 @@ def coverage_audit(vols: dict, cots: dict, snaps: dict) -> dict:
             continue
         ser = src["series"]
         n_rec = sum(1 for d, _ in ser if S.vol_point_vintage(sym, d) == S.RECONSTRUCTED)
+        gaps = [[a[0].isoformat(), b[0].isoformat()] for a, b in zip(ser, ser[1:]) if (b[0] - a[0]).days > 10]
         out["vol"][sym] = {"first": ser[0][0].isoformat(), "last": ser[-1][0].isoformat(), "n": len(ser),
                            "n_reconstructed": n_rec, "n_unknown_vintage": len(ser) - n_rec,
+                           "gaps_over_10d": gaps,
                            "source_hash": src["sha256"],
                            "note": "今天下载的历史；除 VXSLV 回算段外均为 unknown_vintage（未证明与当时公开值一致）"}
     for k, c in cots.items():

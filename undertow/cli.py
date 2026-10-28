@@ -4259,6 +4259,8 @@ def build_parser() -> argparse.ArgumentParser:
     _desk_register(sub)
     from undertow.riskwatch_cli import register as _riskwatch_register
     _riskwatch_register(sub)
+    from undertow.sentiment_cli import register as _sentiment_register
+    _sentiment_register(sub)
 
     psig = sub.add_parser("signals",
                           help="强信号台账：重建/回填/统计（这层从未回测过，靠向前累积）")

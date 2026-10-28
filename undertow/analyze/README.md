@@ -103,6 +103,7 @@
 imports `core`（+ 少量分析层内部互引，如 `outlook` 吃 gamma/flow 结果；`portfolio` 吃 blackscholes）；**不 import** `collect`/`report`（`portfolio` 只吃调用方喂入的 `InstrumentContext`，账户数据由 CLI 层从 `collect/longbridge_account` 取后注入）。输出只作**波段级风险情境**，非交易指令、非投资建议。
 - `direction.py` —— **方向裁决与弃权**。区分【硬弃权】（无前日快照/ΔOI 全零/数据已过期，属逻辑约束）与【软弃权】（压力比不足/两口径反向，阈值**未校准**）。所有软弃权理由强制带「未经校准」标注；实测没有任何门槛的 Wilson 95% 下界超过 50%。
 - `structure_read.py` —— 机构口径的结构读数，**不输出方向票**（防守强度轴与多空正交）。
+- `sentiment.py` —— **情绪面板 v0 纯计算（Codex 066，`sentiment-panel-v0-20261028`）**：严格 Delta 包围（复用 `flow._iv_at_delta_strict`，无包围返回 None，不取端点）、两包围到期按总方差插到恒 30 日（不外推；最近到期只作审计列）、两侧 50Δ ATM、源链 P/C 0–45D 主窗与全链对照（缺字段整项 None、分母 0 单独状态、记录到期覆盖）、prior-only 中位秩分位（日频 252、COT 156 期）、质量状态枚举与 VXSLV 2025-06-16 重启/回算段标记。描述层：不合成分数、不给方向。编排在 `undertow/sentiment_cli.py`。
 
 ### `conviction.py`（开发期，2026-09-28）
 期权多层同向读数：S（同到期 Δskew25）、F（近价 ±5% 可用腿按 |ΔOI×Δ| 推断分侧，纯净度未知不计入）、

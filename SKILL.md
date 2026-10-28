@@ -33,6 +33,7 @@ description: >-
 2. `python -m undertow walls silver wti` —— 最近几道墙、ΔOI、买卖方向；注意哪些墙是明后天到期（钉价、到期后变薄）。
 3. `python -m undertow flow` / `expiry` / `report` —— 持仓流与到期阶梯（持仓流金银略好于抛硬币、原油无信息，见 `data/backtest/flow-accuracy-explore-v1/`）。
 4. `python -m undertow news <品种>` —— 新闻只作背景，不改判方向。
+   `python -m undertow sentiment show` —— 情绪面板（波动指数 / 期权偏斜与 P/C / COT 分列，带数据日与质量）；只作背景描述，**不给方向、不改研判**，分位不是反弹概率（Codex 066）。
 5. 外部作者的位点：按来向区分支撑/压力；登记用 `dirledger author-add`（私有），对错只由价格裁定。
 
 ### ② 下单定价（「这个价差挂多少？」「买方还是卖方？」）

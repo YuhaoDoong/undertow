@@ -128,12 +128,16 @@ def test_budget_without_legs_keeps_old_behavior():
     assert r["feasible_units"] == [1, 2] and r["allowed_units"] == 2 and r.get("netting") is None  # 止损 300 > 200
 
 
-def test_pending_group_stop_is_incomplete_not_fail():
-    """跨期净额单元没有整组止损规则 → 单笔计划止损 incomplete，预算 incomplete（不是通过，也不是确定的 fail）。"""
+def test_no_stop_unit_checked_by_joint_loss_bound():
+    """跨期净额单元没有价格止损计划：旧版报 incomplete（「整组止损规则待补」）。Codex 065 WP1（用户 10/23 澄清）起
+    按已证明的保守全损界核对计划止损额度：界内 → 通过，来源写明 joint_loss_bound_no_price_stop；风险界算不出才 incomplete。"""
     book = [_row("cal", [C(100, -1, E1), C(100, 1, E2)], -50, 1.6, "QQQ")]
     b = rp.evaluate_book(book, CAP)
     st = next(c for c in b["checks"] if c["check"].endswith("单笔计划止损"))
-    assert st["status"] == "incomplete" and b["overall"] == "incomplete"
+    assert st["status"] == "pass" and st["note"].startswith(rp.NO_PRICE_STOP_BASIS) and "保守上界" in st["note"]
+    unk = rp.evaluate_book([_row("cal", [C(100, 1, E1), C(105, -2, E2)], 300, 2.4, "QQQ")], CAP)
+    su = next(c for c in unk["checks"] if c["check"].endswith("单笔计划止损"))
+    assert su["status"] == "incomplete" and unk["overall"] != "pass"   # unresolved：不能用全损界代替
 
 
 def test_apply_cash_ledger_overrides_cost_basis():

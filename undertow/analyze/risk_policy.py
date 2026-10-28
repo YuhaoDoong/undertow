@@ -268,18 +268,36 @@ def _net_units(rows: list[dict]) -> tuple[list[dict], list[dict]]:
         r = nr.unit_risk(legs, net_cash=sum(p["net_cash"] for p in ps),
                          future_fees=sum(p.get("future_fees", 0.0) for p in ps),
                          cash_basis="；".join(sorted({p.get("cash_basis") or "未注明" for p in ps})), label=u)
+        ml = r["max_loss"] if r["bound_type"] in ("joint_bound", "conservative_bound") else None
         if len(ps) == 1 and nr.normalize(ps[0]["legs"])[0] == r["net_legs"] and _num(ps[0].get("stop_loss")):
             stop, stop_basis = ps[0]["stop_loss"], "原组合计划止损"
         else:
-            stop = nr.stop_bound(r)
-            stop_basis = "整组价值非负 → 止损损失 ≤ 到期最大亏损（上界，非止损规则）" if stop is not None else "整组止损规则待补"
-        ml = r["max_loss"] if r["bound_type"] in ("joint_bound", "conservative_bound") else None
+            stop, stop_basis = no_price_stop_bound(r["bound_type"], ml)
         out.append({"id": f"unit|{u}|" + ",".join(sorted(p["id"] for p in ps)), "underlying": ps[0].get("underlying"),
                     "stop_loss": stop, "payoff_max_loss": ml, "state": "open", "unit": u,
-                    "bound_type": r["bound_type"], "stop_basis": stop_basis, "members": [p["id"] for p in ps]})
+                    "bound_type": r["bound_type"], "stop_basis": stop_basis,
+                    "stop_basis_code": NO_PRICE_STOP_BASIS if stop_basis.startswith(NO_PRICE_STOP_BASIS) else None,
+                    "members": [p["id"] for p in ps]})
         report.append({"unit": u, "members": [p["id"] for p in ps], "netted": True, "gross_upper": gross_upper,
                        "risk": r, "stop_loss": stop, "stop_basis": stop_basis})
     return out, report
+
+
+# 用户 2026-10-23 澄清（Codex 065 WP1）：「政策 B 不用改啊。只是说明了一下，计划止损以下的仓位可以不止损。」
+# 没有价格止损计划、但联合最大亏损 L 已核 → 计划损失按「全损风险界 L」核对原计划止损额度：L ≤ 上限通过、> 上限不通过。
+# 不是 N/A、不是 0，也不放宽金额（064 的 defined_risk_no_price_stop 豁免已撤回，不实施）。借记、贷记一致。
+NO_PRICE_STOP_BASIS = "joint_loss_bound_no_price_stop"
+
+
+def no_price_stop_bound(bound_type, max_loss) -> tuple[float | None, str]:
+    """无价格止损计划时的计划损失口径 → (金额, 来源)。风险界未知/无界 → (None, 原因)：调用方报 incomplete / fail，不当无计划。
+    跨期保守界：按该界核对；超限只说明「按当前保守界未获准」，不声称真实风险一定超限（文案带「上界」触发该说明）。"""
+    if bound_type == "joint_bound" and _num(max_loss):
+        return max_loss, f"{NO_PRICE_STOP_BASIS}：未设价格止损，按联合全损界核对计划止损额度（含模型费用；指派/到期处置另管）"
+    if bound_type == "conservative_bound" and _num(max_loss):
+        return max_loss, (f"{NO_PRICE_STOP_BASIS}：未设价格止损，按跨期保守上界核对计划止损额度"
+                          "（含模型费用；指派/到期处置另管）")
+    return None, "整组止损规则待补（风险界未知或无界，不能用全损界代替）"
 
 
 def _book_checks(rows: list[dict], R: float, policy: dict) -> list[dict]:

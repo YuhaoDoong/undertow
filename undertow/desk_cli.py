@@ -483,8 +483,9 @@ def cmd_risk_unit(args) -> int:
         print(f"\n[{title}] {legs}")
         print(f"  风险界 {r['bound_type']}（{r['method']}）：最大亏损 {ml}" + (f"（S={r['worst_at']:g}）" if r.get("worst_at") is not None else "")
               + f" · 最大收益 {mg} · 净现金流 {r['net_cash'] if r['net_cash'] is not None else '—'} · 未来费用 {r['future_fees']}")
-        sb = nr.stop_bound(r)
-        print(f"  止损：" + (f"整组价值非负 → 止损损失 ≤ ${sb:,.2f}（上界，非止损规则）" if sb is not None else "整组止损规则待补"))
+        sb, sbasis = rp.no_price_stop_bound(r["bound_type"], r["max_loss"])
+        print(f"  计划止损（无价格止损计划时）：" + (f"按全损界 ${sb:,.2f} 核对止损额度（{sbasis.split('：', 1)[1]}）"
+                                                if sb is not None else sbasis))
         for a in r["assumptions"]:
             print(f"  · {a}")
         for pr in r["problems"]:

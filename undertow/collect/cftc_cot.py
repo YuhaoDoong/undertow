@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 
 from undertow.core.config import CotSpec, Instrument
@@ -174,3 +175,43 @@ class CftcCotSource(DataSource):
             conc_net_8_long=conc("conc_net_le_8_tdr_long_all"),
             conc_net_8_short=conc("conc_net_le_8_tdr_short_all"),
         )
+
+
+# —— 情绪面板（Codex 066）用的严格序列 ——
+# CotReport 里 Legacy 的非商业持仓借用了 managed_money 槽位；面板必须写真实类别。
+# 且 _to_int 把缺失折成 0，面板要求缺失保持 None，所以这里直接从原始记录严格解析。
+REAL_CATEGORY = {"disaggregated_fut": "managed_money", "legacy_fut": "noncommercial"}
+NOMINAL_RELEASE = "周二截止 → 当周五 15:30 ET（常规；节假日/停摆有例外，未逐期核实）"
+
+
+def _strict_int(value):
+    if value in (None, "", "."):
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def strict_category_series(reports: list[CotReport], report_type: str) -> list[dict]:
+    """把同一合约的周报转成情绪面板用的严格序列（升序）。缺字段 = None，不折零。"""
+    pos, chg = _FIELD_MAPS[report_type][0]["managed_money"], _FIELD_MAPS[report_type][1]["managed_money"]
+    out = []
+    for r in sorted(reports, key=lambda x: x.report_date):
+        raw = r.raw or {}
+        out.append({
+            "report_date": r.report_date, "report_type": report_type,
+            "category_actual": REAL_CATEGORY[report_type],
+            "long": _strict_int(raw.get(pos[0])), "short": _strict_int(raw.get(pos[1])),
+            "spread": _strict_int(raw.get(pos[2])) if pos[2] else None,
+            "open_interest": _strict_int(raw.get("open_interest_all")),
+            "change_long": _strict_int(raw.get(chg[0])), "change_short": _strict_int(raw.get(chg[1])),
+        })
+    return out
+
+
+def raw_hash(reports: list[CotReport]) -> str:
+    import hashlib
+    blob = json.dumps([r.raw for r in sorted(reports, key=lambda x: x.report_date)],
+                      sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()

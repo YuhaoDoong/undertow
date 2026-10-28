@@ -34,6 +34,33 @@ class CboeVolSource:
             self.cache.set(cache_key, text)
         return self._parse(text)
 
+    def fetch_with_identity(self, sym: str, *, use_cache: bool = True) -> dict:
+        """取原文并带身份：{sym, url, sha256, fetched_at, status, series}。
+
+        情绪面板（Codex 066）要求每个分量保存原文散列与实际抓取时刻；fetched_at 取缓存文件里
+        写入时记录的时刻（命中缓存时）或本次请求时刻，不用「今天」顶替。
+        """
+        import hashlib
+        import json as _json
+        import time as _time
+        key = f"cboevol_{sym}"
+        url = CBOE_VOL_URL.format(sym=sym)
+        text, fetched_at, status = None, None, "fresh_fetch"
+        if use_cache:
+            text = self.cache.get(key, self.CACHE_TTL)
+            if text is not None:
+                status = "cache_hit"
+                try:
+                    fetched_at = float(_json.loads(self.cache._path(key).read_text("utf-8"))["fetched_at"])
+                except (OSError, ValueError, KeyError, TypeError):
+                    fetched_at = None
+        if text is None:
+            text = http_get_text(url, headers={"User-Agent": "Mozilla/5.0"})
+            fetched_at = _time.time()
+            self.cache.set(key, text)
+        return {"sym": sym, "url": url, "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                "fetched_at": fetched_at, "status": status, "series": self._parse(text)}
+
     @staticmethod
     def _parse(text: str) -> list[tuple[date, float]]:
         out: list[tuple[date, float]] = []

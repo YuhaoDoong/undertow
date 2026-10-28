@@ -161,3 +161,10 @@ def test_coverage_audit_reports_gaps_and_reconstructed():
     v = rep["vol"]["VXSLV"]
     assert v["gaps_over_10d"] == [["2022-02-11", "2025-05-15"], ["2025-05-16", "2025-06-17"]]
     assert v["n_reconstructed"] == 2
+
+
+def test_snapshot_path_stored_relative():
+    from undertow.core.config import PROJECT_ROOT
+    assert C._rel(str(PROJECT_ROOT / "data/snapshots/options/GLD/2026-10-27.json.gz")) == \
+        "data/snapshots/options/GLD/2026-10-27.json.gz"
+    assert C._rel("/elsewhere/x.json.gz") == "x.json.gz"

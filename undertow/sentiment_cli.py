@@ -37,6 +37,15 @@ def _iso(ts: float | None) -> str | None:
     return datetime.fromtimestamp(ts, timezone.utc).isoformat() if ts is not None else None
 
 
+def _rel(path: str) -> str:
+    """快照路径存成相对项目根的路径：公开台账里不写本机绝对路径（含用户名/工作树位置）。"""
+    from undertow.core.config import PROJECT_ROOT
+    try:
+        return str(Path(path).resolve().relative_to(PROJECT_ROOT.resolve()))
+    except ValueError:
+        return Path(path).name
+
+
 def _sha(obj) -> str:
     return hashlib.sha256(json.dumps(obj, sort_keys=True, ensure_ascii=False, default=str)
                           .encode("utf-8")).hexdigest()
@@ -197,7 +206,7 @@ def options_component(snap: dict | None, history: list[tuple[date, dict]], *, mo
     if sk["skew25_30d_pp"] is None and pcv.get("value") is None:
         q = S.INVALID
     return {**base, "source_hash": snap["ident"]["sha256"],
-            "source_path_or_url": snap["ident"]["path"], "file_date": snap["file_date"].isoformat(),
+            "source_path_or_url": _rel(snap["ident"]["path"]), "file_date": snap["file_date"].isoformat(),
             "captured_at": _iso(snap["ident"]["captured_at"]),
             "first_available_at": _iso(snap["ident"]["captured_at"]),
             "valuation_date": meta["valuation_date"].isoformat() if meta["valuation_date"] else None,

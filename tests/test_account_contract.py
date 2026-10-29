@@ -111,18 +111,18 @@ def test_assets_requests_usd_and_checks_currency(monkeypatch):
 
     def run(args, timeout=30.0):
         seen["args"] = args
-        return [{"currency": "USD", "net_assets": "877.78", "total_cash": "1057.76", "buy_power": "657.77",
-                 "cash_infos": [{"currency": "USD", "available_cash": "407.84"},
-                                {"currency": "SGD", "available_cash": "320.47"}]}]
+        return [{"currency": "USD", "net_assets": "1234.56", "total_cash": "1500.25", "buy_power": "900.10",
+                 "cash_infos": [{"currency": "USD", "available_cash": "611.11"},
+                                {"currency": "SGD", "available_cash": "222.22"}]}]
     monkeypatch.setattr(lb, "_run", run)
     a = lb.fetch_assets()
     assert seen["args"] == ["assets", "--currency", "USD"]
-    assert a.currency == "USD" and a.net_assets == pytest.approx(877.78) and a.total_cash == pytest.approx(1057.76)
-    assert a.cash_by_ccy == {"USD": 407.84, "SGD": 320.47}          # 各币种原值，不与顶层相加
+    assert a.currency == "USD" and a.net_assets == pytest.approx(1234.56) and a.total_cash == pytest.approx(1500.25)
+    assert a.cash_by_ccy == {"USD": 611.11, "SGD": 222.22}          # 各币种原值，不与顶层相加
 
 
 def test_assets_wrong_currency_raises(monkeypatch):
-    _stub(monkeypatch, [{"currency": "SGD", "net_assets": "1124.62", "buy_power": "843", "cash_infos": []}])
+    _stub(monkeypatch, [{"currency": "SGD", "net_assets": "1580.40", "buy_power": "1200", "cash_infos": []}])
     with pytest.raises(lb.AccountDataError, match="币种"):
         lb.fetch_assets()
 

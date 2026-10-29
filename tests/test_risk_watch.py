@@ -88,10 +88,10 @@ def test_debit_plan_stop_and_credit_paper_stop():
 
 
 def test_live_credit_plan_stop_is_honoured():
-    """2026-10-23：实盘贷记价差在私有计划写了 stop_value，旧版只认模拟仓自带的 stop_value → 静默不报。"""
-    live = dict(key="live|SLV|2026-10-30|P|50/48", scope="live", label="SLV 48/50P", underlying="SLV",
-                expiry="2026-10-30", side="P", k_sell=50.0, k_buy=48.0, entry_credit=1.10, qty=2,
-                fee_round_trip=3.2, spot=47.5, tdays_to_expiry=5, stop_value=None)
+    """实盘贷记价差在私有计划写了 stop_value，旧版只认模拟仓自带的 stop_value → 静默不报。（合成：虚构标的 XYZ）"""
+    live = dict(key="live|XYZ|2026-03-20|P|30/28", scope="live", label="XYZ 28/30P", underlying="XYZ",
+                expiry="2026-03-20", side="P", k_sell=30.0, k_buy=28.0, entry_credit=1.10, qty=2,
+                fee_round_trip=3.2, spot=27.5, tdays_to_expiry=5, stop_value=None)
     hit = [i for i in ev(credit(**live, value=1.63), plan={"stop_value": 1.63}) if i.key.startswith("stop")]
     assert len(hit) == 1 and hit[0].severity == "urgent" and "先买回卖腿" in hit[0].detail
     assert "stop" not in keys(ev(credit(**live, value=1.62), plan={"stop_value": 1.63}))

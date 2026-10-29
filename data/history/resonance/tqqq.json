@@ -786,5 +786,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-10-28T10:14:22.158818+00:00"
+ },
+ {
+  "instrument": "tqqq",
+  "date": "2026-10-29",
+  "spot": 29694.25,
+  "state": "仅结构",
+  "struct_bias": "偏空(弱)",
+  "band": "中性",
+  "regime": "牛",
+  "stretch": -0.8058265960412657,
+  "stretch_pctile": 0.336,
+  "drawdown": -3.6130471145804313,
+  "dd_pctile": 0.524,
+  "combo_pctile": 0.43000000000000005,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-10-29T10:11:40.798392+00:00"
  }
 ]

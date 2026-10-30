@@ -6,8 +6,8 @@
   "not_a_proxy": "期权标的就是股票本身，行权价直接是股价，无 ETF/商品换算 —— 比 USO≈WTI 干净得多。proxy_quality 记 direct。",
   "earnings_drive_walls": "个股 OI 堆积受【财报日】主导，财报周的墙会整体重构；ETF 的墙更多由月度 OPEX 决定。**墙位持久性的经验不能从 ETF 照搬。**",
   "not_calibrated": "signal_ledger 里没有任何个股样本 —— 黄金 72%/白银 71% 那些命中率一概不适用。个股墙位只作描述性参考，不得据此重仓。",
-  "cross_stock_not_independent": "⚠️ 这批个股彼此高度相关（NVDA/AMD/INTC 同为半导体；MSFT/AAPL/GOOGL 同为大盘科技），且与已有的 QQQ/TQQQ/SPY 重叠。**跨品种合并统计必须做日期聚类 bootstrap** —— 把 N 只个股的同一天当成 N 份独立证据，就是 2026-08-29 那个「138 个品种日」的错误（见 AGENTS.md「单品种时序 vs 跨品种合并」）。单品种时序检验不受此限。",
-  "liquidity_screen": "入选判据用项目已有的 WALL_FLOW_MIN_OI=3000（墙位流可读的最低 OI），不另立阈值。2026-09-25 实测近端主墙 OI：NVDA 120,765/88,044 · AAPL 37,831/17,193 · TSLA 35,697/10,967 · MSFT 25,422/12,821 · INTC 22,359/20,249 · GOOGL 20,718/9,708 · AMD 9,034/13,348。全部远超阈值，最薄的 AMD 也比已在交易的 TQQQ（全链 1,746 合约）厚得多。近价行权价档距 0.22%~0.79%，密度足够。"
+  "cross_stock_not_independent": "⚠️ 这批个股彼此高度相关（NVDA/AMD/INTC 同为半导体；MSFT/AAPL/GOOGL/AMZN/META 同为大盘科技），且与已有的 QQQ/TQQQ/SPY 重叠。**跨品种合并统计必须做日期聚类 bootstrap** —— 把 N 只个股的同一天当成 N 份独立证据，就是 2026-08-29 那个「138 个品种日」的错误（见 AGENTS.md「单品种时序 vs 跨品种合并」）。单品种时序检验不受此限。",
+  "liquidity_screen": "入选判据用项目已有的 WALL_FLOW_MIN_OI=3000（墙位流可读的最低 OI），不另立阈值。2026-09-25 实测近端主墙 OI：NVDA 120,765/88,044 · AAPL 37,831/17,193 · TSLA 35,697/10,967 · MSFT 25,422/12,821 · INTC 22,359/20,249 · GOOGL 20,718/9,708 · AMD 9,034/13,348。全部远超阈值，最薄的 AMD 也比已在交易的 TQQQ（全链 1,746 合约）厚得多。近价行权价档距 0.22%~0.79%，密度足够。 2026-10-30 补入 AMZN/META（同一阈值）：近端主墙 OI AMZN 4,604/8,492 · META 5,848/6,282，均过线。"
  },
  "instruments": {
   "gold": {
@@ -391,6 +391,48 @@
    },
    "commodity": null,
    "vol_index": "VXAPL"
+  },
+  "amzn": {
+   "key": "amzn",
+   "display_name": "亚马逊 (AMZN)",
+   "asset_class": "single_stock",
+   "cot": null,
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "AMZN",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "direct",
+    "note": "2026-10-30（用户：头部个股每日记录期权数据）纳入，补齐七巨头。当日 CBOE 收盘链 2,408 合约，近端主墙 250（4,604）/210（8,492），档距 2.50（1.11%，本批最粗之一）；全链当日成交约 127 万张。 共同边界见顶层 _single_stock。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "AMZN",
+    "quality": "direct",
+    "note": "AMZN 日线，标的自身即定价对象，无跟踪误差。"
+   },
+   "commodity": null,
+   "vol_index": null
+  },
+  "meta": {
+   "key": "meta",
+   "display_name": "Meta (META)",
+   "asset_class": "single_stock",
+   "cot": null,
+   "options": {
+    "source": "cboe_etf",
+    "symbol": "META",
+    "approx_commodity_multiplier": null,
+    "proxy_quality": "direct",
+    "note": "2026-10-30（用户：头部个股每日记录期权数据）纳入，补齐七巨头。当日 CBOE 收盘链 7,038 合约（单日快照约 410KB，个股里最大），近端主墙 700（5,848）/610（6,282），档距 2.50（0.40%）。 共同边界见顶层 _single_stock。"
+   },
+   "price": {
+    "source": "cboe_history",
+    "symbol": "META",
+    "quality": "direct",
+    "note": "META 日线，标的自身即定价对象，无跟踪误差。"
+   },
+   "commodity": null,
+   "vol_index": null
   }
  },
  "defaults": {

@@ -647,6 +647,9 @@ def cmd_plan_set(args) -> int:
     cs, ss_, si = (getattr(args, a, None) for a in ("campaign_start", "stage_start", "stage_inherit"))
     if cs is not None:
         p["campaign_start"] = cs
+    for f, a in (("campaign_members", "campaign_member"), ("campaign_independent", "campaign_independent")):
+        if getattr(args, a, None):
+            p[f] = list(getattr(args, a))
     if getattr(args, "clear_stage", False):
         p.pop("stage", None)
     if ss_ is not None or si:
@@ -690,9 +693,13 @@ def register(sub):
     s.add_argument("--inv-basis", choices=("close", "intraday"), default="close"); s.add_argument("--inv-note")
     s.add_argument("--review-date"); s.add_argument("--review-note"); s.add_argument("--note")
     s.add_argument("--campaign-start", help="本轮起点（带时区 ISO，按现金流水核定的首笔成交时刻；Codex 063 N1）")
+    s.add_argument("--campaign-member", action="append",
+                   help="本轮已离场的成员合约（换腿离场的旧腿；在场腿自动是成员），人工核对流水后登记，可多次（campaign-cash v2）")
+    s.add_argument("--campaign-independent", action="append",
+                   help="本轮起点之后、但不属于本轮的同标的合约（另开另平的独立交易），人工核对后登记，可多次")
     s.add_argument("--stage-start", help="换腿新阶段起点（带时区 ISO；Codex 064 §5）")
     s.add_argument("--stage-inherit", action="append", type=_stage_leg,
-                   help="沿用腿及内部估值：代码:带符号张数:low:ref:high，如 SLV261030P50000.US:-2:1.85:1.93:1.98（可多次）")
+                   help="沿用腿及内部估值：代码:带符号张数:low:ref:high，如 XYZ260320P00030000.US:-2:1.70:1.78:1.84（虚构示例，可多次）")
     s.add_argument("--stage-basis", help="内部估值来源说明（同截面中价/成交价、时刻、质量）")
     s.add_argument("--clear-stage", action="store_true", help="删除已登记的新阶段")
     s.set_defaults(func=cmd_plan_set)

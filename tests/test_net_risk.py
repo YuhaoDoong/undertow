@@ -143,16 +143,18 @@ def test_no_stop_unit_checked_by_joint_loss_bound():
 def test_cash_ledger_allocates_each_flow_once_per_unit():
     """旧 apply_cash_ledger 逐行按合约认领流水（共用合约重复计、离场腿丢失），已由 apply_campaign_cash 取代（Codex 063 N1）。"""
     from undertow.analyze.risk_aggregate import apply_campaign_cash
-    book = [{"id": "a", "underlying": "SLV", "legs": [dict(P(52, 2), symbol="SLV261030P00052000.US"),
-                                                      dict(P(50, -2), symbol="SLV261030P00050000.US")],
-             "net_cash": -146.0, "future_fees": 3.2, "cash_basis": "成本价"}]
-    rows = [{"time": "2026-10-16T14:09:19Z", "symbol": "SLV261030P00052000.US", "balance": "-262.00", "flow_name": "Option Buy Transaction"},
-            {"time": "2026-10-16T14:09:19Z", "symbol": "SLV261030P00050000.US", "balance": "116.00", "flow_name": "Option Sell Transaction"},
-            {"time": "2026-10-19T10:40:44Z", "symbol": "SLV261030P00052000.US", "balance": "-1.59", "flow_name": "Option Buy Fee"},
-            {"time": "2026-10-19T10:40:44Z", "symbol": "SLV261030P00050000.US", "balance": "-1.60", "flow_name": "Option Sell Fee"},
-            {"time": "2026-10-16T15:00:00Z", "symbol": "OTHER", "balance": "999", "flow_name": "Option Sell Transaction"}]
-    apply_campaign_cash(book, {"rows": rows, "window_start": "2026-09-01T00:00:00+00:00", "plans": {}})
-    assert book[0]["net_cash"] == pytest.approx(-149.19) and "唯一分配" in book[0]["cash_basis"]
+    # 独立合成（虚构标的 XYZ、虚构时刻与金额）；2026-10-31 前此处误用了一笔真实成交的时刻/金额，已替换（Codex 067 P0）
+    book = [{"id": "a", "underlying": "XYZ", "legs": [dict(P(52, 2), symbol="XYZ261120P00052000.US"),
+                                                      dict(P(50, -2), symbol="XYZ261120P00050000.US")],
+             "net_cash": -140.0, "future_fees": 3.2, "cash_basis": "成本价"}]
+    rows = [{"time": "2026-11-02T15:30:05Z", "symbol": "XYZ261120P00052000.US", "balance": "-250.00", "flow_name": "Option Buy Transaction"},
+            {"time": "2026-11-02T15:30:05Z", "symbol": "XYZ261120P00050000.US", "balance": "110.00", "flow_name": "Option Sell Transaction"},
+            {"time": "2026-11-03T10:00:00Z", "symbol": "XYZ261120P00052000.US", "balance": "-1.55", "flow_name": "Option Buy Fee"},
+            {"time": "2026-11-03T10:00:00Z", "symbol": "XYZ261120P00050000.US", "balance": "-1.56", "flow_name": "Option Sell Fee"},
+            {"time": "2026-11-02T16:00:00Z", "symbol": "OTHER", "balance": "999", "flow_name": "Option Sell Transaction"}]
+    plans = {"live|XYZ|2026-11-20|P|50/52": {"campaign_start": "2026-11-02T15:30:05Z"}}
+    apply_campaign_cash(book, {"rows": rows, "window_start": "2026-10-01T00:00:00+00:00", "plans": plans})
+    assert book[0]["net_cash"] == pytest.approx(-250 + 110 - 1.55 - 1.56) and "唯一分配" in book[0]["cash_basis"]
 
 
 def test_spread_candidate_carries_legs_and_cash():

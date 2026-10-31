@@ -74,7 +74,8 @@ def apply_campaign_cash(book: list[dict], cash: dict | None) -> list[str]:
     cash = {"rows": 原样流水, "window_start": 带时区 ISO, "plans": {计划键: 计划}}；{"error": 原因} = 流水读取失败。
     同一标的的带腿行合成一份归属；归属不完整（缺金额、窗口没覆盖、起点登记不合格）或流水读不到 → 这些行 net_cash=None，
     预算报 incomplete（不再留券商成本价口径冒充已核：成本价在部分减仓后会被改写）。
-    政策 B 用的 net_cash：登记了新阶段 → 新阶段入场现金的保守端；否则 → 本轮累计。另存 campaign_cash / cash_detail 供展示。"""
+    政策 B 用的 net_cash：登记了新阶段 → 新阶段入场现金的逐腿最差端；否则 → 本轮累计。
+    成员来自私有计划 campaign_start / campaign_members / campaign_independent（campaign-cash v2，Codex 067 P0）。另存 campaign_cash / cash_detail 供展示。"""
     from undertow.analyze import campaign_cash as cc
     notes = []
     units: dict = {}
@@ -90,24 +91,25 @@ def apply_campaign_cash(book: list[dict], cash: dict | None) -> list[str]:
         return [f"现金流水读取失败（{cash['error']}）→ 同标的净额现金未知，预算 incomplete"]
     plans = cash.get("plans") or {}
     for u, ps in units.items():
-        anchors, stages = {}, {}
+        anchors, stages, members = {}, {}, {}
         for p in ps:
             plan = plans.get(cc.plan_key_for_legs(u, p["legs"]) or "") or {}
             if plan.get("campaign_start"):
                 anchors[p["id"]] = plan["campaign_start"]
             if plan.get("stage"):
                 stages[p["id"]] = plan["stage"]
+            members[p["id"]] = {k: plan.get(k) for k in ("campaign_members", "campaign_independent")}
         res = cc.unit_cash(u, ps, cash.get("rows") or [], window_start=cash["window_start"],
-                           anchors=anchors, stages=stages)
+                           anchors=anchors, stages=stages, members=members)
         for p in ps:
             ok = res["quality"] != "incomplete"
             p.update(net_cash=res["policy_cash_by_row"].get(p["id"]) if ok else None,
                      campaign_cash=res["by_row"].get(p["id"]) if ok else None,
                      cash_basis=cc.basis_text(res, p["id"]), cash_detail=res)
         notes += [f"{u}：{x}" for x in res["problems"] + res["notes"]]
-        if res["quality"] == "bound" and res.get("inferred_starts"):
-            notes.append(f"{u}：本轮起点未登记，按保守界计；可用 `undertow riskwatch plan-set --key <键> --campaign-start "
-                         f"<ISO>` 登记已核起点（推断最早关联成交 {min(res['inferred_starts'].values())}）")
+        if res.get("candidates"):
+            notes.append(f"{u}：本轮起点/成员未登记 → 不完整；人工核对流水后用 `undertow riskwatch plan-set --key <键> "
+                         f"--campaign-start <ISO> [--campaign-member <离场合约>…] [--campaign-independent <合约>…]` 登记")
     return notes
 
 

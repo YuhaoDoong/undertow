@@ -261,6 +261,18 @@ def _campaign_fields_problem(p: dict) -> str | None:
     cs = p.get("campaign_start")
     if cs is not None and not _aware_iso(cs):
         return "campaign_start 必须是带时区的 ISO 时刻"
+    from undertow.analyze.campaign_cash import norm_symbol, parse_occ
+    for f in ("campaign_members", "campaign_independent"):        # campaign-cash v2（Codex 067 P0）：人工核对后登记
+        v = p.get(f)
+        if v is None:
+            continue
+        if not isinstance(v, list) or not v or not all(isinstance(x, str) and parse_occ(norm_symbol(x)) for x in v):
+            return f"{f} 必须是非空的期权合约代码列表"
+        if len({norm_symbol(x) for x in v}) != len(v):
+            return f"{f} 有重复合约"
+    both = {norm_symbol(x) for x in p.get("campaign_members") or []} & {norm_symbol(x) for x in p.get("campaign_independent") or []}
+    if both:
+        return f"同一合约不能既是成员又是独立：{'、'.join(sorted(both))}"
     st = p.get("stage")
     if st is None:
         return None
@@ -278,6 +290,9 @@ def _campaign_fields_problem(p: dict) -> str | None:
         ps = [x.get(f) for f in ("low", "ref", "high")]
         if not all(_fin(v) and v > 0 for v in ps) or not ps[0] <= ps[1] <= ps[2]:
             return "stage.inherited 的 low ≤ ref ≤ high 必须是正有限数"
+    syms = [norm_symbol(x["symbol"]) for x in inh]
+    if len(set(syms)) != len(syms):                  # Codex 067：同一沿用腿登记两次会重复计虚拟收入
+        return "stage.inherited 同一合约只能登记一次"
     return None
 
 

@@ -261,7 +261,9 @@ def test_risk_unit_prints_three_rulers_and_keeps_exited_leg_cash(fakes, monkeypa
             f("2026-10-10T14:00:00Z", "USO261029C155000.US", "420.00", "Option Sell Transaction"),
             f("2026-10-11T10:00:00Z", "USO261029C160000.US", "-0.82", "Option Buy Fee"),
             f("2026-10-11T10:00:00Z", "USO261029C155000.US", "-0.84", "Option Sell Fee")]
-    apply_campaign_cash(book, {"rows": rows, "window_start": "2026-09-01T00:00:00+00:00", "plans": {}})
+    plans = {"live|USO|2026-10-29|C|165/160": {"campaign_start": "2026-10-01T14:00:00Z",
+                                                "campaign_members": ["USO261029C155000.US"]}}   # v2：离场旧腿须登记成员
+    apply_campaign_cash(book, {"rows": rows, "window_start": "2026-09-01T00:00:00+00:00", "plans": plans})
     monkeypatch.setattr(dc, "_budget_context", lambda: ({"equity": 664.0, "asof": "x"}, book, {"latched": False}, []))
     assert dc.cmd_risk_unit(argparse.Namespace(underlying="USO", leg=None, cash=None)) == 0
     out = capsys.readouterr().out

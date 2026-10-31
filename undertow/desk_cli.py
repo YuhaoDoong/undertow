@@ -485,10 +485,10 @@ def _show_rulers(rows: list[dict], root: str, legs: list[dict]) -> None:
         return
     n = sum(abs(lg["qty"]) for lg in nr.normalize(legs)[0] if lg["kind"] != "STOCK")
     ff = round(n * sp.FEE_PER_CONTRACT, 2)
-    q = {"verified": "起点已登记", "bound": "起点未登记 → 保守界"}.get(det["quality"], det["quality"])
+    q = {"verified": "起点与成员已登记（人工核对，源无张数）"}.get(det["quality"], det["quality"])
     print(f"\n现金归属（{det['version']}，{q}）：本轮起点 {det['start']} · 本轮实际现金 {det['campaign_cash']:+,.2f}"
           + (f" · 含已离场腿 {'、'.join(det['exited'])}" if det["exited"] else "")
-          + (f" · 未关联的同标的独立交易流水 {det['independent_rows']} 条（不计入）" if det["independent_rows"] else ""))
+          + (f" · 登记为独立的同标的交易流水 {det['independent_rows']} 条（不计入）" if det["independent_rows"] else ""))
     camp = nr.unit_risk(legs, net_cash=sum(b["campaign_cash"] for b in rows), future_fees=ff, label="本轮累计")
     ml = lambda r: "—" if r["max_loss"] is None else f"${r['max_loss']:,.2f}"
     print(f"  ① 本轮累计（全部实际现金 + 剩余腿到期最坏 − 未来费用）：最大亏损 {ml(camp)}（{camp['bound_type']}）")
@@ -500,7 +500,10 @@ def _show_rulers(rows: list[dict], root: str, legs: list[dict]) -> None:
             old = st["old_stage"][k] if st.get("old_stage") else None
             print(f"  ② 新阶段入场（沿用腿内部估值 {k}）：新阶段现金 {cash:+,.2f} → 最大亏损 {ml(r)}"
                   + (f" · 旧阶段参考 {old:+,.2f}（两者之和 = 本轮实际，内部估值不是成交）" if old is not None else ""))
-        print("     政策 B 预算取使新阶段风险最大的端点（新交易从成立时点算，不吃旧阶段利润）")
+        cash = sum(det["stages"][b["id"]]["policy_cash"] if b["id"] in det["stages"] else b["campaign_cash"] for b in rows)
+        r = nr.unit_risk(legs, net_cash=cash, future_fees=ff, label="新阶段·政策")
+        print(f"     政策 B 预算用逐腿最差端（沿用空头取 low、沿用多头取 high）：新阶段现金 {cash:+,.2f} → 最大亏损 {ml(r)}"
+              "（新交易从成立时点算，不吃旧阶段利润）")
     else:
         print("  ② 新阶段入场：未登记换腿阶段 → 政策 B 预算用 ①")
     v, why = _hold_value_now(root, legs)

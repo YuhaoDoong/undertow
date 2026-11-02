@@ -1,0 +1,74 @@
+{
+ "schema": 1,
+ "command": "mainwall",
+ "argv": [
+  "mainwall",
+  "capture",
+  "--status-file",
+  "data/logs/.status_mainwall_2026-11-02.json"
+ ],
+ "pid": 75114,
+ "started_at": "2026-11-02T11:11:01.543336+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-11-02",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-11-02.json.gz",
+   "sha256": "775efc693e70514a0f80daa32cc17ebeaffd684922e37baec31f40aa15ec156e",
+   "captured_at": 1793617308.646157,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-10-30",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-10-30.json.gz",
+   "sha256": "fd5ad4cc90612ee3c08bd615f60997adfe46477066de008900e9f511295bfd55",
+   "captured_at": 1793354653.3775501,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_GLD",
+   "status": "cache_hit",
+   "size": 585583,
+   "sha256": "fe9cf691f9712a503ccfe2dbb5958a12378987f5026005ec72c9e6d44d50ffdc",
+   "fetched_at": "2026-11-02T11:02:16.896030+00:00",
+   "age_s": 524.8,
+   "ttl_s": 43200,
+   "stored": true,
+   "seq": 2
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_refetch_GLD",
+   "status": "cache_hit",
+   "size": 80,
+   "sha256": "ea27c02396e3cc768b23a883483560ca749b5e511c5515350e2d1f2f5fbcc263",
+   "fetched_at": "2026-11-02T11:02:15.932890+00:00",
+   "age_s": 525.8,
+   "ttl_s": 1800,
+   "stored": true,
+   "seq": 3
+  },
+  {
+   "kind": "cache",
+   "key": "yahoo_etf_GLD_2y",
+   "status": "fresh_fetch",
+   "size": 58723,
+   "sha256": "e0026a32b9ed1b2409e1f5bfdb07c222e39c94f7363f801ec24950773ba71daf",
+   "fetched_at": "2026-11-02T11:11:01.926337+00:00",
+   "age_s": 0.0,
+   "ttl_s": null,
+   "stored": true,
+   "seq": 4
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-11-02T11:11:02.008889+00:00",
+ "rc": 1,
+ "git_head": "90d8a82d21f499582b38da26cca62cabeabf4572"
+}

@@ -1,0 +1,76 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 75252,
+ "started_at": "2026-11-02T11:11:46.524673+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-11-02",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-11-02.json.gz",
+   "sha256": "775efc693e70514a0f80daa32cc17ebeaffd684922e37baec31f40aa15ec156e",
+   "captured_at": 1793617308.646157,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/TLT/2026-11-02",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/TLT/2026-11-02.json.gz",
+   "sha256": "016c471891474bfec3e6a538135388d6714f156e2f73e004c913533de1389236",
+   "captured_at": 1793617315.188705,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SPY/2026-11-02",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SPY/2026-11-02.json.gz",
+   "sha256": "8a87ca2178b390a85caeed8a085349466bab77a0ddc888fdfc4bdeb8ef51e192",
+   "captured_at": 1793617317.651098,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 2
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/TSLA/2026-11-02",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/TSLA/2026-11-02.json.gz",
+   "sha256": "1fadaa6a0a972f944b0e31acd39dc1c01586636e8c0f48162280862867b1dda6",
+   "captured_at": 1793617324.3794901,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 3
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/INTC/2026-11-02",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/INTC/2026-11-02.json.gz",
+   "sha256": "b455d732296cf1541e62ac814ecb3b714dd0f963a0f7dba4814aa142096fee5e",
+   "captured_at": 1793617327.2039309,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 4
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/AAPL/2026-11-02",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/AAPL/2026-11-02.json.gz",
+   "sha256": "a0d2131f0120832f0346c5795a9040f0bcb75f06196bf10530a9007b1f6a63c1",
+   "captured_at": 1793617332.0298,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 5
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-11-02T11:12:04.692461+00:00",
+ "rc": 1,
+ "git_head": "90d8a82d21f499582b38da26cca62cabeabf4572"
+}

@@ -90,3 +90,7 @@
   spy:LedgerConflictError: spy 2026-11-02 首份候选已冻结；新输入与原记录冲突，原候选及回填结果未改；需人工核对，禁止事后改写前瞻样
 2026-11-02 20:06 +08 | ET 2026-11-02 06:55 | ⚠️ 方向判断台账失败（ET 2026-11-02 06:55）
   record rc=0 score rc=0 conviction rc=0 expiry-profile rc=1：  ⚠️ shadow expiry-profile spy: LedgerConflictError: spy|2026-11-02 首份事前记录已冻结，新输入不同；未改写 
+2026-11-02 20:28 +08 | ET 2026-11-02 07:23 | ⚠️ 模拟仓台账局部不完整（ET 2026-11-02 07:23）
+  已生成，见私有 data/paper/reports/.status_paper_book.json
+2026-11-02 20:29 +08 | ET 2026-11-02 07:23 | ⚠️ 方向判断台账失败（ET 2026-11-02 07:23）
+  record rc=0 score rc=0 conviction rc=0 expiry-profile rc=1：  ⚠️ shadow expiry-profile spy: LedgerConflictError: spy|2026-11-02 首份事前记录已冻结，新输入不同；未改写 

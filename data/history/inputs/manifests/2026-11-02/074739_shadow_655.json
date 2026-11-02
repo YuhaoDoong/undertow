@@ -1,0 +1,26 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 655,
+ "started_at": "2026-11-02T07:47:19.830638+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/SPY/2026-11-02",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SPY/2026-11-02.json.gz",
+   "sha256": "2e203a6445371c59af24e588f2d27eb21cbae86e138a16c2e96976773ca9269f",
+   "captured_at": 1793605133.517409,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-11-02T07:47:39.623917+00:00",
+ "rc": 1,
+ "git_head": "8bb86aae95c60a67a35c0e9f6b0477748831e8da"
+}

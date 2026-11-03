@@ -806,5 +806,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-11-02T06:16:05.825219+00:00"
+ },
+ {
+  "instrument": "spy",
+  "date": "2026-11-03",
+  "spot": 752.1,
+  "state": "共振看多",
+  "struct_bias": "偏多(弱)",
+  "band": "强超卖",
+  "regime": "牛",
+  "stretch": -1.9206321404402396,
+  "stretch_pctile": 0.032,
+  "drawdown": -3.2903148760001533,
+  "dd_pctile": 0.092,
+  "combo_pctile": 0.062,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-11-03T06:18:01.925703+00:00"
  }
 ]

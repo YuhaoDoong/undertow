@@ -823,5 +823,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-11-02T06:15:43.309907+00:00"
+ },
+ {
+  "instrument": "tlt",
+  "date": "2026-11-03",
+  "spot": 81.59,
+  "state": "仅超买",
+  "struct_bias": "中性",
+  "band": "强超买",
+  "regime": "熊",
+  "stretch": 2.1378378378378535,
+  "stretch_pctile": 0.92,
+  "drawdown": -2.175966735966727,
+  "dd_pctile": 0.912,
+  "combo_pctile": 0.916,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-11-03T06:17:15.606074+00:00"
  }
 ]

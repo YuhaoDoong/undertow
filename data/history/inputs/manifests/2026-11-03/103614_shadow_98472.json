@@ -1,0 +1,36 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 98472,
+ "started_at": "2026-11-03T10:35:56.492814+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/QQQ/2026-11-03",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/QQQ/2026-11-03.json.gz",
+   "sha256": "e064b61b90b3c9bc434bc7b4abb6f77d3399acb2f57ae1b90fab350fab9d7031",
+   "captured_at": 1793701654.375811,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SPY/2026-11-03",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SPY/2026-11-03.json.gz",
+   "sha256": "95e6248383b88cf3e03fd3d471daf96ca793240f8ffdfcb7811339ea0cb2a8b2",
+   "captured_at": 1793701657.781888,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-11-03T10:36:14.256497+00:00",
+ "rc": 1,
+ "git_head": "6bdf98a880fea4a8c914bef1285e36e7f7458e9c"
+}

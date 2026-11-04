@@ -311,3 +311,9 @@
 {"key": ["tlt", "2026-11-03"], "published": 2.0, "revision": 0.4, "revised_at": "2026-11-03T19:18:32.075691+08:00"}
 {"key": ["spy", "2026-11-03"], "published": 2.3, "revision": 0.9, "revised_at": "2026-11-03T19:18:42.560304+08:00"}
 {"key": ["iwm", "2026-11-03"], "published": 2.5, "revision": 0.9, "revised_at": "2026-11-03T19:19:00.012242+08:00"}
+{"key": ["gold", "2026-11-04"], "published": -0.9, "revision": -0.4, "revised_at": "2026-11-04T19:52:38.238673+08:00"}
+{"key": ["silver", "2026-11-04"], "published": 0.2, "revision": 1.8, "revised_at": "2026-11-04T19:52:59.222148+08:00"}
+{"key": ["qqq", "2026-11-04"], "published": -0.1, "revision": 0.5, "revised_at": "2026-11-04T19:53:43.938052+08:00"}
+{"key": ["tlt", "2026-11-04"], "published": 0.4, "revision": 2.0, "revised_at": "2026-11-04T19:54:18.027630+08:00"}
+{"key": ["spy", "2026-11-04"], "published": 1.7, "revision": 2.5, "revised_at": "2026-11-04T19:54:29.378698+08:00"}
+{"key": ["iwm", "2026-11-04"], "published": 0.9, "revision": 1.9, "revised_at": "2026-11-04T19:54:49.878235+08:00"}

@@ -2,13 +2,13 @@
   "schema": 2,
   "kind": "latest_cache",
   "not_for_asof_backtest": true,
-  "computed_at": "2026-11-05T06:34:34.903413+00:00",
+  "computed_at": "2026-11-05T06:59:49.771976+00:00",
   "inputs": {
     "iv": {
-      "n": 3114,
+      "n": 3115,
       "first": "2011-03-16",
-      "last": "2026-11-03",
-      "sha": "0185f65cea9f3fe2"
+      "last": "2026-11-04",
+      "sha": "88d048c932a17228"
     },
     "px": {
       "n": 5034,

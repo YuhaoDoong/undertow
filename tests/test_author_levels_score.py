@@ -281,3 +281,18 @@ def test_v4_tri_class():
     assert au.tri_class("support", "held") == "right" and au.tri_class("support", "broken") == "wrong"
     assert au.tri_class("trade_long", "not_triggered") == "undecided"
     assert au.tri_class("break_below", "incomplete_window") == "undecided"
+
+
+# ═══ 2026-11-05：布伦特合约按 instrument 文本分派（BZZ26 到期后改用 BZF27）═══
+def test_brent_contract_dispatch():
+    assert au.brent_contract("布伦特原油 BZZ26（12 月）") == "BZZ26"
+    assert au.brent_contract("布伦特期货 BZF27（1 月合约）") == "BZF27"
+    assert au.brent_contract("布伦特原油（现货口径）") is None          # 无合约 → no_price_source，不猜
+    assert au.brent_contract("BZH27") is None                          # 未登记结算口径的合约不计分
+    assert au.SPECS_V4["BZF27"]["tol"] == 0.0 and au.SPECS_V4["BZF27"]["settle"] == (19, 30)
+
+
+def test_brent_contract_ambiguous_raises():
+    import pytest
+    with pytest.raises(ValueError):
+        au.brent_contract("BZZ26 与 BZF27 混写")

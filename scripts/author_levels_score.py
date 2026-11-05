@@ -247,6 +247,9 @@ SESSION_END_H = 17
 SPECS = {                          # 结算时刻来自交易所公开惯例（未逐日核实）；tick = 最小报价单位
     "gold_proxy": {"settle": (13, 30), "tick": None, "tol": 0.005, "basis": "proxy_unverified（GC=F 持有成本折算）"},
     "BZZ26": {"settle": (14, 30), "tick": "0.01", "tol": 0.0, "basis": "contract_direct（BZZ26）"},
+    # 2026-11-05：BZZ26 已于 10/30 到期（Yahoo 最后一根 10/30），此后的布伦特价位按当时的近月 BZF27 计分；
+    # 同一合约直取、不拼连续合约（BZ=F 换月日的日线实测会混入旧合约的开盘价）
+    "BZF27": {"settle": (14, 30), "tick": "0.01", "tol": 0.0, "basis": "contract_direct（BZF27）"},
     # 2026-10-08 补白银价格源（此前外部作者二的白银价位全是 no_price_source）
     "silver_fut": {"settle": (13, 25), "tick": None, "tol": 0.003,
                    "basis": "contract_rolling（SI=F 连续主力，换月未建模）"},
@@ -504,6 +507,8 @@ SPECS_V4 = {
                      "settle_src": "同 silver_fut；现货口径为近似"},
     "BZZ26": {**SPECS["BZZ26"], "settle_tz": "Europe/London", "settle": (19, 30),
               "settle_src": "ICE Brent 结算窗口伦敦 19:28–19:30（Codex 027 查 ICE 页面）；BZZ26.NYM 是否跟随、Yahoo close 映射未核实（推断）"},
+    "BZF27": {**SPECS["BZF27"], "settle_tz": "Europe/London", "settle": (19, 30),
+              "settle_src": "同 BZZ26（ICE Brent 伦敦 19:28–19:30）；BZF27.NYM 是否跟随、Yahoo close 映射未核实（推断）"},
 }
 CALENDAR_NOTE = "calendar_approx（NYSE 交易日近似 CME/NYMEX 会话；节假日半日盘未建模）"
 NEGATIVE = ("miss", "untouched", "not_triggered", "neither")
@@ -813,6 +818,14 @@ def _preserve_v1() -> None:
 OUT_CHANGES = ROOT / "data/soul/author_levels_version_changes.json"
 
 
+def brent_contract(inst: str) -> str | None:
+    """instrument 文本里写明的布伦特合约代码（须在 SPECS 里登记过结算口径）；没写或未登记 → None（no_price_source）。"""
+    hits = [c for c in SPECS if c.startswith("BZ") and c in inst]
+    if len(hits) > 1:
+        raise ValueError(f"instrument 同时含多个布伦特合约：{inst}")
+    return hits[0] if hits else None
+
+
 def main():
     asof = datetime.now(timezone.utc)
     if "--asof" in sys.argv:
@@ -834,10 +847,11 @@ def main():
                 cache["SI"] = (yahoo_daily("SI=F", "2y"), yahoo_hourly("SI=F"))
             (d, h), spec, spec4 = cache["SI"], SPECS[k], SPECS_V4[k]
             tol_v2 = spec["tol"]
-        elif "BZZ26" in inst:
-            if "BZZ26" not in cache:
-                cache["BZZ26"] = (yahoo_daily("BZZ26.NYM", "6mo"), yahoo_hourly("BZZ26.NYM"))
-            (d, h), spec, spec4 = cache["BZZ26"], SPECS["BZZ26"], SPECS_V4["BZZ26"]
+        elif brent_contract(inst):
+            code = brent_contract(inst)
+            if code not in cache:
+                cache[code] = (yahoo_daily(f"{code}.NYM", "6mo"), yahoo_hourly(f"{code}.NYM"))
+            (d, h), spec, spec4 = cache[code], SPECS[code], SPECS_V4[code]
             tol_v2 = 0.001
         else:
             out.append({**r, "score": {"result": "no_price_source"}}); continue

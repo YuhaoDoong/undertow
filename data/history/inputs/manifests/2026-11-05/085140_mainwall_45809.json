@@ -1,0 +1,64 @@
+{
+ "schema": 1,
+ "command": "mainwall",
+ "argv": [
+  "mainwall",
+  "settle"
+ ],
+ "pid": 45809,
+ "started_at": "2026-11-05T08:51:40.267527+00:00",
+ "items": [
+  {
+   "kind": "cache",
+   "key": "cboehist_GLD",
+   "status": "cache_hit",
+   "size": 585903,
+   "sha256": "ec0cb5a5eefd91d60cd2945b494c4b3a3f9a6decd94fbe02aecec5e28be2598e",
+   "fetched_at": "2026-11-05T08:43:16.149230+00:00",
+   "age_s": 504.1,
+   "ttl_s": 43200,
+   "stored": true,
+   "seq": 0
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_refetch_GLD",
+   "status": "cache_hit",
+   "size": 79,
+   "sha256": "b632e743b0b527b9d5f88013da613ca37a49de8f56e44aa8c458d12d223a8d1e",
+   "fetched_at": "2026-11-05T08:43:15.155862+00:00",
+   "age_s": 505.1,
+   "ttl_s": 1800,
+   "stored": true,
+   "seq": 1
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_SLV",
+   "status": "cache_hit",
+   "size": 517639,
+   "sha256": "d206e24a8ba6169c4e91984ffdc59ed61a12d0d0dba9796a8f9a5309e1b1f1e1",
+   "fetched_at": "2026-11-05T08:43:42.801030+00:00",
+   "age_s": 477.6,
+   "ttl_s": 43200,
+   "stored": true,
+   "seq": 2
+  },
+  {
+   "kind": "cache",
+   "key": "cboehist_refetch_SLV",
+   "status": "cache_hit",
+   "size": 79,
+   "sha256": "7a3a9b23356cb90fd61f1885d88b9a717c1d0bcb6ed605cf7e3a6daa4d81aa8e",
+   "fetched_at": "2026-11-05T08:43:41.809773+00:00",
+   "age_s": 478.6,
+   "ttl_s": 1800,
+   "stored": true,
+   "seq": 3
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-11-05T08:51:40.457168+00:00",
+ "rc": 0,
+ "git_head": "cbe1ae75237e68dd59e4940803269801eec2a74b"
+}

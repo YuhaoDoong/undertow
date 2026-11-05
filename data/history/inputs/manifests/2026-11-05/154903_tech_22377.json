@@ -1,0 +1,40 @@
+{
+ "schema": 1,
+ "command": "tech",
+ "argv": [
+  "tech",
+  "qqq"
+ ],
+ "pid": 22377,
+ "started_at": "2026-11-05T15:49:03.328318+00:00",
+ "items": [
+  {
+   "kind": "cache",
+   "key": "yahoo_NQ_F_2y",
+   "status": "cache_hit",
+   "size": 35411,
+   "sha256": "2bc1c6f3b302efd52ffbc78357380bf49a78480c10f7b38d6f15b4d92fc45d9e",
+   "fetched_at": "2026-11-05T15:16:02.788533+00:00",
+   "age_s": 1980.5,
+   "ttl_s": 21600,
+   "stored": true,
+   "seq": 0
+  },
+  {
+   "kind": "cache",
+   "key": "yahoo_NQ_F_5d",
+   "status": "cache_hit",
+   "size": 1599,
+   "sha256": "25996a4d78ad22d505af08961a81f7d424c694e1224619feb0e9166741c95015",
+   "fetched_at": "2026-11-05T15:36:56.625366+00:00",
+   "age_s": 726.7,
+   "ttl_s": 21600,
+   "stored": true,
+   "seq": 1
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-11-05T15:49:03.337422+00:00",
+ "rc": 0,
+ "git_head": "4305164532d9c7d1ef23327ab4e189dd68d9d05b"
+}

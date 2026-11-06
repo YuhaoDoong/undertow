@@ -1,0 +1,56 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 18705,
+ "started_at": "2026-11-06T07:52:48.053778+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/SPY/2026-11-06",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SPY/2026-11-06.json.gz",
+   "sha256": "cef94cc17a916051b218575bb8d32af03bb66b2c5d92fed41d21b89112dbc170",
+   "captured_at": 1793951005.4520981,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/IWM/2026-11-06",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/IWM/2026-11-06.json.gz",
+   "sha256": "9a0f3b7f0fb094145a7f9d317823725ad254c4f2ab5c53e15d5e2848a496a3e0",
+   "captured_at": 1793951007.1974652,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/TSLA/2026-11-06",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/TSLA/2026-11-06.json.gz",
+   "sha256": "31a8f44a1acf85d1cc58f29afec0176607db869629639fa191e4804b3eb39c74",
+   "captured_at": 1793951009.956707,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 2
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/NVDA/2026-11-06",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/NVDA/2026-11-06.json.gz",
+   "sha256": "3a8e4834c8adef093b72631140691248d44b378d3b02893667630039ec7b1771",
+   "captured_at": 1793951011.3802,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 3
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-11-06T07:53:09.360019+00:00",
+ "rc": 1,
+ "git_head": "323d6fe3875920ce7ebad27bfbf4de5bc611e28f"
+}

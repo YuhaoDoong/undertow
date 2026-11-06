@@ -332,3 +332,7 @@
 {"key": ["tlt", "2026-11-05"], "published": 2.0, "revision": 0.4, "revised_at": "2026-11-05T19:19:32.290569+08:00"}
 {"key": ["spy", "2026-11-05"], "published": 1.7, "revision": 0.9, "revised_at": "2026-11-05T19:19:43.392582+08:00"}
 {"key": ["iwm", "2026-11-05"], "published": 1.9, "revision": 0.9, "revised_at": "2026-11-05T19:20:03.041049+08:00"}
+{"key": ["silver", "2026-11-06"], "published": -0.4, "revision": -1.0, "revised_at": "2026-11-06T19:06:22.166078+08:00"}
+{"key": ["wti", "2026-11-06"], "published": 1.1, "revision": -0.5, "revised_at": "2026-11-06T19:06:39.738974+08:00"}
+{"key": ["tqqq", "2026-11-06"], "published": -0.3, "revision": 1.3, "revised_at": "2026-11-06T19:07:36.677549+08:00"}
+{"key": ["iwm", "2026-11-06"], "published": 2.3, "revision": 1.5, "revised_at": "2026-11-06T19:08:28.096588+08:00"}

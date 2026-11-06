@@ -23,7 +23,10 @@ alert() {  # $1=标题 $2=正文
   local f="data/reports/FAILURE_${ET_DATE}.txt"
   printf '%s | ET %s | %s\n  %s\n' "$(date '+%F %H:%M %Z')" "$ET_NOW" "$1" "$2" >> "$f"
   echo "[告警] $1 — $2" >&2
-  /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Basso\"" 2>/dev/null || true
+  # 弹窗按「美东日 + 内容（去掉运行时刻）」去重（用户 2026-11-06：每 15 分钟重跑把同一条告警弹十几遍）；
+  # 兜底文件上面照常每次追加。去重模块自身出错 → 直接弹（宁可重复，不能漏）。
+  python3 -m undertow.notify_once "$1" "$2" Basso 2>/dev/null \
+    || /usr/bin/osascript -e "display notification \"$2\" with title \"$1\" sound name \"Basso\"" 2>/dev/null || true
 }
 notify() { alert "$@"; }   # 兼容旧调用名
 # Codex 034 §3.1：阶段状态按【当前快照身份】记在 data/logs/.daily_stages_<日>.json；已 ok 的阶段续跑时跳过（不重算、
@@ -387,7 +390,9 @@ if [[ -n "$STRONG_LINES" ]]; then
         > "data/reports/ALERT_${ET_DATE}.txt"
     # macOS 通知（launchd 跑在用户 GUI 会话，display notification 可弹；失败不影响主流程）
     # Codex 015：强信号历史检验未通过（T3）→ 通知只作「资金流异常观察」，明说不参与结论
-    /usr/bin/osascript -e "display notification \"${SUMMARY}\" with title \"🔎 undertow 资金流异常观察\" subtitle \"强信号未通过验证 · 不参与结论 · 数字见报告\" sound name \"Glass\"" 2>/dev/null || true
+    # 同一天同一摘要只弹一次（重跑不再重复弹；兜底文件照写）
+    python3 -m undertow.notify_once "🔎 undertow 资金流异常观察" "${SUMMARY}" Glass "强信号未通过验证 · 不参与结论 · 数字见报告" 2>/dev/null \
+      || /usr/bin/osascript -e "display notification \"${SUMMARY}\" with title \"🔎 undertow 资金流异常观察\" subtitle \"强信号未通过验证 · 不参与结论 · 数字见报告\" sound name \"Glass\"" 2>/dev/null || true
 fi
 
 # —— 台账回填：用真实收盘价补齐前瞻收益 ——

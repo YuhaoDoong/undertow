@@ -2899,13 +2899,9 @@ def _alert_position_conflicts(signals: dict, today: str) -> None:
     (out / f"{today}_conflict.md").write_text(
         f"# 持仓 × 信号冲突 {today}\n\n{txt}\n", encoding="utf-8")
     head = conflicts[0]
-    try:
-        subprocess.run(["/usr/bin/osascript", "-e",
-                        f'display notification "{head.headline()[:180]}" '
-                        f'with title "⚠️ 持仓与信号方向冲突" sound name "Glass"'],
-                       check=False, capture_output=True, timeout=10)
-    except Exception:
-        pass
+    # 同一美东日同一内容只弹一次（daily 每 15 分钟重跑，旧版每轮都弹；用户 2026-11-06）；副标题点明强信号是 T3 未验证
+    from undertow.notify_once import push
+    push("⚠️ 持仓与信号方向冲突", head.headline()[:180], sound="Glass", subtitle="强信号未通过验证（T3）· 只作提醒")
 
 
 def _gamma_jsonable(inst, ga) -> dict:

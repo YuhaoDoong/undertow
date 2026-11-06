@@ -27,8 +27,8 @@ from undertow.collect.store import SnapshotStore
 from undertow.collect.faireconomy_cal import FairEconomyCalSource
 from undertow.collect.cftc_cot import CftcCotSource
 from undertow.collect.cboe_options import (CboeOptionsSource, snapshot_from_payload,
-                                          chain_fingerprint, materially_same,
-                                          oi_change_total)
+                                          chain_fingerprint, oi_change_total)
+from undertow.collect.chain_dedup import materially_same   # 同键合约（B1SPY 等）安全；cboe_options 在方向指纹内不改
 from undertow.collect.cboe_history import CboeHistorySource
 from undertow.collect.yahoo_futures import YahooFuturesSource
 from undertow.collect.fred_macro import FredMacroSource
@@ -2579,6 +2579,17 @@ def cmd_report(args) -> int:
                     if not replay and _ws_sess_s < market_today().isoformat():
                         print(f"[提示] {inst.key} 最新快照对应交易日 {_ws_sess_s} 已过去（今日快照未到）："
                               "不重写墙位价差前瞻台账", file=sys.stderr)
+                        raise _SkipLedger()
+                    # 2026-11-06：价与背景必须同一天，否则冻结的是不一致记录、源补齐后又判冲突。暂不冻结、下轮重试；
+                    # 临近开盘（ET ≥ 09:00）仍不一致 → 当天样本要丢了，进台账问题（告警）。
+                    _lag = None if replay else _sl.context_lag(_ctx, _prior[-1])
+                    if _lag:
+                        from datetime import datetime as _dt
+                        from undertow.core.clock import ET as _ET
+                        _n = _dt.now(_ET)
+                        if _n.date().isoformat() == _ws_sess_s and _n.hour >= 9:
+                            raise ValueError(f"{_lag}；临近开盘仍未补齐，今日前瞻样本未冻结")
+                        print(f"[提示] {inst.key} {_lag}：暂不冻结墙位价差前瞻台账，下轮重试", file=sys.stderr)
                         raise _SkipLedger()
                     _sl.record(inst.key, inst.options.symbol, _sess_meta["session"],
                                _ws_spot, _ws_v, context=_ctx,

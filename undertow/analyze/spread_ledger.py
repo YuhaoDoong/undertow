@@ -197,6 +197,17 @@ def _decision_fields(row: dict) -> dict:
     return out
 
 
+def context_lag(context: dict, spot_date: str) -> str | None:
+    """决策价与波动率背景是否出自同一天（2026-11-06 修）。不一致 → 返回说明（调用方暂不冻结、下轮重试）；一致或无 asof → None。
+
+    决策价取长桥日 K（前一交易日收盘），背景取 CBOE 日线；CBOE 晚到时首份记录会是「11/05 的价 + 11/04 的 ATR/布林」，
+    CBOE 补齐后同日重跑背景变了 → 判「首份冻结、新输入冲突」反复告警，且冻结下来的那份本身就前后不一致。"""
+    asof = (context or {}).get("asof")
+    if asof is None or asof == spot_date:
+        return None
+    return f"波动率背景日线只到 {asof}，决策价是 {spot_date} 收盘（日线源滞后）"
+
+
 def decision_context(highs, lows, closes, dates, session: date) -> dict:
     """决策日的波动率状态 —— 只记录，不过滤（用户 2026-09-25：「先不带入期权实盘」）。
 

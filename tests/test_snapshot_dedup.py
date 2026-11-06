@@ -23,8 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from undertow import cli                                        # noqa: E402
-from undertow.collect.cboe_options import (materially_same,     # noqa: E402
-                                           snapshot_from_payload)
+from undertow.collect.cboe_options import snapshot_from_payload  # noqa: E402
+from undertow.collect.chain_dedup import materially_same        # noqa: E402  —— 管线实际用的判据（2026-11-06 起）
 
 TODAY = date(2026, 9, 24)
 
@@ -185,3 +185,60 @@ def test_intraday_capture_never_overwrites_premarket(store, monkeypatch):
     assert store.captured_at("options", "GLD", TODAY) == pre, "盘前快照被覆盖"
     assert store.load("options_intraday", "GLD", TODAY) is not None, "盘中数据必须另存"
     print("PASS test_intraday_capture_never_overwrites_premarket")
+
+
+def _payload_roots(rows, spot=400.0, ts="2026-11-05T15:59:59"):
+    """rows = [(root, strike, kind, oi, volume)]：同一行权价可有多个代码根（如 SPY 与 B1SPY）。"""
+    p = _payload([], spot=spot, ts=ts)
+    p["data"]["options"] = [
+        {"option": f"{root}261106{k}{int(st * 1000):08d}", "open_interest": oi, "volume": vol,
+         "iv": 0.2, "delta": 0.5, "gamma": 0.01, "bid": 1.0, "ask": 1.1, "bid_size": 1, "ask_size": 1,
+         "theta": 0.0, "vega": 0.0, "rho": 0.0, "last_trade_price": 1.05, "prev_day_close": 1.0}
+        for root, st, k, oi, vol in rows]
+    return p
+
+
+DUP = [("SPY", 740.0, "C", 10495, 61017), ("B1SPY", 740.0, "C", 85, 85), ("SPY", 730.0, "P", 900, 40)]
+
+
+def _spy(p):
+    return snapshot_from_payload(p, "spy", "SPY")
+
+
+def test_duplicate_strike_keys_same_content_is_same():
+    """2026-11-06：SPY/IWM 链里出现与标准合约同键的 B1 代码合约。旧版键冲突即判不同 →
+    同一份快照每轮 daily 都被重写，冻结台账反复判冲突。同内容必须判相同。"""
+    a, b = _spy(_payload_roots(DUP, spot=733.0)), _spy(_payload_roots(list(reversed(DUP)), spot=735.31))
+    assert len(a.contracts) == 3
+    assert materially_same(a, a) and materially_same(a, b)
+
+
+@pytest.mark.parametrize("changed,label", [
+    ([("SPY", 740.0, "C", 10495, 61017), ("B1SPY", 740.0, "C", 86, 85), ("SPY", 730.0, "P", 900, 40)], "同键合约之一 OI 变"),
+    ([("SPY", 740.0, "C", 10495, 61017), ("B1SPY", 740.0, "C", 85, 90), ("SPY", 730.0, "P", 900, 40)], "同键合约之一 volume 变"),
+    ([("SPY", 740.0, "C", 10495, 61017), ("SPY", 730.0, "P", 900, 40), ("SPY", 735.0, "P", 1, 1)], "同键合约换成新合约"),
+])
+def test_duplicate_strike_keys_changes_detected(changed, label):
+    assert not materially_same(_spy(_payload_roots(DUP)), _spy(_payload_roots(changed))), label
+
+
+def test_same_day_duplicate_key_chain_not_rewritten(tmp_path):
+    """端到端：同日第二次抓到同内容（含同键合约）→ 不重写快照文件（captured_at 不变）。"""
+    from undertow.collect.store import SnapshotStore
+    from undertow.core.config import load_config
+    store = SnapshotStore(root=tmp_path)
+    inst = load_config().get("spy")
+    day = date(2026, 11, 6)
+    p1, s1 = cli._save_snapshot_dedup(store, inst, "SPY", _payload_roots(DUP, spot=733.0), day)
+    ca1 = store.captured_at("options", "SPY", day)
+    p2, s2 = cli._save_snapshot_dedup(store, inst, "SPY", _payload_roots(DUP, spot=735.31), day)
+    assert s1 is False and s2 is True and p1 == p2
+    assert store.captured_at("options", "SPY", day) == ca1
+
+
+def test_pipeline_uses_split_dedup_and_direction_fingerprint_files_untouched():
+    """去重判据挪出 cboe_options.py：该文件在方向算法预登记指纹里（signal_ledger.CALL_CODE_FILES）。"""
+    from undertow.analyze import signal_ledger as sl
+    from undertow.collect import chain_dedup
+    assert cli.materially_same is chain_dedup.materially_same
+    assert "undertow/collect/chain_dedup.py" not in sl.CALL_CODE_FILES

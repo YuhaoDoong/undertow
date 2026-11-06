@@ -58,3 +58,23 @@ def test_record_stores_context_and_old_rows_still_load(tmp_path):
     assert len(sl.load("silver", root=tmp_path)) == 2
     assert sl.backfill("silver", {}, root=tmp_path) == (0, 0)
     print("PASS test_record_stores_context_and_old_rows_still_load")
+
+
+def test_context_lag_blocks_mismatched_price_and_context_day():
+    """2026-11-06：CBOE 日线晚到 → 决策价是 11/05 收盘、背景还是 11/04 → 不冻结（否则源补齐后同日重跑判冲突）。"""
+    from undertow.analyze.spread_ledger import context_lag
+    assert context_lag({"asof": "2026-11-04", "atr14": 9.4}, "2026-11-05") is not None
+    assert "2026-11-04" in context_lag({"asof": "2026-11-04"}, "2026-11-05")
+    assert context_lag({"asof": "2026-11-05"}, "2026-11-05") is None
+    assert context_lag({"error": "X"}, "2026-11-05") is None          # 背景失败另有记录路径，不在此拦
+    assert context_lag({}, "2026-11-05") is None and context_lag(None, "2026-11-05") is None
+
+
+def test_wall_ledger_guard_wired_before_record():
+    """守住接线：cli 在 _sl.record 之前调用 context_lag，且不一致时走 _SkipLedger / 临近开盘报问题。"""
+    import pathlib
+    src = pathlib.Path("undertow/cli.py").read_text()
+    i_guard, i_rec = src.index("_sl.context_lag(_ctx, _prior[-1])"), src.index("_sl.record(inst.key, inst.options.symbol")
+    assert i_guard < i_rec
+    seg = src[i_guard:i_rec]
+    assert "raise _SkipLedger()" in seg and "临近开盘仍未补齐" in seg

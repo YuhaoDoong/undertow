@@ -9,7 +9,7 @@
  ],
  "status": "ok",
  "spot": 46.92,
- "computed_at": "2026-11-06T12:53:41.103391+00:00",
+ "computed_at": "2026-11-06T13:14:59.827401+00:00",
  "inputs": {
   "snapshot_prev": {
    "path": "data/snapshots/options/SLV/2026-11-05.json.gz",

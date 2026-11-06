@@ -2,7 +2,7 @@
   "schema": 2,
   "kind": "latest_cache",
   "not_for_asof_backtest": true,
-  "computed_at": "2026-11-06T10:17:47.994042+00:00",
+  "computed_at": "2026-11-06T10:42:52.124897+00:00",
   "inputs": {
     "iv": {
       "n": 4307,

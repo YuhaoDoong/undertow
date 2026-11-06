@@ -71,7 +71,9 @@ def _legs_and_cash(c) -> tuple[list | None, float | None, float | None]:
 def apply_campaign_cash(book: list[dict], cash: dict | None) -> list[str]:
     """用现金流水按本轮唯一分配覆盖账本行的净现金流（Codex 063 N1；口径见 campaign_cash 模块文档）。原地修改，返回提示。
 
-    cash = {"rows": 原样流水, "window_start": 带时区 ISO, "plans": {计划键: 计划}}；{"error": 原因} = 流水读取失败。
+    cash = {"rows": 原样流水, "window_start": 带时区 ISO, "plans": {计划键: 计划},
+            "executions": 原样成交明细（可选，给未入账费用配张数）, "executions_since": 日期, "executions_error": 原因}；
+    {"error": 原因} = 流水读取失败。
     同一标的的带腿行合成一份归属；归属不完整（缺金额、窗口没覆盖、起点登记不合格）或流水读不到 → 这些行 net_cash=None，
     预算报 incomplete（不再留券商成本价口径冒充已核：成本价在部分减仓后会被改写）。
     政策 B 用的 net_cash：登记了新阶段 → 新阶段入场现金的逐腿最差端；否则 → 本轮累计。
@@ -90,6 +92,16 @@ def apply_campaign_cash(book: list[dict], cash: dict | None) -> list[str]:
                 p.update(net_cash=None, cash_basis=f"现金流水读取失败（{cash['error']}）→ 不可核", cash_detail=None)
         return [f"现金流水读取失败（{cash['error']}）→ 同标的净额现金未知，预算 incomplete"]
     plans = cash.get("plans") or {}
+    # 未入账费用的张数（Codex 069 B3）：只读成交明细 → 逐条流水的张数（与 trial reconcile 同一份配对）；读不到 → 张数未知
+    quantities, qnote = None, None
+    if cash.get("executions_error"):
+        qnote = f"成交明细读取失败：{cash['executions_error']}"
+    elif isinstance(cash.get("executions"), list):
+        from undertow.analyze import trial_reconcile as tr
+        quantities = tr.flow_quantities(cash.get("rows") or [], cash["executions"])["qty"]
+        qnote = f"成交明细只读了 {cash['executions_since']} 起" if cash.get("executions_since") else None
+    else:
+        qnote = "没有读取成交明细"
     for u, ps in units.items():
         anchors, stages, members = {}, {}, {}
         for p in ps:
@@ -100,7 +112,7 @@ def apply_campaign_cash(book: list[dict], cash: dict | None) -> list[str]:
                 stages[p["id"]] = plan["stage"]
             members[p["id"]] = {k: plan.get(k) for k in ("campaign_members", "campaign_independent")}
         res = cc.unit_cash(u, ps, cash.get("rows") or [], window_start=cash["window_start"],
-                           anchors=anchors, stages=stages, members=members)
+                           anchors=anchors, stages=stages, members=members, quantities=quantities, quantity_note=qnote)
         for p in ps:
             ok = res["quality"] != "incomplete"
             p.update(net_cash=res["policy_cash_by_row"].get(p["id"]) if ok else None,

@@ -201,103 +201,9 @@ def _near(a: datetime, b: datetime) -> bool:
     return abs((a - b).total_seconds()) <= TIME_TOL_S
 
 
-def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict], coverage_through: str,
-              trial_start: str, now: str, known_trades: dict | None = None, reads: list[dict] | None = None,
-              coverage_kind: str = "unknown") -> dict:
-    """→ 对账候选（见模块头规则）。
-
-    cash_flow / executions：试行到账起至 now 的原样行（可含缓冲日之外的行，按时间裁剪）；
-    positions：{代码(.US 可带): 带符号张数}（券商当前持仓）；known_trades：状态里的 closed_trades（id → 记录）；
-    reads：[{"what","start","end","n","ok"}] 每段读数（None = 未提供 → 不可推进）；
-    coverage_kind：覆盖证据类型（trial_capital.COVERAGE_KINDS），缺省 unknown → 不给历史豁免（规则 11）。"""
-    start, cov, t_now = _ts(trial_start), _ts(coverage_through), _ts(now)
-    out = {"schema": SCHEMA, "status": "incomplete", "groups": [], "records": [], "external": [], "other": [],
-           "unknown": [], "problems": [], "history_issues": [], "notes": [], "conflicts": [], "blockers": [],
-           "expiry_events": [], "can_advance_coverage": False}
-    if start is None or cov is None or t_now is None:
-        out["problems"] = out["blockers"] = ["试行起点/覆盖时点/当前时刻缺失或不带时区"]
-        return out
-    problems: list[dict] = []
-    notes: list[str] = []
-    known = known_trades or {}
-
-    def P(msg, t=None, cs=(), hard=False):
-        """问题。hard / 无时刻 → 永远阻断；否则只在时刻晚于覆盖时点、或涉及在场/覆盖后交易的合约时阻断（见规则 11）。"""
-        problems.append({"msg": msg, "t": t, "contracts": tuple(c for c in cs if c), "hard": hard})
-
-    # 9. 读数证据
-    read_probs = _check_reads(reads, start, t_now, len(cash_flow), len(executions))
-    for msg in read_probs:
-        P(msg, hard=True)
-
-    # 解析流水
-    txns, fees = [], []
-    pre_trial = set()
-    for i, r in enumerate(cash_flow):
-        name, t = r.get("flow_name"), _ts(r.get("time"))
-        if t is None:
-            P(f"流水行时间不可解析：{name!r}", hard=True)
-            continue
-        if t > t_now:
-            continue
-        amt = _fnum(r.get("balance"))
-        if name in OPTION_TXN or name in OPTION_FEE:
-            c = contract_of(r)
-            if c is None:
-                P(f"期权流水认不出合约：{name} @ {r.get('time')}", t)
-                continue
-            if t < start:
-                if name in OPTION_TXN:
-                    pre_trial.add(c)
-                continue
-            if amt is None:
-                P(f"期权流水金额不是有限数：{c} {name} @ {r.get('time')}", t, [c])
-                continue
-            if r.get("currency") != "USD":
-                P(f"期权流水币种 {r.get('currency')!r} 不是 USD：{c} {name} @ {r.get('time')}（不按 USD 加总）", t, [c])
-                continue
-            want = {"buy": -1, "sell": 1}.get(OPTION_TXN.get(name), -1)      # 成交：买负卖正；费用：负
-            if amt == 0 or (amt > 0) != (want > 0):
-                if name in OPTION_FEE and amt > 0:
-                    pass                                       # 正数费用在规则 5 里单独报（退款/调整）
-                else:
-                    P(f"期权流水金额 {amt:+.2f} 与类型 {name} 的符号不符或为零（可能是冲正/退款/调整）：{c} @ {r.get('time')}，"
-                      "不当普通成交/费用", t, [c])
-                    continue
-            rec = {"i": i, "contract": c, "root": parse_contract(c)[0], "t": t, "amount": amt,
-                   "side": OPTION_TXN.get(name) or OPTION_FEE.get(name), "qty": None, "order": None, "px": None}
-            (txns if name in OPTION_TXN else fees).append(rec)
-        elif t < start:
-            continue
-        else:
-            row = {"flow_name": name, "currency": r.get("currency"), "amount": amt, "time": r.get("time")}
-            if name in EXTERNAL:
-                out["external"].append(row)
-            elif name in KNOWN_OTHER:
-                out["other"].append(row)
-            else:
-                out["unknown"].append({**row, "symbol": r.get("symbol")})
-                P(f"未知流水类型 {name!r} {r.get('symbol') or ''} @ {r.get('time')}（可能是行权/指派/股票成交）", t,
-                  [contract_of(r)])
-
-    # 解析成交
-    exs = []
-    for j, e in enumerate(executions):
-        t = _ts(e.get("time"))
-        if t is None:
-            P("成交行时间不可解析", hard=True)
-            continue
-        if t < start or t > t_now:
-            continue
-        q, px = _int_qty(e.get("quantity")), _fnum(e.get("price"))
-        if q is None or q <= 0 or px is None or px < 0 or not e.get("order_id"):
-            P(f"成交行张数/价格/订单号不可用（张数须为正整数）：{e.get('symbol')} 张数 {e.get('quantity')!r} @ {e.get('time')}",
-              t, [contract_of({"symbol": e.get("symbol")})])
-            continue
-        sym = str(e.get("symbol") or "")
-        exs.append({"j": j, "t": t, "order": str(e["order_id"]), "symbol": sym, "contract": contract_of({"symbol": sym}),
-                    "root": root_of(sym), "side": str(e.get("side") or "").lower(), "qty": q, "px": px, "role": None})
-
+def _match_legs(txns: list[dict], exs: list[dict], P) -> None:
+    """规则 1+2：流水 ↔ 成交按订单整体求解（原地写 txn["qty"/"order"/"px"] 与成交行 role；问题经 P 报告）。
+    reconcile 与 flow_quantities（campaign_cash 未入账费用的张数，Codex 069 B3）共用这一份，不另造第二套数量配对。"""
     # 1+2. 流水 ↔ 成交：按订单整体求解。每条流水的候选 =（订单, 价格, 张数 Q）：同标的根、±2 秒、同订单同价格的若干行
     #      张数之和为 Q 且 Q × 价 × 100 = |金额|（部分成交会被流水合并成一行）。同一订单簇里枚举各流水的候选组合，
     #      要求成交行不重复使用、且该订单剩下的标的代码行恰好构成组合净价行（各合约腿张数相等为 Q，净价行张数之和 = Q，
@@ -409,6 +315,137 @@ def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict],
                 P(f"流水 {x['contract']} {x['side']} {x['amount']:+.2f} @ {x['t'].isoformat()}："
                   + ("与同订单其它行无法同时解释（净价行对不上）" if not sigs else f"同订单簇有 {len(sigs)} 种解释，无法唯一确定张数"),
                   x["t"], [x["contract"]])
+
+
+def flow_quantities(cash_flow: list[dict], executions: list[dict]) -> dict:
+    """期权成交流水 → 张数（复用规则 1+2 的同一份配对，Codex 069 B3）。→ {"qty": {流水下标: 张数}, "problems": [...]}。
+    只解释得了的行才给张数；配不上 / 不唯一 / 行不合格的流水不出现在 qty 里（调用方当「张数未知」，不猜 1 张、不拿当前持仓顶替）。
+    不做读数完整性、持仓、生命周期、费用检查 —— 那些是 reconcile 的事；这里只回答「这条流水是几张」。"""
+    probs: list[str] = []
+
+    def P(msg, t=None, cs=(), hard=False):
+        probs.append(msg)
+    txns = []
+    for i, r in enumerate(cash_flow or []):
+        name, t = r.get("flow_name"), _ts(r.get("time"))
+        if name not in OPTION_TXN or t is None:
+            continue
+        c, amt = contract_of(r), _fnum(r.get("balance"))
+        if c is None or amt is None or r.get("currency", "USD") != "USD" or amt == 0 \
+                or (amt > 0) != (OPTION_TXN[name] == "sell"):
+            continue
+        txns.append({"i": i, "contract": c, "root": parse_contract(c)[0], "t": t, "amount": amt,
+                     "side": OPTION_TXN[name], "qty": None, "order": None, "px": None})
+    exs = []
+    for j, e in enumerate(executions or []):
+        t, q, px = _ts(e.get("time")), _int_qty(e.get("quantity")), _fnum(e.get("price"))
+        if t is None or q is None or q <= 0 or px is None or px < 0 or not e.get("order_id"):
+            continue
+        sym = str(e.get("symbol") or "")
+        exs.append({"j": j, "t": t, "order": str(e["order_id"]), "symbol": sym, "contract": contract_of({"symbol": sym}),
+                    "root": root_of(sym), "side": str(e.get("side") or "").lower(), "qty": q, "px": px, "role": None})
+    _match_legs(txns, exs, P)
+    return {"qty": {x["i"]: int(x["qty"]) for x in txns if x["qty"]}, "problems": probs}
+
+
+def reconcile(*, cash_flow: list[dict], positions: dict, executions: list[dict], coverage_through: str,
+              trial_start: str, now: str, known_trades: dict | None = None, reads: list[dict] | None = None,
+              coverage_kind: str = "unknown") -> dict:
+    """→ 对账候选（见模块头规则）。
+
+    cash_flow / executions：试行到账起至 now 的原样行（可含缓冲日之外的行，按时间裁剪）；
+    positions：{代码(.US 可带): 带符号张数}（券商当前持仓）；known_trades：状态里的 closed_trades（id → 记录）；
+    reads：[{"what","start","end","n","ok"}] 每段读数（None = 未提供 → 不可推进）；
+    coverage_kind：覆盖证据类型（trial_capital.COVERAGE_KINDS），缺省 unknown → 不给历史豁免（规则 11）。"""
+    start, cov, t_now = _ts(trial_start), _ts(coverage_through), _ts(now)
+    out = {"schema": SCHEMA, "status": "incomplete", "groups": [], "records": [], "external": [], "other": [],
+           "unknown": [], "problems": [], "history_issues": [], "notes": [], "conflicts": [], "blockers": [],
+           "expiry_events": [], "can_advance_coverage": False}
+    if start is None or cov is None or t_now is None:
+        out["problems"] = out["blockers"] = ["试行起点/覆盖时点/当前时刻缺失或不带时区"]
+        return out
+    problems: list[dict] = []
+    notes: list[str] = []
+    known = known_trades or {}
+
+    def P(msg, t=None, cs=(), hard=False):
+        """问题。hard / 无时刻 → 永远阻断；否则只在时刻晚于覆盖时点、或涉及在场/覆盖后交易的合约时阻断（见规则 11）。"""
+        problems.append({"msg": msg, "t": t, "contracts": tuple(c for c in cs if c), "hard": hard})
+
+    # 9. 读数证据
+    read_probs = _check_reads(reads, start, t_now, len(cash_flow), len(executions))
+    for msg in read_probs:
+        P(msg, hard=True)
+
+    # 解析流水
+    txns, fees = [], []
+    pre_trial = set()
+    for i, r in enumerate(cash_flow):
+        name, t = r.get("flow_name"), _ts(r.get("time"))
+        if t is None:
+            P(f"流水行时间不可解析：{name!r}", hard=True)
+            continue
+        if t > t_now:
+            continue
+        amt = _fnum(r.get("balance"))
+        if name in OPTION_TXN or name in OPTION_FEE:
+            c = contract_of(r)
+            if c is None:
+                P(f"期权流水认不出合约：{name} @ {r.get('time')}", t)
+                continue
+            if t < start:
+                if name in OPTION_TXN:
+                    pre_trial.add(c)
+                continue
+            if amt is None:
+                P(f"期权流水金额不是有限数：{c} {name} @ {r.get('time')}", t, [c])
+                continue
+            if r.get("currency") != "USD":
+                P(f"期权流水币种 {r.get('currency')!r} 不是 USD：{c} {name} @ {r.get('time')}（不按 USD 加总）", t, [c])
+                continue
+            want = {"buy": -1, "sell": 1}.get(OPTION_TXN.get(name), -1)      # 成交：买负卖正；费用：负
+            if amt == 0 or (amt > 0) != (want > 0):
+                if name in OPTION_FEE and amt > 0:
+                    pass                                       # 正数费用在规则 5 里单独报（退款/调整）
+                else:
+                    P(f"期权流水金额 {amt:+.2f} 与类型 {name} 的符号不符或为零（可能是冲正/退款/调整）：{c} @ {r.get('time')}，"
+                      "不当普通成交/费用", t, [c])
+                    continue
+            rec = {"i": i, "contract": c, "root": parse_contract(c)[0], "t": t, "amount": amt,
+                   "side": OPTION_TXN.get(name) or OPTION_FEE.get(name), "qty": None, "order": None, "px": None}
+            (txns if name in OPTION_TXN else fees).append(rec)
+        elif t < start:
+            continue
+        else:
+            row = {"flow_name": name, "currency": r.get("currency"), "amount": amt, "time": r.get("time")}
+            if name in EXTERNAL:
+                out["external"].append(row)
+            elif name in KNOWN_OTHER:
+                out["other"].append(row)
+            else:
+                out["unknown"].append({**row, "symbol": r.get("symbol")})
+                P(f"未知流水类型 {name!r} {r.get('symbol') or ''} @ {r.get('time')}（可能是行权/指派/股票成交）", t,
+                  [contract_of(r)])
+
+    # 解析成交
+    exs = []
+    for j, e in enumerate(executions):
+        t = _ts(e.get("time"))
+        if t is None:
+            P("成交行时间不可解析", hard=True)
+            continue
+        if t < start or t > t_now:
+            continue
+        q, px = _int_qty(e.get("quantity")), _fnum(e.get("price"))
+        if q is None or q <= 0 or px is None or px < 0 or not e.get("order_id"):
+            P(f"成交行张数/价格/订单号不可用（张数须为正整数）：{e.get('symbol')} 张数 {e.get('quantity')!r} @ {e.get('time')}",
+              t, [contract_of({"symbol": e.get("symbol")})])
+            continue
+        sym = str(e.get("symbol") or "")
+        exs.append({"j": j, "t": t, "order": str(e["order_id"]), "symbol": sym, "contract": contract_of({"symbol": sym}),
+                    "root": root_of(sym), "side": str(e.get("side") or "").lower(), "qty": q, "px": px, "role": None})
+
+    _match_legs(txns, exs, P)
 
     # 3. 持仓路径（含到期行），切生命周期段
     timeline = [{"t": x["t"], "contract": x["contract"], "dq": x["qty"] if x["side"] == "buy" else -x["qty"],

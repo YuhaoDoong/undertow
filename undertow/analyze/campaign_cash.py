@@ -25,8 +25,14 @@ Codex 067 用合成反例推翻了两点（`tests/test_campaign_cash.py` 的 067
   是两笔真实分笔成交；若券商重复推送同一条，本模块无法识别，只计数报告）。
   多行共同认领的流水：没有新阶段时只影响展示用的逐行分配（按 id 字典序给第一行；单元合计与政策合计不随 id 改变）；
   有新阶段时逐行分配会改变政策现金 → incomplete。
-- **费用**：费用次日入账。一条费用行覆盖同合约「上一条费用行之后到它之前」的成交；覆盖的成交都不是本轮成员 → 不计；
-  部分是 → 全额计入（费用为负，保守）。成员成交之后还没有费用行 → 按模型估计计入（标估计）。
+- **费用**：费用次日入账，按（合约, 方向）合并。一条费用行覆盖同合约【同方向】「上一条同方向费用行之后到它之前」的成交
+  （费用名不带方向时才不分方向；v3 前不分方向：同一时刻入账的买费与卖费，后一条覆盖不到任何成交而被丢掉）；
+  覆盖的成交都不是本轮成员 → 不计；部分是 → 全额计入（费用为负，保守）。
+  成员成交之后还没有费用行 → 按【这笔成交自己的张数】× 模型费率估计（v3，Codex 069 B3）。张数来自只读成交明细
+  （`trial_reconcile.flow_quantities`，与对账同一份配对）；配不上 / 没读到 → 张数未知 → incomplete，当场可见。
+  v2 用「当前在场最大张数 × 待入账行数」：分笔加仓会高估，**部分减仓会低估**（先买 10 后卖 9、剩 1：模型费 15.2 被估成 1.6，
+  可让本该超上限的单元按 192.4 通过 200）—— 既不是上界也不是下界，所以不再用当前张数顶替历史张数，也不按每行 1 张。
+  费率 FEE_PER_CONTRACT 是项目模型值、不是已核的最高费率：张数已知时费用质量记 estimated，不叫「已核上界」。
 - **窗口**：在场合约在窗口内没有任何成交、登记起点早于窗口 → 不能证明覆盖 → incomplete。
 
 三把尺子（Codex 064 §5，不混用、不相加）：
@@ -45,8 +51,9 @@ import math
 import re
 from datetime import datetime
 
-VERSION = "campaign-cash-v2-20261031"
-SOURCE = "Codex 063 N1（现金事件唯一分配、来源质量）+ 064 §5（换腿三把尺子）+ 067 P0（成员须登记、阶段去重与逐腿最差端）"
+VERSION = "campaign-cash-v3-20261106"
+SOURCE = ("Codex 063 N1（现金事件唯一分配、来源质量）+ 064 §5（换腿三把尺子）+ 067 P0（成员须登记、阶段去重与逐腿最差端）"
+          " + 069 B3（未入账费用按逐笔成交张数、费用按方向覆盖、成员/费用质量分列）")
 MEMBERSHIP_BASIS = "registered-private"
 MEMBERSHIP_ASSUMPTION = ("成员完整性依赖私有登记（campaign_start / campaign_members / campaign_independent）的人工核对；"
                          "现金流水无张数与订单号，起点之后同一成员合约若另有一次无关往返，本模块无法识别")
@@ -119,6 +126,16 @@ def _is_fee(r) -> bool:
     return "fee" in str(r.get("flow_name") or "").lower()
 
 
+def _side(r, amt: float, fee: bool) -> str | None:
+    """流水方向：名字里带 buy/sell 就用它；成交行不带时按金额符号（买负卖正）；费用行不带 → None（不分方向覆盖）。"""
+    n = str(r.get("flow_name") or "").lower()
+    if "buy" in n:
+        return "buy"
+    if "sell" in n:
+        return "sell"
+    return None if fee else ("sell" if amt > 0 else "buy")
+
+
 def _parse_rows(unit: str, cash_rows: list[dict]):
     """本单元的流水 → (成交行, 费用行, 问题)。每行带 idx（原始位置）、sym、t、amt。不是本单元的行不看。"""
     tx, fees, probs = [], [], []
@@ -130,8 +147,9 @@ def _parse_rows(unit: str, cash_rows: list[dict]):
         if t is None or amt is None:
             probs.append(f"{sym}：流水{'时刻' if t is None else '金额'}缺失或无法解析（不当 0）")
             continue
-        row = {"idx": i, "sym": sym, "t": t, "amt": amt}
-        (fees if _is_fee(r) else tx).append(row)
+        fee = _is_fee(r)
+        row = {"idx": i, "sym": sym, "t": t, "amt": amt, "side": _side(r, amt, fee)}
+        (fees if fee else tx).append(row)
     return tx, fees, probs
 
 
@@ -151,19 +169,29 @@ def _closure(held: set[str], tx: list[dict], start) -> set[str]:
 
 
 def _fee_coverage(fees: list[dict], tx: list[dict]) -> dict:
-    """每条费用行覆盖的成交（同合约、上一条费用行之后到它之前）。→ {费用 idx: [成交行]}。"""
+    """每条费用行覆盖的成交（同合约、同方向、上一条同方向费用行之后到它之前；费用不带方向 → 不分方向）。
+    → {费用 idx: [成交行]}。"""
     out = {}
-    by_sym: dict = {}
+    by_key: dict = {}
     for f in fees:
-        by_sym.setdefault(f["sym"], []).append(f)
-    for sym, fs in by_sym.items():
+        by_key.setdefault((f["sym"], f["side"]), []).append(f)
+    for (sym, side), fs in by_key.items():
         fs = sorted(fs, key=lambda f: (f["t"], f["idx"]))
-        txs = sorted((r for r in tx if r["sym"] == sym), key=lambda r: r["t"])
+        txs = sorted((r for r in tx if r["sym"] == sym and (side is None or r["side"] == side)), key=lambda r: r["t"])
         prev = None
         for f in fs:
             out[f["idx"]] = [r for r in txs if (prev is None or r["t"] > prev) and r["t"] <= f["t"]]
             prev = f["t"]
     return out
+
+
+def _pending_fee(pending: list[dict], quantities: dict | None) -> tuple[float | None, int, list[dict]]:
+    """未入账费用估计 = Σ 每笔成交自己的张数 × 模型费率。→ (估计额, 张数合计, 张数未知的成交)；有未知 → 估计额 None。"""
+    q = quantities or {}
+    unknown = [x for x in pending if not isinstance(q.get(x["idx"]), int) or isinstance(q.get(x["idx"]), bool)
+               or q[x["idx"]] <= 0]
+    n = sum(q[x["idx"]] for x in pending if x not in unknown)
+    return (None if unknown else round(n * FEE_PER_CONTRACT, 2)), n, unknown
 
 
 def _member_list(raw, what: str, probs: list) -> set[str]:
@@ -176,7 +204,7 @@ def _member_list(raw, what: str, probs: list) -> set[str]:
     return {norm_symbol(x) for x in raw}
 
 
-def _stage_view(stage: dict | None, row: dict, alloc: dict, member_tx: list[dict], fees, cover, est_qty: int,
+def _stage_view(stage: dict | None, row: dict, alloc: dict, member_tx: list[dict], fees, cover, quantities,
                 start) -> dict | None:
     """新阶段入场现金（尺子 2）。stage = {"start": ISO, "inherited": [{symbol, qty, ref, low, high, basis?}]}。
     member_tx：本行的成员成交（起点之后、合约属于本行）。
@@ -230,7 +258,9 @@ def _stage_view(stage: dict | None, row: dict, alloc: dict, member_tx: list[dict
     real_idx = {r["idx"] for r in real_tx}
     real_fees = [f for f in fees if f["sym"] in new_syms and any(r["idx"] in real_idx for r in cover.get(f["idx"], []))]
     covered = {r["idx"] for f in real_fees for r in cover.get(f["idx"], [])}
-    est = round(sum(1 for r in real_tx if r["idx"] not in covered) * est_qty * FEE_PER_CONTRACT, 2)
+    est, _, unk = _pending_fee([r for r in real_tx if r["idx"] not in covered], quantities)
+    if est is None:
+        return {"problems": [f"新腿 {'、'.join(sorted({r['sym'] for r in unk}))} 有费用未入账且张数未知（成交明细没读到或配不上）"]}
     real = round(sum(r["amt"] for r in real_tx) + sum(f["amt"] for f in real_fees) - est, 2)
     cash = {k: round(real + v, 2) for k, v in virt.items()}
     policy = round(real + worst, 2)
@@ -244,15 +274,19 @@ def _stage_view(stage: dict | None, row: dict, alloc: dict, member_tx: list[dict
 
 
 def unit_cash(unit: str, rows: list[dict], cash_rows: list[dict], *, window_start: str,
-              anchors: dict | None = None, stages: dict | None = None, members: dict | None = None) -> dict:
+              anchors: dict | None = None, stages: dict | None = None, members: dict | None = None,
+              quantities: dict | None = None, quantity_note: str | None = None) -> dict:
     """一个风险单元的现金归属。rows：同一标的的在场账本行（各带 id、legs[symbol, qty]）。
     anchors：{行 id: campaign_start ISO}；stages：{行 id: stage}；
     members：{行 id: {"campaign_members": [已离场成员合约], "campaign_independent": [起点后不属本轮的同标的合约]}}
     （都来自私有计划，登记时人工核对）。
-    → {"quality": verified|incomplete, "campaign_cash", "by_row", "policy_cash_by_row", "stages", ...}。"""
+    quantities：{cash_rows 下标: 张数}（`trial_reconcile.flow_quantities` 由只读成交明细配出；只有费用未入账的成员成交需要）；
+    quantity_note：张数源的说明（如成交明细读取失败的原因），张数未知时随问题一起报。
+    → {"quality": verified|incomplete, "membership_quality", "fee_quality": actual|estimated|unknown, "campaign_cash", ...}。"""
     anchors, stages, members = anchors or {}, stages or {}, members or {}
     out = {"version": VERSION, "unit": unit, "window_start": window_start, "quality": "incomplete",
            "membership_basis": MEMBERSHIP_BASIS, "assumptions": [MEMBERSHIP_ASSUMPTION],
+           "membership_quality": None, "fee_quality": None, "pending_fee_qty": 0,
            "campaign_cash": None, "by_row": {}, "policy_cash_by_row": {}, "start": None,
            "linked": [], "exited": [], "independent": [], "independent_rows": 0, "duplicate_keys": 0,
            "fee_estimate": 0.0, "pending_fee_rows": 0, "stages": {}, "candidates": {}, "problems": [], "notes": []}
@@ -287,7 +321,6 @@ def unit_cash(unit: str, rows: list[dict], cash_rows: list[dict], *, window_star
     if out["duplicate_keys"]:
         out["notes"].append(f"{out['duplicate_keys']} 条成交与另一条代码/时刻/金额完全相同：按多笔真实分笔成交计"
                             "（源无事件 id，若是券商重复推送无法识别）")
-    est_qty = max((abs(int(lg["qty"])) for r in rows for lg in r.get("legs") or []), default=1)
     cover = _fee_coverage(fees, tx)
 
     # 起点：必须登记（Codex 067：同秒闭包与「可行起点取最少」都不能证明成员完整或覆盖全部张数）
@@ -364,7 +397,17 @@ def unit_cash(unit: str, rows: list[dict], cash_rows: list[dict], *, window_star
         out["notes"].append("有费用行同时覆盖本轮成员与非成员成交：全额计入（保守）")
     covered = {r["idx"] for f in fee_used for r in cover.get(f["idx"], [])}
     pending = [x for x in member_tx if x["idx"] not in covered]
-    est = round(len(pending) * est_qty * FEE_PER_CONTRACT, 2)
+    out["membership_quality"] = MEMBERSHIP_BASIS
+    est, n_pending, unk = _pending_fee(pending, quantities)
+    if est is None:
+        out["fee_quality"] = "unknown"
+        out["problems"].append(
+            f"{len(unk)} 笔本轮成交的费用未入账且张数未知（{'、'.join(sorted({x['sym'] for x in unk}))}"
+            + (f"；{quantity_note}" if quantity_note else "；成交明细没读到或配不上") + "）→ 费用没有可证明的上界，"
+            "不按当前持仓张数顶替、也不按每行 1 张（Codex 069 B3）")
+        return out
+    out["fee_quality"] = "estimated" if pending else "actual"
+    qmap = quantities or {}
     total = round(sum(x["amt"] for x in member_tx) + sum(f["amt"] for f in fee_used) - est, 2)
 
     # 逐行分配（展示用；单元合计与 id 无关）：多行认领 → 按 id 字典序第一行；未入账费用估计按成交归属行
@@ -374,7 +417,7 @@ def unit_cash(unit: str, rows: list[dict], cash_rows: list[dict], *, window_star
     for f in fee_used:
         by_row[fee_owner[f["idx"]][0]] += f["amt"]
     for x in pending:
-        by_row[own[x["idx"]][0]] -= est_qty * FEE_PER_CONTRACT
+        by_row[own[x["idx"]][0]] -= qmap[x["idx"]] * FEE_PER_CONTRACT
     by_row = {k: round(v, 2) for k, v in by_row.items()}
     if abs(sum(by_row.values()) - total) > 0.005:                        # 现金守恒：分配之和 = 唯一计数总额
         out["problems"].append(f"现金守恒失败：分配合计 {sum(by_row.values()):.2f} ≠ 总额 {total:.2f}")
@@ -383,16 +426,16 @@ def unit_cash(unit: str, rows: list[dict], cash_rows: list[dict], *, window_star
     out.update(campaign_cash=total, by_row=by_row, linked=sorted(linked), exited=sorted(linked - held),
                independent=sorted({x["sym"] for x in independent}), independent_rows=len(independent),
                start=t0.isoformat() if t0 else None, quality="verified",
-               fee_estimate=est, pending_fee_rows=len(pending))
-    if est:
-        out["notes"].append(f"{len(pending)} 笔成交的费用尚未入账：按模型 ${FEE_PER_CONTRACT}/张 × {est_qty} 张估计"
-                            f" ${est:.2f}（入账后自动改用实际）")
+               fee_estimate=est, pending_fee_rows=len(pending), pending_fee_qty=n_pending)
+    if pending:
+        out["notes"].append(f"{len(pending)} 笔成交的费用尚未入账：按成交明细张数 {n_pending} 张 × 模型 ${FEE_PER_CONTRACT}/张"
+                            f" 估计 ${est:.2f}（模型费率，不是已核上界；入账后自动改用实际）")
     # 单元内沿用张数对账（Codex 067）：沿用腿必须是本行在场腿且张数等于本行张数（_stage_view），而多行共认领的合约一旦
     # 有行登记新阶段就已 incomplete（上面）→ 每个被沿用的合约只属于一行，各阶段沿用张数合计不可能超过在场张数。
     policy = dict(by_row)
     for r in rows:
         mtx = [x for x in member_tx if r["id"] in own[x["idx"]]]
-        sv = _stage_view(stages.get(r["id"]), r, by_row, mtx, fees, cover, est_qty, start_by_row[r["id"]])
+        sv = _stage_view(stages.get(r["id"]), r, by_row, mtx, fees, cover, quantities, start_by_row[r["id"]])
         if sv is None:
             continue
         out["stages"][r["id"]] = sv
@@ -407,7 +450,9 @@ def unit_cash(unit: str, rows: list[dict], cash_rows: list[dict], *, window_star
 
 def basis_text(res: dict, rid: str) -> str:
     """账本行 cash_basis 的人读口径（同一单元各行共用同一份归属结果）。"""
-    q = {"verified": "本轮起点与成员已登记（人工核对，源无张数）", "incomplete": "不完整"}.get(res["quality"], res["quality"])
+    q = {"verified": "本轮起点与成员已登记（人工核对）", "incomplete": "不完整"}.get(res["quality"], res["quality"])
+    if res["quality"] == "verified" and res.get("fee_quality") == "estimated":
+        q += f"；未入账费用按成交张数估计 ${res['fee_estimate']:.2f}"
     ex = f"；含已离场腿 {'、'.join(res['exited'])}" if res.get("exited") else ""
     st = res["stages"].get(rid)
     stage = (f"；政策预算用新阶段入场现金（{st['policy_endpoint_text']}，不吃旧阶段利润）"

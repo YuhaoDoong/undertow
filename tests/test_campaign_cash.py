@@ -24,8 +24,12 @@ def leg(k, q, kind="P", exp="2026-03-20", root="XYZ"):
 
 
 def flow(t, s, amt, fee=False):
-    return {"time": t, "symbol": s, "balance": f"{amt:.2f}",
-            "flow_name": ("Option Sell Fee" if fee else ("Option Sell Transaction" if amt > 0 else "Option Buy Transaction"))}
+    """fee=True → 不带方向的费用名（覆盖同合约两个方向，沿用 v2 语义）；fee="buy"/"sell" → 长桥实名「Option Buy/Sell Fee」。"""
+    if fee:
+        name = {"buy": "Option Buy Fee", "sell": "Option Sell Fee"}.get(fee, "Option Fee")
+    else:
+        name = "Option Sell Transaction" if amt > 0 else "Option Buy Transaction"
+    return {"time": t, "symbol": s, "balance": f"{amt:.2f}", "flow_name": name}
 
 
 # —— 换腿例：起点组合单买 32P 卖 30P；之后先买 28P、隔几十秒再分两笔卖出 32P；30P 空头沿用。
@@ -280,12 +284,13 @@ def test_inherited_leg_must_exist_before_stage_and_new_leg_must_be_new():
     held = [dict(id="h", legs=[_l(100, -1), _l(90, 1)])]
     tx = [_x(5, 0, _s(100), 200), _x(8, 0, _s(90), -100)]
     late = dict(start="2026-10-04T14:00:00Z", inherited=[dict(symbol=_s(100), qty=-1, low=2, ref=2, high=2)])
+    q = {0: 1, 1: 1}                                                        # 费用未入账：成交明细张数（v3）
     r = cc.unit_cash("XYZ", held, tx, window_start="2026-09-01T00:00:00Z", anchors={"h": tx[0]["time"]},
-                     stages={"h": late})
+                     stages={"h": late}, quantities=q)
     assert r["quality"] == "incomplete" and any("该时点已存在" in p for p in r["problems"])
     early = dict(start="2026-10-09T14:00:00Z", inherited=[dict(symbol=_s(100), qty=-1, low=2, ref=2, high=2)])
     r2 = cc.unit_cash("XYZ", held, tx, window_start="2026-09-01T00:00:00Z", anchors={"h": tx[0]["time"]},
-                      stages={"h": early})
+                      stages={"h": early}, quantities=q)
     assert r2["quality"] == "incomplete" and any("不是新阶段的新腿" in p for p in r2["problems"])
 
 
@@ -312,7 +317,7 @@ def test_same_second_unrelated_trade_does_not_join_campaign():
     r = cc.unit_cash("XYZ", held, rows, window_start=W0, anchors={"h": rows[0]["time"]})
     assert r["quality"] == "incomplete" and any(o50 in p for p in r["problems"])
     ok = cc.unit_cash("XYZ", held, rows, window_start=W0, anchors={"h": rows[0]["time"]},
-                      members={"h": {"campaign_independent": [o50]}})
+                      members={"h": {"campaign_independent": [o50]}}, quantities={0: 1, 1: 1})
     assert ok["campaign_cash"] == pytest.approx(200.0 - 120.0 - 2 * 1 * cc.FEE_PER_CONTRACT)   # 两笔费用未入账 → 估计
 
 
@@ -357,11 +362,12 @@ def test_pending_fees_estimated_then_replaced_by_actual():
     held = [{"id": "h", "underlying": "XYZ", "legs": [leg(50, -2)]}]
     rows = [flow("2026-10-01T14:00:00Z", s50, 200.0)]
     a = {"h": rows[0]["time"]}
-    r = cc.unit_cash("XYZ", held, rows, window_start=W0, anchors=a)
+    r = cc.unit_cash("XYZ", held, rows, window_start=W0, anchors=a, quantities={0: 2})
     assert r["fee_estimate"] == pytest.approx(2 * cc.FEE_PER_CONTRACT) and r["pending_fee_rows"] == 1
-    assert r["campaign_cash"] == pytest.approx(200.0 - 2 * cc.FEE_PER_CONTRACT)
+    assert r["campaign_cash"] == pytest.approx(200.0 - 2 * cc.FEE_PER_CONTRACT) and r["fee_quality"] == "estimated"
     r2 = cc.unit_cash("XYZ", held, rows + [flow("2026-10-02T10:00:00Z", s50, -1.61, fee=True)], window_start=W0, anchors=a)
     assert r2["fee_estimate"] == 0 and r2["campaign_cash"] == pytest.approx(200.0 - 1.61)
+    assert r2["fee_quality"] == "actual"                                   # 入账后不再需要张数
 
 
 def test_fee_row_straddling_start_counts_in_full():

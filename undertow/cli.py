@@ -3147,6 +3147,7 @@ def _load_account_review(no_cache):
 
 # 同标的净额的现金归属窗口（Codex 063 N1）：在场合约在窗口内没有成交 → incomplete（不默认覆盖）。120 天是工程选择、未校准。
 CAMPAIGN_CASH_WINDOW_DAYS = 120
+CAMPAIGN_EXEC_WINDOW_DAYS = 10       # 未入账费用配张数用的成交明细窗口；工程选择、未校准（费用实测 T+1 入账）
 
 
 def _campaign_cash_input(lb) -> dict:
@@ -3165,7 +3166,23 @@ def _campaign_cash_input(lb) -> dict:
         plans, prob = {}, f"{type(e).__name__}"
     if prob:            # 坏计划 ≠ 没有计划（Codex 054 R1 / 065）：登记的起点/新阶段未知 → 不可核
         return {"error": f"持仓计划文件不合格：{prob}"}
-    return {"rows": rows, "window_start": f"{start.isoformat()}T00:00:00+00:00", "plans": plans or {}}
+    out = {"rows": rows, "window_start": f"{start.isoformat()}T00:00:00+00:00", "plans": plans or {}}
+    # 未入账费用要按每笔成交的真实张数估（Codex 069 B3）：只读成交明细，近 CAMPAIGN_EXEC_WINDOW_DAYS 天（费用 T+1 入账，
+    # 更早的成交费用早该到账；仍未到账的那笔会因张数未知而 incomplete，当场可见）。读失败 → 张数未知，不退回旧估法。
+    now = _dt.now(_tz.utc)
+    ex_start = (now - _td(days=CAMPAIGN_EXEC_WINDOW_DAYS)).date()
+    try:
+        from undertow.trial_cli import _executions_since
+        reads: list = []
+        out["executions"] = _executions_since(lb, f"{ex_start.isoformat()}T00:00:00+00:00", now.isoformat(), reads=reads)
+        out["executions_since"] = ex_start.isoformat()
+        if not all(r.get("ok") for r in reads):
+            out.pop("executions")
+            out["executions_error"] = "当日成交与历史成交部分重叠，无法确认不重复"
+    except Exception as e:                                # noqa: BLE001
+        out.pop("executions", None)
+        out["executions_error"] = f"{type(e).__name__}: {str(e)[:100]}"
+    return out
 
 
 def cmd_account(args) -> int:

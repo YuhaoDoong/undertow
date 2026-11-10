@@ -930,5 +930,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-11-09T06:11:01.963965+00:00"
+ },
+ {
+  "instrument": "gold",
+  "date": "2026-11-10",
+  "spot": 4131.7,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "中性",
+  "regime": "熊",
+  "stretch": 0.9854932896219288,
+  "stretch_pctile": 0.724,
+  "drawdown": -7.155619301301097,
+  "dd_pctile": 0.412,
+  "combo_pctile": 0.568,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-11-10T06:13:35.073275+00:00"
  }
 ]

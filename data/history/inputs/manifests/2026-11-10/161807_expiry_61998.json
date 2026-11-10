@@ -1,0 +1,36 @@
+{
+ "schema": 1,
+ "command": "expiry",
+ "argv": [
+  "expiry",
+  "wti"
+ ],
+ "pid": 61998,
+ "started_at": "2026-11-10T16:18:07.133495+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/USO/2026-11-10",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/USO/2026-11-10.json.gz",
+   "sha256": "985d98da6bccee49f4b6e9bde20c2e93ef5e8d5b1389e7fe0197a6901c931442",
+   "captured_at": 1794309503.698229,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/USO/2026-11-09",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/USO/2026-11-09.json.gz",
+   "sha256": "2142b45ee79a3685510f8c92d96f74462d058753d00aa5864f3991e9f966d750",
+   "captured_at": 1794222751.261479,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-11-10T16:18:07.316083+00:00",
+ "rc": 0,
+ "git_head": "8b844e94bbb59c3e6e2ccb3d6363cd4fbe80adee"
+}

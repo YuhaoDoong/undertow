@@ -932,5 +932,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-11-11T06:08:38.440038+00:00"
+ },
+ {
+  "instrument": "iwm",
+  "date": "2026-11-12",
+  "spot": 282.52,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "中性",
+  "regime": "牛",
+  "stretch": 1.0007917007916953,
+  "stretch_pctile": 0.664,
+  "drawdown": -3.8833469833469922,
+  "dd_pctile": 0.244,
+  "combo_pctile": 0.454,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-11-12T06:14:12.045838+00:00"
  }
 ]

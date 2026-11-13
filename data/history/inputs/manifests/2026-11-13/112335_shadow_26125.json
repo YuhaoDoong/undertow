@@ -1,0 +1,156 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 26125,
+ "started_at": "2026-11-13T11:23:13.635364+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/GLD/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GLD/2026-11-13.json.gz",
+   "sha256": "6a9c38f99675f7221bde0d15134ef5f227072645e7fe9885915249330ed679fb",
+   "captured_at": 1794568405.568625,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SLV/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SLV/2026-11-13.json.gz",
+   "sha256": "a2bff9c109e7333578df08f7b52492f063fb16d44a40e97c5431642b42424b19",
+   "captured_at": 1794568406.990033,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/QQQ/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/QQQ/2026-11-13.json.gz",
+   "sha256": "4dc832454957a19b4b79aea4ff383c7f066a4e9d3609c6004edd9ba60009ab42",
+   "captured_at": 1794568409.192885,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 2
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/TLT/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/TLT/2026-11-13.json.gz",
+   "sha256": "140f0a6216e3b5d2ddebbdbdeecd22ae0503253e8445e020657d342f724e2e85",
+   "captured_at": 1794568411.875168,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 3
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/SPY/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/SPY/2026-11-13.json.gz",
+   "sha256": "b2f82746037d9ade26a50bc70d04137b9b4a18972d0c795ff26538a8bdbebd52",
+   "captured_at": 1794562375.8326468,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 4
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/IWM/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/IWM/2026-11-13.json.gz",
+   "sha256": "00d2d83626adfc7a30f883368dfdb4c24e20337f52727e0fdccf552ea85dbd6e",
+   "captured_at": 1794568414.230009,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 5
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/TQQQ/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/TQQQ/2026-11-13.json.gz",
+   "sha256": "ee7476e5390135a61673c5a8e0f9d067550d7319f86ec9770fb9a181a6a79091",
+   "captured_at": 1794568410.677133,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 6
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/GOOGL/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-11-13.json.gz",
+   "sha256": "e74ee0bd30f8302d8fcb0890d8fb452463cfa44d10b08b4aa6ccd96b375f8d3c",
+   "captured_at": 1794568415.633013,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 7
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/TSLA/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/TSLA/2026-11-13.json.gz",
+   "sha256": "29952aa0b42dc035e1767559262d7e653d9ccf001d893679c59046f6a29304b9",
+   "captured_at": 1794568417.034752,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 8
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/NVDA/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/NVDA/2026-11-13.json.gz",
+   "sha256": "f60be4f5a5abb4dd002821998a07e257f27fda53a16adf8c22414800c42f647a",
+   "captured_at": 1794559360.2863638,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 9
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/INTC/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/INTC/2026-11-13.json.gz",
+   "sha256": "27ca4f269ab8cfe457356e3e2fa12d59a78cd3fb2eb4798ffef3953645b528ac",
+   "captured_at": 1794568418.753474,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 10
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/AMD/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/AMD/2026-11-13.json.gz",
+   "sha256": "647cc02f79d53950c88b92b14f141a4fc812f6ee5da4dfb805c7b16b447368d5",
+   "captured_at": 1794568420.114748,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 11
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/MSFT/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/MSFT/2026-11-13.json.gz",
+   "sha256": "a2d6c4ece411a1084b3d4f08a8a64d2511b739a9ca6168d6568bd5afb18b46b0",
+   "captured_at": 1794568421.4427001,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 12
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/AAPL/2026-11-13",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/AAPL/2026-11-13.json.gz",
+   "sha256": "ededf9e69964209d9be161bc2c9ef2ff311bc44587afbf95235395eb44fda6d4",
+   "captured_at": 1794568422.716819,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 13
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-11-13T11:23:35.837608+00:00",
+ "rc": 1,
+ "git_head": "194672814cf487cf6d707a7ecf29d54a905ea360"
+}

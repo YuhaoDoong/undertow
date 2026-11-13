@@ -390,3 +390,8 @@
 {"key": ["spy", "2026-11-13"], "published": 3.2, "revision": 2.4, "revised_at": "2026-11-13T18:00:04.769513+08:00"}
 {"key": ["spy", "2026-11-13"], "published": 3.2, "revision": 2.4, "revised_at": "2026-11-13T18:25:12.671329+08:00"}
 {"key": ["spy", "2026-11-13"], "published": 3.2, "revision": 2.4, "revised_at": "2026-11-13T18:50:27.934670+08:00"}
+{"key": ["gold", "2026-11-13"], "published": -0.4, "revision": 1.8, "revised_at": "2026-11-13T19:13:55.919903+08:00"}
+{"key": ["silver", "2026-11-13"], "published": -1.0, "revision": 1.2, "revised_at": "2026-11-13T19:14:15.161480+08:00"}
+{"key": ["tlt", "2026-11-13"], "published": 3.0, "revision": 2.0, "revised_at": "2026-11-13T19:15:27.270027+08:00"}
+{"key": ["spy", "2026-11-13"], "published": 3.2, "revision": 2.4, "revised_at": "2026-11-13T19:15:37.971717+08:00"}
+{"key": ["iwm", "2026-11-13"], "published": 1.7, "revision": 0.9, "revised_at": "2026-11-13T19:15:57.980504+08:00"}

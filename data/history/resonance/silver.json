@@ -984,5 +984,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-11-12T06:11:30.988764+00:00"
+ },
+ {
+  "instrument": "silver",
+  "date": "2026-11-13",
+  "spot": 49.61,
+  "state": "仅结构",
+  "struct_bias": "偏空(弱)",
+  "band": "偏超卖",
+  "regime": "熊",
+  "stretch": -1.923701074178249,
+  "stretch_pctile": 0.16,
+  "drawdown": -12.385782121617266,
+  "dd_pctile": 0.16,
+  "combo_pctile": 0.16,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-11-13T06:01:57.312572+00:00"
  }
 ]

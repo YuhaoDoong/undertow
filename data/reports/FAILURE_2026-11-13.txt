@@ -34,3 +34,9 @@
   b'{"chart":{"result":null,"error":{"code":"Not Found","description":"No data found, symbol may be delisted"}}}'
 2026-11-13 17:16 +08 | ET 2026-11-13 04:07 | ⚠️ 方向判断台账失败（ET 2026-11-13 04:07）
   record rc=0 score rc=0 conviction rc=0 expiry-profile rc=1：  ⚠️ shadow expiry-profile nvda: LedgerConflictError: nvda|2026-11-13 首份事前记录已冻结，新输入不同；未改写 
+2026-11-13 17:40 +08 | ET 2026-11-13 04:32 | ⚠️ 模拟仓台账局部不完整（ET 2026-11-13 04:32）
+  已生成，见私有 data/paper/reports/.status_paper_book.json
+2026-11-13 17:41 +08 | ET 2026-11-13 04:32 | ⚠️ 作者价位计分失败（ET 2026-11-13 04:32）
+  b'{"chart":{"result":null,"error":{"code":"Not Found","description":"No data found, symbol may be delisted"}}}'
+2026-11-13 17:42 +08 | ET 2026-11-13 04:32 | ⚠️ 方向判断台账失败（ET 2026-11-13 04:32）
+  record rc=0 score rc=0 conviction rc=0 expiry-profile rc=1：  ⚠️ shadow expiry-profile spy: LedgerConflictError: spy|2026-11-13 首份事前记录已冻结，新输入不同；未改写   ⚠️ shadow expiry-profile nvda: LedgerConflictError: nvda|2026-11-13 首份事前记录已冻结，新输入不同；未改写 

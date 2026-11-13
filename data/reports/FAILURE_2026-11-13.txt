@@ -64,3 +64,9 @@
   b'{"chart":{"result":null,"error":{"code":"Not Found","description":"No data found, symbol may be delisted"}}}'
 2026-11-13 19:23 +08 | ET 2026-11-13 06:13 | ⚠️ 方向判断台账失败（ET 2026-11-13 06:13）
   record rc=0 score rc=0 conviction rc=0 expiry-profile rc=1：  ⚠️ shadow expiry-profile spy: LedgerConflictError: spy|2026-11-13 首份事前记录已冻结，新输入不同；未改写   ⚠️ shadow expiry-profile iwm: LedgerConflictError: iwm|2026-11-13 首份事前记录已冻结，新输入不同；未改写 
+2026-11-13 19:47 +08 | ET 2026-11-13 06:39 | ⚠️ 模拟仓台账局部不完整（ET 2026-11-13 06:39）
+  已生成，见私有 data/paper/reports/.status_paper_book.json
+2026-11-13 19:48 +08 | ET 2026-11-13 06:39 | ⚠️ 作者价位计分失败（ET 2026-11-13 06:39）
+  b'{"chart":{"result":null,"error":{"code":"Not Found","description":"No data found, symbol may be delisted"}}}'
+2026-11-13 19:49 +08 | ET 2026-11-13 06:39 | ⚠️ 方向判断台账失败（ET 2026-11-13 06:39）
+  record rc=0 score rc=0 conviction rc=0 expiry-profile rc=1：  ⚠️ shadow expiry-profile spy: LedgerConflictError: spy|2026-11-13 首份事前记录已冻结，新输入不同；未改写   ⚠️ shadow expiry-profile iwm: LedgerConflictError: iwm|2026-11-13 首份事前记录已冻结，新输入不同；未改写 

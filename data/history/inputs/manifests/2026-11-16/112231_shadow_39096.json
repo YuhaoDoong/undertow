@@ -1,0 +1,76 @@
+{
+ "schema": 1,
+ "command": "shadow",
+ "argv": [
+  "shadow",
+  "expiry-profile"
+ ],
+ "pid": 39096,
+ "started_at": "2026-11-16T11:22:10.381878+00:00",
+ "items": [
+  {
+   "kind": "snapshot",
+   "key": "options/GOOGL/2026-11-16",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/GOOGL/2026-11-16.json.gz",
+   "sha256": "fe0f88e427b8490a37e60178af7f59c84f53ac6561a75e5788c58597455545c9",
+   "captured_at": 1794827637.270397,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 0
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/TSLA/2026-11-16",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/TSLA/2026-11-16.json.gz",
+   "sha256": "9c9c06bd8d77c7a679cd7f565abbbafc03ac7ef250933ea3767289119a66043b",
+   "captured_at": 1794827637.921948,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 1
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/NVDA/2026-11-16",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/NVDA/2026-11-16.json.gz",
+   "sha256": "7b4a82b0c2b6354dc76a64d7f40002752eed08dbccb681aab99c24cca7fe4931",
+   "captured_at": 1794818648.5290549,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 2
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/INTC/2026-11-16",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/INTC/2026-11-16.json.gz",
+   "sha256": "c66c2ef97e9f57fba6dc532ba4337f3c203a0c9e5f57cd69775201c46de9c4dd",
+   "captured_at": 1794827639.480791,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 3
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/AMD/2026-11-16",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/AMD/2026-11-16.json.gz",
+   "sha256": "747a3fc5e1cb5b07b68f6aa1002cc3c36704fe66ad7598d75246a04fcf4ccb50",
+   "captured_at": 1794827640.885886,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 4
+  },
+  {
+   "kind": "snapshot",
+   "key": "options/AAPL/2026-11-16",
+   "path": "/Users/yhdong/Trading/data/snapshots/options/AAPL/2026-11-16.json.gz",
+   "sha256": "728e0ccc421361ed69c01d2cfde71ac00df2f78d79d7ce43386e14211f4afeb8",
+   "captured_at": 1794827643.6538181,
+   "status": "stored_file",
+   "stored": false,
+   "seq": 5
+  }
+ ],
+ "errors": [],
+ "finished_at": "2026-11-16T11:22:31.850275+00:00",
+ "rc": 1,
+ "git_head": "34ef8f336f4f9494f880e752d4a2f7714f80b51d"
+}

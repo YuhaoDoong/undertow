@@ -9,7 +9,7 @@
 | 文件 | 数据 · 来源 | 成本/滞后 |
 |---|---|---|
 | `cftc_cot.py` | COT 持仓：CFTC Socrata（Disaggregated 物理品 / Legacy 金融品如美元指数）。⚠️ `CotReport` 里 Legacy 非商业借用 managed_money 槽位、缺失折 0；情绪面板改用 `strict_category_series`（真实类别、缺失=None） | 免费·周五发布·截止当周二 |
-| `cboe_options.py` | 期权链：CBOE 延迟报价（**ETF 代理** GLD/SLV/USO/QQQ），OCC 代码解析、OI/gamma/iv + 原始落盘 + 内容指纹去重（同日去重管线改用 `chain_dedup.py`，按 OI/volume 多重集合比较；本文件在方向算法指纹内不改。SPY 自 2026-11-02、IWM 自 11-06 链里有与标准合约同键的 B1SPY/B1IWM 代码，产品性质未核实、OI 占比 <0.01%，仍并入解析） | 免费·日内延迟 |
+| `cboe_options.py` | 期权链：CBOE 延迟报价（**ETF 代理** GLD/SLV/USO/QQQ），OCC 代码解析、OI/gamma/iv + 原始落盘 + 内容指纹去重（同日去重与跨日结算闸门均改用 `chain_dedup.py`：同日按 OI/volume 多重集合比较，跨日 `settled_oi_change` 剔除同键合约；本文件在方向算法指纹内不改，`oi_change_total` 留作原样，管线不再用它判结算。SPY 自 2026-11-02、IWM/NVDA/TSLA 自 11-06 链里有与标准合约同键的 B1SPY/B1IWM/B1VDA/B1SLA 代码，产品性质未核实、OI 占比 <0.01%，仍并入解析；它们曾让未结算旧链落盘，见 `data/history/snapshot_audit/`） | 免费·日内延迟 |
 | `cboe_history.py` | 历史日线（回测用）：CBOE，免 key | 免费·日终 |
 | `fresh_daily.py` | **盘前决策用的新鲜 T−1 日线**（Codex 056 F0）：expected 只来自预存交易日历；源顺序 CBOE 历史 → Yahoo chart 同代码 ETF，整条序列取自第一个到达 expected 的源、不拼接；缺 H/L 的 bar 不顶替；另一源与快照自带前收盘（带日期才核）相对差 > 0.5% → conflict。返回 typed 记录（fresh/stale/conflict/calendar_unknown，含逐源尝试、抓取时刻、原文 sha256、价格口径）。ATR/语境由 `analyze.mainwall.derive_inputs` 从同一序列算（采集层不 import 分析层）。主墙研究账使用；影子账 v5 不改 | 免费·Yahoo 有界重抓（15 分钟缓存） |
 | `cboe_vol.py` | 波动率指数：GVZ(金)/OVX(油)/VXSLV(银)；`fetch_with_identity` 另给原文 sha256 与实际抓取时刻（情绪面板用）。VXSLV 于 2025-06-16 重启，停算期历史为回算值 | 免费·日频 |

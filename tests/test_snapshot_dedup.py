@@ -242,3 +242,48 @@ def test_pipeline_uses_split_dedup_and_direction_fingerprint_files_untouched():
     from undertow.collect import chain_dedup
     assert cli.materially_same is chain_dedup.materially_same
     assert "undertow/collect/chain_dedup.py" not in sl.CALL_CODE_FILES
+
+
+# ── 跨日结算闸门：同键调整合约不得把未结算的旧链放行（2026-11-16）────────────────
+
+def test_settled_oi_change_ignores_duplicate_key_collision():
+    """实测 SPY/IWM/NVDA/TSLA：ET 01:00 抓到的链里全部存活合约 OI 与前一日完全相同，
+    oi_change_total 却因同键 B1 合约互相覆盖算出几十万～上百万 → 旧链被当成今日快照落盘。"""
+    from undertow.collect.cboe_options import oi_change_total
+    from undertow.collect.chain_dedup import settled_oi_change
+    prev = _spy(_payload_roots(DUP))
+    stale = _spy(_payload_roots(DUP, spot=736.0))                     # 同一份 OI，只是现价变了
+    assert oi_change_total(prev, stale) > 0, "旧闸门被骗（本测试的前提）"
+    assert settled_oi_change(prev, stale) == 0, "未结算的旧链必须判 0"
+    moved = [("SPY", 740.0, "C", 10495, 0), ("B1SPY", 740.0, "C", 85, 0), ("SPY", 730.0, "P", 1005, 0)]
+    assert settled_oi_change(prev, _spy(_payload_roots(moved))) == 105
+    # 同键那一档整键剔除：只有它变了也判 0（调整合约 OI 占比 <0.01%，真实结算必然带动大量唯一键合约）
+    only_dup = [("SPY", 740.0, "C", 10600, 0), ("B1SPY", 740.0, "C", 85, 0), ("SPY", 730.0, "P", 900, 0)]
+    assert settled_oi_change(prev, _spy(_payload_roots(only_dup))) == 0
+    # 无同键时与 oi_change_total 完全一致（新键按全额、消失的合约不计）
+    a = _snap(_payload(BASE))
+    b = _snap(_payload([(400.0, "C", 1300, 1), (410.0, "C", 50, 1)]))
+    assert settled_oi_change(a, b) == oi_change_total(a, b) == 350
+
+
+def test_cross_day_stale_chain_with_duplicate_keys_not_saved(tmp_path):
+    """端到端：前一日已有快照，今日抓到的仍是前一日 OI（含同键合约）→ 不落盘；结算到了才落盘。"""
+    from undertow.collect.store import SnapshotStore
+    from undertow.core.config import load_config
+    store = SnapshotStore(root=tmp_path)
+    inst = load_config().get("spy")
+    store.save("options", "SPY", _payload_roots(DUP), on_date=date(2026, 11, 12))
+    day = date(2026, 11, 13)
+    p, sk = cli._save_snapshot_dedup(store, inst, "SPY", _payload_roots(list(reversed(DUP)), spot=736.0), day)
+    assert sk is True and p is None and store.load("options", "SPY", day) is None, "旧链不得落盘"
+    moved = [("SPY", 740.0, "C", 10495, 9), ("B1SPY", 740.0, "C", 85, 0), ("SPY", 730.0, "P", 1005, 3)]
+    p2, sk2 = cli._save_snapshot_dedup(store, inst, "SPY", _payload_roots(moved), day)
+    assert sk2 is False and p2 is not None
+
+
+def test_pipeline_and_wait_settlement_use_settled_gate():
+    """落盘闸门与盯结算脚本必须同一判据（wait_settlement.sh 注释：两套判据早晚会漂开）。"""
+    from undertow.collect import chain_dedup
+    assert cli.settled_oi_change is chain_dedup.settled_oi_change
+    sh = (ROOT / "scripts/wait_settlement.sh").read_text(encoding="utf-8")
+    assert "settled_oi_change(prev, curr) > 0" in sh and "oi_change_total(prev, curr)" not in sh

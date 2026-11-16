@@ -28,10 +28,11 @@ say "开始盯结算（最多 ${DEADLINE}h，每 $((INTERVAL/60)) 分钟一次�
 while (( $(date +%s) < END )); do
   READY=$("$PY" - <<'PYEOF'
 import sys; sys.path.insert(0, ".")
-# 有几个品种的 OI 已经结算？判据与落盘 dedup 完全一致（oi_change_total>0），
+# 有几个品种的 OI 已经结算？判据与落盘 dedup 完全一致（settled_oi_change>0；2026-11-16 起剔除同键调整合约），
 # 不另立标准 —— 两套判据早晚会漂开。
 try:
-    from undertow.collect.cboe_options import CboeOptionsSource, oi_change_total
+    from undertow.collect.cboe_options import CboeOptionsSource
+    from undertow.collect.chain_dedup import settled_oi_change
     from undertow.collect.store import SnapshotStore
     from undertow.core.config import load_config
     from undertow.cli import snapshot_from_payload
@@ -48,7 +49,7 @@ try:
                 continue
             prev = snapshot_from_payload(latest[1], key, sym)
             checked += 1
-            if oi_change_total(prev, curr) > 0:
+            if settled_oi_change(prev, curr) > 0:
                 ready += 1
         except Exception:
             failed += 1

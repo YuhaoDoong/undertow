@@ -28,7 +28,7 @@ from undertow.collect.faireconomy_cal import FairEconomyCalSource
 from undertow.collect.cftc_cot import CftcCotSource
 from undertow.collect.cboe_options import (CboeOptionsSource, snapshot_from_payload,
                                           chain_fingerprint, oi_change_total)
-from undertow.collect.chain_dedup import materially_same   # 同键合约（B1SPY 等）安全；cboe_options 在方向指纹内不改
+from undertow.collect.chain_dedup import materially_same, settled_oi_change   # 同键合约（B1SPY 等）安全；cboe_options 在方向指纹内不改
 from undertow.collect.cboe_history import CboeHistorySource
 from undertow.collect.yahoo_futures import YahooFuturesSource
 from undertow.collect.fred_macro import FredMacroSource
@@ -1286,7 +1286,9 @@ def _save_snapshot_dedup(store, inst, sym, payload, today):
                     # 指纹只看单份快照，判不了"到期合约滚出导致行集合变化、
                     # 而存活合约一张没动"的情形 —— 那正是 OI 未结算的残缺快照
                     # （现价新、OI 旧），落盘后会让次日 diff 把两天变动记成一天。
-                    if oi_change_total(prev, curr) == 0:
+                    # 2026-11-16：改用 settled_oi_change —— oi_change_total 被同键调整合约（B1SPY 等）骗过，
+                    # SPY/IWM/NVDA/TSLA 每天 ET 01:00 落下未结算的旧链（SPY 11/10 永久留存），见 chain_dedup 文档。
+                    if settled_oi_change(prev, curr) == 0:
                         return None, True
                 elif materially_same(prev, curr):
                     return store.path_of("options", sym, today), True

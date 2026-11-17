@@ -1020,5 +1020,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-11-16T06:04:40.759193+00:00"
+ },
+ {
+  "instrument": "tqqq",
+  "date": "2026-11-17",
+  "spot": 27107.0,
+  "state": "无信号",
+  "struct_bias": "中性",
+  "band": "偏超卖",
+  "regime": "熊",
+  "stretch": -1.8749982224876698,
+  "stretch_pctile": 0.168,
+  "drawdown": -6.4283378126644175,
+  "dd_pctile": 0.292,
+  "combo_pctile": 0.22999999999999998,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-11-17T09:43:58.605209+00:00"
  }
 ]

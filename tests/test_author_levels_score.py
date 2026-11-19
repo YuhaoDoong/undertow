@@ -296,3 +296,60 @@ def test_brent_contract_ambiguous_raises():
     import pytest
     with pytest.raises(ValueError):
         au.brent_contract("BZZ26 与 BZF27 混写")
+
+
+# ═══ 2026-11-19：K 线存档 + 价源下线（BZZ26 到期后 Yahoo 404，整个计分崩溃、金银也停算）═══
+class _Err(Exception):
+    pass
+
+
+def _gone(_sym):
+    raise _Err("HTTP 404 调用失败: x  No data found, symbol may be delisted")
+
+
+def test_fetch_bars_archives_merges_and_falls_back(tmp_path, monkeypatch):
+    monkeypatch.setattr(au, "BARS_DIR", tmp_path)
+    d1 = [(date(2026, 10, 1), 1, 2, 0.5, 1.5), (date(2026, 10, 2), 1, 2, 0.5, 1.6)]
+    d2 = [(date(2026, 10, 2), 1, 2, 0.5, 1.7), (date(2026, 10, 5), 1, 2, 0.5, 1.8)]   # 10/02 被修订、窗口前移
+    got, src = au.fetch_bars("BZZ26.NYM", "1d", lambda s: d1)
+    assert src == "live" and got == d1
+    got, src = au.fetch_bars("BZZ26.NYM", "1d", lambda s: d2)
+    assert src == "live" and [b[0] for b in got] == [date(2026, 10, 1), date(2026, 10, 2), date(2026, 10, 5)]
+    assert got[1][4] == 1.7                                                      # 同一根以本次为准
+    got, src = au.fetch_bars("BZZ26.NYM", "1d", _gone)                            # 下线 → 读存档
+    assert src == "archive" and len(got) == 3
+    h = [(datetime(2026, 10, 1, 14, tzinfo=timezone.utc), 1, 2, 0.5, 1.5)]
+    au.fetch_bars("BZZ26.NYM", "1h", lambda s: h)
+    assert au.fetch_bars("BZZ26.NYM", "1h", _gone)[0] == h                      # 小时线时区往返不丢
+
+
+def test_fetch_bars_gone_without_archive_and_network_error(tmp_path, monkeypatch):
+    import pytest
+    monkeypatch.setattr(au, "BARS_DIR", tmp_path)
+    with pytest.raises(au.PriceSourceGone):
+        au.fetch_bars("BZX26.NYM", "1d", _gone)
+
+    def flaky(_s):
+        raise _Err("timed out")
+    with pytest.raises(_Err):                                                    # 临时故障不能当成下线
+        au.fetch_bars("BZX26.NYM", "1d", flaky)
+
+
+def test_corrupt_archive_is_quarantined_not_overwritten(tmp_path, monkeypatch):
+    monkeypatch.setattr(au, "BARS_DIR", tmp_path)
+    p = au._bars_path("SI=F", "1d")
+    p.write_text("{半截", "utf-8")
+    assert au.load_bars("SI=F", "1d") is None
+    assert not p.exists() and p.with_name(p.name + ".corrupt-1").read_text("utf-8") == "{半截"
+
+
+def test_carry_prior_keeps_last_score_or_marks_expired():
+    r = {"author": "A", "posted_at": "2026-09-18T22:24:00+08:00", "instrument": "BZZ26", "claim": "support",
+         "params": {"level": 93.6}}
+    prior = {au._row_key(r): {**r, "score": {"result": "held"}, "score_v3": {"result": "held"}}, "__asof__": "2026-11-05T12:30"}
+    c = au.carry_prior(r, prior, "gone")
+    assert c["score"]["result"] == "held" and c["price_source"]["carried_from_asof"] == "2026-11-05T12:30"
+    again = au.carry_prior(r, {au._row_key(r): c, "__asof__": "2026-11-20"}, "gone")   # 再沿用不刷新来源时刻
+    assert again["price_source"]["carried_from_asof"] == "2026-11-05T12:30"
+    other = {**r, "params": {"level": 98.0}}
+    assert au.carry_prior(other, prior, "gone")["score"]["result"] == "price_source_expired"

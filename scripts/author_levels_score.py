@@ -89,6 +89,99 @@ def yahoo_hourly(sym: str) -> list[tuple]:
             for t, o, h, lo, c in zip(r["timestamp"], q["open"], q["high"], q["low"], q["close"]) if None not in (o, h, lo, c)]
 
 
+# ═══ 2026-11-19：K 线存档（BZZ26 10/30 到期后 Yahoo 下线 → 11/06 起整个计分 404 崩溃、金银也停算）═══
+# 免费合法源里没有已到期布伦特合约的小时线（FRED DCOILBRENTEU 只有现货日收盘、无高低价，CME 403 不碰），
+# 而且事后换价源属于看过结果后改口径。所以改为：每次拉到就并入存档（公开行情，随 daily 入库），
+# 合约下线（Yahoo 404 delisted）后读存档；存档也没有 → PriceSourceGone，由 main 沿用上次计分并标注，不崩、不猜。
+BARS_DIR = ROOT / "data/history/price_bars/yahoo"
+
+
+class PriceSourceGone(Exception):
+    """价源已下线且本地无存档。"""
+
+
+def _bars_path(sym: str, interval: str) -> Path:
+    return BARS_DIR / f"{sym.replace('=', '_').replace('.', '_')}_{interval}.json"
+
+
+def _bar_key(x, interval):
+    return x.isoformat()
+
+
+def _bar_from(k: str, interval: str):
+    return date.fromisoformat(k) if interval == "1d" else datetime.fromisoformat(k)
+
+
+def load_bars(sym: str, interval: str) -> list[tuple] | None:
+    """读存档；损坏的文件改名隔离（不覆盖），按无存档处理。"""
+    p = _bars_path(sym, interval)
+    if not p.exists():
+        return None
+    try:
+        d = json.loads(p.read_text("utf-8"))
+        return [(_bar_from(b[0], interval), *b[1:]) for b in d["bars"]]
+    except Exception:
+        n = 1
+        while p.with_name(p.name + f".corrupt-{n}").exists():
+            n += 1
+        p.rename(p.with_name(p.name + f".corrupt-{n}"))
+        return None
+
+
+def save_bars(sym: str, interval: str, fresh: list[tuple]) -> list[tuple]:
+    """把本次拉到的 K 线并入存档（同一根以本次为准），原子写 + 回读核对；返回合并后的完整序列。"""
+    merged = {_bar_key(b[0], interval): list(b[1:]) for b in (load_bars(sym, interval) or [])}
+    merged.update({_bar_key(b[0], interval): list(b[1:]) for b in fresh})
+    rows = [[k, *v] for k, v in sorted(merged.items(), key=lambda kv: _bar_from(kv[0], interval))]
+    p = _bars_path(sym, interval)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_suffix(".tmp")
+    head = json.dumps({"symbol": sym, "interval": interval, "source": "Yahoo v8 chart（只读公开接口）",
+                       "updated_at": datetime.now(timezone.utc).isoformat()}, ensure_ascii=False)[:-1]
+    # 一根一行：每天只追加几行，git 增量小
+    tmp.write_text(head + ', "bars": [\n' + ",\n".join(json.dumps(r) for r in rows) + "\n]}\n", "utf-8")
+    if len(json.loads(tmp.read_text("utf-8"))["bars"]) != len(rows):
+        raise RuntimeError(f"K 线存档回读不一致：{p}")
+    tmp.replace(p)
+    return [(_bar_from(r[0], interval), *r[1:]) for r in rows]
+
+
+def _is_delisted(e: Exception) -> bool:
+    m = str(e)
+    return "HTTP 404" in m or "delisted" in m
+
+
+def fetch_bars(sym: str, interval: str, fetch) -> tuple[list[tuple], str]:
+    """拉 Yahoo 并存档 → (合并序列, "live")；下线 → (存档, "archive")；下线且无存档 → PriceSourceGone。
+    网络等其它错误照常抛出（daily 照常告警，不能把临时故障当成下线）。"""
+    try:
+        fresh = fetch(sym)
+    except Exception as e:
+        if not _is_delisted(e):
+            raise
+        arch = load_bars(sym, interval)
+        if arch:
+            return arch, "archive"
+        raise PriceSourceGone(f"{sym} {interval}：Yahoo 已下线且无本地存档") from e
+    return save_bars(sym, interval, fresh), "live"
+
+
+def _row_key(r: dict) -> str:
+    return json.dumps([r.get("author"), r.get("posted_at"), r.get("instrument"), r.get("claim"), r.get("params")],
+                      ensure_ascii=False, sort_keys=True)
+
+
+def carry_prior(r: dict, prior: dict, why: str) -> dict:
+    """价源下线：沿用上次成功计分（标注来源时刻，不再更新）；从未算过 → price_source_expired。"""
+    old = prior.get(_row_key(r))
+    if old and "score" in old and old["score"].get("result") != "price_source_expired":
+        keep = {k: v for k, v in old.items() if k.startswith("score")}
+        return {**r, **keep, "price_source": {"status": "expired_carried", "why": why,
+                                              "carried_from_asof": old.get("price_source", {}).get("carried_from_asof")
+                                              or prior.get("__asof__")}}
+    return {**r, "score": {"result": "price_source_expired", "why": why}, "price_source": {"status": "expired_none"}}
+
+
 def to_spot_h(bars):
     return [(t, *(x * math.exp(-R * gold_T(t.date())) for x in v)) for t, *v in bars]
 
@@ -834,27 +927,52 @@ def main():
     gold = None
     cache = {}
     out = []
+    prior = {}
+    if OUT.exists():
+        try:
+            od = json.loads(OUT.read_text("utf-8"))
+            prior = {_row_key(x): x for x in od.get("rows", [])}
+            prior["__asof__"] = od.get("asof")
+        except Exception:
+            prior = {}
+    sources = {}
+
+    def bars(sym, rng):
+        """(日线, 小时线)；任一下线且无存档 → PriceSourceGone。"""
+        d, sd = fetch_bars(sym, "1d", lambda x: yahoo_daily(x, rng))
+        h, sh = fetch_bars(sym, "1h", yahoo_hourly)
+        sources[sym] = sd if sd == sh else f"1d:{sd}/1h:{sh}"
+        return d, h
+
     for r in rows:
         inst = r["instrument"]
-        if inst.startswith("XAU") or inst.startswith("黄金"):
-            if gold is None:
-                gold = (to_spot(yahoo_daily("GC=F", "2y")), to_spot_h(yahoo_hourly("GC=F")))
-            (d, h), spec, spec4 = gold, SPECS["gold_proxy"], SPECS_V4["gold_proxy"]
-            tol_v2 = 0.005
-        elif inst.startswith(("XAG", "SI")):
-            k = "silver_proxy" if inst.startswith("XAG") else "silver_fut"
-            if "SI" not in cache:
-                cache["SI"] = (yahoo_daily("SI=F", "2y"), yahoo_hourly("SI=F"))
-            (d, h), spec, spec4 = cache["SI"], SPECS[k], SPECS_V4[k]
-            tol_v2 = spec["tol"]
-        elif brent_contract(inst):
-            code = brent_contract(inst)
-            if code not in cache:
-                cache[code] = (yahoo_daily(f"{code}.NYM", "6mo"), yahoo_hourly(f"{code}.NYM"))
-            (d, h), spec, spec4 = cache[code], SPECS[code], SPECS_V4[code]
-            tol_v2 = 0.001
-        else:
-            out.append({**r, "score": {"result": "no_price_source"}}); continue
+        try:
+            if inst.startswith("XAU") or inst.startswith("黄金"):
+                if gold is None:
+                    gd, gh = bars("GC=F", "2y")
+                    gold = (to_spot(gd), to_spot_h(gh))
+                (d, h), spec, spec4 = gold, SPECS["gold_proxy"], SPECS_V4["gold_proxy"]
+                tol_v2 = 0.005
+            elif inst.startswith(("XAG", "SI")):
+                k = "silver_proxy" if inst.startswith("XAG") else "silver_fut"
+                if "SI" not in cache:
+                    cache["SI"] = bars("SI=F", "2y")
+                (d, h), spec, spec4 = cache["SI"], SPECS[k], SPECS_V4[k]
+                tol_v2 = spec["tol"]
+            elif brent_contract(inst):
+                code = brent_contract(inst)
+                if code not in cache:
+                    cache[code] = bars(f"{code}.NYM", "6mo")
+                if isinstance(cache[code], PriceSourceGone):
+                    raise cache[code]
+                (d, h), spec, spec4 = cache[code], SPECS[code], SPECS_V4[code]
+                tol_v2 = 0.001
+            else:
+                out.append({**r, "score": {"result": "no_price_source"}}); continue
+        except PriceSourceGone as e:
+            if brent_contract(inst):
+                cache[brent_contract(inst)] = e
+            out.append(carry_prior(r, prior, str(e))); continue
         v4 = {**score_v4(r, d, h, spec4, asof), "price_basis": spec4["basis"], "tol": spec4["tol"]}
         v5 = score_tol(r, d, h, spec4, asof)
         v3 = {**score_v3(r, d, h, spec, asof), "tol": spec["tol"]}
@@ -888,6 +1006,11 @@ def main():
         print(f"    对 {tri['right']} / 错 {tri['wrong']} / 未决 {tri['undecided']}（未决不删出分母；命中率界限 "
               f"{tri['right']}/{n_} ~ {tri['right'] + tri['undecided']}/{n_}）")
     print(f"  v3→v4 变化 {sum(c['v3'] != c['v4'] for c in changes)}/{len(changes)} 条（明细：{OUT_CHANGES.name}，私有）")
+    gone = [x for x in out if x.get("price_source")]
+    if gone:
+        carried = sum(x["price_source"]["status"] == "expired_carried" for x in gone)
+        print(f"  价源已下线 {len(gone)} 条：沿用上次计分 {carried} 条（不再更新）、从未算过 {len(gone) - carried} 条")
+    print("  价源：" + "、".join(f"{k} {v}" for k, v in sorted(sources.items())))
 
 
 if __name__ == "__main__":

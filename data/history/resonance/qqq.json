@@ -1056,5 +1056,23 @@
   "forward_10d": null,
   "forward_20d": null,
   "published_at": "2026-11-18T07:45:50.109829+00:00"
+ },
+ {
+  "instrument": "qqq",
+  "date": "2026-11-19",
+  "spot": 27779.0,
+  "state": "仅结构",
+  "struct_bias": "偏空(弱)",
+  "band": "偏超卖",
+  "regime": "熊",
+  "stretch": -1.3593900644441042,
+  "stretch_pctile": 0.16,
+  "drawdown": -5.24432942609225,
+  "dd_pctile": 0.056,
+  "combo_pctile": 0.108,
+  "forward_5d": null,
+  "forward_10d": null,
+  "forward_20d": null,
+  "published_at": "2026-11-19T11:21:57.217715+00:00"
  }
 ]
